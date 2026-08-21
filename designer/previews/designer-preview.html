@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>WebUI — Design System Reference</title>
+<link rel="stylesheet" href="../assets/design-system.css">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font-sans);
+    font-size: var(--font-size-base);
+    line-height: var(--line-height-normal);
+    background: var(--color-bg);
+    color: var(--color-text);
+    padding: var(--space-10) var(--space-6) var(--space-16);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  ::selection { background: var(--color-primary-soft); color: var(--color-text); }
+
+  .sg-container { max-width: 75rem; margin: 0 auto; }
+
+  .sg-header { margin-bottom: var(--space-12); }
+  .sg-eyebrow {
+    display: inline-flex;
+    align-items: center;
+    gap: var(--space-2);
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--letter-spacing-wider);
+    text-transform: uppercase;
+    color: var(--color-primary-600);
+  }
+  .sg-eyebrow__dot {
+    width: 0.45rem;
+    height: 0.45rem;
+    border-radius: var(--radius-full);
+    background: var(--color-primary-500);
+  }
+  .sg-header h1 {
+    font-size: var(--text-3xl);
+    font-weight: var(--font-weight-bold);
+    letter-spacing: var(--letter-spacing-tight);
+    line-height: var(--line-height-tight);
+    margin-top: var(--space-3);
+  }
+  .sg-header p {
+    color: var(--color-text-muted);
+    margin-top: var(--space-3);
+    max-width: 52rem;
+  }
+  .sg-header p code {
+    font-family: var(--font-mono);
+    font-size: 0.875em;
+    background: var(--color-bg-inset);
+    border: var(--border-width) solid var(--color-border);
+    border-radius: var(--radius-sm);
+    padding: 0.1em 0.35em;
+  }
+
+  .sg-section { margin-bottom: var(--space-12); }
+  .sg-section__head {
+    display: flex;
+    align-items: baseline;
+    gap: var(--space-3);
+    border-bottom: var(--border-width) solid var(--color-border);
+    padding-bottom: var(--space-3);
+    margin-bottom: var(--space-5);
+  }
+  .sg-section__num {
+    font-size: var(--text-2xl);
+    font-weight: var(--font-weight-bold);
+    color: var(--color-primary-500);
+    font-variant-numeric: tabular-nums;
+    line-height: 1;
+    letter-spacing: var(--letter-spacing-tight);
+  }
+  .sg-section__head h2 {
+    font-size: var(--text-2xl);
+    font-weight: var(--font-weight-bold);
+    letter-spacing: var(--letter-spacing-tight);
+    line-height: var(--line-height-tight);
+  }
+
+  .sg-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(17rem, 1fr));
+    gap: var(--space-4);
+    align-items: start;
+  }
+  .sg-card {
+    background: var(--color-bg-raised);
+    border: var(--border-width) solid var(--color-border);
+    border-radius: var(--radius-xl);
+    box-shadow: var(--shadow-sm);
+    padding: var(--space-5);
+  }
+  .sg-card h3 {
+    font-size: var(--font-size-xs);
+    font-weight: var(--font-weight-semibold);
+    text-transform: uppercase;
+    letter-spacing: var(--letter-spacing-wider);
+    color: var(--color-text-muted);
+    margin-bottom: var(--space-4);
+  }
+  .sg-label {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-muted);
+    margin-top: var(--space-4);
+    font-family: var(--font-mono);
+  }
+  .sg-pre {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    line-height: 1.6;
+    background: var(--color-bg-inset);
+    border: var(--border-width) solid var(--color-border);
+    border-radius: var(--radius-lg);
+    padding: var(--space-4);
+    overflow-x: auto;
+    color: var(--color-text);
+    white-space: pre-wrap;
+    word-break: break-word;
+  }
+
+  .sg-color-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(10.5rem, 1fr));
+    gap: var(--space-3);
+  }
+  .sg-color-swatch {
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+    border: var(--border-width) solid var(--color-border);
+    background: var(--color-bg-raised);
+  }
+  .sg-color-swatch__swatch { height: 3.25rem; }
+  .sg-color-swatch__info { padding: var(--space-2) var(--space-3); }
+  .sg-color-swatch__name { font-size: 0.8125rem; font-weight: var(--font-weight-semibold); }
+  .sg-color-swatch__token { font-size: 0.6875rem; color: var(--color-text-muted); font-family: var(--font-mono); }
+
+  .sg-type-scale { display: flex; flex-direction: column; gap: var(--space-3); }
+  .sg-type-sample { display: flex; align-items: baseline; gap: var(--space-4); }
+  .sg-type-sample__label {
+    font-size: 0.6875rem;
+    color: var(--color-text-muted);
+    font-family: var(--font-mono);
+    min-width: 5rem;
+    text-align: right;
+    flex: none;
+  }
+
+  .sg-spacing-grid { display: flex; flex-direction: column; gap: var(--space-3); }
+  .sg-spacing-row { display: flex; align-items: center; gap: var(--space-3); }
+  .sg-spacing-row__bar {
+    background: var(--color-primary-500);
+    border-radius: var(--radius-sm);
+    height: 12px;
+    flex-shrink: 0;
+  }
+  .sg-spacing-row__label {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    font-family: var(--font-mono);
+  }
+
+  .sg-shadow-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr));
+    gap: var(--space-4);
+  }
+  .sg-shadow-box {
+    background: var(--color-bg-raised);
+    border: var(--border-width) solid var(--color-border);
+    border-radius: var(--radius-md);
+    padding: var(--space-6);
+    text-align: center;
+    font-size: 0.875rem;
+    color: var(--color-text-muted);
+  }
+
+  .sg-radius-grid { display: flex; gap: var(--space-4); flex-wrap: wrap; align-items: center; }
+  .sg-radius-sample {
+    background: var(--color-primary-500);
+    width: 3rem;
+    height: 3rem;
+    flex: none;
+  }
+  .sg-radius-label {
+    font-size: 0.75rem;
+    color: var(--color-text-muted);
+    font-family: var(--font-mono);
+  }
+
+  .sg-component-row { display: flex; flex-wrap: wrap; gap: var(--space-3); align-items: center; }
+  .sg-demo { display: flex; flex-direction: column; gap: var(--space-3); }
+  .sg-rules { font-size: 0.875rem; line-height: 1.8; padding-left: 1.25rem; color: var(--color-text-muted); }
+  .sg-rules code {
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    background: var(--color-bg-inset);
+    border-radius: var(--radius-sm);
+    padding: 0.1em 0.3em;
+    color: var(--color-text);
+  }
+</style>
+</head>
+<body>
+<div class="sg-container">
+
+<div class="sg-header">
+  <div class="sg-eyebrow"><span class="sg-eyebrow__dot"></span>Bedrock WebUI · Design Tokens</div>
+  <h1>WebUI Design System</h1>
+  <p>Visual reference for all design tokens, components, and patterns. Edit <code>assets/design-system.css</code> and reload to see changes.</p>
+</div>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- 1. COLORS -->
+<!-- ════════════════════════════════════════════════════════ -->
+<div class="sg-section">
+  <div class="sg-section__head"><span class="sg-section__num">01</span><h2>Colors</h2></div>
+  <div class="sg-color-grid" id="color-palette">
+    <!-- populated by JS below -->
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- 2. TYPOGRAPHY -->
+<!-- ════════════════════════════════════════════════════════ -->
+<div class="sg-section">
+  <div class="sg-section__head"><span class="sg-section__num">02</span><h2>Typography</h2></div>
+  <div class="sg-grid">
+    <div class="sg-card">
+      <h3>Type Scale</h3>
+      <div class="sg-type-scale">
+        <div class="sg-type-sample"><span class="sg-type-sample__label">text-xs</span><span style="font-size:var(--text-xs)">The quick brown fox</span></div>
+        <div class="sg-type-sample"><span class="sg-type-sample__label">text-sm</span><span style="font-size:var(--text-sm)">The quick brown fox</span></div>
+        <div class="sg-type-sample"><span class="sg-type-sample__label">text-base</span><span style="font-size:var(--text-base)">The quick brown fox</span></div>
+        <div class="sg-type-sample"><span class="sg-type-sample__label">text-lg</span><span style="font-size:var(--text-lg)">The quick brown fox</span></div>
+        <div class="sg-type-sample"><span class="sg-type-sample__label">text-xl</span><span style="font-size:var(--text-xl)">The quick brown fox</span></div>
+        <div class="sg-type-sample"><span class="sg-type-sample__label">text-2xl</span><span style="font-size:var(--text-2xl);font-weight:700">The quick brown fox</span></div>
+        <div class="sg-type-sample"><span class="sg-type-sample__label">text-3xl</span><span style="font-size:var(--text-3xl);font-weight:700">The quick brown fox</span></div>
+      </div>
+    </div>
+    <div class="sg-card">
+      <h3>Font Families</h3>
+      <div class="sg-demo">
+        <p style="font-family:var(--font-sans)"><strong>Sans:</strong> The quick brown fox jumps over the lazy dog.</p>
+        <p style="font-family:var(--font-mono);font-size:0.875rem"><strong>Mono:</strong> The quick brown fox jumps over the lazy dog.</p>
+      </div>
+    </div>
+    <div class="sg-card">
+      <h3>Font Weights</h3>
+      <div class="sg-demo">
+        <p style="font-weight:400">Regular (400) — The quick brown fox</p>
+        <p style="font-weight:500">Medium (500) — The quick brown fox</p>
+        <p style="font-weight:600">Semibold (600) — The quick brown fox</p>
+        <p style="font-weight:700">Bold (700) — The quick brown fox</p>
+        <p style="font-weight:800">Extrabold (800) — The quick brown fox</p>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- 3. SPACING -->
+<!-- ════════════════════════════════════════════════════════ -->
+<div class="sg-section">
+  <div class="sg-section__head"><span class="sg-section__num">03</span><h2>Spacing Scale</h2></div>
+  <div class="sg-spacing-grid" id="spacing-scale">
+    <!-- populated by JS below -->
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- 4. BORDER RADIUS -->
+<!-- ════════════════════════════════════════════════════════ -->
+<div class="sg-section">
+  <div class="sg-section__head"><span class="sg-section__num">04</span><h2>Border Radius</h2></div>
+  <div class="sg-radius-grid" id="radius-scale">
+    <!-- populated by JS below -->
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- 5. SHADOWS -->
+<!-- ════════════════════════════════════════════════════════ -->
+<div class="sg-section">
+  <div class="sg-section__head"><span class="sg-section__num">05</span><h2>Shadows</h2></div>
+  <div class="sg-shadow-grid" id="shadow-scale">
+    <!-- populated by JS below -->
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- 6. COMPONENTS -->
+<!-- ════════════════════════════════════════════════════════ -->
+<div class="sg-section">
+  <div class="sg-section__head"><span class="sg-section__num">06</span><h2>Components</h2></div>
+
+  <div class="sg-grid">
+    <!-- Buttons -->
+    <div class="sg-card">
+      <h3>Button — all variants</h3>
+      <div class="sg-component-row">
+        <button class="button button--primary button--md">Primary</button>
+        <button class="button button--secondary button--md">Secondary</button>
+        <button class="button button--outline button--md">Outline</button>
+        <button class="button button--ghost button--md">Ghost</button>
+      </div>
+      <div class="sg-component-row" style="margin-top:var(--space-3)">
+        <button class="button button--danger button--md">Danger</button>
+        <button class="button button--success button--md">Success</button>
+        <button class="button button--warning button--md">Warning</button>
+      </div>
+      <div class="sg-label">Classes: button button--{variant} button--{size}</div>
+    </div>
+
+    <!-- Button sizes -->
+    <div class="sg-card">
+      <h3>Button — all sizes</h3>
+      <div class="sg-component-row">
+        <button class="button button--primary button--sm">Small</button>
+        <button class="button button--primary button--md">Medium</button>
+        <button class="button button--primary button--lg">Large</button>
+      </div>
+      <div class="sg-label">Classes: button button--primary button--{sm|md|lg}</div>
+    </div>
+
+    <!-- Button states -->
+    <div class="sg-card">
+      <h3>Button — states</h3>
+      <div class="sg-component-row">
+        <button class="button button--primary button--md">Normal</button>
+        <button class="button button--primary button--md" disabled>Disabled</button>
+      </div>
+      <div class="sg-demo" style="margin-top:var(--space-3)">
+        <button class="button button--primary button--md button--block">Full Width</button>
+      </div>
+    </div>
+
+    <!-- Inputs -->
+    <div class="sg-card">
+      <h3>Input — all states</h3>
+      <div class="sg-demo">
+        <input class="input" placeholder="Default input" value="Some text">
+        <input class="input input--error" placeholder="Error state" value="Bad input">
+        <input class="input input--success" placeholder="Success state" value="Valid input">
+        <input class="input" placeholder="Disabled" disabled>
+        <input class="input" placeholder="Required" required>
+      </div>
+      <div class="sg-label">Classes: input input--{error|success|warning}</div>
+    </div>
+
+    <!-- Cards -->
+    <div class="sg-card">
+      <h3>Card — all variants</h3>
+      <div class="sg-demo">
+        <div class="card card--elevated"><div class="card__body"><div class="card__title">Elevated</div><p class="card__desc">Raised surface with a stronger shadow.</p></div></div>
+        <div class="card card--outlined"><div class="card__body"><div class="card__title">Outlined</div><p class="card__desc">Defined by border only.</p></div></div>
+        <div class="card card--flat"><div class="card__body"><div class="card__title">Flat</div><p class="card__desc">Inset surface, no border.</p></div></div>
+        <div class="card card--interactive"><div class="card__body"><div class="card__title">Interactive</div><p class="card__desc">Hover me for the lift.</p></div></div>
+      </div>
+      <div class="sg-label">Classes: card card--{elevated|outlined|flat|interactive}</div>
+    </div>
+
+    <!-- Badges -->
+    <div class="sg-card">
+      <h3>Badge — all variants</h3>
+      <div class="sg-component-row">
+        <span class="badge badge--neutral">Neutral</span>
+        <span class="badge badge--primary">Primary</span>
+        <span class="badge badge--success">Success</span>
+        <span class="badge badge--warning">Warning</span>
+        <span class="badge badge--danger">Danger</span>
+        <span class="badge badge--info">Info</span>
+      </div>
+      <div class="sg-component-row" style="margin-top:var(--space-2)">
+        <span class="badge badge--sm">Small</span>
+        <span class="badge">Medium</span>
+        <span class="badge badge--lg">Large</span>
+        <span class="badge badge--dot"><span class="badge__dot"></span>Live</span>
+      </div>
+      <div class="sg-label">Classes: badge badge--{variant} badge--{sm|lg|dot}</div>
+    </div>
+
+    <!-- Alerts -->
+    <div class="sg-card">
+      <h3>Alert — all variants</h3>
+      <div class="sg-demo">
+        <div class="alert alert--info"><div class="alert__body">This is an info alert with a message.</div></div>
+        <div class="alert alert--success"><div class="alert__body">This is a success alert with a message.</div></div>
+        <div class="alert alert--warning"><div class="alert__body">This is a warning alert with a message.</div></div>
+        <div class="alert alert--danger"><div class="alert__body">This is a danger alert with a message.</div></div>
+      </div>
+      <div class="sg-label">Classes: alert alert--{info|success|warning|danger}</div>
+    </div>
+
+    <!-- Tabs -->
+    <div class="sg-card">
+      <h3>Tabs</h3>
+      <nav class="tabs" role="tablist">
+        <button class="tabs__tab tabs__tab--active" role="tab" aria-selected="true">Info</button>
+        <button class="tabs__tab" role="tab" aria-selected="false">Stats</button>
+        <button class="tabs__tab" role="tab" aria-selected="false">Log</button>
+      </nav>
+      <div class="sg-label">Classes: tabs, tabs__tab, tabs__tab--active</div>
+    </div>
+
+    <!-- Progress -->
+    <div class="sg-card">
+      <h3>Progress — all sizes</h3>
+      <div class="sg-demo">
+        <div class="progress progress--sm"><div class="progress__track"><div class="progress__fill" style="width:30%"></div></div></div>
+        <div class="progress progress--md"><div class="progress__track"><div class="progress__fill" style="width:60%"></div></div></div>
+        <div class="progress progress--lg progress--striped"><div class="progress__track"><div class="progress__fill" style="width:80%"></div></div></div>
+      </div>
+      <div class="sg-label">Classes: progress progress--{sm|md|lg|striped}</div>
+    </div>
+
+    <!-- Avatars -->
+    <div class="sg-card">
+      <h3>Avatar — all sizes</h3>
+      <div class="sg-component-row">
+        <div class="avatar avatar--sm"><span class="avatar__initials">TS</span></div>
+        <div class="avatar avatar--md"><span class="avatar__initials">TS</span></div>
+        <div class="avatar avatar--lg"><span class="avatar__initials">TS</span></div>
+        <div class="avatar avatar--xl"><span class="avatar__initials">TS</span></div>
+      </div>
+      <div class="sg-label">Classes: avatar avatar--{sm|md|lg|xl} &gt; avatar__initials</div>
+    </div>
+
+    <!-- Skeleton -->
+    <div class="sg-card">
+      <h3>Skeleton — all variants</h3>
+      <div class="sg-demo">
+        <div class="skeleton skeleton--text" style="width:80%"></div>
+        <div class="skeleton skeleton--title" style="width:60%"></div>
+        <div class="skeleton skeleton--avatar"></div>
+        <div class="skeleton skeleton--button" style="width:120px"></div>
+        <div class="skeleton skeleton--card"></div>
+      </div>
+      <div class="sg-label">Classes: skeleton skeleton--{text|title|avatar|button|card}</div>
+    </div>
+
+    <!-- Toast -->
+    <div class="sg-card">
+      <h3>Toast — all variants</h3>
+      <div class="sg-demo">
+        <div class="toast toast--info"><div class="toast__body"><div class="toast__title">Info</div><div class="toast__desc">This is an informational toast.</div></div></div>
+        <div class="toast toast--success"><div class="toast__body"><div class="toast__title">Success</div><div class="toast__desc">Your changes have been saved.</div></div></div>
+        <div class="toast toast--warning"><div class="toast__body"><div class="toast__title">Warning</div><div class="toast__desc">Storage is almost full.</div></div></div>
+        <div class="toast toast--danger"><div class="toast__body"><div class="toast__title">Error</div><div class="toast__desc">Sync failed. Retrying in 30s.</div></div></div>
+      </div>
+      <div class="sg-label">Classes: toast toast--{info|success|warning|danger}</div>
+    </div>
+
+    <!-- Modal -->
+    <div class="sg-card">
+      <h3>Modal</h3>
+      <div class="modal">
+        <div class="modal__header"><h2 class="modal__title">Modal Title</h2><button class="modal__close" aria-label="Close">&times;</button></div>
+        <div class="modal__body">Modal content goes here. This is a preview of the modal component.</div>
+        <div class="modal__footer">
+          <button class="button button--ghost button--sm">Cancel</button>
+          <button class="button button--primary button--sm">Confirm</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- 7. BEM REFERENCE -->
+<!-- ════════════════════════════════════════════════════════ -->
+<div class="sg-section">
+  <div class="sg-section__head"><span class="sg-section__num">07</span><h2>Component Class Reference</h2></div>
+  <div class="sg-grid">
+    <div class="sg-card">
+      <h3>Pattern</h3>
+      <pre class="sg-pre">.block                    /* component */
+.block__element           /* child part */
+.block--modifier          /* variant / state */
+.block__element--modifier /* child variant */</pre>
+    </div>
+    <div class="sg-card">
+      <h3>Examples</h3>
+      <pre class="sg-pre">.button                   /* button block */
+.button__label            /* label inside button */
+.button--primary          /* primary variant */
+.button--lg               /* large size modifier */
+.tabs__tab--active        /* active tab */</pre>
+    </div>
+    <div class="sg-card">
+      <h3>Rules</h3>
+      <ul class="sg-rules">
+        <li>Blocks are lowercase, no prefix</li>
+        <li>One element level max (<code>__</code>)</li>
+        <li>Modifiers can stack (<code>button button--primary button--lg</code>)</li>
+        <li>No inline <code>style</code> in production components</li>
+        <li>Use <code>var(--token)</code> instead of raw values</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════════════════════════════════ -->
+<!-- 8. DESIGN TOKENS REFERENCE -->
+<!-- ════════════════════════════════════════════════════════ -->
+<div class="sg-section">
+  <div class="sg-section__head"><span class="sg-section__num">08</span><h2>Design Tokens — Quick Reference</h2></div>
+  <div class="sg-grid">
+    <div class="sg-card">
+      <h3>How to use tokens</h3>
+      <pre class="sg-pre">/* ✅ Do this */
+.my-class {
+  color: var(--color-primary);
+  padding: var(--spacing-4);
+  font-size: var(--text-base);
+  border-radius: var(--radius-md);
+}
+
+/* ❌ Don't do this */
+.my-class {
+  color: #3b82f6;
+  padding: 16px;
+  font-size: 16px;
+  border-radius: 6px;
+}</pre>
+    </div>
+    <div class="sg-card">
+      <h3>Token categories</h3>
+      <pre class="sg-pre">--color-{name}       /* semantic + scale colors */
+--text-{size}        /* font sizes (alias of --font-size-*) */
+--font-{family}      /* font families */
+--spacing-{n}        /* spacing (alias of --space-*) */
+--radius-{size}      /* border radius */
+--shadow-{size}      /* elevation */
+--transition-{name}  /* motion */
+--z-{layer}          /* stacking */</pre>
+    </div>
+  </div>
+</div>
+
+</div><!-- /sg-container -->
+
+<script>
+// Populate color palette
+(function() {
+  var palette = document.getElementById('color-palette');
+  var colors = [
+    ['--color-neutral-50',  '#f8fafc'], ['--color-neutral-100', '#f1f5f9'], ['--color-neutral-200', '#e2e8f0'],
+    ['--color-neutral-300', '#cbd5e1'], ['--color-neutral-400', '#94a3b8'], ['--color-neutral-500', '#64748b'],
+    ['--color-neutral-600', '#475569'], ['--color-neutral-700', '#334155'], ['--color-neutral-800', '#1e293b'],
+    ['--color-neutral-900', '#0f172a'],
+    ['--color-primary', '#10b89f'], ['--color-primary-strong', '#0d756c'], ['--color-primary-soft', '#ecfdf9'],
+    ['--color-success', '#16a34a'], ['--color-success-strong', '#15803d'], ['--color-success-soft', '#dcfce7'],
+    ['--color-warning', '#d97706'], ['--color-warning-strong', '#b45309'], ['--color-warning-soft', '#fef3c7'],
+    ['--color-danger', '#dc2626'], ['--color-danger-strong', '#b91c1c'], ['--color-danger-soft', '#fee2e2'],
+    ['--color-info', '#2563eb'], ['--color-info-strong', '#1d4ed8'], ['--color-info-soft', '#dbeafe'],
+  ];
+  colors.forEach(function(c) {
+    var swatch = document.createElement('div');
+    swatch.className = 'sg-color-swatch';
+    swatch.innerHTML = '<div class="sg-color-swatch__swatch" style="background:' + c[1] + '"></div>' +
+      '<div class="sg-color-swatch__info">' +
+      '<div class="sg-color-swatch__name">' + c[0].replace('--color-', '').replace(/-/g, ' ') + '</div>' +
+      '<div class="sg-color-swatch__token">' + c[0] + '</div>' +
+      '<div class="sg-color-swatch__token">' + c[1] + '</div>' +
+      '</div>';
+    palette.appendChild(swatch);
+  });
+
+  // Spacing scale
+  var spacing = document.getElementById('spacing-scale');
+  var spaces = [
+    ['--spacing-0', '0px', 0], ['--spacing-1', '4px', 4], ['--spacing-2', '8px', 8],
+    ['--spacing-3', '12px', 12], ['--spacing-4', '16px', 16], ['--spacing-5', '20px', 20],
+    ['--spacing-6', '24px', 24], ['--spacing-8', '32px', 32], ['--spacing-10', '40px', 40],
+    ['--spacing-12', '48px', 48], ['--spacing-16', '64px', 64],
+  ];
+  spaces.forEach(function(s) {
+    var row = document.createElement('div');
+    row.className = 'sg-spacing-row';
+    row.innerHTML = '<div class="sg-spacing-row__bar" style="width:' + s[2] + 'px"></div>' +
+      '<span class="sg-spacing-row__label">' + s[0] + ' (' + s[1] + ')</span>';
+    spacing.appendChild(row);
+  });
+
+  // Border radius
+  var radius = document.getElementById('radius-scale');
+  var radii = [
+    ['--radius-none', '0px', '0px'], ['--radius-sm', '2px', '2px'], ['--radius-md', '6px', '6px'],
+    ['--radius-lg', '8px', '8px'], ['--radius-xl', '12px', '12px'], ['--radius-2xl', '16px', '16px'],
+    ['--radius-full', '50%', '50%'],
+  ];
+  radii.forEach(function(r) {
+    var sample = document.createElement('div');
+    sample.className = 'sg-radius-sample';
+    sample.style.borderRadius = r[2];
+    sample.title = r[0] + ' (' + r[1] + ')';
+    radius.appendChild(sample);
+    var label = document.createElement('span');
+    label.className = 'sg-radius-label';
+    label.textContent = r[0] + ' (' + r[1] + ')';
+    radius.appendChild(label);
+  });
+
+  // Shadows
+  var shadows = document.getElementById('shadow-scale');
+  var shadowList = [
+    ['--shadow-sm', 'Small'], ['--shadow-md', 'Medium'], ['--shadow-lg', 'Large'], ['--shadow-xl', 'Extra Large'],
+  ];
+  shadowList.forEach(function(s) {
+    var box = document.createElement('div');
+    box.className = 'sg-shadow-box';
+    box.style.boxShadow = 'var(' + s[0] + ')';
+    box.textContent = s[1];
+    shadows.appendChild(box);
+  });
+})();
+</script>
+</body>
+</html>
