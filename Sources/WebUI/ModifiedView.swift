@@ -178,7 +178,7 @@ public struct EventHandlerModifier: ViewModifier {
         context.register(handler: handler, for: componentID)
         return injectAttributes(
             into: html,
-            "data-component-id=\"\(componentID)\" data-event=\"\(htmlEscape(event.rawValue))\""
+            "data-component-id=\"\(componentID.value)\" data-event=\"\(htmlEscape(event.rawValue))\""
         )
     }
 }

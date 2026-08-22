@@ -23,6 +23,10 @@ let package = Package(
             name: "WebUIShowcase",
             targets: ["WebUIShowcase"]
         ),
+        .executable(
+            name: "WebUISmokeTest",
+            targets: ["WebUISmokeTest"]
+        ),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-log.git", "1.0.0"..<"2.0.0"),
@@ -75,6 +79,20 @@ let package = Package(
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOHTTP1", package: "swift-nio"),
                 .product(name: "NIOCore", package: "swift-nio"),
+            ]
+        ),
+
+        // ── Deployment smoke test (designer/smoke.sh harness) ────
+        .executableTarget(
+            name: "WebUISmokeTest",
+            dependencies: [
+                "WebUI",
+                "WebUIDesignSystem",
+                .product(name: "Logging", package: "swift-log"),
+                .product(name: "NIOPosix", package: "swift-nio"),
+                .product(name: "NIOHTTP1", package: "swift-nio"),
+                .product(name: "NIOCore", package: "swift-nio"),
+                .product(name: "NIOWebSocket", package: "swift-nio"),
             ]
         ),
 

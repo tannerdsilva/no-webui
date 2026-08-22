@@ -52,10 +52,33 @@ designer/sync.sh               # build + test + regenerate the showcase
 ```
 
 `sync.sh` runs `swift build` (which embeds the current `designer/assets/`
-CSS/JS), `swift test` (238 tests), then regenerates
+CSS/JS), `swift test` (242 tests), then regenerates
 `designer/previews/showcase.html` via the freshly built `WebUIShowcase`
 binary. Use `designer/sync.sh --no-test` to skip the suite during quick
 iteration.
+
+### Smoke-testing your deployment
+
+Two one-command gates prove the design actually reaches a browser intact.
+Both are safe to run repeatedly and exit non-zero on the first failure.
+
+```bash
+designer/smoke.sh          # asset integrity + deployed page structure
+designer/fullstack-smoke.sh # live WebSocket event round-trips (full stack)
+```
+
+- `smoke.sh` builds the `WebUISmokeTest` server, starts it, and checks that the
+  CSS/JS it serves are **byte-identical** to `designer/assets/`, that the page
+  is self-contained (no external asset refs, CSP present), and that every
+  visual fix survived into the deployed HTML.
+- `fullstack-smoke.sh` goes further: it deploys the real stack (NIO HTTP +
+  WebSocket upgrade + Swift `EventRouter` + interactive WebUI views) and drives
+  **live events over the wire** — click a button, type in an input, and asserts
+  the DOM patches back correctly. This catches event-routing bugs a static
+  check can't.
+
+You need `node` + `playwright` on PATH for `fullstack-smoke.sh`'s browser
+layer; the Node WebSocket round-trip needs only `node`.
 
 > Why a script instead of a `swift package plugin` command? A command plugin
 > holds the package build lock for the whole `swift package plugin` run, so

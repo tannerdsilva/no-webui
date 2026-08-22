@@ -25,9 +25,11 @@ need to explain something, put it in the appropriate `Documentation/*.md` file.
 
 ```bash
 swift build             # includes plugin that auto-generates Assets+Generated.swift
-swift test              # 238 tests, 11 suites
+swift test              # 242 tests, 11 suites
 swift run WebUIExample  # example server on :9090
 designer/sync.sh        # build + test + regenerate designer/previews/showcase.html
+designer/smoke.sh       # asset-integrity + deployed-page smoke gate
+designer/fullstack-smoke.sh  # full-stack deployment gate (live WS round-trips)
 ```
 
 the `WebUIAssetPlugin` build tool plugin runs automatically during `swift build`.

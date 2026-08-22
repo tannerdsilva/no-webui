@@ -3,3 +3,9 @@
 
 # macOS
 .DS_Store
+
+# node (designer browser smoke test)
+node_modules/
+
+# smoke-test screenshots
+.smoke/

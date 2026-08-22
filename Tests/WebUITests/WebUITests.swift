@@ -1174,6 +1174,24 @@ func eventHandlerModifierEmitsComponentID() {
     #expect(html.contains("Hello"))
 }
 
+@Test("EventHandlerModifier emits the raw component id, not the struct's debug description")
+func eventHandlerModifierEmitsRawComponentID() {
+    let router = EventRouter()
+    var context = RenderContext(router: router)
+
+    let html = RenderContext.$current.withValue(context) {
+        Text("Hello")
+            .onClick { _ in [] }
+            .render()
+    }
+
+    // The attribute must carry the bare id (c0), never the Swift struct's
+    // debugDescription ("ComponentID(value: \"c0\")"), or the runtime's event
+    // delegation can't route the click back to the registered handler.
+    #expect(html.contains("data-component-id=\"c0\""), "emitted: \(html)")
+    #expect(!html.contains("ComponentID(value:"))
+}
+
 @Test("EventHandlerModifier passes through without context")
 func eventHandlerModifierWithoutContext() {
     let html = Text("Hello")

@@ -1,0 +1,13 @@
+{
+  "name": "no-webui-designer",
+  "private": true,
+  "type": "module",
+  "description": "designer tooling: browser-level deployment smoke test",
+  "scripts": {
+    "smoke": "node designer/browser-smoke.mjs",
+    "smoke:css": "designer/smoke.sh"
+  },
+  "devDependencies": {
+    "playwright": "^1.62.1"
+  }
+}
