@@ -40,6 +40,10 @@ window.WebUIRuntime = (function () {
 
     function connect(url) {
       if (destroyed) return;
+      if (typeof WebSocket === 'undefined') {
+        log.warn('WebSocket is not available in this environment');
+        return;
+      }
       if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
 
       var wsUrl = url || config.wsUrl || 'ws://' + location.host + '/ws';
@@ -60,6 +64,10 @@ window.WebUIRuntime = (function () {
         if (destroyed) return;
         try {
           var msg = JSON.parse(e.data);
+          if (msg && msg.type === 'pong' && pongTimer) {
+            clearTimeout(pongTimer);
+            pongTimer = null;
+          }
           onMessage(msg);
         } catch (err) {
           log.error('Failed to parse message: ' + err.message);
@@ -110,7 +118,7 @@ window.WebUIRuntime = (function () {
         ws.send(JSON.stringify(data));
       } else {
         if (messageQueue.length >= config.maxQueueSize) {
-          messageQueue.shift(); // drop oldest
+          messageQueue.shift();
         }
         messageQueue.push(data);
         if (!reconnectTimer) connect();
@@ -188,7 +196,9 @@ window.WebUIRuntime = (function () {
       listeners = [];
 
       for (var key in inputTimers) {
-        if (inputTimers.hasOwnProperty(key)) clearTimeout(inputTimers[key]);
+        if (inputTimers.hasOwnProperty(key) && inputTimers[key].timer) {
+          clearTimeout(inputTimers[key].timer);
+        }
       }
       inputTimers = {};
       log.debug('Event delegation unmounted');
@@ -202,7 +212,7 @@ window.WebUIRuntime = (function () {
       if (!componentId) return;
 
       if (event.type === 'click') {
-        if (event.metaKey || event.ctrlKey || event.shiftKey) return; // let browser handle
+        if (event.metaKey || event.ctrlKey || event.shiftKey) return;
         var link = event.target.closest('a');
         if (link) {
 
@@ -334,7 +344,7 @@ window.WebUIRuntime = (function () {
           for (var j = 0; j < el.options.length; j++) {
             if (el.options[j].selected) values.push(el.options[j].value);
           }
-          data[el.name] = values;
+          data[el.name] = values.join(',');
         } else if (el.type === 'file') {
 
           continue;
@@ -346,39 +356,40 @@ window.WebUIRuntime = (function () {
     }
 
     function debounceInput(componentId, event, eventData) {
-
       var fieldKey = event.target.name || event.target.id || '';
       var key = componentId + ':' + fieldKey;
+      var now = Date.now();
 
-      if (inputTimers[key]) {
-        clearTimeout(inputTimers[key]);
+      if (!inputTimers[key]) {
+        inputTimers[key] = { timer: null, data: eventData, eventType: event.type, lastSent: now };
       }
+      var entry = inputTimers[key];
+      entry.data = eventData;
+      entry.eventType = event.type;
 
-      if (!inputTimers[key + ':leading']) {
-        inputTimers[key + ':leading'] = true;
+      var flush = function () {
+        if (entry.timer) {
+          clearTimeout(entry.timer);
+          entry.timer = null;
+        }
+        entry.lastSent = Date.now();
         send({
           type: 'event',
           component: componentId,
-          event: event.type,
-          data: eventData,
+          event: entry.eventType,
+          data: entry.data,
         });
+      };
 
-        inputTimers[key + ':reset'] = setTimeout(function () {
-          delete inputTimers[key + ':leading'];
-          delete inputTimers[key + ':reset'];
-        }, config.debounceMaxWaitMs);
+      if (now - entry.lastSent >= config.debounceMaxWaitMs) {
+        flush();
         return;
       }
 
-      inputTimers[key] = setTimeout(function () {
-        delete inputTimers[key];
-        send({
-          type: 'event',
-          component: componentId,
-          event: event.type,
-          data: eventData,
-        });
-      }, config.debounceInputMs);
+      if (entry.timer) {
+        clearTimeout(entry.timer);
+      }
+      entry.timer = setTimeout(flush, config.debounceInputMs);
     }
 
     function reset(config_) {
@@ -451,25 +462,41 @@ window.WebUIRuntime = (function () {
     function saveInputState(root) {
       var state = {};
       var inputs = root.querySelectorAll('input, textarea, select');
+      var active = null;
+      try { active = document.activeElement; } catch (e) { active = null; }
       for (var i = 0; i < inputs.length; i++) {
         var el = inputs[i];
         var key = el.id || el.name || i;
-        state[key] = {
-          value: el.value,
-          checked: el.type === 'checkbox' || el.type === 'radio' ? el.checked : undefined,
-          selectionStart: el.selectionStart,
-          selectionEnd: el.selectionEnd,
-        };
+        var record = { value: el.value };
+        if (el.type === 'checkbox' || el.type === 'radio') {
+          record.checked = el.checked;
+        }
+        try {
+          record.selectionStart = el.selectionStart;
+          record.selectionEnd = el.selectionEnd;
+        } catch (e) { }
+        if (active === el) record.focused = true;
+        state[key] = record;
       }
       return state;
     }
 
+
+    function safeSetSelectionRange(el, start, end) {
+      try {
+        if (typeof el.setSelectionRange === 'function') {
+          el.setSelectionRange(start, end);
+        }
+      } catch (e) { }
+    }
 
     function restoreInputState(fragmentId, state) {
       if (!state) return;
       var root = document.getElementById(fragmentId);
       if (!root) return;
       var inputs = root.querySelectorAll('input, textarea, select');
+      var focusTarget = null;
+      var focusState = null;
       for (var i = 0; i < inputs.length; i++) {
         var el = inputs[i];
         var key = el.id || el.name || i;
@@ -482,9 +509,21 @@ window.WebUIRuntime = (function () {
             el.checked = saved.checked;
           }
           if (saved.selectionStart !== undefined && saved.selectionEnd !== undefined) {
-            el.setSelectionRange(saved.selectionStart, saved.selectionEnd);
+            safeSetSelectionRange(el, saved.selectionStart, saved.selectionEnd);
+          }
+          if (saved.focused) {
+            focusTarget = el;
+            focusState = saved;
           }
         }
+      }
+      if (focusTarget && typeof focusTarget.focus === 'function') {
+        try {
+          focusTarget.focus();
+          if (focusState && focusState.selectionStart !== undefined && focusState.selectionEnd !== undefined) {
+            safeSetSelectionRange(focusTarget, focusState.selectionStart, focusState.selectionEnd);
+          }
+        } catch (e) { }
       }
     }
 
@@ -651,7 +690,7 @@ window.WebUIRuntime = (function () {
     }
 
     var log = createLogger(config.logLevel);
-    log.info('Initializing WebUI Runtime v0.2');
+    log.info('Initializing WebUI Runtime v0.3');
 
     var stateStore = createStateStore(log);
     var fragmentPatcher = createFragmentPatcher(log);
@@ -666,9 +705,10 @@ window.WebUIRuntime = (function () {
 
     wsClient.connect();
 
-    window.addEventListener('popstate', function () {
+    var popstateHandler = function () {
       wsClient.send({ type: 'navigate', url: location.pathname + location.search });
-    });
+    };
+    window.addEventListener('popstate', popstateHandler);
 
     instance = {
       config: config,
@@ -677,6 +717,7 @@ window.WebUIRuntime = (function () {
       eventDelegator: eventDelegator,
       fragmentPatcher: fragmentPatcher,
       stateStore: stateStore,
+      popstateHandler: popstateHandler,
     };
 
     log.info('WebUI Runtime initialized');
@@ -686,6 +727,9 @@ window.WebUIRuntime = (function () {
   function destroy() {
     if (!instance) return;
     instance.log.info('Destroying WebUI Runtime');
+    if (instance.popstateHandler) {
+      window.removeEventListener('popstate', instance.popstateHandler);
+    }
     instance.wsClient.disconnect();
     instance.eventDelegator.unmount();
     instance.fragmentPatcher.reset();

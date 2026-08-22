@@ -1,8 +1,9 @@
 # JS Runtime
 
-The WebUI JS runtime (`designer/assets/webui-runtime.js`, ~822
-lines) is a vanilla JavaScript module that runs in the browser. It has no
-dependencies — no React, no jQuery, no build step.
+The WebUI JS runtime (`designer/assets/webui-runtime.js`, ~750 lines) is a
+vanilla JavaScript module that runs in the browser. It has no dependencies —
+no React, no jQuery, no build step. It ships embedded in every rendered page
+and auto-initializes on load.
 
 ## Module: createLogger
 
@@ -12,7 +13,7 @@ Creates a logger with configurable log levels.
 
 **Returns:** `{ debug, info, warn, error }`
 
-Each method checks the configured minimum level before printing to `console`.
+each method checks the configured minimum level before printing to `console`.
 
 ## Module: createEventDelegator
 
@@ -20,17 +21,29 @@ Captures DOM events on elements with `data-component-id` and sends them to the
 server over WebSocket.
 
 **Events captured:** `click`, `input`, `change`, `submit`, `keydown`, `focus`,
-`blur`, `dblclick`, `contextmenu`, `mouseenter`, `mouseleave`, `touchstart`,
-`touchend`, `scroll`, `wheel`
+`blur`
 
-**Mounting:** Adds a single event listener on `document.body` for each event type
-(event delegation pattern). Filters to elements with `data-component-id`.
+**Mounting:** adds a single event listener on `document` for each event type
+(event delegation pattern). filters to the nearest element carrying
+`data-component-id`. `findComponent` walks `composedPath()` (capped at 20
+hops) and, when the target has no component ancestor, falls back to the
+element's `labels` / `label[for=id]` so inputs whose `data-component-id` sits
+on the surrounding `<label>` still route.
 
-**Input debouncing:** `input` events are debounced (default 300ms, max wait 1000ms)
-to avoid flooding the server on every keystroke.
+**Input debouncing:** `input` events are debounced with trailing + max-wait
+semantics. the trailing delay is `debounceInputMs` (default 300ms) and the
+max-wait cap is `debounceMaxWaitMs` (default 1000ms). a burst of keystrokes on
+a field coalesces into a single trailing send, and the max-wait guarantees a
+send even while the user keeps typing. `change`, `blur`, and `submit` are not
+debounced — they send immediately so no input is lost when typing stops, the
+field loses focus, or the form submits.
 
-**Submit handling:** On `submit` events, collects all named form fields into a
-`{ fieldName: value }` data object and sends as an `event` message.
+**Submit handling:** on `submit` events, collects all named form fields into a
+`{ fieldName: value }` data object and sends as an `event` message. checkbox
+and radio values are only included when checked, `select-multiple` values are
+joined into a comma-separated string, and file inputs are skipped — so every
+value on the wire stays a string (the server's `EventData.data` is
+`[String: String]`).
 
 **Message format:**
 ```json
@@ -57,19 +70,26 @@ Receives fragment updates from the server and patches the DOM.
 }
 ```
 
-**Patching:** For each fragment, finds the element by `id` and replaces it using
-`createContextualFragment()` + `replaceChild()`. This preserves the element's
-position and surrounding DOM.
+**Patching:** for each fragment, finds the element by `id` and replaces it
+using `createContextualFragment()` + `replaceChild()`. this preserves the
+element's position and surrounding DOM.
 
-**HTML sanitization:** Before insertion, the HTML is sanitized:
+**HTML sanitization:** before insertion, the HTML is sanitized:
 - `<script>` tags are stripped (including content)
-- Event handler attributes (`onclick`, `onerror`, `onload`, etc.) are stripped
+- event handler attributes (`onclick`, `onerror`, `onload`, etc.) are stripped
 - `javascript:` URLs in `href`, `src`, `action`, `formaction`, `xlink:href` are
   replaced with empty strings
 
-**Input state preservation:** Before replacing an element, if the element is an
-`<input>`, `<textarea>`, or `<select>`, the current value is saved and restored
-after replacement. This prevents cursor position loss during live updates.
+**Input state preservation:** before replacing an element, if the element
+contains an `<input>`, `<textarea>`, or `<select>`, the current value, checked
+state, and selection range are saved and restored after replacement. this
+prevents value and caret loss during live updates.
+
+**Focus preservation:** the patcher also records which control had keyboard
+focus before the patch. if the replacement fragment contains that same control
+(identified by id, name, or position), focus and caret are restored after the
+swap. this keeps the user's typing position intact when a re-rendered fragment
+includes the field they are editing — a common source of perceived jitter.
 
 ## Module: createStateStore
 
@@ -79,16 +99,18 @@ A simple key-value store with dot-path access and change subscriptions.
 
 | Method | Description |
 |---|---|
-| `get(path)` | Read a value by dot path (e.g., `"user.name"`). Returns `undefined` for missing paths. |
-| `set(path, value)` | Write a value by dot path. Creates intermediate objects as needed. Rejects paths containing `__proto__`, `constructor`, or `prototype`. |
-| `subscribe(path, callback)` | Register a change listener. Returns an unsubscribe function. |
+| `get(path)` | Read a value by dot path (e.g., `"user.name"`). returns `undefined` for missing paths. |
+| `set(path, value)` | Write a value by dot path. creates intermediate objects as needed. rejects paths containing `__proto__`, `constructor`, or `prototype`. |
+| `subscribe(path, callback)` | Register a change listener. returns an unsubscribe function. |
 | `clear()` | Reset store and remove all subscribers. |
 
-**Security:** The `set()` method checks every path segment against a denylist
-(`__proto__`, `constructor`, `prototype`) to prevent prototype pollution attacks.
+**Security:** the `set()` method checks every path segment against a denylist
+(`__proto__`, `constructor`, `prototype`) to prevent prototype pollution
+attacks.
 
-**Subscriber errors:** Individual subscriber errors are caught and logged — a
-failing subscriber does not prevent other subscribers from receiving the event.
+**Subscriber errors:** individual subscriber errors are caught and logged — a
+failing subscriber does not prevent other subscribers from receiving the
+event.
 
 ## Module: createWSClient
 
@@ -104,20 +126,26 @@ Manages the WebSocket connection with automatic reconnection.
 | `wsPingInterval` | 30000ms | Interval for ping messages |
 | `wsPongTimeout` | 60000ms | Time to wait for pong before reconnecting |
 | `maxQueueSize` | 1000 | Maximum queued messages when disconnected |
-| `debounceInputMs` | 300ms | Input event debounce delay |
+| `debounceInputMs` | 300ms | Input event trailing debounce delay |
 | `debounceMaxWaitMs` | 1000ms | Maximum input debounce wait |
 
-**Reconnection:** Uses exponential backoff starting at 1 second, doubling each
-attempt, capped at `wsMaxReconnectDelay`. Jitter is not applied.
+**Reconnection:** uses exponential backoff starting at 1 second, doubling each
+attempt, capped at `wsMaxReconnectDelay`. a jitter multiplier of 0.5–1.5× is
+applied to the computed delay so simultaneous clients do not reconnect in
+lockstep.
 
-**Ping/pong:** Sends `{ type: "ping" }` at `wsPingInterval`. If no `{ type: "pong" }`
-response within `wsPongTimeout`, disconnects and reconnects.
+**Ping/pong:** sends `{ type: "ping" }` at `wsPingInterval`. if no
+`{ type: "pong" }` response arrives within `wsPongTimeout`, the connection is
+considered dead and reconnected. when a pong does arrive, the pending
+reconnect timer is cleared, so a healthy connection never triggers a spurious
+reconnect.
 
-**Message queue:** When disconnected, messages are queued (up to `maxQueueSize`).
-On reconnect, queued messages are sent in order.
+**Message queue:** when disconnected, messages are queued (up to
+`maxQueueSize`). on reconnect, queued messages are sent in order.
 
 **Lifecycle:**
-- `connect()` — opens the WebSocket
+- `connect()` — opens the WebSocket. a safe no-op (warns and returns) when the
+  environment has no `WebSocket` global.
 - `disconnect()` — closes the WebSocket and clears the queue
 - `send(msg)` — sends immediately if connected, queues if disconnected
 
@@ -128,7 +156,8 @@ A small utility object for client-side navigation:
 | Method | Description |
 |---|---|
 | `navigate(url)` | Push state via `history.pushState` |
-| `redirect(url, replace)` | Navigate via `location.href` (or `location.replace` if `replace` is true). Blocks `javascript:`, `data:`, `vbscript:` URLs. |
+| `redirect(url, replace)` | Navigate via `location.href` (or `location.replace` if `replace` is true). blocks `javascript:`, `data:`, `vbscript:` URLs. |
+| `reload()` | Reload the page via `location.reload()` |
 
 ## Initialization
 
@@ -141,7 +170,9 @@ WebUIRuntime.init({
 ```
 
 The runtime auto-initializes when the page loads (via the inline `<script>` tag
-at the end of `<body>`). It auto-destroys on `beforeunload`.
+at the end of `<body>`). It auto-destroys on `beforeunload`, which disconnects
+the WebSocket, unmounts event delegation, resets the fragment patcher, clears
+the state store, and removes the `popstate` listener it registered.
 
 ## Public API
 

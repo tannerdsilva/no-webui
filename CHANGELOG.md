@@ -24,6 +24,8 @@ all notable changes to this project are documented here.
   `#if DEBUG` print for missing RenderContext.
 - `injectAttributes` now passes closing tags through unchanged instead of
   wrapping in `<span>`.
+- JS runtime now preserves keyboard focus (and caret) when a re-rendered
+  fragment contains the control the user is editing.
 - comprehensive `Documentation/` directory with 7 markdown files covering
   architecture, getting started, API reference, JS runtime, design system,
   and layouts.
@@ -31,6 +33,12 @@ all notable changes to this project are documented here.
 
 ### changed
 
+- JS runtime input debouncing now uses trailing + max-wait semantics: a burst
+  of keystrokes on a field coalesces into a single well-timed send instead of
+  firing a leading event per keystroke. `change`, `blur`, and `submit` send
+  immediately so no input is lost.
+- JS runtime reconnect now applies 0.5–1.5× jitter to the exponential backoff
+  delay so clients do not reconnect in lockstep.
 - full visual redesign of the design system to the "nexus" language:
   indigo primary (`#6366f1` family, replaces the teal accent), cool
   neutrals, soft 6px radii (`--radius-button`/`--radius-input` no longer
@@ -53,6 +61,13 @@ all notable changes to this project are documented here.
 
 ### fixed
 
+- JS runtime keepalive: a pong no longer leaves a pending reconnect timer
+  armed, which could have triggered a spurious reconnect on a healthy
+  connection.
+- JS runtime multi-select form fields now send a comma-joined string instead
+  of an array (the server's `EventData.data` is `[String: String]`, so an
+  array would have failed to decode).
+- JS runtime `destroy()` now removes the `popstate` listener it registered.
 - prototype pollution via `State.set("__proto__.polluted", value)`.
 - XSS via WebSocket fragment injection (`sanitizeFragmentHTML`).
 - `javascript:` URL execution in `Link.href`, `Image.src`, `Form.action`.

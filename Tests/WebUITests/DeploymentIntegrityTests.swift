@@ -138,3 +138,44 @@ func darkSolidButtonContrast() {
 	#expect(dark.contains(".button.button--success"), "dark solid-button ink override missing (white-on-bright would return)")
 }
 
+// MARK: - JS runtime event-pipeline resilience
+//
+// These guardrails pin the debounce + liveness + focus behavior of the JS
+// runtime so a regression that re-introduces per-keystroke flooding, a dead
+// keepalive, or focus loss on fragment patch fails the build.
+
+@Test("runtime debounces input with trailing + max-wait semantics")
+func runtimeInputDebounceSemantics() {
+	let js = WebUIAssets.js
+	#expect(js.contains("setTimeout(flush, config.debounceInputMs)"), "input debounce no longer schedules a trailing flush on debounceInputMs")
+	#expect(js.contains("config.debounceMaxWaitMs"), "input debounce lost its max-wait cap")
+	#expect(js.contains("entry.lastSent"), "input debounce lost its last-send timestamp (max-wait would stop enforcing)")
+}
+
+@Test("runtime clears the keepalive timer when a pong arrives")
+func runtimePongClearsKeepalive() {
+	let js = WebUIAssets.js
+	#expect(js.contains("msg.type === 'pong'"), "runtime no longer detects pong messages")
+	#expect(js.contains("clearTimeout(pongTimer)"), "pong no longer cancels the pending reconnect timer (liveness detection is dead)")
+}
+
+@Test("runtime preserves focus across fragment patches")
+func runtimePreservesFocusOnPatch() {
+	let js = WebUIAssets.js
+	#expect(js.contains("document.activeElement"), "runtime no longer records which input had focus before a patch")
+	#expect(js.contains("record.focused = true"), "runtime lost the per-input focused flag")
+	#expect(js.contains("focusTarget.focus()"), "runtime no longer restores focus after replacing a fragment")
+}
+
+@Test("runtime coerces multi-select form values to a string for the wire protocol")
+func runtimeStringifiesMultiSelect() {
+	let js = WebUIAssets.js
+	#expect(js.contains("values.join(',')"), "select-multiple now sends an array, but WSIncoming.data is [String: String] (Swift decode would reject the form)")
+}
+
+@Test("runtime guards against a missing WebSocket")
+func runtimeHandlesNoWebSocket() {
+	let js = WebUIAssets.js
+	#expect(js.contains("typeof WebSocket === 'undefined'"), "runtime lost its guard for environments without WebSocket")
+}
+

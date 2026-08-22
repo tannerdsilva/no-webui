@@ -212,15 +212,18 @@ A Swift enum with a static `source` property containing the embedded JS runtime
 
 ### JS Runtime Modules
 
-The JS runtime (`webui-runtime.js`) has five internal modules:
+The JS runtime (`webui-runtime.js`) is organized around a set of factory
+functions plus a `Router` helper and a `createMessageDispatcher` that routes
+incoming WebSocket messages to the patcher, state store, and router. the core
+factories:
 
 | Module | Lines | Responsibility |
 |---|---|---|
-| `createLogger` | ~30 | Configurable log levels (debug, info, warn, error, silent) |
-| `createEventDelegator` | ~80 | Captures DOM events on `[data-component-id]` elements, debounces input, queues and sends to WebSocket |
-| `createFragmentPatcher` | ~60 | Receives fragment updates and patches the DOM via `createContextualFragment()` + `replaceChild()`. Sanitizes HTML before insertion (strips `<script>`, event handlers, javascript: URLs). |
-| `createStateStore` | ~80 | Key-value store with dot-path access, change subscriptions, and prototype-pollution protection |
-| `createWSClient` | ~150 | WebSocket connection with exponential backoff reconnect, ping/pong keepalive, message queue, and `beforeunload` disconnect |
+| `createLogger` | ~15 | Configurable log levels (debug, info, warn, error, silent) |
+| `createEventDelegator` | ~190 | Captures DOM events on `[data-component-id]` elements, coalesces input into a single trailing send (trailing + max-wait debounce), and forwards to the WebSocket |
+| `createFragmentPatcher` | ~120 | Receives fragment updates and patches the DOM via `createContextualFragment()` + `replaceChild()`. Sanitizes HTML before insertion (strips `<script>`, event handlers, javascript: URLs). Preserves input value, checked state, selection, and keyboard focus across a patch. |
+| `createStateStore` | ~75 | Key-value store with dot-path access, change subscriptions, and prototype-pollution protection |
+| `createWSClient` | ~140 | WebSocket connection with exponential backoff + jitter reconnect, ping/pong keepalive (a pong clears the pending reconnect timer), message queue, and disconnect handling |
 
 See `Documentation/JS_RUNTIME.md` for detailed documentation of each module.
 
