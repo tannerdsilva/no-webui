@@ -260,6 +260,28 @@ window.WebUIRuntime = (function () {
         }
         maxDepth--;
       }
+
+      var target = event.target;
+      if (target && target.nodeType === 1) {
+        var labels = null;
+        try {
+          if (target.labels && target.labels.length) {
+            labels = target.labels;
+          }
+        } catch (e) {
+          labels = null;
+        }
+        if ((!labels || !labels.length) && target.id) {
+          labels = document.querySelectorAll('label[for="' + target.id + '"]');
+        }
+        if (labels && labels.length) {
+          for (var j = 0; j < labels.length; j++) {
+            if (labels[j].hasAttribute && labels[j].hasAttribute('data-component-id')) {
+              return labels[j];
+            }
+          }
+        }
+      }
       return null;
     }
 
@@ -282,10 +304,10 @@ window.WebUIRuntime = (function () {
         case 'keydown':
           return {
             key: event.key,
-            ctrlKey: event.ctrlKey,
-            shiftKey: event.shiftKey,
-            altKey: event.altKey,
-            metaKey: event.metaKey,
+            ctrlKey: String(event.ctrlKey),
+            shiftKey: String(event.shiftKey),
+            altKey: String(event.altKey),
+            metaKey: String(event.metaKey),
           };
 
         case 'focus':

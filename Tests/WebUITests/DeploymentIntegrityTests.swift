@@ -48,3 +48,20 @@ func embeddedCSPinsVisualFixes() {
 	#expect(css.contains("flex-direction: row"), "progress left-anchor fix missing from embedded css")
 	#expect(css.contains("grid-area: 1 / 1"), "zstack overlap fix missing from embedded css")
 }
+
+@Test("runtime resolves form controls whose data-component-id sits on their label")
+func runtimeResolvesLabelForInputs() throws {
+	let js = WebUIAssets.js
+	#expect(js.contains("data-component-id"), "runtime no longer carries the component-id lookup")
+	#expect(js.contains("target.labels"), "runtime lost the labels[] resolution for inputs (typing would stop round-tripping)")
+	#expect(js.contains("label[for=\""), "runtime lost the label[for=id] fallback for inputs")
+}
+
+@Test("runtime sends keydown modifier keys as strings to match the wire protocol")
+func runtimeStringifiesKeydownModifiers() throws {
+	let js = WebUIAssets.js
+	#expect(js.contains("String(event.ctrlKey)"), "runtime sends ctrlKey as a JS boolean, but WSIncoming.data is [String: String]")
+	#expect(js.contains("String(event.shiftKey)"), "runtime sends shiftKey as a JS boolean; Swift decode would reject the event")
+	#expect(js.contains("String(event.altKey)"), "runtime sends altKey as a JS boolean; Swift decode would reject the event")
+	#expect(js.contains("String(event.metaKey)"), "runtime sends metaKey as a JS boolean; Swift decode would reject the event")
+}

@@ -52,7 +52,7 @@ designer/sync.sh               # build + test + regenerate the showcase
 ```
 
 `sync.sh` runs `swift build` (which embeds the current `designer/assets/`
-CSS/JS), `swift test` (242 tests), then regenerates
+CSS/JS), `swift test` (244 tests), then regenerates
 `designer/previews/showcase.html` via the freshly built `WebUIShowcase`
 binary. Use `designer/sync.sh --no-test` to skip the suite during quick
 iteration.
@@ -79,6 +79,32 @@ designer/fullstack-smoke.sh # live WebSocket event round-trips (full stack)
 
 You need `node` + `playwright` on PATH for `fullstack-smoke.sh`'s browser
 layer; the Node WebSocket round-trip needs only `node`.
+
+### Playing with the demo interactively
+
+The smoke tests are headless on purpose: they deploy the stack, drive it,
+assert, and exit — so you only see shell output. To *play* with the same
+deployed stack, use the demo launcher:
+
+```bash
+designer/demo.sh       # build (if needed), start server, open your browser
+```
+
+It starts the `WebUISmokeTest` server and opens
+`http://127.0.0.1:9123/` in your default browser. The page is the real full
+stack (live WebSocket → Swift `EventRouter` → DOM patch), not a static mockup:
+
+- **Counter** — click `+` / `−` / `Reset`. Each click round-trips over the
+  WebSocket and the DOM patches in place.
+- **Progress** — `−10%` / `+10%` re-render the bar server-side.
+- **Echo** — type in the input and the text echoes back below it, live.
+
+`Ctrl+C` in the `demo.sh` terminal stops the server. If you'd rather not open
+a browser (e.g. on a headless box), start the server manually instead:
+
+```bash
+swift run WebUISmokeTest    # serves http://127.0.0.1:9123/ (ws: /ws)
+```
 
 > Why a script instead of a `swift package plugin` command? A command plugin
 > holds the package build lock for the whole `swift package plugin` run, so
