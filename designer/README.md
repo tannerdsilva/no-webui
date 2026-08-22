@@ -52,7 +52,7 @@ designer/sync.sh               # build + test + regenerate the showcase
 ```
 
 `sync.sh` runs `swift build` (which embeds the current `designer/assets/`
-CSS/JS), `swift test` (244 tests), then regenerates
+CSS/JS), `swift test` (247 tests), then regenerates
 `designer/previews/showcase.html` via the freshly built `WebUIShowcase`
 binary. Use `designer/sync.sh --no-test` to skip the suite during quick
 iteration.

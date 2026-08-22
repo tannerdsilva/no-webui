@@ -25,7 +25,7 @@ need to explain something, put it in the appropriate `Documentation/*.md` file.
 
 ```bash
 swift build             # includes plugin that auto-generates Assets+Generated.swift
-swift test              # 244 tests, 11 suites
+swift test              # 247 tests, 11 suites
 swift run WebUIExample  # example server on :9090
 swift run WebUISmokeTest # interactive full-stack demo on :9123 (ws: /ws)
 designer/sync.sh        # build + test + regenerate designer/previews/showcase.html

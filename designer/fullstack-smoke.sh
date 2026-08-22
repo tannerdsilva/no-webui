@@ -41,16 +41,22 @@ fi
 ok "swift build WebUISmokeTest"
 
 BINPATH="$(swift build --show-bin-path)/WebUISmokeTest"
+if lsof -nP -iTCP:${PORT} -sTCP:LISTEN >/dev/null 2>&1; then
+  bad "port :${PORT} is already in use — stop the other server (e.g. designer/demo.sh) and re-run"
+  exit 1
+fi
 "${BINPATH}" >/tmp/webui-fullstack-server.log 2>&1 &
 BIN=$!
 
 ready=0
 for _ in $(seq 1 60); do
   if curl -fsS -o /dev/null "${BASE}/" 2>/dev/null; then ready=1; break; fi
+  if ! kill -0 "${BIN}" 2>/dev/null; then break; fi
   sleep 0.25
 done
-if [ "${ready}" -ne 1 ]; then
-  bad "server did not become ready on :${PORT}"
+if [ "${ready}" -ne 1 ] || ! kill -0 "${BIN}" 2>/dev/null; then
+  bad "server did not become ready on :${PORT} (see /tmp/webui-fullstack-server.log)"
+  tail -5 /tmp/webui-fullstack-server.log 2>/dev/null
   exit 1
 fi
 ok "full-stack server ready (${BIN})"

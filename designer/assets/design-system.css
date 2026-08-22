@@ -62,7 +62,7 @@
 
   --color-text:       #1e293b;
   --color-text-muted: #64748b;
-  --color-text-faint: #94a3b8;
+  --color-text-faint: #5f6f86;
   --color-on-color:   #ffffff;
 
   --color-border:        #e2e8f0;
@@ -247,11 +247,11 @@ button {
 }
 
 a {
-  color: var(--color-primary-600);
+  color: var(--color-primary-700);
   text-decoration: none;
   transition: color var(--transition-fast);
 }
-a:hover { color: var(--color-primary-700); }
+a:hover { color: var(--color-primary-800); }
 
 :focus { outline: none; }
 
@@ -450,15 +450,15 @@ code, .inline-code {
   --btn-bg: transparent;
   --btn-bg-hover: transparent;
   --btn-bg-active: transparent;
-  --btn-fg: var(--color-primary-600);
-  color: var(--color-primary-600);
+  --btn-fg: var(--color-primary-700);
+  color: var(--color-primary-700);
   background: transparent;
   border-color: transparent;
   padding: 0.35rem 0.5rem;
   min-height: auto;
   font-weight: var(--font-weight-medium);
 }
-.button--link:hover { color: var(--color-primary-700); text-decoration: underline; background: transparent; }
+.button--link:hover { color: var(--color-primary-800); text-decoration: underline; background: transparent; }
 
 .button--sm {
   min-height: 2rem;
@@ -2745,7 +2745,7 @@ code, .inline-code {
 .badge--warning { background: var(--color-warning-soft); color: var(--color-warning-strong); border-color: transparent; }
 .badge--danger  { background: var(--color-danger-soft); color: var(--color-danger-strong); border-color: transparent; }
 .badge--info    { background: var(--color-info-soft); color: var(--color-info-strong); border-color: transparent; }
-.badge--neutral { background: var(--color-bg-inset); color: var(--color-text-muted); }
+.badge--neutral { background: var(--color-bg-inset); color: var(--color-neutral-600); }
 .badge--sm { font-size: 0.65rem; padding: 0.05em 0.45em; }
 .badge--lg { font-size: var(--font-size-sm); padding: 0.25em 0.75em; }
 .badge__dot {
@@ -6117,7 +6117,7 @@ code, .inline-code {
 
     --color-text:       #e6edf7;
     --color-text-muted: #97a6bd;
-    --color-text-faint: #5d6f8c;
+    --color-text-faint: #8494ab;
     --color-on-color:   #0a0e17;
 
 
@@ -6188,6 +6188,22 @@ code, .inline-code {
   .button--outline { --btn-bg-active: var(--color-bg-inset); }
   .button--ghost:hover,
   .button--outline:hover { background: var(--color-bg-inset); }
+
+  /* Solid colored buttons: dark ink on the bright fill (matches primary's
+     inverted dark treatment) so labels stay legible in dark mode.
+     Two-class selectors: the base solid rules appear LATER in source
+     order, so equal specificity would lose the cascade. */
+  .button.button--danger,
+  .button.button--success,
+  .button.button--warning { color: var(--color-on-color); }
+
+  a,
+  .button--link { color: var(--color-primary-400); }
+  a:hover,
+  .button--link:hover { color: var(--color-primary-300); }
+
+  .badge--primary { color: var(--color-primary-400); }
+  .badge--neutral { color: var(--color-text-muted); }
 
   ::selection {
     background: rgba(52, 211, 184, 0.35);
@@ -6745,7 +6761,7 @@ code, .inline-code {
 .breadcrumb--chevron .breadcrumb__sep { color: var(--color-text-faint); }
 
 .button--xs { padding: 0.15rem 0.5rem; font-size: var(--font-size-xs); min-height: 1.5rem; }
-.button--success { background: var(--color-success); color: #fff; border-color: transparent; }
+.button--success { background: var(--color-success-strong); color: #fff; border-color: transparent; }
 .button--success:hover { background: color-mix(in srgb, var(--color-success) 88%, black); border-color: var(--color-success-strong); }
 
 .calendar__header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
@@ -7421,12 +7437,12 @@ code, .inline-code {
 }
 
 .button--warning {
-  --btn-bg: var(--color-warning);
+  --btn-bg: var(--color-warning-strong);
   --btn-bg-hover: var(--color-warning-strong);
   --btn-bg-active: var(--color-warning-strong);
   --btn-fg: #fff;
   color: #fff;
-  background: var(--color-warning);
+  background: var(--color-warning-strong);
   border-color: transparent;
   box-shadow: var(--shadow-sm);
 }
