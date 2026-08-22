@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'nonce-k_36L67PyJZaDi_MKKF5rQ'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:;">
+          <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'nonce-qAg3zuMCUUGytAcBaTUb2g'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:;">
   <title>WebUI UI Showcase</title>
   
   <style>
@@ -327,6 +327,8 @@
                "Helvetica Neue", Arial, "Noto Sans", sans-serif;
   --font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
                "Liberation Mono", "Courier New", monospace;
+  --font-display: ui-serif, "Iowan Old Style", "Palatino Linotype", "Palatino",
+                  Georgia, "Times New Roman", serif;
 
   --font-size-xs:    0.75rem;
   --font-size-sm:    0.875rem;
@@ -378,6 +380,12 @@
   --radius-xl:   0.75rem;
   --radius-2xl:  1rem;
   --radius-full: 9999px;
+
+  /* architectural geometry — sharp interactive surfaces, subtle card lift */
+  --radius-button:   var(--radius-none);
+  --radius-input:    var(--radius-none);
+  --radius-card:     var(--radius-sm);
+  --radius-elevated: var(--radius-sm);
 
   --border-width: 1px;
   --border-width-2: 2px;
@@ -610,7 +618,7 @@ code, .inline-code {
   color: var(--btn-fg);
   background: var(--btn-bg);
   border: var(--border-width) solid var(--btn-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-button);
   cursor: pointer;
   user-select: none;
   white-space: nowrap;
@@ -622,7 +630,7 @@ code, .inline-code {
     transform var(--transition-fast),
     filter var(--transition-fast);
 }
-.button:hover { background: var(--btn-bg-hover); }
+.button:hover { background: var(--btn-bg-hover); border-color: var(--color-neutral-400); }
 .button:active { background: var(--btn-bg-active); transform: translateY(0.5px); }
 .button:focus-visible { box-shadow: var(--ring-focus); outline-offset: 0; }
 
@@ -637,7 +645,7 @@ code, .inline-code {
   border-color: transparent;
   box-shadow: var(--shadow-sm);
 }
-.button--primary:hover { background: var(--color-primary-solid-hover); box-shadow: var(--shadow-md); }
+.button--primary:hover { background: var(--color-primary-solid-hover); border-color: var(--color-primary-800); }
 .button--primary:active { background: var(--color-primary-solid-active); }
 
 .button--secondary {
@@ -680,7 +688,7 @@ code, .inline-code {
   border-color: transparent;
   box-shadow: var(--shadow-sm);
 }
-.button--danger:hover { background: var(--color-danger-strong); box-shadow: var(--shadow-md); }
+.button--danger:hover { background: var(--color-danger-strong); border-color: var(--color-danger-strong); }
 
 .button--link {
   --btn-bg: transparent;
@@ -692,7 +700,6 @@ code, .inline-code {
   border-color: transparent;
   padding: 0.35rem 0.5rem;
   min-height: auto;
-  border-radius: var(--radius-sm);
   font-weight: var(--font-weight-medium);
 }
 .button--link:hover { color: var(--color-primary-700); text-decoration: underline; background: transparent; }
@@ -701,7 +708,6 @@ code, .inline-code {
   min-height: 2rem;
   padding: 0.35rem 0.75rem;
   font-size: var(--font-size-sm);
-  border-radius: var(--radius-md);
 }
 .button--lg {
   min-height: 3rem;
@@ -756,8 +762,6 @@ code, .inline-code {
 }
 .button-group > .button { border-radius: 0; }
 .button-group > .button + .button { margin-left: calc(var(--border-width) * -1); }
-.button-group > .button:first-child { border-top-left-radius: var(--radius-lg); border-bottom-left-radius: var(--radius-lg); }
-.button-group > .button:last-child { border-top-right-radius: var(--radius-lg); border-bottom-right-radius: var(--radius-lg); }
 .button-group > .button:focus-visible { z-index: 1; box-shadow: var(--ring-focus); }
 
 .split-button {
@@ -765,10 +769,7 @@ code, .inline-code {
   align-items: stretch;
 }
 .split-button .button { border-radius: 0; }
-.split-button .button--action { border-top-left-radius: var(--radius-lg); border-bottom-left-radius: var(--radius-lg); }
 .split-button .button--caret {
-  border-top-right-radius: var(--radius-lg);
-  border-bottom-right-radius: var(--radius-lg);
   padding: 0 0.6rem;
   border-left: var(--border-width) solid var(--color-border-strong);
 }
@@ -791,7 +792,7 @@ code, .inline-code {
   color: var(--input-fg);
   background: var(--input-bg);
   border: var(--border-width) solid var(--input-border);
-  border-radius: var(--radius-lg);
+  border-radius: var(--radius-input);
   transition:
     border-color var(--transition-fast),
     box-shadow var(--transition-fast),
@@ -816,7 +817,7 @@ code, .inline-code {
   border-style: dashed;
 }
 
-.input--sm { min-height: 2rem; font-size: var(--font-size-sm); padding: 0 0.6rem; border-radius: var(--radius-md); }
+.input--sm { min-height: 2rem; font-size: var(--font-size-sm); padding: 0 0.6rem; }
 .input--lg { min-height: 3rem; font-size: var(--font-size-lg); padding: 0 1rem; }
 
 .input--error,
@@ -2477,7 +2478,7 @@ code, .inline-code {
   width: min(30rem, 92vw);
   background: var(--color-bg-raised);
   border: var(--border-width) solid var(--color-border);
-  border-radius: var(--radius-2xl);
+  border-radius: var(--radius-elevated);
   box-shadow: var(--shadow-xl);
   overflow: hidden;
   z-index: var(--z-modal);
@@ -2707,12 +2708,13 @@ code, .inline-code {
 .card {
   background: var(--color-bg-raised);
   border: var(--border-width) solid var(--color-border);
-  border-radius: var(--radius-xl);
+  border-radius: var(--radius-card);
   box-shadow: var(--shadow-sm);
   overflow: hidden;
 }
 .card__body { padding: var(--space-4); }
 .card__title {
+  font-family: var(--font-display);
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-semibold);
   color: var(--color-text);
@@ -3648,7 +3650,7 @@ code, .inline-code {
   width: min(28rem, 100%);
   background: var(--color-bg-raised);
   border: var(--border-width) solid var(--color-border);
-  border-radius: var(--radius-2xl);
+  border-radius: var(--radius-elevated);
   box-shadow: var(--shadow-xl);
   overflow: hidden;
   animation: br-slide-up var(--transition-base) var(--ease-out);
@@ -6988,7 +6990,7 @@ code, .inline-code {
 
 .button--xs { padding: 0.15rem 0.5rem; font-size: var(--font-size-xs); min-height: 1.5rem; }
 .button--success { background: var(--color-success); color: #fff; border-color: transparent; }
-.button--success:hover { background: color-mix(in srgb, var(--color-success) 88%, black); }
+.button--success:hover { background: color-mix(in srgb, var(--color-success) 88%, black); border-color: var(--color-success-strong); }
 
 .calendar__header { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); margin-bottom: var(--space-3); }
 .calendar__month { font-weight: var(--font-weight-semibold); font-size: var(--font-size-base); }
@@ -7672,7 +7674,7 @@ code, .inline-code {
   border-color: transparent;
   box-shadow: var(--shadow-sm);
 }
-.button--warning:hover { background: var(--color-warning-strong); box-shadow: var(--shadow-md); }
+.button--warning:hover { background: var(--color-warning-strong); border-color: var(--color-warning-strong); }
 .button--md { min-height: 2.5rem; }
 
 .input--success { border-color: var(--color-success-ring); box-shadow: 0 0 0 3px var(--color-success-soft); }
@@ -7869,29 +7871,34 @@ section,
    typography is defined here to keep hierarchy consistent.
    ═══════════════════════════════════════════════════════════ */
 h1 {
+  font-family: var(--font-display);
   font-size: var(--font-size-4xl);
   font-weight: var(--font-weight-bold);
   line-height: var(--line-height-tight);
-  letter-spacing: var(--letter-spacing-tight);
+  letter-spacing: -0.01em;
   color: var(--color-text);
   margin: 0 0 var(--space-5);
 }
 h2 {
+  font-family: var(--font-display);
   font-size: var(--font-size-2xl);
   font-weight: var(--font-weight-bold);
   line-height: var(--line-height-tight);
-  letter-spacing: var(--letter-spacing-tight);
+  letter-spacing: -0.01em;
   color: var(--color-text);
   margin: 0 0 var(--space-4);
 }
 h3 {
+  font-family: var(--font-display);
   font-size: var(--font-size-lg);
   font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-tight);
+  letter-spacing: -0.005em;
   color: var(--color-text);
   margin: 0 0 var(--space-3);
 }
 h4 {
+  font-family: var(--font-display);
   font-size: var(--font-size-base);
   font-weight: var(--font-weight-semibold);
   line-height: var(--line-height-normal);
@@ -8323,7 +8330,7 @@ Plain text content<span class="text-escaped">&lt;script&gt;alert(&#39;xss&#39;)&
 <label class="demo-label">Country:</label><select id="demo-country"><option value="us" selected>United States</option><option value="ca">Canada</option><option value="uk">United Kingdom</option><option value="de">Germany</option><option value="jp">Japan</option></select>
 </div></div>
 </div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
-<h3 class="demo-card-title">Form with CSRF</h3><div class="demo-card-body"><form id="demo-form" action="/submit" method="post"><input type="hidden" name="_csrf" value="ZGVtby1mb3JtOjE3ODczNzQyOTY6MTVjN2FhYzMxYzE4ODQ5Mzk2ZWM2NDcyMTVlZGMzM2M0MTMzNTM1ZGFiYWM0MWU3M2I4ODAwOWRkMDQ3ZjZmNA=="><div class="vstack spacing-12 align-flex-start">
+<h3 class="demo-card-title">Form with CSRF</h3><div class="demo-card-body"><form id="demo-form" action="/submit" method="post"><input type="hidden" name="_csrf" value="ZGVtby1mb3JtOjE3ODczODEwMjg6ZDIzZTMwMzY4ZDYwYjdlMTIyNDdiYzBlNDNmMDYyZWM4YjU3M2Y2NGNlYmFhOTZjYjQwMGE2N2Q3NTkzMGUwOQ=="><div class="vstack spacing-12 align-flex-start">
 <label class="demo-label">Name:</label><input id="form-name" type="text" placeholder="Your name"><label class="demo-label">Message:</label><textarea id="form-message" rows="3" placeholder="Your message"></textarea><button id="form-submit" type="submit">Submit</button>
 </div></form></div>
 </div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
@@ -8608,7 +8615,7 @@ Plain text content<span class="text-escaped">&lt;script&gt;alert(&#39;xss&#39;)&
 </div></main>
 </div>
 </div>
-  <script nonce="k_36L67PyJZaDi_MKKF5rQ">
+  <script nonce="qAg3zuMCUUGytAcBaTUb2g">
 
 window.WebUIRuntime = (function () {
   'use strict';
