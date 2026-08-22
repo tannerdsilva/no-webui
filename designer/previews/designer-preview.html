@@ -20,6 +20,10 @@
 
   ::selection { background: var(--color-primary-soft); color: var(--color-text); }
 
+  @media (prefers-color-scheme: dark) {
+    .sg-eyebrow { color: var(--color-primary-400); }
+  }
+
   .sg-container { max-width: 75rem; margin: 0 auto; }
 
   .sg-header { margin-bottom: var(--space-12); }
@@ -70,18 +74,19 @@
     margin-bottom: var(--space-5);
   }
   .sg-section__num {
-    font-size: var(--text-2xl);
+    font-size: var(--font-size-xs);
     font-weight: var(--font-weight-bold);
     color: var(--color-primary-500);
     font-variant-numeric: tabular-nums;
-    line-height: 1;
-    letter-spacing: var(--letter-spacing-tight);
+    letter-spacing: var(--letter-spacing-wider);
   }
   .sg-section__head h2 {
-    font-size: var(--text-2xl);
-    font-weight: var(--font-weight-bold);
-    letter-spacing: var(--letter-spacing-tight);
+    font-size: var(--font-size-sm);
+    font-weight: var(--font-weight-semibold);
+    letter-spacing: var(--letter-spacing-wider);
+    text-transform: uppercase;
     line-height: var(--line-height-tight);
+    color: var(--color-text);
   }
 
   .sg-grid {
@@ -547,30 +552,54 @@
 </div><!-- /sg-container -->
 
 <script>
-// Populate color palette
+// Populate color palette — reads the live token values so the swatches
+// always match design-system.css in both light and dark themes.
 (function() {
   var palette = document.getElementById('color-palette');
-  var colors = [
-    ['--color-neutral-50',  '#f8fafc'], ['--color-neutral-100', '#f1f5f9'], ['--color-neutral-200', '#e2e8f0'],
-    ['--color-neutral-300', '#cbd5e1'], ['--color-neutral-400', '#94a3b8'], ['--color-neutral-500', '#64748b'],
-    ['--color-neutral-600', '#475569'], ['--color-neutral-700', '#334155'], ['--color-neutral-800', '#1e293b'],
-    ['--color-neutral-900', '#0f172a'],
-    ['--color-primary', '#10b89f'], ['--color-primary-strong', '#0d756c'], ['--color-primary-soft', '#ecfdf9'],
-    ['--color-success', '#16a34a'], ['--color-success-strong', '#15803d'], ['--color-success-soft', '#dcfce7'],
-    ['--color-warning', '#d97706'], ['--color-warning-strong', '#b45309'], ['--color-warning-soft', '#fef3c7'],
-    ['--color-danger', '#dc2626'], ['--color-danger-strong', '#b91c1c'], ['--color-danger-soft', '#fee2e2'],
-    ['--color-info', '#2563eb'], ['--color-info-strong', '#1d4ed8'], ['--color-info-soft', '#dbeafe'],
+  var cs = getComputedStyle(document.documentElement);
+  var val = function(name) {
+    var v = cs.getPropertyValue(name).trim();
+    if (!v) return '';
+    var el = document.createElement('span');
+    el.style.color = 'transparent';
+    el.style.display = 'none';
+    document.body.appendChild(el);
+    el.style.color = v;
+    var resolved = getComputedStyle(el).color;
+    el.remove();
+    return resolved.startsWith('rgb') ? resolved : v;
+  };
+  var groups = [
+    ['Base — neutral', ['--color-neutral-50', '--color-neutral-100', '--color-neutral-200',
+      '--color-neutral-300', '--color-neutral-400', '--color-neutral-500',
+      '--color-neutral-600', '--color-neutral-700', '--color-neutral-800', '--color-neutral-900']],
+    ['Base — surfaces', ['--color-bg', '--color-bg-raised', '--color-bg-inset', '--color-bg-subtle',
+      '--color-text', '--color-text-muted', '--color-text-faint']],
+    ['Accent — primary', ['--color-primary-300', '--color-primary-400', '--color-primary-500',
+      '--color-primary-600', '--color-primary-700', '--color-primary-strong', '--color-primary-soft']],
+    ['Semantic', ['--color-success', '--color-success-strong',
+      '--color-warning', '--color-warning-strong',
+      '--color-danger', '--color-danger-strong',
+      '--color-info', '--color-info-strong']],
   ];
-  colors.forEach(function(c) {
-    var swatch = document.createElement('div');
-    swatch.className = 'sg-color-swatch';
-    swatch.innerHTML = '<div class="sg-color-swatch__swatch" style="background:' + c[1] + '"></div>' +
-      '<div class="sg-color-swatch__info">' +
-      '<div class="sg-color-swatch__name">' + c[0].replace('--color-', '').replace(/-/g, ' ') + '</div>' +
-      '<div class="sg-color-swatch__token">' + c[0] + '</div>' +
-      '<div class="sg-color-swatch__token">' + c[1] + '</div>' +
-      '</div>';
-    palette.appendChild(swatch);
+  groups.forEach(function(g) {
+    var title = document.createElement('div');
+    title.className = 'sg-label';
+    title.style.marginBottom = '0';
+    title.textContent = g[0];
+    palette.appendChild(title);
+    g[1].forEach(function(name) {
+      var hex = val(name);
+      var swatch = document.createElement('div');
+      swatch.className = 'sg-color-swatch';
+      swatch.innerHTML = '<div class="sg-color-swatch__swatch" style="background:' + hex + '"></div>' +
+        '<div class="sg-color-swatch__info">' +
+        '<div class="sg-color-swatch__name">' + name.replace('--color-', '').replace(/-/g, ' ') + '</div>' +
+        '<div class="sg-color-swatch__token">' + name + '</div>' +
+        '<div class="sg-color-swatch__token">' + hex + '</div>' +
+        '</div>';
+      palette.appendChild(swatch);
+    });
   });
 
   // Spacing scale
