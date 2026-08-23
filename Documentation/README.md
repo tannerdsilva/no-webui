@@ -46,6 +46,13 @@ Client event → EventRouter.handle() → [FragmentUpdate] → WS send → DOM p
 
 See `Documentation/ARCHITECTURE.md` for the complete flow.
 
+## Tooling
+
+every developer action is a single command — there are no shell scripts. see
+`Documentation/ASSEMBLY.md` for the stage map (`swift build`, `swift test`,
+`serve`, `smoke`, `fullstack-smoke`, `probe`, `showcase`, and the node browser
+gate).
+
 ## Design Principles
 
 1. **Server-side rendering** — all HTML is produced on the server. the browser

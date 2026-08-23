@@ -37,10 +37,21 @@ See `Sources/WebUIExample/main.swift` and `Documentation/GETTING_STARTED.md`.
 ## Build and test
 
 ```bash
-swift build           # plugin auto-generates Assets+Generated.swift
-swift test            # 238 tests, 11 suites
+swift build           # WebUIAssetPlugin auto-generates Assets+Generated.swift
+swift test            # 252 tests, 11 suites
 swift run WebUIExample  # example server on :9090
-swift package plugin showcase  # generate showcase HTML
+```
+
+all project tooling is command plugins — no shell scripts. see
+`Documentation/ASSEMBLY.md` for the full stage map.
+
+```bash
+swift package --disable-sandbox plugin serve    # host the smoke/demo server on :9123 (Ctrl+C stops)
+swift package --disable-sandbox plugin smoke    # self-contained smoke gate (server + checks + teardown)
+swift package --disable-sandbox plugin fullstack-smoke  # self-contained full-stack gate (live WS round-trips)
+node designer/browser-smoke.mjs                 # browser layout gate (playwright, self-contained)
+swift package plugin probe 9123                 # is a port in use?
+swift package plugin showcase --allow-writing-to-package-directory  # refresh designer/previews/showcase.html
 ```
 
 ## Project structure
@@ -53,13 +64,17 @@ no-webui/
 │   ├── WebUIDesignSystem/        # design system
 │   ├── WebUIAssetTool/           # asset embedding tool
 │   ├── WebUIExample/             # example server
-│   └── WebUIShowcase/            # showcase server + generator
+│   ├── WebUIShowcase/            # showcase server + generator
+│   └── WebUISmokeTest/           # smoke/demo server (hosted by the plugins)
 ├── Plugins/
-│   ├── WebUIAssetPlugin/         # build tool plugin for assets
-│   ├── WebUIShowcasePlugin/      # command plugin for showcase generation
-│   └── WebUIDesignerSync/        # command plugin for designer sync
-├── Tests/WebUITests/             # web UI tests (238 tests)
-├── Documentation/                # 7 documentation files
+│   ├── WebUIAssetPlugin/         # build tool plugin: embeds designer/assets at build time
+│   ├── WebUIServePlugin/         # command plugin `serve`: hosts the server on :9123
+│   ├── WebUISmokePlugin/         # command plugin `smoke`: self-contained asset/page gate
+│   ├── WebUIFullstackSmokePlugin/# command plugin `fullstack-smoke`: live WS gate
+│   ├── WebUIProbePlugin/         # command plugin `probe`: port check
+│   └── WebUIShowcasePlugin/      # command plugin `showcase`: regenerates designer/previews/
+├── Tests/WebUITests/             # web UI tests (252 tests)
+├── Documentation/                # 8 documentation files (incl. ASSEMBLY.md)
 ├── designer/                     # designer sandbox (CSS/JS only)
 ├── README.md
 └── AGENTS.md
@@ -74,11 +89,14 @@ The `designer/` directory is a CSS/JS-only sandbox for UI design work:
 designer/assets/design-system.css
 designer/assets/webui-runtime.js
 
-# Preview in browser:
+# Preview in browser (instant, no build step):
 open designer/previews/designer-preview.html
 
-# Sync into framework:
-swift package plugin designer-sync
+# See your work in the real framework:
+swift package --disable-sandbox plugin serve    # live server on :9123
+swift package --disable-sandbox plugin smoke    # asset + page-integrity gate
+swift package --disable-sandbox plugin fullstack-smoke  # live WS gate
+node designer/browser-smoke.mjs                 # browser layout gate
 ```
 
 See `designer/README.md` for the full designer guide.
@@ -86,6 +104,7 @@ See `designer/README.md` for the full designer guide.
 ## Documentation
 
 - `Documentation/ARCHITECTURE.md` — framework architecture and design decisions
+- `Documentation/ASSEMBLY.md` — project tooling and the build/verification stage map
 - `Documentation/API.md` — full API reference
 - `Documentation/DESIGN_SYSTEM.md` — design system component reference
 - `Documentation/GETTING_STARTED.md` — getting started guide
@@ -97,3 +116,4 @@ See `designer/README.md` for the full designer guide.
 - Swift 6.2+
 - macOS 15+
 - No external dependencies beyond swift-log and swift-nio
+- node + playwright only for the browser layout gate (`designer/browser-smoke.mjs`)

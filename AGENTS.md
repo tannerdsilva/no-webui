@@ -24,20 +24,54 @@ need to explain something, put it in the appropriate `Documentation/*.md` file.
 ## build and test
 
 ```bash
-swift build             # includes plugin that auto-generates Assets+Generated.swift
-swift test              # 247 tests, 11 suites
+swift build             # includes the WebUIAssetPlugin that auto-generates Assets+Generated.swift
+swift test              # 252 tests, 11 suites
 swift run WebUIExample  # example server on :9090
-swift run WebUISmokeTest # interactive full-stack demo on :9123 (ws: /ws)
-designer/sync.sh        # build + test + regenerate designer/previews/showcase.html
-designer/demo.sh        # build + start demo server + open browser at :9123
-designer/smoke.sh       # asset-integrity + deployed-page smoke gate
-designer/fullstack-smoke.sh  # full-stack deployment gate (live WS round-trips)
+```
+
+all project tooling is command plugins — there are no shell scripts. see
+`Documentation/ASSEMBLY.md` for the full stage map and `designer/README.md`
+for the designer workflow.
+
+## plugin verbs
+
+| verb | how to run | what it does |
+|---|---|---|
+| `serve` | `swift package --disable-sandbox plugin serve` | hosts the WebUISmokeTest server on :9123 (long-running; Ctrl+C stops, no orphans). binds require the sandbox to be disabled. |
+| `smoke` | `swift package --disable-sandbox plugin smoke` | self-contained gate: spawns the server, checks served-asset byte integrity + page signatures + CSP, tears down. |
+| `fullstack-smoke` | `swift package --disable-sandbox plugin fullstack-smoke` | self-contained gate: spawns the server, drives live WebSocket round-trips via node, tears down. |
+| `probe` | `swift package plugin probe [port]` | connect-based port check (bind-probe is sandbox-denied). |
+| `showcase` | `swift package plugin showcase --allow-writing-to-package-directory` | regenerates `designer/previews/showcase.html` directly (declared `writeToPackageDirectory`). add `--output <path>` for ad-hoc targets. |
+
+browser layout gate (not a plugin — headless Chromium cannot run inside the
+plugin sandbox):
+
+```bash
+node designer/browser-smoke.mjs   # self-contained: builds, serves, checks, screenshots to .smoke/, tears down
 ```
 
 the `WebUIAssetPlugin` build tool plugin runs automatically during `swift build`.
 it reads `designer/assets/*.css` and `*.js` and generates
 `Assets+Generated.swift` with the content embedded as Swift string constants.
 no manual `swift run WebUIAssetTool` needed.
+
+### why serve/smoke/fullstack-smoke need `--disable-sandbox`
+
+the command-plugin sandbox forbids listening: `bind()` fails with `EPERM` even
+when `allowNetworkConnections(scope: .local(ports:))` is granted (that
+permission is outbound-only). `--disable-sandbox` (a global flag, placed before
+`plugin`) lifts the sandbox for the invocation, letting the plugin spawn the
+server child that binds. these verbs therefore declare no network permission —
+the flag is the only gate. a forgotten `--disable-sandbox` surfaces as
+`server did not become ready on :9123 — run with --disable-sandbox`.
+
+### the lock
+
+a running plugin invocation holds the package `.build` lock for its whole run —
+any concurrent `swift package` command waits ("Another instance of SwiftPM is
+already running using '.build'"). therefore: never run a gate while `serve` is
+up, and never expect a client-style plugin to query a server hosted by another
+invocation. gates host their own server, check, and tear down in one call.
 
 ## project conventions
 
@@ -91,17 +125,7 @@ instantly in the browser with no build step.
 
 `designer/previews/showcase.html` is a generated artifact — a compiled snapshot
 of the showcase page (Swift sources + embedded assets). it is not hand-edited.
-regenerate it with `designer/sync.sh` (build + test + generate + copy).
-
-the `designer-sync` workflow is a shell script, not a SwiftPM command plugin:
-`swift package plugin` holds the package `.build` lock for the whole plugin
-run, so a nested `swift build`/`swift test` inside the plugin deadlocks on
-`flock()` of that same lock, and the command-plugin write sandbox also forbids
-writing inside the package directory.
-
-for ad-hoc showcase generation to a path outside the package
-(e.g. `/tmp`), the `showcase` command plugin still works:
-`swift package plugin showcase --output /tmp/showcase.html`.
+regenerate it with `swift package plugin showcase --allow-writing-to-package-directory`.
 
 ### security invariants
 
@@ -141,11 +165,23 @@ these must never be weakened:
 3. add tests in `Tests/WebUITests/`
 4. update `Documentation/DESIGN_SYSTEM.md` with the new component
 5. run `swift build` (plugin regenerates assets) then `swift test`
+6. run `swift package --disable-sandbox plugin fullstack-smoke` to prove the
+   component deploys and interacts live
 
 ### regenerating the showcase artifact
 
-1. run `designer/sync.sh` (or `designer/sync.sh --no-test` to skip tests)
+1. run `swift package plugin showcase --allow-writing-to-package-directory`
 2. review `designer/previews/showcase.html` in a browser
+
+### verifying a change end-to-end
+
+```bash
+swift build
+swift test
+swift package --disable-sandbox plugin smoke
+swift package --disable-sandbox plugin fullstack-smoke
+node designer/browser-smoke.mjs     # requires node + playwright (chromium)
+```
 
 ### fixing a security issue
 
@@ -163,11 +199,22 @@ these must never be weakened:
   `.build/plugins/outputs/no-webui/WebUI/tools/WebUIAssetPlugin/Assets+Generated.swift`.
 - **Plugin failures** — if `swift build` fails with a plugin error, check that
   `designer/assets/` exists and contains both `design-system.css`
-  and `webui-runtime.js`.
-- **never nest `swift build`/`swift test` inside `swift package plugin`** — the
-  plugin host holds the `.build` lock; the nested process deadlocks on it
-  (observed: nested build parked in `flock()` indefinitely). keep such
-  workflows in shell scripts like `designer/sync.sh`.
+  and `webui-runtime.js`. if those files are deleted/renamed the build still
+  succeeds (the plugin warns and returns no commands) — the server then embeds
+  empty assets.
+- **bind() is sandbox-denied** — `serve`/`smoke`/`fullstack-smoke` must run with
+  `--disable-sandbox`. without it the child server fails to bind and the plugin
+  reports `server did not become ready — run with --disable-sandbox`.
+- **the `.build` lock** — a running plugin (e.g. `serve`) blocks every other
+  `swift package` command until it exits. never launch a gate while `serve` is up.
+- **showcase permission** — the `showcase` verb declares
+  `writeToPackageDirectory`; every invocation needs the approval flag
+  (`--allow-writing-to-package-directory`), even with `--output /tmp/...`.
+- **stale `-tool` binaries** — when an executable target is also a plugin tool
+  dependency, `swift build --target` refreshes
+  `.build/<triple>/debug/<Name>-tool`, not `.build/debug/<Name>`. a fresh clone
+  (no `.build`) has no staleness: the first plugin invocation cold-builds and
+  serves byte-fresh sources.
 - **`Logger.Message` type** — swift-log's `Logger` methods take `Logger.Message`,
   not `String`. string concatenation with `+` doesn't produce `Logger.Message`.
   use string interpolation or a single string literal.

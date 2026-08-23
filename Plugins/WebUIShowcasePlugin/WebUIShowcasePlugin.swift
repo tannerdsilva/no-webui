@@ -8,22 +8,21 @@ struct WebUIShowcasePlugin: CommandPlugin {
         context: PluginContext,
         arguments: [String]
     ) async throws {
-        // Parse optional --output argument
-        var outputPath = context.pluginWorkDirectory.appending("showcase").appending("index.html")
+        // Default: write the showcase into designer/previews/ (allowed via the
+        // writeToPackageDirectory permission). --output overrides to any path.
+        var outputURL = context.package.directoryURL
+            .appendingPathComponent("designer/previews/showcase.html")
         if let outputIndex = arguments.firstIndex(of: "--output"),
            outputIndex + 1 < arguments.count {
-            outputPath = Path(arguments[outputIndex + 1])
+            outputURL = URL(fileURLWithPath: arguments[outputIndex + 1])
         }
 
-        // Build the showcase generator
         print("Building WebUI Showcase generator...")
         let showcaseTool = try context.tool(named: "WebUIShowcase")
-        let executableURL = URL(fileURLWithPath: showcaseTool.path.string)
 
-        // Run the generator with --generate flag
         let process = Process()
-        process.executableURL = executableURL
-        process.arguments = ["--generate", outputPath.string]
+        process.executableURL = showcaseTool.url
+        process.arguments = ["--generate", outputURL.path]
         process.standardOutput = FileHandle.standardOutput
         process.standardError = FileHandle.standardError
         try process.run()
@@ -32,7 +31,7 @@ struct WebUIShowcasePlugin: CommandPlugin {
         if process.terminationStatus == 0 {
             print("")
             print("WebUI Showcase generated at:")
-            print("  file://\(outputPath.string)")
+            print("  file://\(outputURL.path)")
             print("")
             print("Open this URL in your browser to view the showcase.")
         } else {

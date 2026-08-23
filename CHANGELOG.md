@@ -6,6 +6,28 @@ all notable changes to this project are documented here.
 
 ### added
 
+- command plugins for the whole project tooling: `serve` (hosts the
+  WebUISmokeTest server on :9123, run with `--disable-sandbox`), `smoke`
+  (self-contained asset-integrity + page-structure gate), `fullstack-smoke`
+  (self-contained live-WebSocket gate), `probe` (connect-based port check).
+- `Documentation/ASSEMBLY.md` — the build/verification stage map.
+
+### changed
+
+- designer gate workflow is now single plugin commands; the designer shell
+  scripts (`sync.sh`, `demo.sh`, `smoke.sh`, `fullstack-smoke.sh`,
+  `browser-smoke.sh`) were removed.
+- `showcase` now declares `writeToPackageDirectory` and writes
+  `designer/previews/showcase.html` directly
+  (`swift package plugin showcase --allow-writing-to-package-directory`).
+- the browser layout gate runs as a self-contained node command
+  (`node designer/browser-smoke.mjs`) — headless Chromium cannot run inside
+  the plugin sandbox.
+
+### fixed
+
+- removed the stale `WebUIDesignerSync` plugin reference from the README.
+
 - build tool plugin (`WebUIAssetPlugin`) that auto-generates `Assets+Generated.swift`
   from CSS and JS assets during `swift build`. no more manual `swift run WebUIAssetTool`.
 - `CSRFProtection` — stateless HMAC-SHA256 token generation and validation.

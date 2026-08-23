@@ -41,78 +41,44 @@ Changes appear instantly. No server, no terminal, no waiting.
 ### When you're done
 
 The build system reads directly from `designer/assets/`. There is no sync step.
-When Tanner runs `swift build`, it automatically picks up your latest changes
-from this directory.
+When anyone runs `swift build`, it automatically picks up your latest changes
+from this directory and embeds them into the framework as compiled-in assets.
 
-To verify your changes work end-to-end:
-
-```bash
-cd no-webui
-designer/sync.sh               # build + test + regenerate the showcase
-```
-
-`sync.sh` runs `swift build` (which embeds the current `designer/assets/`
-CSS/JS), `swift test` (247 tests), then regenerates
-`designer/previews/showcase.html` via the freshly built `WebUIShowcase`
-binary. Use `designer/sync.sh --no-test` to skip the suite during quick
-iteration.
-
-### Smoke-testing your deployment
-
-Two one-command gates prove the design actually reaches a browser intact.
-Both are safe to run repeatedly and exit non-zero on the first failure.
+To see your work in the real framework, the developer runs these commands
+(all single commands, no scripts):
 
 ```bash
-designer/smoke.sh          # asset integrity + deployed page structure
-designer/fullstack-smoke.sh # live WebSocket event round-trips (full stack)
+swift package --disable-sandbox plugin serve        # host the real server on :9123
+swift package --disable-sandbox plugin smoke        # asset-integrity + page-structure gate
+swift package --disable-sandbox plugin fullstack-smoke  # live WebSocket round-trip gate
+node designer/browser-smoke.mjs                     # headless-Chromium layout gate
+swift package plugin showcase --allow-writing-to-package-directory  # refresh showcase.html
 ```
 
-- `smoke.sh` builds the `WebUISmokeTest` server, starts it, and checks that the
-  CSS/JS it serves are **byte-identical** to `designer/assets/`, that the page
-  is self-contained (no external asset refs, CSP present), and that every
-  visual fix survived into the deployed HTML.
-- `fullstack-smoke.sh` goes further: it deploys the real stack (NIO HTTP +
-  WebSocket upgrade + Swift `EventRouter` + interactive WebUI views) and drives
-  **live events over the wire** — click a button, type in an input, and asserts
-  the DOM patches back correctly. This catches event-routing bugs a static
-  check can't.
+- `serve` keeps the live server up (the interactive counter / progress / echo
+  demo page on http://127.0.0.1:9123). Ctrl+C stops it.
+- `smoke` proves the CSS/JS the server serves are **byte-identical** to
+  `designer/assets/`, that the page is self-contained, and that every visual
+  fix survived into the deployed HTML.
+- `fullstack-smoke` goes further — it drives **live events over the wire**
+  (a click, a keystroke) and asserts the DOM patches back correctly. this
+  catches event-routing bugs a static check can't.
+- `browser-smoke` loads the page in headless Chromium and asserts real-layout
+  invariants (left-anchored fills, label placement, no console errors). you
+  need `node` + `playwright` for this one; it writes a screenshot to
+  `.smoke/browser.png`.
+- `showcase` regenerates `previews/showcase.html` — the full reference page —
+  from the current Swift sources and embedded assets.
 
-You need `node` + `playwright` on PATH for `fullstack-smoke.sh`'s browser
-layer; the Node WebSocket round-trip needs only `node`.
+if you need a port check, there's a probe too:
+`swift package plugin probe 9123`.
 
-### Playing with the demo interactively
-
-The smoke tests are headless on purpose: they deploy the stack, drive it,
-assert, and exit — so you only see shell output. To *play* with the same
-deployed stack, use the demo launcher:
-
-```bash
-designer/demo.sh       # build (if needed), start server, open your browser
-```
-
-It starts the `WebUISmokeTest` server and opens
-`http://127.0.0.1:9123/` in your default browser. The page is the real full
-stack (live WebSocket → Swift `EventRouter` → DOM patch), not a static mockup:
-
-- **Counter** — click `+` / `−` / `Reset`. Each click round-trips over the
-  WebSocket and the DOM patches in place.
-- **Progress** — `−10%` / `+10%` re-render the bar server-side.
-- **Echo** — type in the input and the text echoes back below it, live.
-
-`Ctrl+C` in the `demo.sh` terminal stops the server. If you'd rather not open
-a browser (e.g. on a headless box), start the server manually instead:
-
-```bash
-swift run WebUISmokeTest    # serves http://127.0.0.1:9123/ (ws: /ws)
-```
-
-> Why a script instead of a `swift package plugin` command? A command plugin
-> holds the package build lock for the whole `swift package plugin` run, so
-> any nested `swift build`/`swift test` deadlocks on it; and command plugins
-> run in a write-sandbox that cannot write back into the package directory
-> (the copy into `designer/previews/` fails with EPERM). The shell script has
-> neither constraint. The `showcase` plugin remains for ad-hoc generation to
-> an arbitrary path: `swift package plugin showcase --output /tmp/x.html`.
+> why do `serve`/`smoke`/`fullstack-smoke` need `--disable-sandbox`? package
+> plugins run in a sandbox that forbids binding a listening port (even with the
+> network permission, which is outbound-only). the flag lifts the sandbox for
+> that one invocation, which is what lets the server bind and listen. if you
+> see `server did not become ready — run with --disable-sandbox`, that's the
+> missing flag.
 
 ## What's in the CSS file
 

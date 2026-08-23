@@ -82,7 +82,7 @@ let package = Package(
             ]
         ),
 
-        // ── Deployment smoke test (designer/smoke.sh harness) ────
+        // ── Smoke/demo server (hosted by the serve/gate plugins) ──
         .executableTarget(
             name: "WebUISmokeTest",
             dependencies: [
@@ -109,9 +109,11 @@ let package = Package(
             capability: .command(
                 intent: .custom(
                     verb: "showcase",
-                    description: "Generate the WebUI Showcase HTML page."
+                    description: "Generate the WebUI Showcase HTML page into designer/previews/."
                 ),
-                permissions: []
+                permissions: [
+                    .writeToPackageDirectory(reason: "write designer/previews/showcase.html"),
+                ]
             ),
             dependencies: [
                 .target(name: "WebUIShowcase"),

@@ -11,7 +11,9 @@
 // Writes a full-page screenshot to .smoke/browser.png. Exits non-zero on failure.
 //
 // Usage: node designer/browser-smoke.mjs
-//        designer/browser-smoke.sh   (wrapper)
+//   (self-contained: builds, serves on :9123, checks in headless Chromium,
+//    screenshots to .smoke/browser.png, tears down. not a plugin verb —
+//    headless Chromium cannot run inside the plugin sandbox.)
 
 import { spawn } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
