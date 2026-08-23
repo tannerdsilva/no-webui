@@ -123,11 +123,7 @@ let package = Package(
                 intent: .custom(
                     verb: "serve",
                     description: "Host the smoke/demo server on :9123 (requires --disable-sandbox)."
-                ),
-                permissions: [
-                    .allowNetworkConnections(scope: .local(ports: [9123]),
-                                              reason: "bind and listen on :9123"),
-                ]
+                )
             ),
             dependencies: [
                 .target(name: "WebUISmokeTest"),
@@ -139,11 +135,7 @@ let package = Package(
                 intent: .custom(
                     verb: "smoke",
                     description: "Self-contained smoke gate: hosts the server, checks it, tears down."
-                ),
-                permissions: [
-                    .allowNetworkConnections(scope: .local(ports: [9123]),
-                                              reason: "bind, serve, and check on :9123"),
-                ]
+                )
             ),
             dependencies: [
                 .target(name: "WebUISmokeTest"),
@@ -155,11 +147,7 @@ let package = Package(
                 intent: .custom(
                     verb: "fullstack-smoke",
                     description: "Self-contained full-stack gate: hosts the server, drives live WS round-trips, tears down."
-                ),
-                permissions: [
-                    .allowNetworkConnections(scope: .local(ports: [9123]),
-                                              reason: "bind, serve, and drive events on :9123"),
-                ]
+                )
             ),
             dependencies: [
                 .target(name: "WebUISmokeTest"),

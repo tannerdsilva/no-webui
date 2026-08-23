@@ -56,7 +56,7 @@ struct WebUIServePlugin: CommandPlugin {
         }
 
         guard ready else {
-            Diagnostics.error("server did not become ready on :\(port)")
+            Diagnostics.error("server did not become ready on :\(port) — run with --disable-sandbox")
             process.terminate()
             return
         }

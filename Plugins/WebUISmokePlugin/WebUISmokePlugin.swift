@@ -49,7 +49,7 @@ struct WebUISmokePlugin: CommandPlugin {
             try await Task.sleep(for: .milliseconds(250))
         }
         guard ready else {
-            Diagnostics.error("server did not become ready on :\(port)")
+            Diagnostics.error("server did not become ready on :\(port) — run with --disable-sandbox")
             return
         }
         ok("server ready on :\(port)")
