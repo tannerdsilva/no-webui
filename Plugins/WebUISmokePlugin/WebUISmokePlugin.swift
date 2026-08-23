@@ -1,0 +1,135 @@
+import Foundation
+import PackagePlugin
+
+// self-contained smoke gate: one command spawns the WebUISmokeTest server
+// (bind() requires the sandbox to be disabled), checks it over loopback,
+// then tears the server down. a long-running `serve` invocation holds the
+// package .build lock for its whole run, so a gate can never be a separate
+// invocation pointed at another plugin's server — it must host its own.
+//
+//   swift package --disable-sandbox plugin --allow-network-connections local:9123 smoke [--port 9123]
+
+@main
+struct WebUISmokePlugin: CommandPlugin {
+    func performCommand(context: PluginContext, arguments: [String]) async throws {
+        var extractor = ArgumentExtractor(arguments)
+        let port = extractor.extractOption(named: "port").first ?? "9123"
+        let base = "http://127.0.0.1:\(port)"
+
+        let server = try context.tool(named: "WebUISmokeTest")
+        let process = Process()
+        process.executableURL = server.url
+        process.standardOutput = FileHandle.standardOutput
+        process.standardError = FileHandle.standardError
+        try process.run()
+        defer {
+            if process.isRunning {
+                process.terminate()
+                process.waitUntilExit()
+            }
+        }
+
+        let session = URLSession(configuration: .ephemeral)
+        defer { session.invalidateAndCancel() }
+
+        var pass = 0
+        var fail = 0
+        func ok(_ message: String) { pass += 1; print("  PASS \(message)") }
+        func bad(_ message: String) { fail += 1; print("  FAIL \(message)") }
+
+        print("=== WebUI smoke check ===")
+        print("  base: \(base)")
+
+        var ready = false
+        for _ in 0..<40 {
+            if await httpStatus(session, "\(base)/") == 200 {
+                ready = true
+                break
+            }
+            try await Task.sleep(for: .milliseconds(250))
+        }
+        guard ready else {
+            Diagnostics.error("server did not become ready on :\(port)")
+            return
+        }
+        ok("server ready on :\(port)")
+
+        let cssSource = context.package.directoryURL
+            .appendingPathComponent("designer/assets/design-system.css")
+        let jsSource = context.package.directoryURL
+            .appendingPathComponent("designer/assets/webui-runtime.js")
+
+        if let servedCss = await GET(session, "\(base)/__assets/css"),
+           let sourceCss = try? Data(contentsOf: cssSource),
+           servedCss == sourceCss {
+            ok("css served bytes == source (\(sourceCss.count) bytes)")
+        } else {
+            bad("css served bytes DIFFER from source")
+        }
+
+        if let servedJs = await GET(session, "\(base)/__assets/js"),
+           let sourceJs = try? Data(contentsOf: jsSource),
+           servedJs == sourceJs {
+            ok("js served bytes == source (\(sourceJs.count) bytes)")
+        } else {
+            bad("js served bytes DIFFER from source")
+        }
+
+        guard let pageData = await GET(session, "\(base)/"),
+              let html = String(data: pageData, encoding: .utf8) else {
+            Diagnostics.error("page not reachable at \(base)/")
+            return
+        }
+
+        let signatures: [(sig: String, label: String)] = [
+            ("color-mix(in srgb, var(--color-neutral-200) 45%, var(--color-bg))", "progress groove color"),
+            ("box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.12)", "progress groove inset shadow"),
+            ("flex-direction: row", "progress left-anchor (row)"),
+            ("grid-area: 1 / 1", "zstack overlap"),
+            ("align-self: stretch", "block-component stretch"),
+            ("margin-top: 1.75rem", "progress label lane"),
+            ("role=\"progressbar\"", "progressbars rendered"),
+            ("counter-value", "interactive counter rendered"),
+            ("echo-out__text", "live input echo rendered"),
+            ("button button--primary", "primary button rendered"),
+        ]
+        for entry in signatures {
+            if html.contains(entry.sig) {
+                ok("fix present: \(entry.label)")
+            } else {
+                bad("fix MISSING: \(entry.label)")
+            }
+        }
+
+        if html.range(of: #"<script[^>]+src="http|<link[^>]+href="http"#, options: .regularExpression) == nil {
+            ok("no external http asset references")
+        } else {
+            bad("page references external http assets (not self-contained)")
+        }
+
+        if html.contains("http-equiv=\"Content-Security-Policy\"") {
+            ok("CSP meta present")
+        } else {
+            bad("CSP meta missing")
+        }
+
+        print("")
+        print("=== summary: \(pass) passed, \(fail) failed ===")
+        if fail == 0 {
+            print("SMOKE PASS")
+        } else {
+            Diagnostics.error("smoke gate failed")
+        }
+    }
+
+    private func httpStatus(_ session: URLSession, _ urlString: String) async -> Int? {
+        guard let url = URL(string: urlString) else { return nil }
+        guard let (_, response) = try? await session.data(from: url) else { return nil }
+        return (response as? HTTPURLResponse)?.statusCode
+    }
+
+    private func GET(_ session: URLSession, _ urlString: String) async -> Data? {
+        guard let url = URL(string: urlString) else { return nil }
+        return try? await session.data(from: url).0
+    }
+}
