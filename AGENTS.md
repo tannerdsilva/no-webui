@@ -25,7 +25,7 @@ need to explain something, put it in the appropriate `Documentation/*.md` file.
 
 ```bash
 swift build             # includes the WebUIAssetPlugin that auto-generates Assets+Generated.swift
-swift test              # 252 tests, 11 suites
+swift test              # 264 tests, 11 suites
 swift run WebUIExample  # example server on :9090
 ```
 
@@ -38,8 +38,8 @@ for the designer workflow.
 | verb | how to run | what it does |
 |---|---|---|
 | `serve` | `swift package --disable-sandbox plugin serve` | hosts the WebUISmokeTest server on :9123 (long-running; Ctrl+C stops, no orphans). binds require the sandbox to be disabled. |
-| `smoke` | `swift package --disable-sandbox plugin smoke` | self-contained gate: spawns the server, checks served-asset byte integrity + page signatures + CSP, tears down. |
-| `fullstack-smoke` | `swift package --disable-sandbox plugin fullstack-smoke` | self-contained gate: spawns the server, drives live WebSocket round-trips via node, tears down. |
+| `smoke` | `swift package --disable-sandbox plugin smoke` | self-contained gate: spawns the server, checks served-asset byte integrity + page signatures + CSP + interactive-component count, tears down. |
+| `fullstack-smoke` | `swift package --disable-sandbox plugin fullstack-smoke` | self-contained gate: spawns the server, drives live WebSocket round-trips (click/echo/redirect/optimistic) via node, tears down. |
 | `probe` | `swift package plugin probe [port]` | connect-based port check (bind-probe is sandbox-denied). |
 | `showcase` | `swift package plugin showcase --allow-writing-to-package-directory` | regenerates `designer/previews/showcase.html` directly (declared `writeToPackageDirectory`). add `--output <path>` for ad-hoc targets. |
 
@@ -47,7 +47,7 @@ browser layout gate (not a plugin — headless Chromium cannot run inside the
 plugin sandbox):
 
 ```bash
-node designer/browser-smoke.mjs   # self-contained: builds, serves, checks, screenshots to .smoke/, tears down
+node designer/browser-smoke.mjs   # self-contained: builds, serves, drives real DOM (counter/echo, optimistic patch+rollback, scroll survival), screenshots to .smoke/, tears down
 ```
 
 the `WebUIAssetPlugin` build tool plugin runs automatically during `swift build`.
@@ -100,7 +100,24 @@ invocation. gates host their own server, check, and tear down in one call.
 - **ViewModifier protocol** — `func apply(to html: String) -> String`. wraps
   rendered HTML with attributes or styles.
 - **EventRouter** — routes WebSocket events to registered handlers. thread-safe
-  via NSLock. max 10,000 handlers by default.
+  via NSLock. max 10,000 handlers by default. missing-handler events log at
+  `.warning` and `handlerCount` is public.
+- **event modifiers** — `.onClick`/`.onSubmit`/`.onInput`/`.onChange` plus
+  keyboard, mouse, and focus/blur variants (`.onKeyUp`, `.onMouseDown`,
+  `.onFocus`, ...) emit `data-component-id` + `data-event` and register the
+  handler in one step. the runtime only delivers the event a component
+  declares — a click-only component never receives hover/press noise.
+- **`.onOptimisticClick(predict:perform:)`** — applies a render-time prediction
+  to the DOM in the same turn as the click, auto-confirms on the authoritative
+  update, and rolls back to last-known-good after `optimisticSettleMs` (5s) if
+  the server never confirms. predictions are render-time snapshots — use for
+  value-independent transitions (reset, toggle-on, set).
+- **`SpaceToken`/`ColorToken`** — back `.padding(.four)` and
+  `.foregroundColor(.primary)` with `var(--space-4)` / `var(--color-primary-500)`
+  references. every case resolves to a token in `design-system.css`
+  (deployment-guarded).
+- **fragment save/restore** — scroll position and non-form `[tabindex]` focus
+  survive a patch alongside value/checked/caret for form controls.
 - **RenderContext** — `@TaskLocal` context for component ID generation and
   handler registration. must be set before rendering.
 - **HTMLDocument** — assembles complete HTML with auto-generated CSP and nonce.
@@ -207,6 +224,12 @@ node designer/browser-smoke.mjs     # requires node + playwright (chromium)
   reports `server did not become ready — run with --disable-sandbox`.
 - **the `.build` lock** — a running plugin (e.g. `serve`) blocks every other
   `swift package` command until it exits. never launch a gate while `serve` is up.
+- **smoke pins the interactive count** — the smoke gate asserts exactly 6
+  `data-component-id` attributes on the smoke page. adding or removing an
+  interactive component there means updating the expected count in
+  `WebUISmokePlugin.swift` (the fullstack driver's `>=6` check is tolerant).
+  the same page is what `browser-smoke` drives for optimistic + scroll
+  survival, so keep those probes' target ids consistent with the page.
 - **showcase permission** — the `showcase` verb declares
   `writeToPackageDirectory`; every invocation needs the approval flag
   (`--allow-writing-to-package-directory`), even with `--output /tmp/...`.
