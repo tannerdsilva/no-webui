@@ -89,11 +89,15 @@ public final class EventRouter: Sendable {
     public func nextComponentID() -> ComponentID {
         state.nextComponentID()
     }
+    public var handlerCount: Int {
+        state.handlerCount
+    }
     public func handle(_ event: EventData) async -> [FragmentUpdate] {
         logger.emit(ObservableEvent.eventReceived(component: event.component.value, event: event.event), observers: observers)
 
         guard let handler = state.handler(for: event.component) else {
-            logger.emit(ObservableEvent.debug(message: "no handler registered for component '\(event.component.value)'"), observers: observers)
+            logger.warning("no handler registered for component '\(event.component.value)'")
+            observers.emit(ObservableEvent.debug(message: "no handler registered for component '\(event.component.value)'"))
             return []
         }
 

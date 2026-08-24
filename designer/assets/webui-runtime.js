@@ -11,11 +11,12 @@ window.WebUIRuntime = (function () {
     maxQueueSize: 1000,
     debounceInputMs: 300,
     debounceMaxWaitMs: 1000,
+    optimisticSettleMs: 5000,
     logLevel: 'warn',
   };
 
   var LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3, silent: 4 };
-  var EVENT_TYPES = ['click', 'input', 'change', 'submit', 'keydown', 'focus', 'blur'];
+  var EVENT_TYPES = ['click', 'input', 'change', 'submit', 'keydown', 'keyup', 'keypress', 'focus', 'blur', 'mouseover', 'mouseout', 'mousedown', 'mouseup'];
 
   function createLogger(level) {
     var min = LOG_LEVELS[level] || LOG_LEVELS.warn;
@@ -175,7 +176,7 @@ window.WebUIRuntime = (function () {
     };
   }
 
-  function createEventDelegator(log, send) {
+  function createEventDelegator(log, send, fragmentPatcher) {
     var inputTimers = {};
     var listeners = [];
     var config = {};
@@ -204,12 +205,32 @@ window.WebUIRuntime = (function () {
       log.debug('Event delegation unmounted');
     }
 
+    function applyPrediction(componentEl, componentId) {
+      var raw = componentEl.getAttribute('data-optimistic');
+      if (!raw) return;
+      var pred;
+      try {
+        pred = JSON.parse(raw);
+      } catch (e) {
+        log.warn('invalid data-optimistic json on #' + componentId);
+        return;
+      }
+      if (!Array.isArray(pred)) {
+        log.warn('data-optimistic payload is not an array on #' + componentId);
+        return;
+      }
+      fragmentPatcher.patch(pred, null, true);
+    }
+
     function handleEvent(event) {
       var componentEl = findComponent(event);
       if (!componentEl) return;
 
       var componentId = componentEl.getAttribute('data-component-id');
       if (!componentId) return;
+
+      var declaredEvent = componentEl.getAttribute('data-event');
+      if (declaredEvent && declaredEvent !== event.type) return;
 
       if (event.type === 'click') {
         if (event.metaKey || event.ctrlKey || event.shiftKey) return;
@@ -238,6 +259,10 @@ window.WebUIRuntime = (function () {
       if (event.type === 'input') {
         debounceInput(componentId, event, eventData);
         return;
+      }
+
+      if (event.type === 'click') {
+        applyPrediction(componentEl, componentId);
       }
 
       send({
@@ -312,6 +337,8 @@ window.WebUIRuntime = (function () {
           return extractFormData(target);
 
         case 'keydown':
+        case 'keyup':
+        case 'keypress':
           return {
             key: event.key,
             ctrlKey: String(event.ctrlKey),
@@ -322,6 +349,10 @@ window.WebUIRuntime = (function () {
 
         case 'focus':
         case 'blur':
+        case 'mouseover':
+        case 'mouseout':
+        case 'mousedown':
+        case 'mouseup':
           return {};
 
         default:
@@ -401,9 +432,11 @@ window.WebUIRuntime = (function () {
 
   function createFragmentPatcher(log) {
     var lastSeq = -1;
+    var pending = {};
+    var settleMs = 5000;
 
 
-    function patch(fragments, seq) {
+    function patch(fragments, seq, optimistic) {
       if (!fragments || !fragments.length) return;
 
       if (seq !== undefined && seq !== null) {
@@ -419,11 +452,39 @@ window.WebUIRuntime = (function () {
       for (var i = 0; i < fragments.length; i++) {
         var f = fragments[i];
         if (!f.id || f.html === undefined) {
+          if (optimistic) continue;
           log.warn('Invalid fragment at index ' + i);
           continue;
         }
+        if (optimistic) {
+          armPending(f.id);
+        } else {
+          clearPending(f.id);
+        }
         replaceElement(f.id, f.html);
       }
+    }
+
+    function armPending(id) {
+      var el = document.getElementById(id);
+      if (!el) return;
+      clearPending(id);
+      pending[id] = { html: el.outerHTML, timer: null };
+      var record = pending[id];
+      record.timer = setTimeout(function () {
+        if (!pending[id]) return;
+        var saved = pending[id].html;
+        delete pending[id];
+        replaceElement(id, saved);
+        log.warn('optimistic patch for #' + id + ' rolled back (no confirmation)');
+      }, settleMs);
+    }
+
+    function clearPending(id) {
+      var record = pending[id];
+      if (!record) return;
+      if (record.timer) clearTimeout(record.timer);
+      delete pending[id];
     }
 
     function sanitizeFragmentHTML(html) {
@@ -477,8 +538,29 @@ window.WebUIRuntime = (function () {
         } catch (e) { }
         if (active === el) record.focused = true;
         state[key] = record;
+        saveScroll(el, el.id || el.name || String(i), state);
+      }
+      var scrollers = root.querySelectorAll('div, section, ul, ol, main, aside, nav, [tabindex]');
+      for (var j = 0; j < scrollers.length; j++) {
+        var sc = scrollers[j];
+        if (sc.tagName === 'TEXTAREA') continue;
+        saveScroll(sc, sc.id || sc.name || '', state);
+      }
+      saveScroll(root, '__root', state);
+      if (active && root.contains(active)) {
+        var tag = active.tagName;
+        var isForm = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON';
+        if (!isForm && active.id) {
+          state['focus:' + active.id] = { focus: true };
+        }
       }
       return state;
+    }
+
+    function saveScroll(el, key, state) {
+      if (!key) return;
+      if (!el.scrollTop && !el.scrollLeft) return;
+      state['scroll:' + key] = { sTop: el.scrollTop, sLeft: el.scrollLeft };
     }
 
 
@@ -516,6 +598,33 @@ window.WebUIRuntime = (function () {
             focusState = saved;
           }
         }
+        var scrollKey = 'scroll:' + (el.id || el.name || String(i));
+        if (state[scrollKey]) {
+          el.scrollTop = state[scrollKey].sTop;
+          el.scrollLeft = state[scrollKey].sLeft;
+        }
+      }
+      for (var sk in state) {
+        if (sk.indexOf('scroll:') !== 0) continue;
+        var targetId = sk.slice(7);
+        if (targetId === '__root') {
+          root.scrollTop = state[sk].sTop;
+          root.scrollLeft = state[sk].sLeft;
+          continue;
+        }
+        var target = document.getElementById(targetId);
+        if (target) {
+          target.scrollTop = state[sk].sTop;
+          target.scrollLeft = state[sk].sLeft;
+        }
+      }
+      for (var fk in state) {
+        if (fk.indexOf('focus:') !== 0) continue;
+        var focusEl = document.getElementById(fk.slice(6));
+        if (focusEl && typeof focusEl.focus === 'function') {
+          try { focusEl.focus(); } catch (e) { }
+        }
+        break;
       }
       if (focusTarget && typeof focusTarget.focus === 'function') {
         try {
@@ -527,9 +636,21 @@ window.WebUIRuntime = (function () {
       }
     }
 
-    function reset() { lastSeq = -1; }
+    function reset() {
+      lastSeq = -1;
+      for (var id in pending) {
+        if (pending.hasOwnProperty(id) && pending[id].timer) {
+          clearTimeout(pending[id].timer);
+        }
+      }
+      pending = {};
+    }
 
-    return { patch: patch, reset: reset };
+    function setSettle(ms) {
+      settleMs = ms;
+    }
+
+    return { patch: patch, reset: reset, setSettle: setSettle };
   }
 
   var UNSAFE_PROTOCOLS = /^(javascript|data|vbscript):/i;
@@ -539,22 +660,24 @@ window.WebUIRuntime = (function () {
     return !UNSAFE_PROTOCOLS.test(url);
   }
 
-  var Router = {
-    navigate: function (url) {
-      if (!url) return;
-      if (!isSafeUrl(url)) { log.warn('Router.navigate: blocked unsafe URL'); return; }
-      history.pushState(null, '', url);
-    },
+  function createRouter(log) {
+    return {
+      navigate: function (url) {
+        if (!url) return;
+        if (!isSafeUrl(url)) { log.warn('Router.navigate: blocked unsafe URL'); return; }
+        history.pushState(null, '', url);
+      },
 
-    redirect: function (url, replace) {
-      if (!url) return;
-      if (!isSafeUrl(url)) { log.warn('Router.redirect: blocked unsafe URL'); return; }
-      if (replace) location.replace(url);
-      else location.href = url;
-    },
+      redirect: function (url, replace) {
+        if (!url) return;
+        if (!isSafeUrl(url)) { log.warn('Router.redirect: blocked unsafe URL'); return; }
+        if (replace) location.replace(url);
+        else location.href = url;
+      },
 
-    reload: function () { location.reload(); },
-  };
+      reload: function () { location.reload(); },
+    };
+  }
 
   function createStateStore(log) {
     var store = {};
@@ -628,7 +751,7 @@ window.WebUIRuntime = (function () {
     return { get: get, set: set, subscribe: subscribe, clear: clear };
   }
 
-  function createMessageDispatcher(log, fragmentPatcher, stateStore) {
+  function createMessageDispatcher(log, fragmentPatcher, stateStore, router) {
     return function handleMessage(msg) {
       if (!msg || !msg.type) {
         log.warn('Received message without type');
@@ -641,7 +764,7 @@ window.WebUIRuntime = (function () {
           break;
 
         case 'redirect':
-          Router.redirect(msg.url, msg.replace === true);
+          router.redirect(msg.url, msg.replace === true);
           break;
 
         case 'state':
@@ -649,7 +772,7 @@ window.WebUIRuntime = (function () {
           break;
 
         case 'reload':
-          Router.reload();
+          router.reload();
           break;
 
         case 'error':
@@ -694,12 +817,14 @@ window.WebUIRuntime = (function () {
 
     var stateStore = createStateStore(log);
     var fragmentPatcher = createFragmentPatcher(log);
-    var handleMessage = createMessageDispatcher(log, fragmentPatcher, stateStore);
+    var router = createRouter(log);
+    var handleMessage = createMessageDispatcher(log, fragmentPatcher, stateStore, router);
     var wsClient = createWSClient(log, handleMessage);
-    var eventDelegator = createEventDelegator(log, wsClient.send);
+    var eventDelegator = createEventDelegator(log, wsClient.send, fragmentPatcher);
 
     wsClient.reset(config);
     eventDelegator.reset(config);
+    fragmentPatcher.setSettle(config.optimisticSettleMs);
 
     eventDelegator.mount();
 

@@ -74,10 +74,13 @@ func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
 								return [FragmentUpdate(id: "counter-value", html: counterValueHTML(state.count))]
 							}
 						WebUIButton("Reset", variant: .ghost, size: .sm, id: "btn-reset")
-							.onClick { _ in
-								state.count = 0
-								return [FragmentUpdate(id: "counter-value", html: counterValueHTML(0))]
-							}
+							.onOptimisticClick(
+								predict: { [FragmentUpdate(id: "counter-value", html: counterValueHTML(0))] },
+								perform: { _ in
+									state.count = 0
+									return [FragmentUpdate(id: "counter-value", html: counterValueHTML(0))]
+								}
+							)
 					}
 				}
 				// Progress card
@@ -259,6 +262,10 @@ extension SmokeApp {
 			let msg = try JSONDecoder().decode(WSIncoming.self, from: data)
 			switch msg {
 			case .event(let component, let event, let data):
+				if component == "redirect-test" {
+					try await writeJSON(WSOutgoing.redirect(url: "/", replace: true), outbound: outbound)
+					return
+				}
 				let eventData = EventData(component: ComponentID(component), event: event, data: data)
 				let updates = await self.router.handle(eventData)
 				guard !updates.isEmpty else { return }

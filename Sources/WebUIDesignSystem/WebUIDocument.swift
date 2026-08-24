@@ -38,7 +38,7 @@ public struct WebUIDocument: View {
         let doc = HTMLDocument(
             title: title,
             body: body,
-            styles: CSSStylesheet(WebUITheme.all + LayoutStyles.complete),
+            styles: CSSStylesheet(LayoutStyles.complete),
             rawStyles: [WebUIAssets.css],
             scripts: scripts,
             head: head,

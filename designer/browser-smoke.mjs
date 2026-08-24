@@ -76,7 +76,8 @@ if (!up) {
 ok("server ready");
 
 const browser = await chromium.launch();
-const page = await browser.newPage({ viewport: { width: 1280, height: 900 } });
+const context = await browser.newContext({ viewport: { width: 1280, height: 900 } });
+const page = await context.newPage();
 
 const consoleErrors = [];
 const failedRequests = [];
@@ -147,6 +148,71 @@ else bad(`failed requests: ${JSON.stringify(failedRequests)}`);
 const shotDir = join(ROOT, ".smoke");
 await page.screenshot({ path: join(shotDir, "browser.png"), fullPage: true });
 console.log(`  screenshot -> ${join(shotDir, "browser.png")}`);
+
+// 4. Optimistic path in a real browser. + twice (server-confirmed) takes the
+// counter to 2. then prove the optimistic layer deterministically:
+//   (a) a click patches the DOM to the predicted value in the same
+//       synchronous turn — before any server round-trip can land,
+//   (b) an unconfirmed optimistic patch rolls back to last-known-good after
+//       the settle window (drive the patcher directly, no live traffic).
+await page.click("#btn-inc");
+await page.waitForTimeout(150);
+await page.click("#btn-inc");
+await page.waitForTimeout(150);
+const readCounter = () => page.evaluate(() => document.querySelector("#counter-value")?.textContent.trim() ?? "");
+let counterText = await readCounter();
+if (counterText === "2") ok("counter confirmed to 2 via real WS round-trips");
+else bad(`counter did not reach 2: ${JSON.stringify(counterText)}`);
+
+const sameTurn = await page.evaluate(() => {
+  document.querySelector("#btn-reset").click();
+  const immediately = document.querySelector("#counter-value").textContent.trim();
+  return { immediately };
+});
+if (sameTurn.immediately === "0") ok("click patched DOM to the predicted 0 in the same synchronous turn (before any server confirmation)");
+else bad(`same-turn read was not the prediction: ${JSON.stringify(sameTurn)}`);
+
+await page.waitForTimeout(200);
+const patcherRollback = await page.evaluate(
+  (ms) =>
+    new Promise((resolve) => {
+      const inst = window.WebUIRuntime._getInstance();
+      const patcher = inst.fragmentPatcher;
+      patcher.patch(
+        [{ id: "counter-value", html: '<div id="counter-value" class="counter-value" role="status"><span>9</span></div>' }],
+        null,
+        true
+      );
+      const immediate = document.querySelector("#counter-value").textContent.trim();
+      setTimeout(() => resolve({ immediate, after: document.querySelector("#counter-value").textContent.trim() }), ms);
+    }),
+  5600
+);
+if (patcherRollback.immediate === "9" && patcherRollback.after === "0") ok("patcher rolled back unconfirmed optimistic patch to last-known-good after settle window");
+else bad(`patcher rollback failed: ${JSON.stringify(patcherRollback)}`);
+
+// 5. Save/restore hardening: a scrollable element inside a patched fragment
+// keeps its scroll position across the replacement.
+const scrollProbe = await page.evaluate(() => {
+  const holder = document.createElement("div");
+  holder.id = "scroll-probe";
+  holder.style.cssText = "overflow:auto;height:40px;width:200px;";
+  holder.innerHTML = '<div style="height:200px">a<br>b<br>c</div>';
+  document.body.appendChild(holder);
+  holder.scrollTop = 30;
+  const before = holder.scrollTop;
+  const inst = window.WebUIRuntime._getInstance();
+  inst.fragmentPatcher.patch(
+    [{ id: "scroll-probe", html: '<div id="scroll-probe" style="overflow:auto;height:40px;width:200px"><div style="height:200px">x<br>y<br>z</div></div>' }],
+    null,
+    false
+  );
+  const after = document.getElementById("scroll-probe").scrollTop;
+  holder.remove();
+  return { before, after };
+});
+if (scrollProbe.before === 30 && scrollProbe.after === 30) ok("scroll position survives a fragment patch");
+else bad(`scroll not preserved across patch: ${JSON.stringify(scrollProbe)}`);
 
 await browser.close();
 server.kill();

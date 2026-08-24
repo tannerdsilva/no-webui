@@ -11,6 +11,9 @@ extension View {
     public func foregroundColor(_ color: String) -> ModifiedView<Self, InlineStyle> {
         ModifiedView(content: self, modifier: InlineStyle(.color, color))
     }
+    public func foregroundColor(_ token: ColorToken) -> ModifiedView<Self, InlineStyle> {
+        ModifiedView(content: self, modifier: InlineStyle(.color, "var(\(token.cssVariable))"))
+    }
 
     // MARK: - Typography
     public func font(size: Int, weight: String = "normal") -> ModifiedView<Self, ComposedModifier<InlineStyle, InlineStyle>> {
@@ -28,6 +31,9 @@ extension View {
     // MARK: - Spacing
     public func padding(_ all: Int) -> ModifiedView<Self, InlineStyle> {
         ModifiedView(content: self, modifier: InlineStyle(.padding, "\(all)px"))
+    }
+    public func padding(_ token: SpaceToken) -> ModifiedView<Self, InlineStyle> {
+        ModifiedView(content: self, modifier: InlineStyle(.padding, "var(\(token.cssVariable))"))
     }
     public func padding(horizontal: Int, vertical: Int) -> ModifiedView<Self, InlineStyle> {
         ModifiedView(
@@ -94,5 +100,38 @@ extension View {
     }
     public func onChange(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
         ModifiedView(content: self, modifier: EventHandlerModifier(event: .change, handler: handler))
+    }
+    public func onFocus(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .focus, handler: handler))
+    }
+    public func onBlur(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .blur, handler: handler))
+    }
+    public func onKeyDown(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .keydown, handler: handler))
+    }
+    public func onKeyUp(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .keyup, handler: handler))
+    }
+    public func onKeyPress(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .keypress, handler: handler))
+    }
+    public func onMouseDown(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .mousedown, handler: handler))
+    }
+    public func onMouseUp(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .mouseup, handler: handler))
+    }
+    public func onMouseOver(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .mouseover, handler: handler))
+    }
+    public func onMouseOut(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .mouseout, handler: handler))
+    }
+
+    // MARK: - Optimistic Events
+
+    public func onOptimisticClick(predict: @escaping () -> [FragmentUpdate], perform: @escaping EventHandler) -> ModifiedView<Self, OptimisticClickModifier> {
+        ModifiedView(content: self, modifier: OptimisticClickModifier(prediction: predict(), handler: perform))
     }
 }

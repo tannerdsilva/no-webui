@@ -81,60 +81,90 @@ let channel = try await bootstrap.bind(host: "0.0.0.0", port: 9090).get()
 
 ## 6. Handle WebSocket Events
 
-When a WebSocket message arrives, decode it as `EventData` and pass to the router:
+the client sends a wrapped `{type:"event", component, event, data}` frame.
+decode it as `WSIncoming`, route it through `router.handle`, and wrap the
+resulting fragments in `WSOutgoing.update(fragments:)` so the runtime patches
+the targets:
 
 ```swift
 func onMessage(_ text: String) async {
     guard let data = text.data(using: .utf8),
-          let event = try? JSONDecoder().decode(EventData.self, from: data)
+          let msg = try? JSONDecoder().decode(WSIncoming.self, from: data)
     else { return }
 
-    let updates = await router.handle(event)
-    // Send updates as JSON over WebSocket
-    let json = try? JSONEncoder().encode(updates)
-    ws.send(String(data: json, encoding: .utf8)!)
+    switch msg {
+    case .event(let component, let event, let data):
+        let eventData = EventData(component: ComponentID(component), event: event, data: data)
+        let updates = await router.handle(eventData)
+        let out = WSOutgoing.update(fragments: updates)
+        // encode(out) and send — see Sources/WebUIExample/main.swift
+    case .ping:
+        // reply with WSOutgoing.pong
+        break
+    case .navigate:
+        break
+    }
 }
 ```
 
 ## 7. Wire Up Event Handlers
 
-The counter needs actual state:
+the framework auto-generates `data-component-id` for every `.onClick` /
+`.onInput` modifier and registers the handler in one step — you never hand-
+manage it. state lives in a class, and the handler re-renders the fragment it
+patches:
 
 ```swift
 struct CounterPage: View {
-    let count: Int
-    let router: EventRouter
+    let state: CounterState
 
     func render() -> String {
-        var context = RenderContext(router: router)
-
-        // Register the increment handler
-        context.register(handler: { event in
-            let newCount = self.count + 1
-            let newHTML = CounterPage(count: newCount, router: self.router).render()
-            return [FragmentUpdate(id: "counter", html: newHTML)]
-        }, for: "increment-btn")
-
+        var context = RenderContext(router: state.router)
         return RenderContext.$current.withValue(context) {
             VStack(spacing: 16) {
-                Text("Count: \(count)")
-                    .id("counter")
-                    .font(size: 32, weight: "700")
-
+                Raw(counterValueHTML(state.count))
                 Button("Increment")
-                    .onClick { _ in [] }
+                    .onClick { _ in
+                        state.count += 1
+                        return [FragmentUpdate(id: "counter-value", html: counterValueHTML(state.count))]
+                    }
             }
-            .padding(32)
             .render()
         }
     }
 }
 ```
 
+`EventHandlerModifier` (the thing behind `.onClick`) assigns the element its
+auto `data-component-id` during render and registers the handler — the two
+halves of the wiring are one step. the `id:` initializer / `.id(...)` modifier
+is what names the element your `FragmentUpdate` patches; keep the two strings
+in lockstep.
+
+### Escape Hatches
+
+the manual path is only for cases the modifier style can't express:
+
+- `context.register(handler:, for:)` registers under a `ComponentID` of your
+  choosing. the client echoes back whatever `data-component-id` is on the
+  element, so a manually-registered id must match an element's *auto* id — not
+  the HTML `id:` you picked for patches.
+- `context.nextComponentID()` returns the next auto id (`c0`, `c1`, ...) if you
+  need to register a handler for an element without using a modifier.
+
+### How IDs Work (the three kinds)
+
+| id | who sets it | who consumes it | example |
+|---|---|---|---|
+| `data-component-id` | auto, by `EventHandlerModifier` via `context.nextComponentID()` | the js runtime reads it and echoes it back as `component`; the router looks up the handler | `data-component-id="c0"` |
+| HTML `id` | you, via `id:` / `.id(...)` | `FragmentUpdate(id:)` -> `getElementById` | `id="counter-value"` |
+| manual `ComponentID` | you, via `context.register(handler:for:)` | `EventRouter.handle` | `"increment-btn"` |
+
 ## Complete Example
 
-See `Sources/WebUIExample/main.swift` for a working HTTP/WebSocket server
-that implements a click counter with the full pipeline.
+See `Sources/WebUIExample/main.swift` for the working HTTP + WebSocket server:
+it renders the live counter + echo page, upgrades `/ws`, and round-trips events
+end to end. run it with `swift run WebUIExample` and open http://localhost:9090.
 
 ## Using the Design System
 
@@ -155,6 +185,6 @@ let page = WebUIDocument(
 )
 ```
 
-`WebUIDocument` includes the full design system CSS (311KB, ~110 CSS custom
+`WebUIDocument` includes the full design system CSS (303KB, ~110 CSS custom
 properties, 16 styled components). See `Documentation/DESIGN_SYSTEM.md` for the
 complete component catalog.

@@ -42,22 +42,33 @@
 
 | Method | Effect |
 |---|---|
+| Method | Effect |
+|---|---|
 | `.font(size:weight:)` | `style="font-size:Npx;font-weight:W"` |
 | `.foregroundColor(_ color: String)` | `style="color:..."` |
+| `.foregroundColor(_ token: ColorToken)` | `style="color:var(--color-...)"` |
 | `.backgroundColor(_ color: String)` | `style="background-color:..."` |
 | `.padding(_ value: Int)` | `style="padding:Npx"` |
+| `.padding(_ token: SpaceToken)` | `style="padding:var(--space-N)"` |
 | `.cornerRadius(_ value: Int)` | `style="border-radius:Npx"` |
 | `.width(_ value: String)` | `style="width:..."` |
 | `.height(_ value: String)` | `style="height:..."` |
 | `.class(_ name: String)` | `class="..."` |
 | `.id(_ id: String)` | `id="..."` |
 | `.onClick(_ handler: @escaping EventHandler)` | `data-component-id="cN" data-event="click"` |
-| `.onInput(_ handler: @escaping EventHandler)` | `data-component-id="cN" data-event="input"` |
 | `.onSubmit(_ handler: @escaping EventHandler)` | `data-component-id="cN" data-event="submit"` |
+| `.onInput(_ handler: @escaping EventHandler)` | `data-component-id="cN" data-event="input"` |
 | `.onChange(_ handler: @escaping EventHandler)` | `data-component-id="cN" data-event="change"` |
-| `.onKeyDown(_ handler: @escaping EventHandler)` | `data-component-id="cN" data-event="keydown"` |
 | `.onFocus(_ handler: @escaping EventHandler)` | `data-component-id="cN" data-event="focus"` |
 | `.onBlur(_ handler: @escaping EventHandler)` | `data-component-id="cN" data-event="blur"` |
+| `.onKeyDown(_ handler: @escaping EventHandler)` | `data-component-id="cN" data-event="keydown"` |
+| `.onKeyUp(_ handler: @escaping EventHandler)` | `data-component-id="cN" data-event="keyup"` |
+| `.onKeyPress(_ handler: @escaping EventHandler)` | `data-component-id="cN" data-event="keypress"` |
+| `.onMouseDown(_ handler: @escaping EventHandler)` | `data-component-id="cN" data-event="mousedown"` |
+| `.onMouseUp(_ handler: @escaping EventHandler)` | `data-component-id="cN" data-event="mouseup"` |
+| `.onMouseOver(_ handler: @escaping EventHandler)` | `data-component-id="cN" data-event="mouseover"` |
+| `.onMouseOut(_ handler: @escaping EventHandler)` | `data-component-id="cN" data-event="mouseout"` |
+| `.onOptimisticClick(predict:perform:)` | click + `data-optimistic="{json prediction}"` — client patches before the round-trip, confirms on update, rolls back on timeout |
 
 ### Event Handling
 
@@ -65,9 +76,11 @@
 |---|---|
 | `EventData` | `{ component: String, event: String, data: [String: String] }` |
 | `EventHandler` | `@Sendable (EventData) async -> [FragmentUpdate]` |
-| `EventRouter` | Routes events to registered handlers. `maxHandlers: Int` (default 10,000) |
+| `EventRouter` | Routes events to registered handlers. `maxHandlers: Int` (default 10,000), `handlerCount: Int` |
 | `RenderContext` | `@TaskLocal` context providing component ID generation and handler registration |
 | `FragmentUpdate` | `{ id: String, html: String }` — DOM patch instruction |
+| `SpaceToken` | spacing-scale tokens (`.one`…`.twentyFour`) → `var(--space-N)` |
+| `ColorToken` | nexus color tokens (`.primary`, `.text`, `.danger`, …) → `var(--color-...)` |
 
 ### Observability
 

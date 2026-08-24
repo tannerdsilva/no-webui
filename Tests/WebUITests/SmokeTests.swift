@@ -941,9 +941,9 @@ struct CSSSystemTests {
 @Suite("Design Token Integrity")
 struct TokenTests {
 
-    @Test("all token categories are present")
+    @Test("all token categories are present in shipped css")
     func allTokenCategories() {
-        let css = WebUITheme.render()
+        let css = WebUIAssets.css
         // neutral palette
         #expect(css.contains("--color-neutral-50"))
         #expect(css.contains("--color-neutral-950"))
@@ -978,34 +978,35 @@ struct TokenTests {
         #expect(css.contains("--ease-out"))
         // z-index
         #expect(css.contains("--z-base"))
-        #expect(css.contains("--z-tooltip"))
+        #expect(css.contains("--z-modal"))
+        #expect(css.contains("--z-toast"))
     }
 
-    @Test("dark mode media query is present")
+    @Test("dark mode media query is present in shipped css")
     func darkModePresent() {
-        let css = WebUITheme.render()
+        let css = WebUIAssets.css
+        let darkStart = css.range(of: "@media (prefers-color-scheme: dark)")
+        let dark = darkStart.map { String(css[$0.lowerBound...]) } ?? ""
         #expect(css.contains("@media (prefers-color-scheme: dark)"))
-        #expect(css.contains("--color-bg: #0a0e17;"))
-        #expect(css.contains("--color-text: #e6edf7;"))
+        #expect(cssTokenValue("color-bg", in: dark) == "#060910")
+        #expect(cssTokenValue("color-text", in: dark) == "#e7ecf5")
     }
 
     @Test("dark mode swaps all surface colors")
     func darkModeSurfaceSwap() {
-        let css = WebUITheme.render()
-        // light mode values
-        #expect(css.contains("--color-bg: #f6f8fa;"))
-        // dark mode values
-        #expect(css.contains("--color-bg: #0a0e17;"))
+        let css = WebUIAssets.css
+        let darkStart = css.range(of: "@media (prefers-color-scheme: dark)")
+        let dark = darkStart.map { String(css[$0.lowerBound...]) } ?? css
+        #expect(cssTokenValue("color-bg", in: css) == "#f4f6f8")
+        #expect(cssTokenValue("color-bg", in: dark) == "#060910")
     }
 
-    @Test("all tokens use var() references in component rules")
-    func tokenReferences() {
-        // Verify that WebUITheme tokens are properly defined
-        let css = WebUITheme.render()
-        // Check that token values are actual colors, not empty
-        #expect(css.contains("#f8fafc"))
-        #expect(css.contains("#10b89f"))
-        #expect(css.contains("#16a34a"))
+    @Test("token values are real nexus colors, not empty")
+    func tokenValues() {
+        let css = WebUIAssets.css
+        #expect(css.contains("#6366f1"))
+        #expect(css.contains("#10b981"))
+        #expect(css.contains("#060910"))
     }
 }
 
@@ -1222,7 +1223,7 @@ struct IntegrationTests {
         let doc = HTMLDocument(
             title: "WebUI Smoke Test",
             body: body,
-            styles: CSSStylesheet(WebUITheme.all),
+            styles: CSSStylesheet([CSSRule(":root", [CSSDeclaration("--color-primary-500", "#6366f1")])]),
             scripts: "console.log('smoke test');",
             head: "<meta name=\"description\" content=\"Smoke test\">"
         )

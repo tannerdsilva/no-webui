@@ -179,3 +179,83 @@ func runtimeHandlesNoWebSocket() {
 	#expect(js.contains("typeof WebSocket === 'undefined'"), "runtime lost its guard for environments without WebSocket")
 }
 
+@Test("shipped page carries a single nexus token set (no stale teal block)")
+func shippedPageCarriesOnlyNexusTokens() {
+	let page = WebUIDocument(title: "token pin", body: "").render()
+	#expect(!page.contains("#10b89f"), "stale teal primary shipped on the wire")
+	#expect(!page.contains("#16a34a"), "stale teal success shipped on the wire")
+	#expect(!page.contains("#f6f8fa"), "stale teal surface shipped on the wire")
+	#expect(page.contains("#6366f1"), "nexus primary missing from shipped page")
+	#expect(page.components(separatedBy: "--color-primary-500:").count == 2, "more than one --color-primary-500 definition on the wire")
+}
+
+@Test("every token documented in DESIGN_SYSTEM.md exists in the shipped css")
+func documentedTokensExistInCss() throws {
+	let url = packageRootURL().appendingPathComponent("Documentation/DESIGN_SYSTEM.md")
+	let doc = try String(contentsOf: url, encoding: .utf8)
+	let css = WebUIAssets.css
+	let regex = /`(--[a-z0-9-]+)`/
+	var checked = 0
+	var missing: [String] = []
+	for m in doc.matches(of: regex) {
+		let token = String(m.1)
+		if css.contains(token) {
+			checked += 1
+		} else {
+			missing.append(token)
+		}
+	}
+	#expect(missing.isEmpty, "documented tokens missing from shipped css: \(missing)")
+	#expect(checked > 20, "drift guard parsed too few backticked tokens from DESIGN_SYSTEM.md (\(checked))")
+}
+
+@Test("runtime wires the router with its logger in scope")
+func runtimeRouterLoggerInScope() {
+	let js = WebUIAssets.js
+	#expect(js.contains("function createRouter(log)"), "router lost its logger param — redirect/navigate would reference an out-of-scope log")
+	#expect(js.contains("createMessageDispatcher(log, fragmentPatcher, stateStore, router)"), "dispatcher no longer receives the router — the client redirect path is dead")
+}
+
+@Test("runtime applies optimistic predictions before sending the event")
+func runtimeAppliesOptimisticPredictions() {
+	let js = WebUIAssets.js
+	#expect(js.contains("data-optimistic"), "runtime lost the optimistic prediction hook")
+	#expect(js.contains("optimisticSettleMs"), "runtime lost the optimistic settle timeout knob")
+	#expect(js.contains("patch(pred, null, true)"), "runtime no longer patches predictions with the optimistic flag before send")
+}
+
+@Test("runtime EVENT_TYPES covers every fluent event modifier")
+func runtimeEventTypesCoverFluentModifiers() {
+	let js = WebUIAssets.js
+	#expect(js.contains("'click', 'input', 'change', 'submit', 'keydown', 'keyup', 'keypress', 'focus', 'blur', 'mouseover', 'mouseout', 'mousedown', 'mouseup'"), "EVENT_TYPES drifted from the delivered set")
+}
+
+@Test("runtime saves and restores scroll position across fragment patches")
+func runtimePreservesScrollOnPatch() {
+	let js = WebUIAssets.js
+	#expect(js.contains("saveScroll"), "runtime lost the scroll-snapshot helper")
+	#expect(js.contains("scrollTop") && js.contains("scrollLeft"), "runtime no longer reads scroll positions")
+	#expect(js.contains("'scroll:'"), "runtime scroll records missing")
+	#expect(js.contains("'focus:'"), "runtime non-form focus records missing")
+}
+
+@Test("every ColorToken case resolves to a token defined in the shipped css")
+func colorTokensResolveInCss() {
+	let css = WebUIAssets.css
+	var missing: [String] = []
+	for token in ColorToken.allCases where !css.contains("--\(token.rawValue):") {
+		missing.append("--\(token.rawValue)")
+	}
+	#expect(missing.isEmpty, "color tokens missing from shipped css: \(missing)")
+}
+
+@Test("every SpaceToken case resolves to a token defined in the shipped css")
+func spaceTokensResolveInCss() {
+	let css = WebUIAssets.css
+	var missing: [String] = []
+	for token in SpaceToken.allCases where !css.contains("\(token.cssVariable):") {
+		missing.append(token.cssVariable)
+	}
+	#expect(missing.isEmpty, "space tokens missing from shipped css: \(missing)")
+}
+

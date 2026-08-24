@@ -11,9 +11,47 @@ all notable changes to this project are documented here.
   (self-contained asset-integrity + page-structure gate), `fullstack-smoke`
   (self-contained live-WebSocket gate), `probe` (connect-based port check).
 - `Documentation/ASSEMBLY.md` — the build/verification stage map.
+- `.onOptimisticClick(predict:perform:)` — the optimistic/pending path. the
+  client applies a render-time prediction to the DOM in the same turn as the
+  click, auto-confirms when the authoritative update lands, and rolls back to
+  last-known-good after `optimisticSettleMs` (default 5s) if nothing confirms.
+  scoped to value-independent/idempotent transitions (e.g. reset); predictions
+  are a render-time snapshot, so stateful increments are not optimistic yet.
+- token-backed modifiers: `SpaceToken`/`ColorToken` enums plus
+  `.padding(.four)` and `.foregroundColor(.primary)` that emit
+  `var(--space-4)` / `var(--color-primary-500)` instead of raw px/hex.
+- fluent event modifiers for the full delivered event set:
+  `onKeyDown`/`onKeyUp`/`onKeyPress`/`onMouseDown`/`onMouseUp`/`onMouseOver`/
+  `onMouseOut`; runtime `EVENT_TYPES` extended to match (keydown/keyup/keypress
+  share key data; mouse events send `{}`).
+- `EventRouter.handlerCount`.
+- live interactive `WebUIExample` on :9090 — the example now upgrades `/ws`
+  and round-trips counter + echo end to end (previously static-only).
 
 ### changed
 
+- `WebUITheme` mirror retired: `design-system.css` is the single token source
+  of truth. `WebUIDocument` ships layout styles + the nexus css only; the
+  stale teal block is gone (~4KB/page). tests that pinned the mirror now pin
+  the shipped css (nexus values, z-index scale, dark theme).
+- `EventRouter.handle` logs a missing handler at `.warning` (was `.debug`).
+- runtime `saveInputState`/`restoreInputState` now also capture/restore scroll
+  position for scrollable fragment elements and re-focus non-form
+  `[tabindex]`-focused elements across a patch.
+- runtime filters delegated events by the element's declared `data-event` —
+  a click-only component no longer receives `mouseover`/`mousedown`/
+  `mouseup` (previously a real click fired all four and dispatched the same
+  handler 4x).
+- runtime `Router` no longer references an out-of-scope `log` — navigation
+  and redirect are wired through a `createRouter(log)` factory so a server
+  `{type:"redirect"}` actually redirects. smoke server gained a reserved
+  `redirect-test` component path; `fullstack-smoke` asserts the redirect frame.
+- `Documentation/GETTING_STARTED.md` rewritten — §6 decodes `WSIncoming` and
+  wraps `WSOutgoing.update`, §7 shows only the auto-generated
+  `data-component-id` pattern, plus a three-id concepts table; the manual
+  `context.register` path is documented as an escape hatch.
+- `Documentation/DESIGN_SYSTEM.md` token reference rewritten from the shipped
+  css with correct nexus names/values, dark theme, and z-index scale.
 - designer gate workflow is now single plugin commands; the designer shell
   scripts (`sync.sh`, `demo.sh`, `smoke.sh`, `fullstack-smoke.sh`,
   `browser-smoke.sh`) were removed.
@@ -25,6 +63,11 @@ all notable changes to this project are documented here.
   the plugin sandbox.
 
 ### fixed
+
+- `Router` out-of-scope `log` made server-sent redirects silently no-op.
+- optimistically-patched fragments that the server never confirms now roll
+  back to last-known-good instead of sticking.
+- scroll position lost when a fragment patch replaced a scrollable element.
 
 - removed the stale `WebUIDesignerSync` plugin reference from the README.
 

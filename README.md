@@ -38,7 +38,7 @@ See `Sources/WebUIExample/main.swift` and `Documentation/GETTING_STARTED.md`.
 
 ```bash
 swift build           # WebUIAssetPlugin auto-generates Assets+Generated.swift
-swift test            # 252 tests, 11 suites
+swift test            # 264 tests, 11 suites
 swift run WebUIExample  # example server on :9090
 ```
 
@@ -73,7 +73,7 @@ no-webui/
 │   ├── WebUIFullstackSmokePlugin/# command plugin `fullstack-smoke`: live WS gate
 │   ├── WebUIProbePlugin/         # command plugin `probe`: port check
 │   └── WebUIShowcasePlugin/      # command plugin `showcase`: regenerates designer/previews/
-├── Tests/WebUITests/             # web UI tests (252 tests)
+├── Tests/WebUITests/             # web UI tests (264 tests)
 ├── Documentation/                # 8 documentation files (incl. ASSEMBLY.md)
 ├── designer/                     # designer sandbox (CSS/JS only)
 ├── README.md

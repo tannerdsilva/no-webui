@@ -20,8 +20,13 @@ each method checks the configured minimum level before printing to `console`.
 Captures DOM events on elements with `data-component-id` and sends them to the
 server over WebSocket.
 
-**Events captured:** `click`, `input`, `change`, `submit`, `keydown`, `focus`,
-`blur`
+**Events captured:** `click`, `input`, `change`, `submit`, `keydown`, `keyup`,
+`keypress`, `focus`, `blur`, `mouseover`, `mouseout`, `mousedown`, `mouseup`
+
+**Event filtering:** each interactive element carries a declared `data-event`
+(the event its handler was registered for). only events matching the declared
+type are dispatched — a `click`-only component never receives the `mousedown`/
+`mouseup`/`mouseover` events that a real click also fires.
 
 **Mounting:** adds a single event listener on `document` for each event type
 (event delegation pattern). filters to the nearest element carrying

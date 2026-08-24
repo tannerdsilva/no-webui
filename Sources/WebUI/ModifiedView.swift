@@ -182,3 +182,36 @@ public struct EventHandlerModifier: ViewModifier {
         )
     }
 }
+
+// MARK: - Optimistic Click Modifier
+
+public struct OptimisticClickModifier: ViewModifier {
+    public let prediction: [FragmentUpdate]
+    public let handler: EventHandler
+    private static let log = Logger(label: "webui.modifiers")
+
+    public init(prediction: [FragmentUpdate], handler: @escaping EventHandler) {
+        self.prediction = prediction
+        self.handler = handler
+    }
+
+    public func apply(to html: String) -> String {
+        guard var context = RenderContext.current else {
+            Self.log.warning("OptimisticClickModifier used without RenderContext. Wrap your render call in RenderContext.$current.withValue(...). The event handler will not fire.")
+            return html
+        }
+        let componentID = context.nextComponentID()
+        context.register(handler: handler, for: componentID)
+        let encoded: String
+        if let data = try? JSONEncoder().encode(prediction),
+           let json = String(data: data, encoding: .utf8) {
+            encoded = json
+        } else {
+            encoded = "[]"
+        }
+        return injectAttributes(
+            into: html,
+            "data-component-id=\"\(componentID.value)\" data-event=\"click\" data-optimistic=\"\(htmlEscape(encoded))\""
+        )
+    }
+}

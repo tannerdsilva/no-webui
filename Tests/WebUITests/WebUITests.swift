@@ -506,9 +506,9 @@ func injectAttributesSkipsClosingTag() {
 
 // MARK: - Design System Tests
 
-@Test("WebUITheme renders all tokens")
-func webuiThemeRenders() {
-    let css = WebUITheme.render()
+@Test("shipped css defines the nexus token set")
+func webuiShippedCssDefinesTokens() {
+    let css = WebUIAssets.css
     #expect(css.contains("--color-neutral-50"))
     #expect(css.contains("--color-primary-500"))
     #expect(css.contains("--color-success"))
@@ -521,9 +521,9 @@ func webuiThemeRenders() {
     #expect(css.contains("--z-modal"))
 }
 
-@Test("WebUITheme includes dark mode")
-func webuiThemeIncludesDarkMode() {
-    let css = WebUITheme.render()
+@Test("shipped css includes the dark-mode remap")
+func webuiShippedCssIncludesDarkMode() {
+    let css = WebUIAssets.css
     #expect(css.contains("@media (prefers-color-scheme: dark)"))
 }
 
@@ -778,8 +778,8 @@ func htmlDocumentWithTheme() {
     let doc = HTMLDocument(
         title: "WebUI App",
         body: body,
-        styles: CSSStylesheet(WebUITheme.all),
-        head: "<meta name=\"theme-color\" content=\"#10b89f\">"
+        styles: CSSStylesheet([CSSRule(":root", [CSSDeclaration("--color-primary-500", "#6366f1")])]),
+        head: "<meta name=\"theme-color\" content=\"#6366f1\">"
     )
 
     let html = doc.render()
@@ -1216,4 +1216,81 @@ func eventHandlerModifierOnBlockView() {
     // data-component-id should be on the div, not a wrapping span
     #expect(html.contains("<div data-component-id="))
     #expect(!html.hasPrefix("<span"))
+}
+
+@Test("every rendered data-component-id has a registered handler")
+func handlerRegistrationMatchesRenderedComponents() async {
+    let counter = ClickCounter()
+    let router = EventRouter()
+    let html: String = RenderContext.$current.withValue(RenderContext(router: router)) {
+        Div(class: "demo") {
+            Button("+")
+                .onClick { _ in counter.clicks += 1; return [] }
+            Button("-")
+                .onClick { _ in counter.clicks -= 1; return [] }
+            Input(id: "echo-field", name: "echo")
+                .onInput { _ in [] }
+        }.render()
+    }
+    let renderedHandlers = html.components(separatedBy: "data-component-id=").count - 1
+    #expect(renderedHandlers == 3, "render should emit one data-component-id per handler")
+    #expect(router.handlerCount == 3, "router should register one handler per modifier")
+    _ = await router.handle(EventData(component: "c0", event: "click", data: [:]))
+    #expect(counter.clicks == 1, "registered c0 handler should have run")
+}
+
+@Test("onOptimisticClick emits a data-optimistic prediction and registers the perform handler")
+func optimisticClickModifierWiring() async {
+    let counter = ClickCounter()
+    let router = EventRouter()
+    let html: String = RenderContext.$current.withValue(RenderContext(router: router)) {
+        Button("Reset")
+            .onOptimisticClick(
+                predict: { [FragmentUpdate(id: "counter-value", html: "<div>0</div>")] },
+                perform: { _ in counter.resets += 1; return [] }
+            )
+            .render()
+    }
+    #expect(html.contains("data-optimistic="), "prediction attribute missing: \(html)")
+    #expect(html.contains("&quot;counter-value&quot;"), "prediction json not attribute-escaped: \(html)")
+    #expect(router.handlerCount == 1, "optimistic click should register the perform handler")
+    _ = await router.handle(EventData(component: "c0", event: "click", data: [:]))
+    #expect(counter.resets == 1, "perform handler should have run")
+}
+
+final class ClickCounter: @unchecked Sendable {
+    var clicks = 0
+    var resets = 0
+}
+
+@Test("token-backed modifiers emit var() references")
+func tokenModifiersEmitVarReferences() {
+    let html = Text("Hi")
+        .padding(.four)
+        .foregroundColor(.primary)
+        .render()
+    #expect(html.contains("padding: var(--space-4);"), "got: \(html)")
+    #expect(html.contains("color: var(--color-primary-500);"), "got: \(html)")
+    let raw = Text("Hi").padding(16).render()
+    #expect(raw.contains("padding: 16px;"), "raw Int overload must still exist: \(raw)")
+}
+
+@Test("expanded fluent event modifiers emit data-event attributes the runtime delegates")
+func expandedEventModifiersEmitDataEvent() {
+    let router = EventRouter()
+    let html: String = RenderContext.$current.withValue(RenderContext(router: router)) {
+        Div {
+            Button("k").onKeyDown { _ in [] }
+            Button("u").onKeyUp { _ in [] }
+            Button("p").onKeyPress { _ in [] }
+            Button("md").onMouseDown { _ in [] }
+            Button("mo").onMouseOver { _ in [] }
+            Button("mu").onMouseUp { _ in [] }
+            Button("mout").onMouseOut { _ in [] }
+        }.render()
+    }
+    for event in ["keydown", "keyup", "keypress", "mousedown", "mouseup", "mouseover", "mouseout"] {
+        #expect(html.contains("data-event=\"\(event)\""), "missing \(event) in: \(html)")
+    }
+    #expect(router.handlerCount == 7, "one handler per event modifier")
 }

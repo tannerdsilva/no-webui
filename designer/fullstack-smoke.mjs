@@ -27,6 +27,8 @@ if (html.includes("WebUIRuntime.init")) ok("runtime auto-bootstraps (WebUIRuntim
 else bad("runtime bootstrap missing");
 if (html.includes('id="counter-value"') && html.includes('id="echo-input"')) ok("interactive view ids present");
 else bad("interactive view ids missing");
+if (html.includes("data-optimistic")) ok("optimistic prediction wired on served page");
+else bad("no data-optimistic on served page");
 
 // 2. Real WebSocket — proves the upgrade + WS stack.
 const messages = [];
@@ -100,6 +102,21 @@ ws.send(JSON.stringify({ type: "event", component: ECHO, event: "input", data: {
 upd = await expectUpdate("echo-out");
 if (upd && upd.fragments[0].html.includes("hello webui")) ok("type 'hello webui' → echoed to #echo-out over WS");
 else bad(`echo did not round-trip: ${JSON.stringify(upd)}`);
+
+// 9. Redirect: the reserved server path emits {type:"redirect"} over the wire
+ws.send(JSON.stringify({ type: "event", component: "redirect-test", event: "click", data: {} }));
+const redirectHit = await new Promise((resolve) => {
+  const t0 = Date.now();
+  const check = () => {
+    const hit = messages.slice(cursor).find((m) => m.type === "redirect");
+    if (hit) { cursor = messages.indexOf(hit) + 1; return resolve(hit); }
+    if (Date.now() - t0 > 2000) return resolve(null);
+    setTimeout(check, 50);
+  };
+  check();
+});
+if (redirectHit && redirectHit.url === "/" && redirectHit.replace === true) ok("redirect-test → {type:redirect,url:'/',replace:true} on the wire");
+else bad(`redirect-test did not emit a redirect frame: ${JSON.stringify(redirectHit)}`);
 
 ws.close();
 console.log(`\n=== summary: ${pass} passed, ${fail} failed ===`);
