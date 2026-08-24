@@ -121,8 +121,12 @@ all notable changes to this project are documented here.
   `NSLock`-guarded access.
 - `htmlEscape()` applied to event names and attribute keys/values in modifiers.
 - `swift-docc-plugin` dependency removed (no DocC catalog exists).
-- all inline `///` doc comments and `//` line comments stripped from source
-  files. documentation lives exclusively in `Documentation/*.md`.
+- comment policy: inline `///` doc comments and `//` line comments are allowed
+  in swift source again (the earlier strip within this cycle is superseded).
+  the no-comment rule now applies only to the distributed web assets — the
+  html, css, and js shipped to clients, which embed verbatim — those stay
+  comment-free. framework prose documentation still lives in
+  `Documentation/*.md`.
 
 ### fixed
 

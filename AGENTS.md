@@ -11,15 +11,20 @@ two major parts under one Package.swift:
 2. **WebUI** — SwiftUI-for-web framework. actively developed. this is
    where most work happens.
 
-## first law — no inline comments in source
+## first law — comments allowed in swift, none in shipped web assets
 
-every line of documentation belongs in `Documentation/*.md` files. source files
-contain zero `///` doc comments and zero `//` line comments. the only exceptions
-are `// MARK:` (structural, Xcode navigation) and `// swift-tools-version:` in
-Package.swift.
+comments are welcome in swift source. `///` doc comments and `//` line comments
+are fine anywhere a comment helps — libraries, executables, plugins, tests.
+`// MARK:` remains the convention for structural navigation.
 
-do not add, restore, or generate inline comments in any source file. if you
-need to explain something, put it in the appropriate `Documentation/*.md` file.
+the one place comments stay forbidden is the distributed web surface: the html,
+css, and js shipped to clients. `designer/assets/design-system.css`,
+`designer/assets/webui-runtime.js`, and every generated html document go over
+the wire verbatim — comments there are payload weight and leak implementation
+detail. keep the bytes the client receives free of comments.
+
+framework-level prose documentation still belongs in `Documentation/*.md`;
+inline comments explain code, markdown files explain architecture and APIs.
 
 ## build and test
 
@@ -53,7 +58,9 @@ node designer/browser-smoke.mjs   # self-contained: builds, serves, drives real 
 the `WebUIAssetPlugin` build tool plugin runs automatically during `swift build`.
 it reads `designer/assets/*.css` and `*.js` and generates
 `Assets+Generated.swift` with the content embedded as Swift string constants.
-no manual `swift run WebUIAssetTool` needed.
+no manual `swift run WebUIAssetTool` needed. these assets are the distributed
+web surface — they embed verbatim into every served page, so they stay
+comment-free (see the first law).
 
 ### why serve/smoke/fullstack-smoke need `--disable-sandbox`
 
@@ -77,9 +84,9 @@ invocation. gates host their own server, check, and tear down in one call.
 
 ### code
 
-- **lowercase comments** in `Documentation/*.md` files. prose is lowercase
-  (no sentence capitalization). preserve backticked identifiers, quoted string
-  literals, CLI flags, and acronyms.
+- **lowercase comments** in `Documentation/*.md` prose and in `//` line
+  comments. sentences start lowercase (no sentence capitalization). preserve
+  backticked identifiers, quoted string literals, CLI flags, and acronyms.
 - **tabs for indentation** in Swift source. `.spacesToTabs(4)`.
 - **value types first** — default to struct. only use class for identity (===),
   reference semantics, or ObjC interop. only use actor for shared mutable state
@@ -206,8 +213,9 @@ node designer/browser-smoke.mjs     # requires node + playwright (chromium)
 2. add a test that proves the fix (e.g., XSS payload that now produces safe output)
 3. run `swift test` to verify
 4. update `Documentation/ARCHITECTURE.md` security table if adding a new mitigation
-5. do not add inline comments explaining the fix — put the explanation in
-   the appropriate `Documentation/*.md` file
+5. explain the fix inline with a `//` comment where it helps, and update the
+   appropriate `Documentation/*.md` file when the change affects documented
+   behavior
 
 ## pitfalls
 
