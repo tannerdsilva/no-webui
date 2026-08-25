@@ -227,7 +227,7 @@ func runtimeAppliesOptimisticPredictions() {
 @Test("runtime EVENT_TYPES covers every fluent event modifier")
 func runtimeEventTypesCoverFluentModifiers() {
 	let js = WebUIAssets.js
-	#expect(js.contains("'click', 'input', 'change', 'submit', 'keydown', 'keyup', 'keypress', 'focus', 'blur', 'mouseover', 'mouseout', 'mousedown', 'mouseup'"), "EVENT_TYPES drifted from the delivered set")
+	#expect(js.contains("'click', 'input', 'change', 'submit', 'keydown', 'keyup', 'keypress', 'focus', 'blur', 'focusin', 'focusout', 'mouseover', 'mouseout', 'mousedown', 'mouseup'"), "EVENT_TYPES drifted from the delivered set")
 }
 
 @Test("runtime saves and restores scroll position across fragment patches")

@@ -4,6 +4,91 @@ all notable changes to this project are documented here.
 
 ## [unreleased]
 
+### docs
+
+- `DESIGN_SYSTEM.md` component reference rebuilt against the shipped css and
+  `WebUIComponents` sources: removed the fictional `WebUIToggle`,
+  `WebUIDropdown`, `WebUISelect`, and `WebUITextArea` sections, corrected every
+  initializer signature and BEM class (`.button--full`, not
+  `.button--full-width`; `modal__title`, `chip__remove`, `empty-state__icon`,
+  `spinner__ring`, `tooltip__arrow`, …), and added the previously undocumented
+  `WebUISkeleton`, `WebUIChip`, `WebUIEmptyState`, and `WebUISpinner` sections.
+
+### changed
+
+- `WebUIAssetPlugin` migrated to the URL-based PackagePlugin API
+  (`directoryURL`, `pluginWorkDirectoryURL`, `URL` input/output files) — the
+  package now compiles warning-free end to end.
+- two test-target warnings fixed (`String(describing:)` for the optional
+  `Mirror` label comparison; `var` → `let` for unmutated `RenderContext`
+  locals).
+- docc: confirmed deliberately out of scope — the package ships no `.docc`
+  catalog and no docc plugin (`swift package generate-documentation` is not a
+  configured subcommand); documentation lives in `Documentation/*.md`. the
+  swift-audit docc check reports a clean package (no catalog, no warnings).
+
+
+### added
+
+- `RuntimeConfig` — the js runtime tuning knobs (debounce, reconnect, settle,
+  log level, `wsUrl`) are now reachable from swift via `HTMLDocument` /
+  `WebUIDocument`'s new `runtimeConfig:` parameter. a non-empty config emits
+  `WebUIRuntime.init({...})` with only set keys; the default bootstrap stays
+  byte-identical.
+- `onFocusIn` / `onFocusOut` modifiers, matching the `HTMLEvent` cases that
+  already existed without a delivery path.
+- `.attribute(_ key:, _ value:)` — generic attribute modifier (and the
+  `data-prevent-enter="false"` escape hatch).
+- `FontWeight` and `TextAlignment` typed enums with `.custom(_:)` escape
+  hatches, added as overloads — string call sites still compile.
+- `minifyCSS(_:)` — render-time css minification for shipped pages.
+- the core `LayoutStyles` now ships the `.zstack > *` overlap rule, making
+  `ZStack` self-sufficient without the design-system stylesheet.
+- `data-dismiss` / `data-remove` markers on dismissible alert/toast/modal and
+  removable chip close buttons.
+
+### changed
+
+- `sanitizeURL()` (and the js router's `isSafeUrl`) strip c0 controls and
+  ascii whitespace before the scheme check, matching the browser's URL parser
+  — padded and obfuscated `javascript:` URLs are now blocked on both sides.
+- every `id` / `class` / `name` / `for` / `data-status` / `method` / icon
+  emission site across the core primitives, semantic containers, and
+  design-system components is now html-escaped.
+- `sanitizeFragmentHTML()` decodes numeric and named character references
+  before stripping, so entity-encoded `javascript:` URLs are neutralized.
+- focus/blur events are delivered via the bubbling `focusin` / `focusout` and
+  normalized to the declared event name — `.onFocus` and `.onBlur` now
+  actually fire.
+- click events carry the clicked element's `targetId` and `targetClass`, so a
+  container handler can disambiguate without per-button wiring.
+- `keydown` Enter no longer preventDefaults inside `TEXTAREA` /
+  `contentEditable`.
+- `GridColumns.fixed(n)` emits grid-safe `repeat(n, minmax(0, 1fr))` and is
+  distinct from `.fraction(n)`; `.autoFill(n)` / `.autoFit(n)` treat n as the
+  minimum track size in px.
+- `markdownToHTML(_:)` is a real minimal safe subset (atx headings, lists,
+  bold/emphasis/code/links, escaped input) instead of a `<p>` stub.
+- `highlightCode(_:language:)` remains escape-only and is now documented
+  honestly as such.
+- shipped pages minify the embedded css at render time (no comments, no blank
+  lines) — smaller payloads, and the no-comments-in-shipped-assets law holds
+  for css on the wire while the designer file keeps its notes.
+- 307 tests / 20 suites (was 264 / 11).
+
+### fixed
+
+- `javascript:` URL execution via control-character obfuscation (leading
+  whitespace and embedded tab/newline) in `sanitizeURL` and the js router —
+  verified in a live browser.
+- attribute injection via `id` / `class` / `name` / `data-status` / `method`
+  on primitives and components.
+- `.onFocus` / `.onBlur` never firing, because the runtime listened for
+  non-bubbling events on `document`.
+- entity-encoded `javascript:` fragments slipping past the client sanitizer.
+- `Enter` in `TEXTAREA` being swallowed when a keydown handler was present.
+- unpaired markdown delimiters emitting unbalanced tags (now render literal).
+
 ### added
 
 - command plugins for the whole project tooling: `serve` (hosts the

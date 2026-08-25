@@ -16,7 +16,7 @@ window.WebUIRuntime = (function () {
   };
 
   var LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3, silent: 4 };
-  var EVENT_TYPES = ['click', 'input', 'change', 'submit', 'keydown', 'keyup', 'keypress', 'focus', 'blur', 'mouseover', 'mouseout', 'mousedown', 'mouseup'];
+  var EVENT_TYPES = ['click', 'input', 'change', 'submit', 'keydown', 'keyup', 'keypress', 'focus', 'blur', 'focusin', 'focusout', 'mouseover', 'mouseout', 'mousedown', 'mouseup'];
 
   function createLogger(level) {
     var min = LOG_LEVELS[level] || LOG_LEVELS.warn;
@@ -222,6 +222,13 @@ window.WebUIRuntime = (function () {
       fragmentPatcher.patch(pred, null, true);
     }
 
+    function effectiveTypes(event) {
+      var types = [event.type];
+      if (event.type === 'focusin') types.push('focus');
+      if (event.type === 'focusout') types.push('blur');
+      return types;
+    }
+
     function handleEvent(event) {
       var componentEl = findComponent(event);
       if (!componentEl) return;
@@ -230,7 +237,7 @@ window.WebUIRuntime = (function () {
       if (!componentId) return;
 
       var declaredEvent = componentEl.getAttribute('data-event');
-      if (declaredEvent && declaredEvent !== event.type) return;
+      if (declaredEvent && effectiveTypes(event).indexOf(declaredEvent) === -1) return;
 
       if (event.type === 'click') {
         if (event.metaKey || event.ctrlKey || event.shiftKey) return;
@@ -245,7 +252,8 @@ window.WebUIRuntime = (function () {
       }
 
       if (event.type === 'keydown' && event.key === 'Enter') {
-        if (componentEl.getAttribute('data-prevent-enter') !== 'false') {
+        var editTarget = event.target && (event.target.tagName === 'TEXTAREA' || event.target.isContentEditable);
+        if (!editTarget && componentEl.getAttribute('data-prevent-enter') !== 'false') {
           event.preventDefault();
         }
       }
@@ -268,7 +276,7 @@ window.WebUIRuntime = (function () {
       send({
         type: 'event',
         component: componentId,
-        event: event.type,
+        event: declaredEvent || event.type,
         data: eventData,
       });
     }
@@ -320,11 +328,18 @@ window.WebUIRuntime = (function () {
       return null;
     }
 
+    function clickTargetData(target) {
+      var data = {};
+      if (target && target.id) data.targetId = target.id;
+      if (target && typeof target.className === 'string' && target.className) data.targetClass = target.className;
+      return data;
+    }
+
     function extractEventData(event, componentEl) {
       var target = event.target;
       switch (event.type) {
         case 'click':
-          return {};
+          return clickTargetData(target);
 
         case 'input':
         case 'change':
@@ -488,6 +503,10 @@ window.WebUIRuntime = (function () {
     }
 
     function sanitizeFragmentHTML(html) {
+
+      html = html.replace(/&#(\d+);/g, function (_, n) { return String.fromCharCode(Number(n)); });
+      html = html.replace(/&#x([0-9a-f]+);/gi, function (_, h) { return String.fromCharCode(parseInt(h, 16)); });
+      html = html.replace(/&colon;/gi, ':');
 
       html = html.replace(new RegExp('<script[^<]*(?:<[^<]*)*' + '<' + '/script>', 'gi'), '');
 
@@ -655,24 +674,29 @@ window.WebUIRuntime = (function () {
 
   var UNSAFE_PROTOCOLS = /^(javascript|data|vbscript):/i;
 
-  function isSafeUrl(url) {
+  function stripUrlControlChars(url) {
+    return String(url).replace(/[\u0000-\u0020\u007F]/g, '');
+  }
 
-    return !UNSAFE_PROTOCOLS.test(url);
+  function isSafeUrl(url) {
+    return !UNSAFE_PROTOCOLS.test(stripUrlControlChars(url));
   }
 
   function createRouter(log) {
     return {
       navigate: function (url) {
         if (!url) return;
-        if (!isSafeUrl(url)) { log.warn('Router.navigate: blocked unsafe URL'); return; }
-        history.pushState(null, '', url);
+        var clean = stripUrlControlChars(url);
+        if (!isSafeUrl(clean)) { log.warn('Router.navigate: blocked unsafe URL'); return; }
+        history.pushState(null, '', clean);
       },
 
       redirect: function (url, replace) {
         if (!url) return;
-        if (!isSafeUrl(url)) { log.warn('Router.redirect: blocked unsafe URL'); return; }
-        if (replace) location.replace(url);
-        else location.href = url;
+        var clean = stripUrlControlChars(url);
+        if (!isSafeUrl(clean)) { log.warn('Router.redirect: blocked unsafe URL'); return; }
+        if (replace) location.replace(clean);
+        else location.href = clean;
       },
 
       reload: function () { location.reload(); },

@@ -93,7 +93,7 @@ public struct CSSFontFace: Sendable {
 // MARK: - Layout Styles
 public enum LayoutStyles {
     public static let all: [CSSRule] = [
-        vstack, hstack, zstack, spacer, scrollview, grid,
+        vstack, hstack, zstack, zstackOverlap, spacer, scrollview, grid,
     ]
     public static let vstack = CSSRule(".vstack", [
         CSSDeclaration("display", "flex"),
@@ -106,6 +106,13 @@ public enum LayoutStyles {
     public static let zstack = CSSRule(".zstack", [
         CSSDeclaration("display", "grid"),
         CSSDeclaration("place-items", "center center"),
+    ])
+    // zstack children must share the single grid cell or they stack in
+    // separate rows instead of overlapping. the same rule exists in
+    // design-system.css for the designer preview; here it makes the core
+    // self-sufficient when only LayoutStyles is shipped.
+    public static let zstackOverlap = CSSRule(".zstack > *", [
+        CSSDeclaration("grid-area", "1 / 1"),
     ])
     public static let spacer = CSSRule(".spacer", [
         CSSDeclaration("flex", "1"),

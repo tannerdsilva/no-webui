@@ -160,6 +160,15 @@ the manual path is only for cases the modifier style can't express:
 | HTML `id` | you, via `id:` / `.id(...)` | `FragmentUpdate(id:)` -> `getElementById` | `id="counter-value"` |
 | manual `ComponentID` | you, via `context.register(handler:for:)` | `EventRouter.handle` | `"increment-btn"` |
 
+### One Router Per Render Pass
+
+component ids (`c0`, `c1`, ...) are assigned in render order, and handlers are
+registered by id. a single `EventRouter` shared across concurrent page renders
+interleaves registrations, so a fresh render against the same router re-uses
+stale ids. the rule: render once per page load and keep that router, or call
+`router.reset()` before rendering a fresh page. servers that render per
+request should give each request its own `EventRouter`.
+
 ## Complete Example
 
 See `Sources/WebUIExample/main.swift` for the working HTTP + WebSocket server:
@@ -185,6 +194,34 @@ let page = WebUIDocument(
 )
 ```
 
-`WebUIDocument` includes the full design system CSS (303KB, ~110 CSS custom
-properties, 16 styled components). See `Documentation/DESIGN_SYSTEM.md` for the
-complete component catalog.
+`WebUIDocument` includes the full design system CSS (303KB source, ~110 CSS
+custom properties, 16 styled components). shipped pages minify the css at
+render time (comments and blank lines stripped), so the wire payload is
+smaller than the source. See `Documentation/DESIGN_SYSTEM.md` for the complete
+component catalog.
+
+### Dismissible Components
+
+`WebUIAlert(dismissible:)`, `WebUIToast(dismissible:)`, `WebUIModal`, and
+`WebUIChip(removable:)` render close buttons with `data-dismiss`/`data-remove`
+markers. the runtime sends `targetId` and `targetClass` for every click, so a
+container handler can tell when a dismiss button was clicked:
+
+```swift
+WebUIDocument(
+    title: "Notifications",
+    body: Div {
+        WebUIToast(message: "Saved", dismissible: true)
+    }
+    .onClick { event in
+        if event.data["targetClass"]?.contains("toast__close") == true {
+            // remove the toast — re-render the container without it
+            return [FragmentUpdate(id: "toast-host", html: toastHostHTML(removed: true))]
+        }
+        return []
+    }
+)
+```
+
+the close buttons are deliberately not auto-wired — the framework renders the
+marker, the handler decides what dismissal means for your state.

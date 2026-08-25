@@ -1008,7 +1008,7 @@ func wsOutgoingPong() throws {
 func wsOutgoingNoScriptType() throws {
     let mirror = Mirror(reflecting: WSOutgoing.pong)
     let cases = mirror.children
-    let hasScript = cases.contains { "\($0.0)" == "script" }
+    let hasScript = cases.contains { String(describing: $0.0) == "script" }
     #expect(!hasScript)
 }
 
@@ -1161,7 +1161,7 @@ func eventRouterReset() async {
 @Test("EventHandlerModifier emits data-component-id when context is set")
 func eventHandlerModifierEmitsComponentID() {
     let router = EventRouter()
-    var context = RenderContext(router: router)
+    let context = RenderContext(router: router)
 
     let html = RenderContext.$current.withValue(context) {
         Text("Hello")
@@ -1177,7 +1177,7 @@ func eventHandlerModifierEmitsComponentID() {
 @Test("EventHandlerModifier emits the raw component id, not the struct's debug description")
 func eventHandlerModifierEmitsRawComponentID() {
     let router = EventRouter()
-    var context = RenderContext(router: router)
+    let context = RenderContext(router: router)
 
     let html = RenderContext.$current.withValue(context) {
         Text("Hello")
@@ -1205,7 +1205,7 @@ func eventHandlerModifierWithoutContext() {
 @Test("EventHandlerModifier injects into root element of block view")
 func eventHandlerModifierOnBlockView() {
     let router = EventRouter()
-    var context = RenderContext(router: router)
+    let context = RenderContext(router: router)
 
     let html = RenderContext.$current.withValue(context) {
         Div { Text("Click me") }

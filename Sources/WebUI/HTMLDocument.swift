@@ -12,6 +12,7 @@ public struct HTMLDocument: Sendable {
     public let devMode: Bool
     public let lang: String
     public let includeRuntime: Bool
+    public let runtimeConfig: RuntimeConfig?
     public let contentSecurityPolicy: String?
     public let nonce: String
     private static func generateNonce() -> String {
@@ -44,6 +45,7 @@ public struct HTMLDocument: Sendable {
         devMode: Bool = false,
         lang: String = "en",
         includeRuntime: Bool = true,
+        runtimeConfig: RuntimeConfig? = nil,
         contentSecurityPolicy: String? = nil
     ) {
         self.title = title
@@ -56,6 +58,7 @@ public struct HTMLDocument: Sendable {
         self.devMode = devMode
         self.lang = lang
         self.includeRuntime = includeRuntime
+        self.runtimeConfig = runtimeConfig
         self.contentSecurityPolicy = contentSecurityPolicy
         self.nonce = Self.generateNonce()
     }
@@ -74,13 +77,13 @@ public struct HTMLDocument: Sendable {
             let cssContent = styles.render()
             if !cssContent.isEmpty { cssParts.append(cssContent) }
             cssParts.append(contentsOf: rawStyles)
-            let allCSS = cssParts.joined(separator: "\n\n")
+            let allCSS = minifyCSS(cssParts.joined(separator: "\n\n"))
             styleTag = allCSS.isEmpty ? "" : "<style>\n\(allCSS)\n</style>"
 
             var jsParts: [String] = []
             if includeRuntime {
                 jsParts.append(WebUIRuntime.source)
-                jsParts.append(WebUIRuntime.bootstrap)
+                jsParts.append(WebUIRuntime.bootstrap(config: runtimeConfig))
             }
             if !scripts.isEmpty {
                 jsParts.append(scripts)

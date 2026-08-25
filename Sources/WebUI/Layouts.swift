@@ -105,6 +105,12 @@ public struct ScrollView: View {
 }
 
 // MARK: - Grid Columns
+
+// `.fixed(n)` is a count-based track template made grid-safe (minmax(0, 1fr)
+// prevents min-content blowout), distinct from `.fraction(n)` which emits the
+// legacy plain 1fr tracks. `.autoFill(n)`/`.autoFit(n)` treat n as the
+// minimum track size in px — `repeat(auto-fill, minmax(npx, 1fr))` — because
+// an auto-* repetition without a concrete min size is meaningless.
 public enum GridColumns: Sendable {
     case fixed(Int)
     case fraction(Int)
@@ -115,11 +121,11 @@ public enum GridColumns: Sendable {
 
     public var cssValue: String {
         switch self {
-        case .fixed(let n):     return "repeat(\(n), 1fr)"
+        case .fixed(let n):     return "repeat(\(n), minmax(0, 1fr))"
         case .fraction(let n):  return "repeat(\(n), 1fr)"
         case .minmax(let a, let b): return "repeat(auto-fill, minmax(\(a), \(b)))"
-        case .autoFill(let n):  return "repeat(auto-fill, \(n)fr)"
-        case .autoFit(let n):   return "repeat(auto-fit, \(n)fr)"
+        case .autoFill(let n):  return "repeat(auto-fill, minmax(\(n)px, 1fr))"
+        case .autoFit(let n):   return "repeat(auto-fit, minmax(\(n)px, 1fr))"
         case .custom(let v):    return v
         }
     }
@@ -167,8 +173,8 @@ public struct Section: View {
 
     public func render() -> String {
         var html = "<section"
-        if let id { html += " id=\"\(id)\"" }
-        if let `class` { html += " class=\"\(`class`)\"" }
+        if let id { html += " id=\"\(htmlEscape(id))\"" }
+        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
         html += ">"
         for child in children {
             html += child.render()
@@ -193,7 +199,7 @@ public struct Navigation: View {
 
     public func render() -> String {
         var html = "<nav"
-        if let `class` { html += " class=\"\(`class`)\"" }
+        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
         html += ">"
         for child in children {
             html += child.render()
@@ -218,7 +224,7 @@ public struct Header: View {
 
     public func render() -> String {
         var html = "<header"
-        if let `class` { html += " class=\"\(`class`)\"" }
+        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
         html += ">"
         for child in children {
             html += child.render()
@@ -243,7 +249,7 @@ public struct Footer: View {
 
     public func render() -> String {
         var html = "<footer"
-        if let `class` { html += " class=\"\(`class`)\"" }
+        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
         html += ">"
         for child in children {
             html += child.render()
@@ -268,7 +274,7 @@ public struct Main: View {
 
     public func render() -> String {
         var html = "<main"
-        if let `class` { html += " class=\"\(`class`)\"" }
+        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
         html += ">"
         for child in children {
             html += child.render()
@@ -293,7 +299,7 @@ public struct Aside: View {
 
     public func render() -> String {
         var html = "<aside"
-        if let `class` { html += " class=\"\(`class`)\"" }
+        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
         html += ">"
         for child in children {
             html += child.render()

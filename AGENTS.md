@@ -30,7 +30,7 @@ inline comments explain code, markdown files explain architecture and APIs.
 
 ```bash
 swift build             # includes the WebUIAssetPlugin that auto-generates Assets+Generated.swift
-swift test              # 264 tests, 11 suites
+swift test              # 307 tests, 20 suites
 swift run WebUIExample  # example server on :9090
 ```
 
@@ -58,9 +58,10 @@ node designer/browser-smoke.mjs   # self-contained: builds, serves, drives real 
 the `WebUIAssetPlugin` build tool plugin runs automatically during `swift build`.
 it reads `designer/assets/*.css` and `*.js` and generates
 `Assets+Generated.swift` with the content embedded as Swift string constants.
-no manual `swift run WebUIAssetTool` needed. these assets are the distributed
-web surface — they embed verbatim into every served page, so they stay
-comment-free (see the first law).
+no manual `swift run WebUIAssetTool` needed. these assets power every served
+page; at render time the css is minified (comments + blank lines stripped) so
+the client never receives the designer notes kept in the working file (see the
+first law).
 
 ### why serve/smoke/fullstack-smoke need `--disable-sandbox`
 
@@ -110,10 +111,18 @@ invocation. gates host their own server, check, and tear down in one call.
   via NSLock. max 10,000 handlers by default. missing-handler events log at
   `.warning` and `handlerCount` is public.
 - **event modifiers** — `.onClick`/`.onSubmit`/`.onInput`/`.onChange` plus
-  keyboard, mouse, and focus/blur variants (`.onKeyUp`, `.onMouseDown`,
-  `.onFocus`, ...) emit `data-component-id` + `data-event` and register the
-  handler in one step. the runtime only delivers the event a component
-  declares — a click-only component never receives hover/press noise.
+  keyboard, mouse, and focus variants (`.onKeyUp`, `.onMouseDown`,
+  `.onFocus`/`.onBlur`, `.onFocusIn`/`.onFocusOut`, ...) emit
+  `data-component-id` + `data-event` and register the handler in one step. the
+  runtime only delivers the event a component declares — a click-only
+  component never receives hover/press noise — and every click carries
+  `targetId`/`targetClass` so a container handler can tell what was clicked.
+  `focus`/`blur` are delivered via the bubbling `focusin`/`focusout` and
+  normalized to the declared event name.
+- **`RuntimeConfig`** — passed to `HTMLDocument`/`WebUIDocument` to tune the
+  js runtime (debounce, reconnect, settle, log level, `wsUrl`). a non-empty
+  config turns the bootstrap into `WebUIRuntime.init({...})`; the default
+  `WebUIRuntime.init();` is byte-identical.
 - **`.onOptimisticClick(predict:perform:)`** — applies a render-time prediction
   to the DOM in the same turn as the click, auto-confirms on the authoritative
   update, and rolls back to last-known-good after `optimisticSettleMs` (5s) if
@@ -165,7 +174,8 @@ these must never be weakened:
 4. **Prototype pollution protection** — `State.set()` rejects `__proto__`,
    `constructor`, `prototype` keys.
 5. **Attribute escaping** — `htmlEscape()` on all attribute keys and values
-   in modifiers.
+   the framework emits: modifier attributes and primitive `id`/`class`/`name`/
+   `for`/`data-status`/`method` parameters alike.
 6. **CSRF tokens** — `CSRFProtection` with HMAC-SHA256 stateless tokens.
 7. **Thread safety** — NSLock on all EventRouter.State and ObserverList
    mutations.

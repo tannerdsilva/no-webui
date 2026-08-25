@@ -67,8 +67,8 @@ public struct Div: View {
 
     public func render() -> String {
         var html = "<div"
-        if let id { html += " id=\"\(id)\"" }
-        if let `class` { html += " class=\"\(`class`)\"" }
+        if let id { html += " id=\"\(htmlEscape(id))\"" }
+        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
         html += ">"
         for child in children {
             html += child.render()
@@ -95,8 +95,8 @@ public struct Span: View {
 
     public func render() -> String {
         var html = "<span"
-        if let id { html += " id=\"\(id)\"" }
-        if let `class` { html += " class=\"\(`class`)\"" }
+        if let id { html += " id=\"\(htmlEscape(id))\"" }
+        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
         html += ">"
         for child in children {
             html += child.render()
@@ -137,9 +137,9 @@ public struct Button: View {
 
     public func render() -> String {
         var html = "<button"
-        if let id { html += " id=\"\(id)\"" }
-        if let `class` { html += " class=\"\(`class`)\"" }
-        if let name { html += " name=\"\(name)\"" }
+        if let id { html += " id=\"\(htmlEscape(id))\"" }
+        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
+        if let name { html += " name=\"\(htmlEscape(name))\"" }
         html += " type=\"\(type.rawValue)\""
         if disabled { html += " disabled" }
         html += ">\(htmlEscape(label))</button>"
@@ -205,8 +205,8 @@ public struct Input: View {
 
     public func render() -> String {
         var html = "<input"
-        if let id { html += " id=\"\(id)\"" }
-        if let name { html += " name=\"\(name)\"" }
+        if let id { html += " id=\"\(htmlEscape(id))\"" }
+        if let name { html += " name=\"\(htmlEscape(name))\"" }
         html += " type=\"\(type.rawValue)\""
         if !placeholder.isEmpty { html += " placeholder=\"\(htmlEscape(placeholder))\"" }
         if !value.isEmpty { html += " value=\"\(htmlEscape(value))\"" }
@@ -257,7 +257,7 @@ public struct Image: View {
             return "<img alt=\"\(htmlEscape(alt))\">"
         }
         var html = "<img src=\"\(htmlEscape(safeSrc))\" alt=\"\(htmlEscape(alt))\""
-        if let `class` { html += " class=\"\(`class`)\"" }
+        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
         if let loading { html += " loading=\"\(loading.rawValue)\"" }
         if let decoding { html += " decoding=\"\(decoding.rawValue)\"" }
         html += ">"
@@ -331,7 +331,7 @@ public struct Link: View {
             return htmlEscape(text)
         }
         var html = "<a href=\"\(htmlEscape(safeHref))\""
-        if let `class` { html += " class=\"\(`class`)\"" }
+        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
         if let target { html += " target=\"\(target.rawValue)\"" }
         if let rel { html += " rel=\"\(rel.htmlValue)\"" }
         html += ">\(htmlEscape(text))</a>"
@@ -359,7 +359,7 @@ public struct Heading: View {
     public func render() -> String {
         let lvl = level.rawValue
         var html = "<h\(lvl)"
-        if let `class` { html += " class=\"\(`class`)\"" }
+        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
         html += ">\(htmlEscape(text))</h\(lvl)>"
         return html
     }
@@ -375,7 +375,7 @@ public struct Paragraph: View {
 
     public func render() -> String {
         var html = "<p"
-        if let `class` { html += " class=\"\(`class`)\"" }
+        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
         html += ">\(htmlEscape(text))</p>"
         return html
     }
@@ -393,7 +393,7 @@ public struct UnorderedList: View {
 
     public func render() -> String {
         var html = "<ul"
-        if let `class` { html += " class=\"\(`class`)\"" }
+        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
         html += ">"
         for item in items {
             html += "<li>\(item.render())</li>"
@@ -413,7 +413,7 @@ public struct OrderedList: View {
 
     public func render() -> String {
         var html = "<ol"
-        if let `class` { html += " class=\"\(`class`)\"" }
+        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
         html += ">"
         for item in items {
             html += "<li>\(item.render())</li>"
@@ -436,7 +436,7 @@ public struct Table: View {
 
     public func render() -> String {
         var html = "<table"
-        if let `class` { html += " class=\"\(`class`)\"" }
+        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
         html += ">"
 
         if !headers.isEmpty {
@@ -484,8 +484,8 @@ public struct Label: View {
 
     public func render() -> String {
         var html = "<label"
-        if let forVal = `for` { html += " for=\"\(forVal)\"" }
-        if let `class` { html += " class=\"\(`class`)\"" }
+        if let forVal = `for` { html += " for=\"\(htmlEscape(forVal))\"" }
+        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
         html += ">\(htmlEscape(text))</label>"
         return html
     }
@@ -516,11 +516,11 @@ public struct TextArea: View {
 
     public func render() -> String {
         var html = "<textarea"
-        if let id { html += " id=\"\(id)\"" }
-        if let name { html += " name=\"\(name)\"" }
+        if let id { html += " id=\"\(htmlEscape(id))\"" }
+        if let name { html += " name=\"\(htmlEscape(name))\"" }
         html += " rows=\"\(rows)\""
         if !placeholder.isEmpty { html += " placeholder=\"\(htmlEscape(placeholder))\"" }
-        if let `class` { html += " class=\"\(`class`)\"" }
+        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
         html += ">\(htmlEscape(value))</textarea>"
         return html
     }
@@ -548,9 +548,9 @@ public struct Select: View {
 
     public func render() -> String {
         var html = "<select"
-        if let id { html += " id=\"\(id)\"" }
-        if let name { html += " name=\"\(name)\"" }
-        if let `class` { html += " class=\"\(`class`)\"" }
+        if let id { html += " id=\"\(htmlEscape(id))\"" }
+        if let name { html += " name=\"\(htmlEscape(name))\"" }
+        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
         html += ">"
         for option in options {
             let sel = option.value == selected ? " selected" : ""
@@ -619,11 +619,11 @@ public struct Form: View {
 
     public func render() -> String {
         var html = "<form"
-        if let id { html += " id=\"\(id)\"" }
-        if let `class` { html += " class=\"\(`class`)\"" }
+        if let id { html += " id=\"\(htmlEscape(id))\"" }
+        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
         let safeAction = sanitizeURL(action) ?? ""
         html += " action=\"\(htmlEscape(safeAction))\""
-        html += " method=\"\(method)\""
+        html += " method=\"\(htmlEscape(method))\""
         html += ">"
         if let token = csrfToken {
             html += "<input type=\"hidden\" name=\"_csrf\" value=\"\(htmlEscape(token))\">"

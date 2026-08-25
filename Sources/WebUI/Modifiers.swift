@@ -1,5 +1,40 @@
 import Foundation
 
+// MARK: - Typography Tokens
+
+public enum FontWeight: Sendable {
+    case thin
+    case light
+    case normal
+    case medium
+    case semibold
+    case bold
+    case extraBold
+    case black
+    case custom(String)
+
+    public var rawValue: String {
+        switch self {
+        case .thin:     return "100"
+        case .light:    return "200"
+        case .normal:   return "400"
+        case .medium:   return "500"
+        case .semibold: return "600"
+        case .bold:     return "700"
+        case .extraBold: return "800"
+        case .black:    return "900"
+        case .custom(let v): return v
+        }
+    }
+}
+
+public enum TextAlignment: String, Sendable {
+    case left = "left"
+    case center = "center"
+    case right = "right"
+    case justify = "justify"
+}
+
 // MARK: - View Modifier Methods
 
 extension View {
@@ -21,11 +56,17 @@ extension View {
         let second = InlineStyle(.fontWeight, weight)
         return ModifiedView(content: self, modifier: ComposedModifier(first: first, second: second))
     }
+    public func font(size: Int, weight: FontWeight) -> ModifiedView<Self, ComposedModifier<InlineStyle, InlineStyle>> {
+        font(size: size, weight: weight.rawValue)
+    }
     public func fontFamily(_ family: String) -> ModifiedView<Self, InlineStyle> {
         ModifiedView(content: self, modifier: InlineStyle(.fontFamily, family))
     }
     public func textAlign(_ alignment: String) -> ModifiedView<Self, InlineStyle> {
         ModifiedView(content: self, modifier: InlineStyle(.textAlign, alignment))
+    }
+    public func textAlign(_ alignment: TextAlignment) -> ModifiedView<Self, InlineStyle> {
+        textAlign(alignment.rawValue)
     }
 
     // MARK: - Spacing
@@ -87,6 +128,9 @@ extension View {
     public func `class`(_ name: String) -> ModifiedView<Self, HTMLAttribute> {
         ModifiedView(content: self, modifier: HTMLAttribute("class", name))
     }
+    public func attribute(_ key: String, _ value: String) -> ModifiedView<Self, HTMLAttribute> {
+        ModifiedView(content: self, modifier: HTMLAttribute(key, value))
+    }
 
     // MARK: - Event Handlers
     public func onClick(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
@@ -127,6 +171,12 @@ extension View {
     }
     public func onMouseOut(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
         ModifiedView(content: self, modifier: EventHandlerModifier(event: .mouseout, handler: handler))
+    }
+    public func onFocusIn(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .focusin, handler: handler))
+    }
+    public func onFocusOut(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .focusout, handler: handler))
     }
 
     // MARK: - Optimistic Events

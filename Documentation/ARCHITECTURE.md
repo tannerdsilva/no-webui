@@ -144,6 +144,12 @@ The `EventRouter` connects server-side event handlers to client-side DOM events.
 
 5. The handler returns `[FragmentUpdate]` — instructions to patch the DOM.
 
+**Lifecycle:** component ids are positional (`c0`, `c1`, ...) — assigned in
+render order. the router therefore maps handler ids one-to-one to a rendered
+page. render each page once with a dedicated router, or call `reset()` before
+rendering a fresh page (see the "one router per render pass" rule in
+`GETTING_STARTED.md`).
+
 ### RenderContext
 
 `RenderContext` is a `@TaskLocal` value that flows through the view tree during
@@ -182,10 +188,19 @@ The document auto-generates:
 - A **nonce** attribute on all inline `<script>` tags
 - Default meta tags (charset, viewport)
 
+At render time the combined css (`styles` + `rawStyles`) is passed through
+`minifyCSS()` — `/* */` comments, blank lines, and line padding are stripped
+before the `<style>` tag is emitted, so shipped pages carry no css comments.
+
+A `RuntimeConfig?` parameter changes the runtime bootstrap: with a non-empty
+config the page emits `WebUIRuntime.init({...})` with only the set keys;
+otherwise the default `WebUIRuntime.init();` is emitted byte-for-byte.
+
 ### WebUIDocument
 
 Extends `HTMLDocument` with the full WebUI design system CSS embedded as a
-raw style string. Use this for apps that want the complete design system.
+raw style string (minified on the wire as above). Use this for apps that want
+the complete design system.
 
 ### WebUIRuntime
 
@@ -231,10 +246,10 @@ See `Documentation/JS_RUNTIME.md` for detailed documentation of each module.
 
 | Threat | Mitigation |
 |---|---|
-| XSS via fragment injection | `sanitizeFragmentHTML()` strips `<script>`, event handlers, javascript: URLs before DOM insertion |
+| XSS via fragment injection | `sanitizeFragmentHTML()` decodes numeric/named character references first, then strips `<script>`, event handlers, and javascript: URLs before DOM insertion — entity-encoded `jav&#x61;script:` cannot ride through |
 | Prototype pollution | `State.set()` rejects keys `__proto__`, `constructor`, `prototype` |
-| `javascript:` URLs | `sanitizeURL()` blocks `javascript:`, `data:`, `vbscript:` protocols in Link, Image, Form, Router |
-| Attribute injection | `htmlEscape()` on all attribute keys and values in modifiers |
+| `javascript:` URLs | `sanitizeURL()` blocks `javascript:`, `data:`, `vbscript:` in Link, Image, Form, and the js Router — c0 controls and ascii whitespace are stripped before the scheme check, matching the browser's parser so padded/obfuscated schemes are caught |
+| Attribute injection | `htmlEscape()` on every attribute key and value the framework emits — primitive `id`/`class`/`name`/`for`/`data-status`/`method` parameters included, not just modifiers |
 | CSP bypass | Auto-generated nonce per document, default CSP with `script-src 'nonce-...'` |
 | CSRF | `CSRFProtection` enum with HMAC-SHA256 stateless tokens, optional `Form.csrfToken` parameter |
 | Data race | `NSLock` on all `EventRouter.State` and `ObserverList` mutations |

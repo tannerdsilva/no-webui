@@ -21,12 +21,24 @@ Captures DOM events on elements with `data-component-id` and sends them to the
 server over WebSocket.
 
 **Events captured:** `click`, `input`, `change`, `submit`, `keydown`, `keyup`,
-`keypress`, `focus`, `blur`, `mouseover`, `mouseout`, `mousedown`, `mouseup`
+`keypress`, `focus`, `blur`, `focusin`, `focusout`, `mouseover`, `mouseout`,
+`mousedown`, `mouseup`
 
 **Event filtering:** each interactive element carries a declared `data-event`
 (the event its handler was registered for). only events matching the declared
 type are dispatched — a `click`-only component never receives the `mousedown`/
-`mouseup`/`mouseover` events that a real click also fires.
+`mouseup`/`mouseover` events that a real click also fires. `focus`/`blur` do
+not bubble, so the runtime listens for the bubbling `focusin`/`focusout` and
+normalizes them: a component declaring `data-event="focus"` receives focusin,
+`data-event="blur"` receives focusout, and `data-event="focusin"/"focusout"`
+components receive the raw event. events are echoed back to the server under
+the declared name, so the swift handler always sees the modifier it attached.
+
+**Enter key:** a `keydown` Enter on an interactive component is
+`preventDefault()`-ed to suppress double form submission — unless the target
+is a `TEXTAREA` or `contentEditable` (newlines keep working) or the component
+declares `data-prevent-enter="false"` (settable from swift via
+`.attribute("data-prevent-enter", "false")`).
 
 **Mounting:** adds a single event listener on `document` for each event type
 (event delegation pattern). filters to the nearest element carrying
@@ -56,9 +68,14 @@ value on the wire stays a string (the server's `EventData.data` is
     "type": "event",
     "component": "c0",
     "event": "click",
-    "data": {}
+    "data": { "targetId": "btn-inc", "targetClass": "button button--primary button--md" }
 }
 ```
+
+`click` sends `targetId` and `targetClass` for the clicked element, so a
+single container `.onClick` handler can tell *what* was clicked (for example
+which `data-dismiss` button). other events send the standard `{ value: ... }`
+or `{}` payloads.
 
 ## Module: createFragmentPatcher
 
@@ -80,6 +97,9 @@ using `createContextualFragment()` + `replaceChild()`. this preserves the
 element's position and surrounding DOM.
 
 **HTML sanitization:** before insertion, the HTML is sanitized:
+- numeric and named character references (`&#x61;`, `&#97;`, `&colon;`) are
+  decoded first — the DOM would decode them anyway — so entity-encoded
+  `javascript:` URLs cannot slip past the checks
 - `<script>` tags are stripped (including content)
 - event handler attributes (`onclick`, `onerror`, `onload`, etc.) are stripped
 - `javascript:` URLs in `href`, `src`, `action`, `formaction`, `xlink:href` are
@@ -133,6 +153,8 @@ Manages the WebSocket connection with automatic reconnection.
 | `maxQueueSize` | 1000 | Maximum queued messages when disconnected |
 | `debounceInputMs` | 300ms | Input event trailing debounce delay |
 | `debounceMaxWaitMs` | 1000ms | Maximum input debounce wait |
+| `optimisticSettleMs` | 5000ms | Unconfirmed optimistic patch rollback timeout |
+| `logLevel` | `warn` | One of `debug`, `info`, `warn`, `error`, `silent` |
 
 **Reconnection:** uses exponential backoff starting at 1 second, doubling each
 attempt, capped at `wsMaxReconnectDelay`. a jitter multiplier of 0.5–1.5× is
@@ -161,7 +183,7 @@ A small utility object for client-side navigation:
 | Method | Description |
 |---|---|
 | `navigate(url)` | Push state via `history.pushState` |
-| `redirect(url, replace)` | Navigate via `location.href` (or `location.replace` if `replace` is true). blocks `javascript:`, `data:`, `vbscript:` URLs. |
+| `redirect(url, replace)` | Navigate via `location.href` (or `location.replace` if `replace` is true). blocks `javascript:`, `data:`, `vbscript:` URLs. c0 controls and ascii whitespace are stripped from the url before the protocol check — mirroring the browser's own parser — so padded/obfuscated schemes are blocked too. |
 | `reload()` | Reload the page via `location.reload()` |
 
 ## Initialization
@@ -175,9 +197,13 @@ WebUIRuntime.init({
 ```
 
 The runtime auto-initializes when the page loads (via the inline `<script>` tag
-at the end of `<body>`). It auto-destroys on `beforeunload`, which disconnects
-the WebSocket, unmounts event delegation, resets the fragment patcher, clears
-the state store, and removes the `popstate` listener it registered.
+at the end of `<body>`). the default bootstrap is `WebUIRuntime.init();`. when
+a swift `RuntimeConfig` is passed to `HTMLDocument`/`WebUIDocument`, the
+bootstrap instead carries an options object with only the set keys
+(`WebUIRuntime.init({"wsUrl":...,"debounceInputMs":150,...})`). it auto-destroys
+on `beforeunload`, which disconnects the WebSocket, unmounts event delegation,
+resets the fragment patcher, clears the state store, and removes the
+`popstate` listener it registered.
 
 ## Public API
 

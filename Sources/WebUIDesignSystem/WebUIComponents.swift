@@ -51,7 +51,7 @@ public struct WebUIButton: View {
         if loading { classes += " button--loading" }
 
         var html = "<button"
-        if let id { html += " id=\"\(id)\"" }
+        if let id { html += " id=\"\(htmlEscape(id))\"" }
         html += " class=\"\(classes)\""
         if disabled { html += " disabled" }
         if loading { html += " aria-busy=\"true\"" }
@@ -111,7 +111,7 @@ public struct WebUIInput: View {
 
         html += "<div class=\"input-wrapper\">"
         html += "<input"
-        if let id { html += " id=\"\(id)\"" }
+        if let id { html += " id=\"\(htmlEscape(id))\"" }
         html += " type=\"\(type.rawValue)\""
         html += " class=\"input \(state.rawValue)\""
         html += " placeholder=\"\(htmlEscape(placeholder))\""
@@ -153,7 +153,7 @@ public struct WebUICard: View {
 
     public func render() -> String {
         var html = "<div class=\"card \(variant.rawValue)\""
-        if let id { html += " id=\"\(id)\"" }
+        if let id { html += " id=\"\(htmlEscape(id))\"" }
         html += ">"
         for child in children {
             html += child.render()
@@ -254,7 +254,7 @@ public struct WebUIAlert: View {
         html += "<div class=\"alert__message\">\(htmlEscape(message))</div>"
         html += "</div>"
         if dismissible {
-            html += "<button class=\"alert__close\" aria-label=\"Dismiss\">&times;</button>"
+            html += "<button class=\"alert__close\" data-dismiss aria-label=\"Dismiss\">&times;</button>"
         }
         html += "</div>"
         return html
@@ -289,7 +289,7 @@ public struct WebUITabs: View {
 
     public func render() -> String {
         var html = "<nav class=\"tabs\""
-        if let id { html += " id=\"\(id)\"" }
+        if let id { html += " id=\"\(htmlEscape(id))\"" }
         html += " role=\"tablist\">"
         for tab in tabs {
             let active = tab.id == activeTab ? " tabs__tab--active" : ""
@@ -329,7 +329,7 @@ public struct WebUIAvatar: View {
     public func render() -> String {
         var html = "<div class=\"avatar \(size.rawValue)\""
         if let status {
-            html += " data-status=\"\(status)\""
+            html += " data-status=\"\(htmlEscape(status))\""
         }
         html += ">"
         if let src {
@@ -458,12 +458,12 @@ public struct WebUIToast: View {
 
     public func render() -> String {
         var html = "<div class=\"toast \(variant.rawValue)\" role=\"alert\""
-        if let id { html += " id=\"\(id)\"" }
+        if let id { html += " id=\"\(htmlEscape(id))\"" }
         html += ">"
         html += "<span class=\"toast__icon\"></span>"
         html += "<span class=\"toast__message\">\(htmlEscape(message))</span>"
         if dismissible {
-            html += "<button class=\"toast__close\" aria-label=\"Dismiss\">&times;</button>"
+            html += "<button class=\"toast__close\" data-dismiss aria-label=\"Dismiss\">&times;</button>"
         }
         html += "</div>"
         return html
@@ -491,12 +491,12 @@ public struct WebUIModal: View {
 
     public func render() -> String {
         var html = "<div class=\"modal-overlay\""
-        if let id { html += " id=\"\(id)\"" }
+        if let id { html += " id=\"\(htmlEscape(id))\"" }
         html += ">"
-        html += "<div class=\"modal\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"\(id ?? "")-title\">"
+        html += "<div class=\"modal\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"\(htmlEscape(id ?? ""))-title\">"
         html += "<div class=\"modal__header\">"
-        html += "<h2 class=\"modal__title\" id=\"\(id ?? "")-title\">\(htmlEscape(title))</h2>"
-        html += "<button class=\"modal__close\" aria-label=\"Close\">&times;</button>"
+        html += "<h2 class=\"modal__title\" id=\"\(htmlEscape(id ?? ""))-title\">\(htmlEscape(title))</h2>"
+        html += "<button class=\"modal__close\" data-dismiss aria-label=\"Close\">&times;</button>"
         html += "</div>"
         html += "<div class=\"modal__body\">"
         for child in children {
@@ -594,11 +594,11 @@ public struct WebUIChip: View {
 
     public func render() -> String {
         var html = "<span class=\"chip \(variant.rawValue)\""
-        if let id { html += " id=\"\(id)\"" }
+        if let id { html += " id=\"\(htmlEscape(id))\"" }
         html += ">"
         html += "<span class=\"chip__label\">\(htmlEscape(text))</span>"
         if removable {
-            html += "<button class=\"chip__remove\" aria-label=\"Remove\">&times;</button>"
+            html += "<button class=\"chip__remove\" data-remove aria-label=\"Remove\">&times;</button>"
         }
         html += "</span>"
         return html
@@ -626,7 +626,7 @@ public struct WebUIEmptyState: View {
 
     public func render() -> String {
         var html = "<div class=\"empty-state\">"
-        html += "<div class=\"empty-state__icon\">\(icon)</div>"
+        html += "<div class=\"empty-state__icon\">\(htmlEscape(icon))</div>"
         html += "<h3 class=\"empty-state__title\">\(htmlEscape(title))</h3>"
         html += "<p class=\"empty-state__message\">\(htmlEscape(message))</p>"
         if let (label, actionId) = action {

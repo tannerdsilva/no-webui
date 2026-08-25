@@ -1,5 +1,9 @@
 # build products (swift build artifacts, generated assets, plugin outputs)
 .build/
+.build-audit/
+
+# SwiftPM workspace metadata
+.swiftpm/
 
 # macOS
 .DS_Store

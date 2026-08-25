@@ -166,22 +166,42 @@ use the scale, never raw integers:
 ## Components
 
 All components are in `WebUIComponents.swift`. Each accepts standard modifiers
-(`.font()`, `.padding()`, etc.) since they conform to `View`.
+(`.font()`, `.padding()`, …) since they conform to `View`. every parameter is
+validated in `Tests/WebUITests/` and every class below exists in the shipped
+css.
 
 ### WebUIButton
 
 ```swift
 WebUIButton("Submit", variant: .primary, size: .md)
 WebUIButton("Delete", variant: .danger, disabled: true)
-WebUIButton("Loading...", variant: .primary, loading: true)
+WebUIButton("Save…", variant: .primary, loading: true)
+WebUIButton("Full", fullWidth: true)
 ```
 
 **Variants:** `primary`, `secondary`, `outline`, `ghost`, `danger`, `success`, `warning`
 **Sizes:** `sm`, `md`, `lg`
-**States:** `disabled`, `loading` (shows spinner), `fullWidth`
+**Parameters:** `label`, `variant`, `size`, `disabled`, `id`, `fullWidth`, `loading`
 
-CSS classes: `button button--{variant} button--{size}` (+ `button--full-width`,
-`button--loading`, `button--disabled`)
+CSS classes: `button button--{variant} button--{size}` (+ `button--full` when
+`fullWidth`, `button--loading` when `loading`); children `button__spinner`,
+`button__label`.
+
+### WebUIInput
+
+```swift
+WebUIInput(placeholder: "Enter text...")
+WebUIInput(placeholder: "Your name", label: "Name", helpText: "As shown on your profile")
+WebUIInput(placeholder: "Password", type: .password, state: .error)
+```
+
+**States:** `normal`, `error`, `success`, `warning`
+**Types:** any `InputType` (`.text`, `.password`, `.email`, `.number`, `.tel`,
+`.url`, `.search`, `.date`, …)
+
+CSS classes: `input__label`, `input-wrapper`, `input` (+
+`input--error`/`input--success`/`input--warning`), `input__help` (+
+`input__help--error`.
 
 ### WebUICard
 
@@ -189,88 +209,66 @@ CSS classes: `button button--{variant} button--{size}` (+ `button--full-width`,
 WebUICard {
     Text("Card content")
 }
-WebUICard(title: "Settings", padding: .lg) {
+WebUICard(variant: .outlined, id: "settings") {
     Text("Settings content")
 }
 ```
 
-CSS classes: `card` (+ `card--padding-sm/md/lg`)
+**Variants:** `elevated`, `outlined`, `flat`, `interactive`
 
-### WebUIInput
-
-```swift
-WebUIInput(placeholder: "Enter text...")
-WebUIInput(value: "prefilled", label: "Name", helperText: "Your full name")
-WebUIInput(type: .password, placeholder: "Password", error: "Required")
-```
-
-**Types:** `text`, `password`, `email`, `number`, `tel`, `url`, `search`, `date`
-**States:** `error` (shows error message), `disabled`
-
-CSS classes: `input-wrapper`, `input-label`, `input`, `input-error`, `input-helper`
-
-### WebUITextArea
-
-```swift
-WebUITextArea(placeholder: "Write...")
-WebUITextArea(value: "Content", label: "Description", rows: 6)
-```
-
-CSS classes: `textarea-wrapper`, `textarea-label`, `textarea`
-
-### WebUISelect
-
-```swift
-WebUISelect(options: [
-    ("Option 1", "opt1"),
-    ("Option 2", "opt2"),
-], placeholder: "Choose...")
-```
-
-CSS classes: `select-wrapper`, `select`
+CSS classes: `card card--{variant}`
 
 ### WebUIBadge
 
 ```swift
 WebUIBadge("New", variant: .success)
-WebUIBadge("3", variant: .danger, size: .sm)
+WebUIBadge("3", variant: .danger, size: .sm, dot: true)
 ```
 
-**Variants:** `primary`, `success`, `warning`, `danger`, `info`, `neutral`
-**Sizes:** `sm`, `md`
+**Variants:** `primary`, `secondary`, `success`, `warning`, `danger`, `info`, `neutral`
+**Sizes:** `sm`, `md`, `lg`
 
-CSS classes: `badge badge--{variant} badge--{size}`
+CSS classes: `badge badge--{variant} badge--{size}` (+ `badge--dot`); child
+`badge__dot`.
 
-### WebUIModal
+### WebUIAlert
 
 ```swift
-WebUIModal(title: "Confirm", isOpen: true) {
-    Text("Are you sure?")
-}
+WebUIAlert(variant: .warning, message: "Disk space low")
+WebUIAlert(variant: .danger, title: "Error", message: "Something broke", dismissible: true)
 ```
 
-CSS classes: `modal-overlay`, `modal`, `modal-header`, `modal-body`, `modal-footer`
+**Variants:** `info`, `success`, `warning`, `danger`
+**Parameters:** `variant`, `title`, `message`, `dismissible`, `icon`
 
-### WebUIToast
+CSS classes: `alert alert--{variant}`, children `alert__icon`, `alert__body`,
+`alert__title`, `alert__message`, `alert__close` (dismissible only; carries
+`data-dismiss`). the container has `role="alert"`.
+
+### WebUITabs
 
 ```swift
-WebUIToast(message: "Saved!", variant: .success)
+WebUITabs(
+    tabs: [TabItem(id: "general", label: "General"), TabItem(id: "settings", label: "Settings")],
+    activeTab: "general"
+)
 ```
 
-**Variants:** `success`, `error`, `warning`, `info`
-
-CSS classes: `toast toast--{variant}`
+CSS classes: `tabs`, `tabs__tab`, `tabs__tab--active`; `role="tablist"` /
+`role="tab"` plus `aria-selected` and a `data-tab` marker on each tab.
 
 ### WebUIAvatar
 
 ```swift
 WebUIAvatar(initials: "JD", size: .md)
-WebUIAvatar(imageUrl: "/profile.jpg", alt: "User")
+WebUIAvatar(initials: "JD", src: "/profile.jpg", status: "online")
 ```
 
 **Sizes:** `sm`, `md`, `lg`, `xl`
+**Parameters:** `initials`, `size`, `src`, `status`
 
-CSS classes: `avatar avatar--{size}`
+CSS classes: `avatar avatar--{size}`, children `avatar__img`, `avatar__initials`,
+`avatar__status` (set only when `status` is given; carries `data-status`).
 
 ### WebUIProgress
 
@@ -279,80 +277,121 @@ WebUIProgress(value: 0.75)
 WebUIProgress(value: 0.5, variant: .warning, showLabel: true)
 ```
 
-**Variants:** `primary`, `success`, `warning`, `danger`
+**Variants:** `primary`, `success`, `warning`, `danger`; `value` clamps to 0…1.
 
-CSS classes: `progress-bar`, `progress-fill`, `progress-label`
+CSS classes: `progress progress--{variant} progress--{size}`, children
+`progress__bar`, `progress__label`; `role="progressbar"` plus `aria-valuenow`
+when accessible.
 
-### WebUIToggle
-
-```swift
-WebUIToggle(isOn: true)
-WebUIToggle(isOn: false, label: "Enable notifications")
-```
-
-CSS classes: `toggle`, `toggle--active`, `toggle-label`
-
-### WebUITabs
+### WebUISkeleton
 
 ```swift
-WebUITabs(tabs: [
-    ("tab1", "General"),
-    ("tab2", "Settings"),
-], activeTab: "tab1")
+WebUISkeleton()
+WebUISkeleton(variant: .card, count: 3)
 ```
 
-CSS classes: `tabs`, `tab`, `tab--active`
+**Variants:** `text`, `title`, `avatar`, `card`, `custom`; optional `width` /
+`height`; `count` clamps to ≥ 1.
+
+CSS classes: `skeleton skeleton--{variant}`; `aria-hidden="true"`.
+
+### WebUIToast
+
+```swift
+WebUIToast(message: "Saved", variant: .success)
+WebUIToast(message: "Failed", variant: .danger, dismissible: false)
+```
+
+**Variants:** `info`, `success`, `warning`, `danger`; dismissible by default.
+
+CSS classes: `toast toast--{variant}`, children `toast__icon`,
+`toast__message`, `toast__close` (dismissible; carries `data-dismiss`);
+`role="alert"`.
+
+### WebUIModal
+
+```swift
+WebUIModal(title: "Confirm") {
+    Text("Are you sure?")
+} footer: {
+    WebUIButton("OK", variant: .primary)
+}
+```
+
+**Parameters:** `title`, `id`, `content`, `footer` (both view builders).
+
+CSS classes: `modal-overlay`, `modal`, `modal__header`, `modal__title`,
+`modal__body`, `modal__footer`, `modal__close` (carries `data-dismiss`);
+`role="dialog"` + `aria-modal="true"` + `aria-labelledby`.
 
 ### WebUITable
 
 ```swift
 WebUITable(
-    headers: ["Name", "Value"],
-    rows: [["Age", "30"], ["Role", "Admin"]]
+    headers: ["Name", "Role"],
+    rows: [[Text("Ada"), Text("Admin")], [Text("Linus"), Text("Dev")]],
+    striped: true, hoverable: true, compact: false
 )
 ```
 
-CSS classes: `table`, `table-header`, `table-row`, `table-cell`
+rows are `[[any View]]`, so cells can be any view (not just strings).
 
-### WebUIAlert
+CSS classes: `table` (+ `table--striped`, `table--hoverable`, `table--compact`).
+
+### WebUIChip
 
 ```swift
-WebUIAlert("Operation completed", variant: .success)
-WebUIAlert("An error occurred", variant: .error, dismissible: true)
+WebUIChip("Swift", variant: .primary)
+WebUIChip("Clear", variant: .neutral, removable: true)
 ```
 
-**Variants:** `info`, `success`, `warning`, `error`
+**Variants:** `primary`, `secondary`, `success`, `warning`, `danger`, `info`, `neutral`
 
-CSS classes: `alert alert--{variant}` (+ `alert--dismissible`)
+CSS classes: `chip chip--{variant}`, children `chip__label`, `chip__remove`
+(removable; carries `data-remove`).
+
+### WebUIEmptyState
+
+```swift
+WebUIEmptyState(title: "No results", message: "Try a different filter.")
+WebUIEmptyState(icon: "📦", title: "Empty", message: "Add your first item", action: ("Add Item", "add-btn"))
+```
+
+CSS classes: `empty-state`, `empty-state__icon`, `empty-state__title`,
+`empty-state__message`.
+
+### WebUISpinner
+
+```swift
+WebUISpinner(size: .md)
+WebUISpinner(size: .lg, label: "Loading…")
+```
+
+**Sizes:** `sm`, `md`, `lg`
+
+CSS classes: `spinner spinner--{size}`, children `spinner__ring`,
+`spinner__label`; `role="status"` (+ `aria-label` when labeled).
 
 ### WebUITooltip
 
 ```swift
-WebUITooltip(text: "More info") {
+WebUITooltip("More info", position: .top) {
     Text("Hover me")
 }
 ```
 
-CSS classes: `tooltip-container`, `tooltip`, `tooltip--visible`
+the tooltip text is the first, unlabeled parameter; **position** is
+`top`, `bottom`, `left`, or `right`.
 
-### WebUIDropdown
-
-```swift
-WebUIDropdown(title: "Menu", items: [
-    ("Profile", "profile"),
-    ("Settings", "settings"),
-    ("Logout", "logout"),
-])
-```
-
-CSS classes: `dropdown`, `dropdown-trigger`, `dropdown-menu`, `dropdown-item`
+CSS classes: `tooltip-container`, `tooltip tooltip--{position}`, children
+`tooltip__arrow`, `tooltip__text`; `role="tooltip"`.
 
 ## CSS Class Naming Convention
 
 All classes follow BEM-like naming:
 - Block: component name (`button`, `card`, `input`)
-- Element: double underscore (`input__label`, `card__title`)
-- Modifier: double dash (`button--primary`, `card--padding-lg`)
+- Element: double underscore (`button__label`, `modal__title`, `chip__remove`)
+- Modifier: double dash (`button--primary`, `alert--danger`, `table--compact`)
 
 ## Responsive Breakpoints
 

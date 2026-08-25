@@ -11,6 +11,7 @@ public struct WebUIDocument: View {
     public let devMode: Bool
     public let lang: String
     public let includeRuntime: Bool
+    public let runtimeConfig: RuntimeConfig?
     public let contentSecurityPolicy: String?
     public init(
         title: String = "WebUI UI",
@@ -21,6 +22,7 @@ public struct WebUIDocument: View {
         devMode: Bool = false,
         lang: String = "en",
         includeRuntime: Bool = true,
+        runtimeConfig: RuntimeConfig? = nil,
         contentSecurityPolicy: String? = nil
     ) {
         self.title = title
@@ -31,6 +33,7 @@ public struct WebUIDocument: View {
         self.devMode = devMode
         self.lang = lang
         self.includeRuntime = includeRuntime
+        self.runtimeConfig = runtimeConfig
         self.contentSecurityPolicy = contentSecurityPolicy
     }
 
@@ -46,6 +49,7 @@ public struct WebUIDocument: View {
             devMode: devMode,
             lang: lang,
             includeRuntime: includeRuntime,
+            runtimeConfig: runtimeConfig,
             contentSecurityPolicy: contentSecurityPolicy
         )
         return doc.render()
