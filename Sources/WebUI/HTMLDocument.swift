@@ -16,8 +16,7 @@ public struct HTMLDocument: Sendable {
     public let contentSecurityPolicy: String?
     public let nonce: String
     private static func generateNonce() -> String {
-        var bytes = [UInt8](repeating: 0, count: 16)
-        guard SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes) == errSecSuccess else {
+        guard let bytes = SecureRandom.bytes(16) else {
             return UUID().uuidString.replacingOccurrences(of: "-", with: "")
         }
         return Data(bytes).base64EncodedString()

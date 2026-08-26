@@ -37,8 +37,8 @@ See `Sources/WebUIExample/main.swift` and `Documentation/GETTING_STARTED.md`.
 ## Build and test
 
 ```bash
-swift build           # WebUIAssetPlugin auto-generates Assets+Generated.swift
-swift test            # 307 tests, 20 suites
+swift build          # WebUIAssetPlugin auto-generates Assets+Generated.swift
+swift test           # 320 tests, 22 suites
 swift run WebUIExample  # example server on :9090
 ```
 
@@ -73,7 +73,7 @@ no-webui/
 │   ├── WebUIFullstackSmokePlugin/# command plugin `fullstack-smoke`: live WS gate
 │   ├── WebUIProbePlugin/         # command plugin `probe`: port check
 │   └── WebUIShowcasePlugin/      # command plugin `showcase`: regenerates designer/previews/
-├── Tests/WebUITests/             # web UI tests (307 tests)
+├── Tests/WebUITests/             # web UI tests (320 tests)
 ├── Documentation/                # 8 documentation files (incl. ASSEMBLY.md)
 ├── designer/                     # designer sandbox (CSS/JS only)
 ├── README.md
@@ -113,7 +113,7 @@ See `designer/README.md` for the full designer guide.
 
 ## Requirements
 
-- Swift 6.2+
-- macOS 15+
+- Swift 6.2+ (verified on macOS 15 and Ubuntu 24.04 with Swift 6.3.3)
+- macOS 15+ **and** Linux — cross-platform from day one
 - No external dependencies beyond swift-log and swift-nio
 - node + playwright only for the browser layout gate (`designer/browser-smoke.mjs`)

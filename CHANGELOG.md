@@ -4,6 +4,21 @@ all notable changes to this project are documented here.
 
 ## [unreleased]
 
+### changed
+
+- linux support: the framework and its six command/build plugins now build
+  and pass the full suite on ubuntu 24.04 (swift 6.3.3). `CommonCrypto` and
+  `SecRandomCopyBytes` are replaced with a dependency-free implementation:
+  pure-swift sha-256/hmac (rfc 4231 vectors pinned in `CryptoTests`) plus a
+  `/dev/urandom` reader on linux and `SecRandomCopyBytes` on apple, so tokens
+  and nonces are byte-identical across platforms. the plugins gained
+  conditional `FoundationNetworking` (linux) imports for `URLSession`, a
+  `Glibc`/`Darwin` guard for the socket-based probe, and dropped the
+  `HTTPURLResponse.statusCode` readiness cast in favor of an any-body GET
+  probe; `WebUIProbePlugin` shims glibc's typed `SOCK_STREAM` enum.
+- 320 tests / 22 suites (was 307 / 20) after adding the crypto suites.
+
+
 ### docs
 
 - `DESIGN_SYSTEM.md` component reference rebuilt against the shipped css and

@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import PackagePlugin
 
 // self-contained full-stack gate: one command spawns the WebUISmokeTest
@@ -36,8 +39,7 @@ struct WebUIFullstackSmokePlugin: CommandPlugin {
 
         var ready = false
         for _ in 0..<40 {
-            if let (_, response) = try? await session.data(from: URL(string: "\(base)/")!),
-               (response as? HTTPURLResponse)?.statusCode == 200 {
+            if let body = await GETBody(session, "\(base)/"), !body.isEmpty {
                 ready = true
                 break
             }
@@ -62,5 +64,10 @@ struct WebUIFullstackSmokePlugin: CommandPlugin {
         if driver.terminationStatus != 0 {
             Diagnostics.error("full-stack smoke gate failed (exit \(driver.terminationStatus))")
         }
+    }
+
+    private func GETBody(_ session: URLSession, _ urlString: String) async -> Data? {
+        guard let url = URL(string: urlString) else { return nil }
+        return try? await session.data(from: url).0
     }
 }

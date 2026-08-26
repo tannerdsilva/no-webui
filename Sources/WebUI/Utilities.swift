@@ -1,5 +1,4 @@
 import Foundation
-import CommonCrypto
 
 // MARK: - HTML Escaping
 public func htmlEscape(_ string: String) -> String {
@@ -275,9 +274,12 @@ public func sanitizeURL(_ url: String) -> String? {
 public enum CSRFProtection {
     public static let defaultMaxAge: TimeInterval = 1800
     public static func generateSecret() -> String {
-        var bytes = [UInt8](repeating: 0, count: 32)
-        _ = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
+        let bytes = SecureRandom.bytes(32) ?? fallbackEntropy(count: 32)
         return Data(bytes).base64EncodedString()
+    }
+    private static func fallbackEntropy(count: Int) -> [UInt8] {
+        var generator = SystemRandomNumberGenerator()
+        return (0..<count).map { _ in UInt8(truncatingIfNeeded: generator.next()) }
     }
     public static func token(for formID: String, secret: String, maxAge: TimeInterval = defaultMaxAge) -> String {
         let expires = Date().timeIntervalSince1970 + maxAge
@@ -311,18 +313,7 @@ public enum CSRFProtection {
               let messageData = message.data(using: .utf8) else {
             return ""
         }
-        var mac = Data(count: Int(CC_SHA256_DIGEST_LENGTH))
-        keyData.withUnsafeBytes { keyPtr in
-            messageData.withUnsafeBytes { msgPtr in
-                mac.withUnsafeMutableBytes { macPtr in
-                    CCHmac(CCHmacAlgorithm(kCCHmacAlgSHA256),
-                           keyPtr.baseAddress, keyData.count,
-                           msgPtr.baseAddress, messageData.count,
-                           macPtr.baseAddress)
-                }
-            }
-        }
-        return mac.map { String(format: "%02hhx", $0) }.joined()
+        return HMACSHA256.hex(message: [UInt8](messageData), key: [UInt8](keyData))
     }
 }
 

@@ -1,4 +1,9 @@
 import Foundation
+#if os(Linux)
+import Glibc
+#else
+import Darwin
+#endif
 import PackagePlugin
 
 // connect-based port probe. reports whether something is listening on
@@ -11,7 +16,7 @@ struct WebUIProbePlugin: CommandPlugin {
         let portText = arguments.first ?? "9123"
         let port = Int(portText) ?? 9123
 
-        let fd = socket(AF_INET, SOCK_STREAM, 0)
+        let fd = socket(AF_INET, streamSockType, 0)
         guard fd >= 0 else {
             Diagnostics.error("socket() failed errno=\(errno)")
             return
@@ -33,5 +38,14 @@ struct WebUIProbePlugin: CommandPlugin {
         } else {
             print("FREE on :\(port) (connect refused, errno=\(errno))")
         }
+    }
+
+    // glibc types sock_type as a c enum; darwin keeps it an Int32.
+    private var streamSockType: Int32 {
+        #if os(Linux)
+        return Int32(SOCK_STREAM.rawValue)
+        #else
+        return SOCK_STREAM
+        #endif
     }
 }

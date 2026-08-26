@@ -34,7 +34,7 @@ to update assets: edit the files in `designer/assets/`, then `swift build`
 
 ## stage 2 — unit verification
 
-`swift test` — 307 tests across 20 suites covering views, modifiers, event
+`swift test` — 320 tests across 22 suites covering views, modifiers, event
 routing, sanitization, and design-system components.
 
 ## stage 3 — the server

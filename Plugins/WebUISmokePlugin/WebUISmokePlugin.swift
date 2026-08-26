@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import PackagePlugin
 
 // self-contained smoke gate: one command spawns the WebUISmokeTest server
@@ -42,7 +45,7 @@ struct WebUISmokePlugin: CommandPlugin {
 
         var ready = false
         for _ in 0..<40 {
-            if await httpStatus(session, "\(base)/") == 200 {
+            if let body = await GETBody(session, "\(base)/"), !body.isEmpty {
                 ready = true
                 break
             }
@@ -129,10 +132,9 @@ struct WebUISmokePlugin: CommandPlugin {
         }
     }
 
-    private func httpStatus(_ session: URLSession, _ urlString: String) async -> Int? {
+    private func GETBody(_ session: URLSession, _ urlString: String) async -> Data? {
         guard let url = URL(string: urlString) else { return nil }
-        guard let (_, response) = try? await session.data(from: url) else { return nil }
-        return (response as? HTTPURLResponse)?.statusCode
+        return try? await session.data(from: url).0
     }
 
     private func GET(_ session: URLSession, _ urlString: String) async -> Data? {

@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(FoundationNetworking)
+import FoundationNetworking
+#endif
 import PackagePlugin
 
 // nonisolated(unsafe): signal handlers can't capture, and can't touch an
