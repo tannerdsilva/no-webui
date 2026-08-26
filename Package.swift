@@ -31,6 +31,7 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-log.git", "1.0.0"..<"2.0.0"),
         .package(url: "https://github.com/apple/swift-nio.git", "2.0.0"..<"3.0.0"),
+        .package(url: "https://github.com/tannerdsilva/rawdog", from: "21.0.0"),
     ],
     targets: [
 
@@ -39,6 +40,9 @@ let package = Package(
             name: "WebUI",
             dependencies: [
                 .product(name: "Logging", package: "swift-log"),
+                .product(name: "RAW", package: "rawdog"),
+                .product(name: "RAW_sha256", package: "rawdog"),
+                .product(name: "RAW_hmac", package: "rawdog"),
             ],
             plugins: [
                 "WebUIAssetPlugin",

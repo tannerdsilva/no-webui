@@ -8,7 +8,7 @@ for live UI updates.
 
 | Module | Description | Dependencies |
 |---|---|---|
-| `WebUI` | View protocol, primitives, layouts, modifiers, CSS system, HTML document assembly, WebSocket protocol, JS runtime | swift-log |
+| `WebUI` | View protocol, primitives, layouts, modifiers, CSS system, HTML document assembly, WebSocket protocol, JS runtime | swift-log, rawdog |
 | `WebUIDesignSystem` | design system: 110 CSS custom properties, 16 styled components | WebUI |
 | `WebUIExample` | HTTP/WebSocket example server (SwiftNIO) | WebUI, WebUIDesignSystem, swift-nio |
 | `WebUIShowcase` | showcase server + static HTML generator | WebUI, WebUIDesignSystem, swift-nio |
@@ -115,5 +115,5 @@ See `designer/README.md` for the full designer guide.
 
 - Swift 6.2+ (verified on macOS 15 and Ubuntu 24.04 with Swift 6.3.3)
 - macOS 15+ **and** Linux — cross-platform from day one
-- No external dependencies beyond swift-log and swift-nio
+- Dependencies: swift-log, swift-nio, and rawdog (v21+ — official sha-256 / hmac suite)
 - node + playwright only for the browser layout gate (`designer/browser-smoke.mjs`)

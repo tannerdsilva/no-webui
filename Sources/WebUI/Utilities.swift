@@ -313,7 +313,7 @@ public enum CSRFProtection {
               let messageData = message.data(using: .utf8) else {
             return ""
         }
-        return HMACSHA256.hex(message: [UInt8](messageData), key: [UInt8](keyData))
+        return (try? HMACSHA256.hex(message: [UInt8](messageData), key: [UInt8](keyData))) ?? ""
     }
 }
 
