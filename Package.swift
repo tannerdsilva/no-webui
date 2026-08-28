@@ -15,9 +15,17 @@ let package = Package(
             name: "WebUIDesignSystem",
             targets: ["WebUIDesignSystem"]
         ),
+        .library(
+            name: "WebUIAuth",
+            targets: ["WebUIAuth"]
+        ),
         .executable(
             name: "WebUIExample",
             targets: ["WebUIExample"]
+        ),
+        .executable(
+            name: "WebUIAuthExample",
+            targets: ["WebUIAuthExample"]
         ),
         .executable(
             name: "WebUIShowcase",
@@ -32,6 +40,10 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-log.git", "1.0.0"..<"2.0.0"),
         .package(url: "https://github.com/apple/swift-nio.git", "2.0.0"..<"3.0.0"),
         .package(url: "https://github.com/tannerdsilva/rawdog", from: "21.0.0"),
+        // TEMP local path while the rawdog21 branch/tag is unpublished; flip to
+        // .package(url: "https://github.com/tannerdsilva/QuickLMDB.git", branch: "rawdog21")
+        // then `from: <tag>` once pushed (see Documentation/IMPLEMENTATION_PLAN.md)
+        .package(name: "QuickLMDB", path: "../QuickLMDB"),
     ],
     targets: [
 
@@ -54,6 +66,17 @@ let package = Package(
                 "WebUI",
             ]
         ),
+        .target(
+            name: "WebUIAuth",
+            dependencies: [
+                "WebUI",
+                .product(name: "Logging", package: "swift-log"),
+                .product(name: "QuickLMDB", package: "QuickLMDB"),
+                .product(name: "RAW", package: "rawdog"),
+                .product(name: "RAW_sha256", package: "rawdog"),
+                .product(name: "RAW_argon2", package: "rawdog"),
+            ]
+        ),
 
         // ── Asset Tool ───────────────────────────────────────────
         .executableTarget(
@@ -66,6 +89,19 @@ let package = Package(
             dependencies: [
                 "WebUI",
                 "WebUIDesignSystem",
+                .product(name: "Logging", package: "swift-log"),
+                .product(name: "NIOPosix", package: "swift-nio"),
+                .product(name: "NIOHTTP1", package: "swift-nio"),
+                .product(name: "NIOCore", package: "swift-nio"),
+                .product(name: "NIOWebSocket", package: "swift-nio"),
+            ]
+        ),
+        .executableTarget(
+            name: "WebUIAuthExample",
+            dependencies: [
+                "WebUI",
+                "WebUIDesignSystem",
+                "WebUIAuth",
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOHTTP1", package: "swift-nio"),
@@ -181,6 +217,13 @@ let package = Package(
             dependencies: [
                 "WebUI",
                 "WebUIDesignSystem",
+            ]
+        ),
+        .testTarget(
+            name: "WebUIAuthTests",
+            dependencies: [
+                "WebUIAuth",
+                "WebUI",
             ]
         ),
     ]

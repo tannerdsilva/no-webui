@@ -1,6 +1,15 @@
 {
-  "originHash" : "38af1caf126e487549d82d1ecfdab4faceba90e15625ef3224aad30d6ee2d621",
+  "originHash" : "84cb660dba67168b5f826c09270f9e1a23da7a7e1ff5c27178562ef84c09e3db",
   "pins" : [
+    {
+      "identity" : "clmdb",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tannerdsilva/CLMDB.git",
+      "state" : {
+        "revision" : "4ce5826424f8e65f395efc5b4c611479384722b1",
+        "version" : "0.9.30"
+      }
+    },
     {
       "identity" : "rawdog",
       "kind" : "remoteSourceControl",
