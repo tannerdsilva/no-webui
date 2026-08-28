@@ -13,6 +13,7 @@ every developer action is a single command. there are no shell scripts.
 | build (embeds assets) | `swift build` | — |
 | unit tests | `swift test` | — |
 | host the smoke/demo server on :9123 | `swift package --disable-sandbox plugin serve` | disabled (bind requires it) |
+| host the auth demo on :9091 | `swift run WebUIAuthExample` | — |
 | smoke gate (server + 15 checks + teardown) | `swift package --disable-sandbox plugin smoke` | disabled |
 | full-stack gate (server + live WS round-trips + teardown) | `swift package --disable-sandbox plugin fullstack-smoke` | disabled |
 | browser gate (playwright layout, self-contained) | `node designer/browser-smoke.mjs` | none (not a plugin) |
@@ -34,8 +35,9 @@ to update assets: edit the files in `designer/assets/`, then `swift build`
 
 ## stage 2 — unit verification
 
-`swift test` — 320 tests across 22 suites covering views, modifiers, event
-routing, sanitization, and design-system components.
+`swift test` — 374 tests across 34 suites covering views, modifiers, event
+routing, sanitization, design-system components, and the `WebUIAuth`
+authentication foundation (tokens, cookies, stores, Argon2id, auth context).
 
 ## stage 3 — the server
 
@@ -49,6 +51,34 @@ no orphans).
 note: a running plugin invocation holds the package `.build` lock for its whole
 run, so `serve` cannot run concurrently with other `swift package` commands.
 run it standalone, then Ctrl+C before the next invocation.
+
+## stage 3b — the auth demo (opt-in)
+
+`swift run WebUIAuthExample` hosts the login-gated interactive demo on :9091
+(no plugin, no sandbox — it is a plain executable like `WebUIExample`). sign in
+with `admin` / `password`.
+
+what it demonstrates:
+
+- a runtime-free login page (native form POST per AD-1 of
+  `Documentation/AUTH_SESSIONS.md`) with a synchronizer CSRF token, hardened
+  CSP, and `X-Frame-Options`
+- M0 `WebUIAuth` machinery end to end: `SessionToken` (SecureRandom-only,
+  SHA-256 hashed at rest), the in-memory session store, cookie parse/build,
+  `PasswordVerifier` Argon2id with dummy-hash equalization and a
+  `constantTimeEquals` username compare, `AuthContext`
+- the interactive dashboard (counter / progress / echo, optimistic reset) with
+  a per-session router; the WebSocket upgrade refuses foreign/no-origin
+  handshakes and, per event, checks the session is still valid — after logout
+  or expiry an open socket is redirected to `/login` and closed
+- CSRF-protected POST logout
+
+**deliberately not in the demo (plan M2):** the Argon2 concurrency cap /
+bounded queue (the login endpoint remains a CPU+memory flood amplifier),
+session caps and the sweep service, per-session state containers (the demo
+shares one global state across sessions). the auth demo has no plugin gate —
+the `smoke`/`fullstack-smoke`/`browser-smoke` gates cover the framework
+reference page only, and are untouched by it.
 
 ## stage 4 — deployment gates
 

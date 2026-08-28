@@ -142,6 +142,7 @@ default `WebUIRuntime.init();` is emitted byte-for-byte.
 | Function | Description |
 |---|---|
 | `htmlEscape(_ string: String) -> String` | escape HTML special characters (&, <, >, ", ') |
+| `constantTimeEquals(_ lhs:, _ rhs:)` | constant-time equality over byte sequences (`[UInt8]`, `Data`) — no early exit on an equal-length input; used for MAC and token compares |
 | `injectAttributes(into html: String, _ attributes: String) -> String` | inject attributes into the first HTML tag |
 | `sanitizeURL(_ url: String) -> String?` | nil for `javascript:`, `data:`, `vbscript:` — strips c0 controls and ascii whitespace first, matching the browser's URL parser, so padded/obfuscated schemes are caught too |
 | `markdownToHTML(_ markdown: String) -> String` | minimal safe markdown subset: atx headings, bullet/numbered lists, `**bold**`, `*emphasis*`, `` `code` ``, `[label](url)` (url-sanitized). input is escaped before tokenizing; unpaired delimiters render literally |
@@ -205,3 +206,88 @@ A SwiftNIO-based HTTP/WebSocket server that serves a live counter + echo page.
 - `WebSocket /ws` — event handling endpoint
 
 **Port:** 9090 (configurable in source)
+
+## WebUIAuth
+
+authentication + sessions foundation for WebUI backends. design rationale and
+threat model live in `Documentation/AUTH_SESSIONS.md`; the execution breakdown
+in `Documentation/IMPLEMENTATION_PLAN.md`.
+
+### Identity model
+
+| Type | Description |
+|---|---|
+| `Identity` | `{ id: String, roles: Set<String> }` — `Codable`, `Hashable`, `Sendable`. `id` is the backend's stable identifier; `roles` is the role set guards branch on |
+| `Role` | well-known role strings: `Role.member` (`"member"`), `Role.admin` (`"admin"`) |
+| `Credential` | `{ username: String, secret: Data }` — raw password bytes, single-use |
+
+### Sessions
+
+| Type | Description |
+|---|---|
+| `AuthenticatedSession` | `{ id: Data, tokenHash: Data, identityID: String, csrfSeed: Data, createdAt, expiresAt, lastSeenAt }` — the raw token never reaches storage, only its SHA-256 `tokenHash`. `id` is 16 random bytes (the LMDB store enforces this size) |
+| `SessionToken.generate()` | 32 bytes from `SecureRandom` **only** — fails loudly on entropy failure, no PRNG fallback |
+| `SessionToken.hash(_:)` | SHA-256 of a token — the only form a store may persist |
+
+### Protocols
+
+| Protocol | Job |
+|---|---|
+| `UserStore.identity(forUsername:) async throws -> Identity?` | backend resolves a username to an identity |
+| `Authenticator.authenticate(_ credential:) async throws -> Identity?` | verifies credentials; `nil` for invalid OR unknown (never leaks existence) |
+| `AuthSessionStore` | `create` / `find(tokenHash:)` / `touch` / `invalidate(id:)` / `invalidateAll(for:)` / `listSessions(for:)` / `purgeExpired(before:)` — `AuthStoreError` = `.duplicateSession`, `.notFound`, `.malformedRecord` |
+
+### Stores
+
+| Store | Notes |
+|---|---|
+| `InMemoryAuthSessionStore` | actor-backed test double + reference semantics: primary id map, tokenHash index, per-identity reverse index |
+| `LMDBAuthSessionStore` | one persistent LMDB environment (`tok`, `tk`, `user`, `audit` databases), one transaction per actor call on the actor's thread. quicklmdb discipline: every `loadEntry` must be guarded by a `containsEntry` in the same transaction (the get path **throws** `.notFound` on a missing key); the `user` index is a denormalized raw array of fixed 16-byte id records (not LMDB dupsort — that requires consumer-declared `MDB_comparable` types) |
+
+### Cookies
+
+| Type | Description |
+|---|---|
+| `HTTPCookie` | `name`/`value`/`Attributes` (`expires`, `maxAge`, `domain`, `path`, `secure`, `httpOnly`, `sameSite`). `setCookieHeaderValue()` throws on violation of the `__Host-` rules (Secure required, no Domain, `Path=/`) |
+| `HTTPCookie.SameSite` | `.lax` / `.strict` / `.none` |
+| `CookieParser.requestCookies(_:)` | quote-aware request-cookie parse: `$`-attributes ignored, values trimmed and unquoted |
+
+### Password verification
+
+| Type | Description |
+|---|---|
+| `Argon2Parameters` | `timeCost` / `memoryCostKiB` / `parallelism`; `Argon2Parameters.interactive` (19 MiB, t=2, p=1 — OWASP interactive) and `Argon2Parameters.recommended` (64 MiB, t=3, p=4) |
+| `PasswordRecord` | `{ salt, hash, parameters }` with PHC-shaped `encodedString()` / `init(encoded:)` round-trip |
+| `PasswordVerifier.hash()` / `.verify()` / `.makeSalt()` | Argon2id built on rawdog `RAW_argon2`; verify = re-hash + `constantTimeEquals` |
+| `PasswordVerifier.dummyRecord()` | same-cost hash for unknown users — equalizes "user exists" vs "unknown" timing |
+
+### Context
+
+| Type | Description |
+|---|---|
+| `AuthContext` | `@TaskLocal` carrying `(session, identity?)` — set around authenticated renders and around event dispatch; `hasRole(_:)` helper. mirrors `RenderContext` mechanics |
+
+## WebUIAuthExample
+
+A SwiftNIO-based login-gated interactive demo on :9091 (sign in with `admin` /
+`password`). demonstrates the auth stack end to end: runtime-free login page
+(native POST, synchronizer CSRF, hardened CSP, `X-Frame-Options`), Argon2id
+credential verification with dummy-hash equalization, `SessionToken` +
+in-memory session store + cookie issuance, the interactive dashboard
+(counter / progress / echo / optimistic reset) under `AuthContext`, a
+per-session interactive router, Origin-checked WebSocket upgrade, per-event
+session-liveness enforcement (post-logout sockets are redirected and closed),
+and CSRF-protected POST logout.
+
+**Endpoints:**
+- `GET /login` — static login page (no JS runtime)
+- `POST /login` — urlencoded credentials + CSRF → `303` + `Set-Cookie`
+- `GET /` — authenticated dashboard, else `303` to `/login`
+- `POST /logout` — CSRF-protected logout → `303` + cookie clear (`GET` → 405)
+- `GET /__assets/css` / `GET /__assets/js` — design system + runtime
+- `WebSocket /ws` — same-origin interactive events (foreign/no-origin refused)
+
+**Port:** 9091
+
+not a deployment template: the Argon2 concurrency cap, session caps/sweep, and
+per-session state containers are deferred to M2 (see the plan).

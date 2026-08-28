@@ -10,8 +10,10 @@ zero external CSS/JS frameworks — the entire UI compiles into the binary.
 |---|---|---|
 | `WebUI` | `Sources/WebUI/` | Core: View protocol, ViewBuilder, primitives, layouts, modifiers, CSS system, HTML document assembly, WebSocket protocol, JS runtime |
 | `WebUIDesignSystem` | `Sources/WebUIDesignSystem/` | Design system: ~110 CSS custom properties (tokens), 16 styled components (Button, Card, Input, Modal, etc.) |
+| `WebUIAuth` | `Sources/WebUIAuth/` | Authentication + sessions: identity model, session tokens, cookies, in-memory + LMDB session stores, Argon2id password verification, constant-time compare, `AuthContext` |
 | `WebUIAssetTool` | `Sources/WebUIAssetTool/` | Build-time executable that embeds CSS + JS as Swift string constants |
 | `WebUIExample` | `Sources/WebUIExample/` | HTTP/WebSocket example server (SwiftNIO-based counter app) |
+| `WebUIAuthExample` | `Sources/WebUIAuthExample/` | Login-gated interactive demo: native-POST login page + authenticated dashboard (admin / password) |
 
 ## Quick Start
 
@@ -44,7 +46,10 @@ View tree → render() → HTML string → HTMLDocument → HTTP response
 Client event → EventRouter.handle() → [FragmentUpdate] → WS send → DOM patch
 ```
 
-See `Documentation/ARCHITECTURE.md` for the complete flow.
+See `Documentation/ARCHITECTURE.md` for the complete flow. For the login page +
+session authentication design (protocols, cookie layer, WebSocket binding,
+hardening deltas), see `Documentation/AUTH_SESSIONS.md`; for the item-by-item
+execution breakdown, see `Documentation/IMPLEMENTATION_PLAN.md`.
 
 ## Tooling
 
