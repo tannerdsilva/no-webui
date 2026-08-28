@@ -306,7 +306,9 @@ public enum CSRFProtection {
         }
 
         let expectedSignature = hmacSHA256(key: secret, message: "\(formID):\(expiresStr)")
-        return signature == expectedSignature
+        // constant-time compare — the caller's signature is attacker-controlled,
+        // and a short-circuiting == would leak prefix bytes of the MAC.
+        return constantTimeEquals(Array(signature.utf8), Array(expectedSignature.utf8))
     }
     private static func hmacSHA256(key: String, message: String) -> String {
         guard let keyData = key.data(using: .utf8),
