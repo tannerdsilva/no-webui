@@ -6200,7 +6200,7 @@ code, .inline-code {
   a,
   .button--link { color: var(--color-primary-400); }
   a:hover,
-  .button--link:hover { color: var(--color-primary-300); }
+  .button--link:hover { color: var(--color-primary-400); }
 
   .badge--primary { color: var(--color-primary-400); }
   .badge--neutral { color: var(--color-text-muted); }
@@ -6214,7 +6214,7 @@ code, .inline-code {
 
   .inline-code,
   code {
-    color: var(--color-primary-300);
+    color: var(--color-primary-400);
   }
 
 
@@ -6225,7 +6225,7 @@ code, .inline-code {
 
 
   .navbar__link--active { background: rgba(99, 102, 241, 0.14); }
-  .tabs__tab--active { color: var(--color-primary-300); }
+  .tabs__tab--active { color: var(--color-primary-400); }
   .tabs__tab--active::after { background: var(--color-primary-400); }
   .sidebar__item--active { background: rgba(99, 102, 241, 0.14); color: var(--color-primary-300); }
   .sidebar__item--active .sidebar__icon { color: var(--color-primary-300); }
