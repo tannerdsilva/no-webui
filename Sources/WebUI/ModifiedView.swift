@@ -183,7 +183,58 @@ public struct EventHandlerModifier: ViewModifier {
     }
 }
 
-// MARK: - Optimistic Click Modifier
+// MARK: - Stable-ID Event Handler
+/// Registers the handler under a *caller-chosen, stable* component id
+/// (instead of the auto-incremented id `.onClick(perform:)` allocates), and
+/// emits `data-component-id`/`data-event` attributes that are byte-identical
+/// on every render.
+///
+/// Re-rendered regions (e.g. an interactive table re-emitted as a
+/// `FragmentUpdate`) can keep routing events to the SAME handler because the
+/// id never changes — `EventRouter.handle` routes by `component.value`.
+///
+/// This is the container-handler pattern: one stable id on a wrapper (or the
+/// table element itself) plus `event.data.targetId` to tell WHICH control was
+/// clicked. The runtime's `clickTargetData` reports the clicked element's id.
+public struct StableIDEventHandlerModifier: ViewModifier {
+    public let componentID: String
+    public let event: HTMLEvent
+    public let handler: EventHandler
+    private static let log = Logger(label: "webui.modifiers")
+
+    public init(componentID: String, event: HTMLEvent, handler: @escaping EventHandler) {
+        self.componentID = componentID
+        self.event = event
+        self.handler = handler
+    }
+
+    public func apply(to html: String) -> String {
+        guard var context = RenderContext.current else {
+            Self.log.warning("StableIDEventHandlerModifier used without RenderContext. Wrap your render call in RenderContext.$current.withValue(...). The event handler for '\(event.rawValue)' will not fire.")
+            return html
+        }
+        context.register(handler: handler, for: ComponentID(componentID))
+        return injectAttributes(
+            into: html,
+            "data-component-id=\"\(htmlEscape(componentID))\" data-event=\"\(htmlEscape(event.rawValue))\""
+        )
+    }
+}
+
+extension View {
+    /// Attach a click handler to a view using a caller-chosen, STABLE
+    /// component id. Unlike `.onClick(perform:)` (which allocates a new
+    /// auto-incremented id on every render), the id here is fixed, so
+    /// re-rendered fragments keep routing to the same handler.
+    ///
+    /// `event.data.targetId` identifies the specific control clicked (the
+    /// runtime reports the id of the innermost clicked element). Use this for
+    /// interactive regions (sortable/selectable/expandable tables) where a
+    /// single container handler dispatches on `targetId`.
+    public func onClick(id: String, perform handler: @escaping EventHandler) -> ModifiedView<Self, StableIDEventHandlerModifier> {
+        ModifiedView(content: self, modifier: StableIDEventHandlerModifier(componentID: id, event: .click, handler: handler))
+    }
+}
 
 public struct OptimisticClickModifier: ViewModifier {
     public let prediction: [FragmentUpdate]

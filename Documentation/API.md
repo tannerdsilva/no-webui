@@ -75,7 +75,8 @@ every attribute parameter (`id`, `class`, `name`, `for`, `data-status`,
 | `.id(_ id: String)` | `id="..."` |
 | `.attribute(_ key: String, _ value: String)` | emits `key="value"` on the root element (e.g. `data-prevent-enter="false"`) |
 | `.showIf(_ condition: Bool)` | `display:none` when false |
-| `.onClick(_ handler:)` | `data-component-id="cN" data-event="click"` |
+| `.onClick(_ handler:)` | `data-component-id="cN" data-event="click"` (auto-allocated id) |
+| `.onClick(id: String, perform: handler)` | `data-component-id="<id>" data-event="click"` — **stable** id you choose; registers under that id so re-rendered fragments keep routing (use for interactive regions like tables) |
 | `.onSubmit(_ handler:)` | `data-component-id="cN" data-event="submit"` |
 | `.onInput(_ handler:)` | `data-component-id="cN" data-event="input"` |
 | `.onChange(_ handler:)` | `data-component-id="cN" data-event="change"` |

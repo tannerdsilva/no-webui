@@ -357,6 +357,53 @@ rows are `[[any View]]`, so cells can be any view (not just strings).
   in-table variant; the standalone `WebUIEmptyState` is the full-card
   version for outside-table contexts. All content is html-escaped.
 
+#### Interactive table (sort / select / expand)
+
+The same view carries the interactive affordances. They are **server-driven**:
+the view renders the *current* state (which column is sorted, which rows are
+selected/expanded) and the server re-renders it on every event. There is no
+client-side state, so the server is the single source of truth.
+
+```swift
+WebUITable(
+    headers: ["Name", "Region", "p95"],
+    rows: rows,
+    id: "interactive-table",               // stable root id — required
+    sortableColumns: [0, 1, 2],           // clickable headers
+    sort: (2, .descending),               // active sort → aria-sort
+    selectable: true,                     // select-all + per-row checkboxes
+    rowIds: ["web", "api", "search"],     // parallel to `rows`
+    selectedRows: ["search"],
+    expandedRows: ["web"],                // rows with a revealed detail row
+    rowDetails: ["web": Text("8 instances · 99.98% SLA")],
+    alignments: [.leading, .leading, .trailing]
+)
+```
+
+- **id** — a *stable* identifier for the outermost element. Interactive tables
+  must pass one so the inner control ids are deterministic:
+  `{id}-sort-{col}`, `{id}-select-all`, `{id}-select-{rowId}`,
+  `{id}-expand-{rowId}`. Pair it with `.onClick(id:)` (see the modifiers table)
+  so the routing anchor is the same on every re-render.
+- **sortableColumns / sort** — clickable headers emit the `.sort` affordance
+  with a `sort__arrow` glyph. The active column carries
+  `aria-sort="ascending|descending"` and a `.sort--active .sort--desc`
+  modifier. Rows must already be ordered by the caller (the server sorts).
+- **selectable / rowIds / selectedRows** — a leading select column with a
+  select-all control and one per-row control. Select-all reflects
+  `aria-checked="mixed"` when a subset is selected. Selected rows carry the
+  `.tr--selected` class (the CSS tints them above the stripe).
+- **expandedRows / rowDetails** — a trailing expand column. A row with detail
+  content gets a `.table__expand-btn` (rotates when open, `aria-expanded`);
+  the revealed content renders in a `.table__detail-row` spanning all columns.
+  Rows without a detail entry get a disabled button.
+
+Because the view is a pure function of the passed-in state, a click handler
+on the server reads `event.data["targetId"]`, mutates its own state (sort
+column/direction, selected set, expanded set), re-renders the table, and returns
+it as a `FragmentUpdate(id:)` keyed to the stable `id`. The smoke server's
+interactive-table card is the reference implementation.
+
 ### WebUIChip
 
 ```swift

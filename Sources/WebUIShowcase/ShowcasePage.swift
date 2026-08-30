@@ -355,6 +355,33 @@ struct ShowcasePage {
                                 alignments: [.leading, .leading, .trailing]
                             )
                         }
+                        demoCard("Table — interactive (sortable · selectable · expandable)") {
+                            // Static reference render of the interactive affordances.
+                            // Live round-trips (sort toggle, select-all, expand)
+                            // are proven on the full-stack smoke page — the
+                            // showcase has no WebSocket backend.
+                            WebUITable(
+                                headers: ["Service", "Region", "p95"],
+                                rows: [
+                                    [Text("web"), Text("us-east-1"), Text("42 ms")],
+                                    [Text("api"), Text("eu-west-2"), Text("18 ms")],
+                                    [Text("search"), Text("us-west-2"), Text("61 ms")],
+                                ],
+                                wrapped: true,
+                                alignments: [.leading, .leading, .trailing],
+                                id: "demo-interactive",
+                                sortableColumns: [0, 1, 2],
+                                sort: (column: 2, direction: .descending),
+                                selectable: true,
+                                rowIds: ["web", "api", "search"],
+                                selectedRows: ["search"],
+                                expandedRows: ["web"],
+                                rowDetails: [
+                                    "web": Text("8 instances · 99.98% SLA · canary 10% to v2.14"),
+                                    "api": Text("4 instances · 99.95% SLA · zero-downtime deploys"),
+                                ]
+                            )
+                        }
                     }
                 }
 

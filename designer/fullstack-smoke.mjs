@@ -29,6 +29,8 @@ if (html.includes('id="counter-value"') && html.includes('id="echo-input"')) ok(
 else bad("interactive view ids missing");
 if (html.includes("data-optimistic")) ok("optimistic prediction wired on served page");
 else bad("no data-optimistic on served page");
+if (html.includes('data-component-id="interactive-table"') && html.includes("interactive-table-sort-0") && html.includes("interactive-table-select-all") && html.includes("interactive-table-expand-")) ok("interactive table served (stable routing anchor + sort/select/expand affordances)");
+else bad("interactive table wiring missing from served page");
 
 // 2. Real WebSocket — proves the upgrade + WS stack.
 const messages = [];
@@ -117,6 +119,58 @@ const redirectHit = await new Promise((resolve) => {
 });
 if (redirectHit && redirectHit.url === "/" && redirectHit.replace === true) ok("redirect-test → {type:redirect,url:'/',replace:true} on the wire");
 else bad(`redirect-test did not emit a redirect frame: ${JSON.stringify(redirectHit)}`);
+
+// 10. Interactive table — live sort / select / expand round-trips.
+// The table re-renders wholesale into #interactive-table; the stable routing
+// anchor (data-component-id="interactive-table") persists on the wrapper, so
+// every click dispatches to the same server handler via targetId.
+const TBL = "interactive-table";
+const tblClick = (targetId) =>
+  ws.send(JSON.stringify({ type: "event", component: TBL, event: "click", data: { targetId } }));
+const tblUpdate = () => expectUpdate(TBL);
+// ordered data-row names: per row the tds are [select, expand, name, region, p95];
+// select/expand render empty text, so the 3rd cell is the primary name.
+const rowNames = (html) => {
+  const body = html.slice(html.indexOf("<tbody>"), html.indexOf("</tbody>"));
+  return body
+    .split("</tr>")
+    .filter((c) => !c.includes("table__detail-row"))
+    .map((c) => {
+      const cells = c.match(/<td[^>]*>[\s\S]*?<\/td>/g) || [];
+      return cells.map((x) => x.replace(/<[^>]+>/g, ""))[2] || "";
+    })
+    .filter(Boolean);
+};
+
+tblClick(`${TBL}-sort-2`);
+let t = await tblUpdate();
+if (t && t.fragments[0].html.includes('aria-sort="ascending"') && JSON.stringify(rowNames(t.fragments[0].html)) === JSON.stringify(["auth","api","web","search"])) ok("table: click p95 header → sorted ascending (9<18<42<61) over WS");
+else bad(`table sort asc wrong: ${t ? JSON.stringify(rowNames(t.fragments[0].html)) : "no update"}`);
+
+tblClick(`${TBL}-sort-2`);
+t = await tblUpdate();
+if (t && t.fragments[0].html.includes('aria-sort="descending"') && rowNames(t.fragments[0].html)[0] === "search") ok("table: click p95 again → toggled to descending (search first)");
+else bad(`table sort desc wrong: ${t ? JSON.stringify(rowNames(t.fragments[0].html)) : "no update"}`);
+
+tblClick(`${TBL}-select-all`);
+t = await tblUpdate();
+if (t && (t.fragments[0].html.match(/tr--selected/g) || []).length === 4) ok("table: select-all → 4 rows selected");
+else bad(`select-all wrong: ${t ? (t.fragments[0].html.match(/tr--selected/g) || []).length : "no update"}`);
+
+tblClick(`${TBL}-select-auth`);
+t = await tblUpdate();
+if (t && (t.fragments[0].html.match(/tr--selected/g) || []).length === 3) ok("table: deselect auth → 3 rows remain selected");
+else bad(`deselect wrong: ${t ? (t.fragments[0].html.match(/tr--selected/g) || []).length : "no update"}`);
+
+tblClick(`${TBL}-expand-web`);
+t = await tblUpdate();
+if (t && t.fragments[0].html.includes("table__detail-row") && t.fragments[0].html.includes("canary 10% to v2.14") && t.fragments[0].html.includes('aria-expanded="true"')) ok("table: expand web → detail row revealed");
+else bad(`expand wrong: ${t ? t.fragments[0].html.includes("table__detail-row") ? "detail row missing content" : "no detail row" : "no update"}`);
+
+tblClick(`${TBL}-expand-web`);
+t = await tblUpdate();
+if (t && !t.fragments[0].html.includes("table__detail-row")) ok("table: collapse web → detail row removed");
+else bad(`collapse wrong: ${t ? "detail row still present" : "no update"}`);
 
 ws.close();
 console.log(`\n=== summary: ${pass} passed, ${fail} failed ===`);

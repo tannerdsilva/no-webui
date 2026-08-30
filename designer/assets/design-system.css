@@ -2388,11 +2388,14 @@ code, .inline-code {
 .table tbody tr:last-child td { border-bottom: none; }
 .table--hoverable tbody tr { transition: background var(--transition-fast); }
 .table--hoverable tbody tr:hover { background: var(--color-bg-subtle); }
-.table tbody tr--selected { background: var(--color-primary-50); }
-.table tbody tr--selected td { color: var(--color-primary-900); }
 
 .table--striped tbody tr:nth-child(even) { background: var(--color-bg-inset); }
 .table--striped.table--hoverable tbody tr:hover { background: var(--color-bg-subtle); }
+/* selection state must win over both stripe and hover — placed after them so
+   the equal-or-higher specificity (tr.tr--selected) is never overridden by
+   the nth-child(even) stripe on a striped table. */
+.table tbody tr.tr--selected { background: var(--color-primary-50); }
+.table tbody tr.tr--selected td { color: var(--color-primary-900); }
 .table tfoot td {
   padding: 0.75rem 1rem;
   font-weight: var(--font-weight-semibold);
@@ -2444,10 +2447,12 @@ code, .inline-code {
   transition: background var(--transition-fast), color var(--transition-fast);
 }
 .table__expand-btn:hover { background: var(--color-neutral-200); color: var(--color-text); }
+.table__expand-btn:disabled { cursor: default; opacity: 0.35; }
 .table__expand-icon {
   width: 0.75rem;
   height: 0.75rem;
   transition: transform var(--transition-base);
+  pointer-events: none;
 }
 .tr--expanded .table__expand-icon { transform: rotate(90deg); }
 .table__detail-row { background: var(--color-bg-inset); }
@@ -2456,6 +2461,38 @@ code, .inline-code {
   font-size: var(--font-size-sm);
   color: var(--color-text-muted);
 }
+
+/* interactive affordances: pointer-events none so a click on the glyph
+   resolves to the labelled control (the runtime reports targetId of the
+   clicked element, and the control — not the svg — carries the id). */
+.table th .sort__arrow { pointer-events: none; }
+
+.table__select {
+  display: inline-grid;
+  place-items: center;
+  width: 1.25rem;
+  height: 1.25rem;
+  border-radius: var(--radius-full);
+  border: var(--border-width) solid var(--color-border-strong);
+  background: var(--color-bg-raised);
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+.table__select:hover { border-color: var(--color-primary-500); }
+.table__select::after {
+  content: "";
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--radius-full);
+  background: var(--color-on-primary-solid);
+  transform: scale(0);
+  transition: transform var(--transition-fast);
+}
+.table tbody .tr--selected .table__select {
+  background: var(--color-primary-solid);
+  border-color: var(--color-primary-solid);
+}
+.table tbody .tr--selected .table__select::after { transform: scale(1); }
 
 @media (max-width: 560px) {
   .table--responsive thead { position: static; display: none; }
@@ -6250,8 +6287,8 @@ code, .inline-code {
   .sidebar__item--active::before { background: var(--color-primary-400); }
   .toc__link--active { color: var(--color-primary-300); }
   .tree__row--selected { background: rgba(99, 102, 241, 0.14); color: var(--color-primary-300); }
-  .table tbody tr--selected { background: rgba(99, 102, 241, 0.14); }
-  .table tbody tr--selected td { color: var(--color-text); }
+  .table tbody tr.tr--selected { background: rgba(99, 102, 241, 0.14); }
+  .table tbody tr.tr--selected td { color: var(--color-text); }
   .combo__option--selected { background: rgba(99, 102, 241, 0.14); color: var(--color-primary-300); }
   .transfer__item--selected { background: rgba(99, 102, 241, 0.14); color: var(--color-primary-300); }
   .multi-select__option--selected { color: var(--color-primary-300); }

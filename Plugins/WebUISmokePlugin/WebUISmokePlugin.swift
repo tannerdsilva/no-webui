@@ -111,10 +111,10 @@ struct WebUISmokePlugin: CommandPlugin {
         }
 
         let interactiveCount = html.components(separatedBy: "data-component-id=\"").count - 1
-        if interactiveCount == 6 {
-            ok("served page exposes 6 interactive components (handler wiring intact)")
+        if interactiveCount == 7 {
+            ok("served page exposes 7 interactive components (handler wiring intact)")
         } else {
-            bad("expected 6 data-component-id attributes, found \(interactiveCount)")
+            bad("expected 7 data-component-id attributes, found \(interactiveCount)")
         }
 
         if html.contains("http-equiv=\"Content-Security-Policy\"") {

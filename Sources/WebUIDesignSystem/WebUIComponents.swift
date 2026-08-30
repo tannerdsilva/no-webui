@@ -551,6 +551,37 @@ public struct WebUITable: View {
     public let footer: [any View]?
     public let emptyState: EmptyState?
 
+    /// Sort direction for the active column.
+    public enum SortDirection: String, Sendable {
+        case ascending
+        case descending
+    }
+
+    /// Stable element id for the outermost rendered element (the `.table-wrap`
+    /// div when `wrapped`, otherwise the `<table>` tag). Interactive tables
+    /// re-emit themselves as `FragmentUpdate(id:)` patches and attach
+    /// `.onClick(id:)` with this same id — because the id is stable across
+    /// re-renders, the EventRouter handler registered once keeps routing.
+    /// Inner control ids are derived: `{id}-sort-{col}`, `{id}-select-all`,
+    /// `{id}-select-{rowId}`, `{id}-expand-{rowId}`.
+    public let id: String?
+    /// Column indices that may be clicked to sort (emit `.sort` affordance).
+    public let sortableColumns: Set<Int>
+    /// The active sort (column + direction), rendered with `aria-sort`.
+    public let sort: (column: Int, direction: SortDirection)?
+    /// Render a select-all + per-row selection control (server is source of
+    /// truth; `selectedRows` must be re-passed on each re-render).
+    public let selectable: Bool
+    /// Row identifiers, parallel to `rows`; required when `selectable` or
+    /// `rowDetails` is used.
+    public let rowIds: [String]
+    /// Currently selected row ids (renders `tr--selected`).
+    public let selectedRows: Set<String>
+    /// Currently expanded row ids (renders the detail row, rotates the icon).
+    public let expandedRows: Set<String>
+    /// Per-row expanded detail content, keyed by row id.
+    public let rowDetails: [String: any View]?
+
     public init(
         headers: [String],
         rows: [[any View]],
@@ -561,7 +592,15 @@ public struct WebUITable: View {
         wrapped: Bool = false,
         alignments: [Alignment] = [],
         footer: [any View]? = nil,
-        emptyState: EmptyState? = nil
+        emptyState: EmptyState? = nil,
+        id: String? = nil,
+        sortableColumns: Set<Int> = [],
+        sort: (column: Int, direction: SortDirection)? = nil,
+        selectable: Bool = false,
+        rowIds: [String] = [],
+        selectedRows: Set<String> = [],
+        expandedRows: Set<String> = [],
+        rowDetails: [String: any View]? = nil
     ) {
         self.headers = headers
         self.rows = rows
@@ -573,6 +612,14 @@ public struct WebUITable: View {
         self.alignments = alignments
         self.footer = footer
         self.emptyState = emptyState
+        self.id = id
+        self.sortableColumns = sortableColumns
+        self.sort = sort
+        self.selectable = selectable
+        self.rowIds = rowIds
+        self.selectedRows = selectedRows
+        self.expandedRows = expandedRows
+        self.rowDetails = rowDetails
     }
 
     public func render() -> String {
@@ -581,6 +628,15 @@ public struct WebUITable: View {
         if hoverable { classes += " table--hoverable" }
         if compact { classes += " table--compact" }
         if responsive { classes += " table--responsive" }
+
+        // interactive geometry
+        let base = id ?? "webui-table"
+        let hasSelect = selectable && !rows.isEmpty && rowIds.count == rows.count
+        let hasExpand = !(rowDetails?.isEmpty ?? true) && !rows.isEmpty
+        let totalColumns = headers.count + (hasSelect ? 1 : 0) + (hasExpand ? 1 : 0)
+
+        let sortArrow = "<svg class=\"sort__arrow\" viewBox=\"0 0 10 10\" width=\"10\" height=\"10\" fill=\"none\" aria-hidden=\"true\"><path d=\"M2 6.5L5 3.5l3 3\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>"
+        let expandIcon = "<svg class=\"table__expand-icon\" viewBox=\"0 0 10 10\" width=\"10\" height=\"10\" fill=\"none\" aria-hidden=\"true\"><path d=\"M3.5 2.5L6.5 5l-3 2.5\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>"
 
         func alignmentClass(_ index: Int) -> String? {
             guard index < alignments.count else { return nil }
@@ -591,11 +647,37 @@ public struct WebUITable: View {
             }
         }
 
-        var html = "<table class=\"\(classes)\">"
+        var tableOpen = "<table"
+        if let id { tableOpen += " id=\"\(htmlEscape(id))\"" }
+        tableOpen += " class=\"\(classes)\">"
+
+        var html = tableOpen
         if !headers.isEmpty {
             html += "<thead><tr>"
+            if hasSelect {
+                let state: String
+                if selectedRows.count == rowIds.count { state = "true" }
+                else if selectedRows.isEmpty { state = "false" }
+                else { state = "mixed" }
+                html += "<th class=\"table__select-col align-center\" scope=\"col\"><span class=\"table__select\" id=\"\(htmlEscape(base))-select-all\" role=\"checkbox\" aria-checked=\"\(state)\" aria-label=\"Select all rows\" tabindex=\"0\"></span></th>"
+            }
+            if hasExpand {
+                html += "<th class=\"table__expand-col\" aria-hidden=\"true\"></th>"
+            }
             for (i, h) in headers.enumerated() {
-                if let a = alignmentClass(i) {
+                let align = alignmentClass(i)
+                let sortPrefix = (align.map { "\($0) " } ?? "") + "sort-cell"
+                if let sort, sort.column == i {
+                    let aria = sort.direction == .ascending ? "ascending" : "descending"
+                    let desc = sort.direction == .descending ? " sort--desc" : ""
+                    html += "<th class=\"\(sortPrefix)\" aria-sort=\"\(aria)\">"
+                    html += "<span class=\"sort sort--active\(desc)\" id=\"\(htmlEscape(base))-sort-\(i)\">\(htmlEscape(h))\(sortArrow)</span>"
+                    html += "</th>"
+                } else if sortableColumns.contains(i) {
+                    html += "<th class=\"\(sortPrefix)\">"
+                    html += "<span class=\"sort\" id=\"\(htmlEscape(base))-sort-\(i)\">\(htmlEscape(h))\(sortArrow)</span>"
+                    html += "</th>"
+                } else if let a = align {
                     html += "<th class=\"\(a)\">\(htmlEscape(h))</th>"
                 } else {
                     html += "<th>\(htmlEscape(h))</th>"
@@ -605,7 +687,7 @@ public struct WebUITable: View {
         }
         html += "<tbody>"
         if rows.isEmpty, let empty = emptyState {
-            let colspan = max(headers.count, 1)
+            let colspan = totalColumns > 0 ? totalColumns : 1
             html += "<tr><td colspan=\"\(colspan)\" class=\"table__empty\">"
             html += "<div class=\"table__empty-icon\">\(htmlEscape(empty.icon))</div>"
             html += "<div class=\"table__empty-title\">\(htmlEscape(empty.title))</div>"
@@ -614,19 +696,46 @@ public struct WebUITable: View {
             }
             html += "</td></tr>"
         } else {
-            for row in rows {
-                html += "<tr>"
+            for (rowIndex, row) in rows.enumerated() {
+                let rowId = rowIndex < rowIds.count ? rowIds[rowIndex] : "row-\(rowIndex)"
+                let selected = selectedRows.contains(rowId)
+                let expanded = expandedRows.contains(rowId)
+                let trClass = [
+                    selected ? "tr--selected" : nil,
+                    expanded ? "tr--expanded" : nil,
+                ].compactMap { $0 }.joined(separator: " ")
+                let trAttrs = trClass.isEmpty ? "" : " class=\"\(trClass)\""
+                html += "<tr\(trAttrs)>"
+                if hasSelect {
+                    html += "<td class=\"table__select-col align-center\"><span class=\"table__select\" id=\"\(htmlEscape(base))-select-\(htmlEscape(rowId))\" role=\"checkbox\" aria-checked=\"\(selected)\" aria-label=\"Select row \(htmlEscape(rowId))\" tabindex=\"0\"></span></td>"
+                }
+                if hasExpand {
+                    let canExpand = rowDetails?[rowId] != nil
+                    if canExpand {
+                        html += "<td class=\"table__expand-col\"><button type=\"button\" class=\"table__expand-btn\" id=\"\(htmlEscape(base))-expand-\(htmlEscape(rowId))\" aria-expanded=\"\(expanded)\">\(expandIcon)</button></td>"
+                    } else {
+                        html += "<td class=\"table__expand-col\"><button type=\"button\" class=\"table__expand-btn\" id=\"\(htmlEscape(base))-expand-\(htmlEscape(rowId))\" aria-disabled=\"true\" disabled>\(expandIcon)</button></td>"
+                    }
+                }
                 for (i, cell) in row.enumerated() {
                     var attrs = ""
                     if responsive, i < headers.count {
-                        attrs += " data-label=\"\(htmlEscape(headers[i]))\""
+                        attrs += "data-label=\"\(htmlEscape(headers[i]))\""
                     }
                     if let a = alignmentClass(i) {
-                        attrs += " class=\"\(a)\""
+                        if attrs.isEmpty {
+                            attrs += "class=\"\(a)\""
+                        } else {
+                            attrs += " class=\"\(a)\""
+                        }
                     }
-                    html += "<td\(attrs)>\(cell.render())</td>"
+                    let tdAttrs = attrs.isEmpty ? "" : " " + attrs
+                    html += "<td\(tdAttrs)>\(cell.render())</td>"
                 }
                 html += "</tr>"
+                if hasExpand, expanded, let detail = rowDetails?[rowId] {
+                    html += "<tr class=\"table__detail-row\"><td colspan=\"\(totalColumns)\"><div class=\"table__detail\">\(detail.render())</div></td></tr>"
+                }
             }
         }
         html += "</tbody>"

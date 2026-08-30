@@ -373,6 +373,157 @@ struct BEMTests {
         #expect(html.contains("<td>1</td>"))
     }
 
+    @Test("WebUITable sortable columns emit sort controls with stable ids")
+    func tableSortableColumns() {
+        let html = WebUITable(
+            headers: ["Name", "Age"],
+            rows: [[Text("A"), Text("1")], [Text("B"), Text("2")]],
+            id: "staff",
+            sortableColumns: [0, 1]
+        ).render()
+        #expect(html.contains("<table id=\"staff\""))
+        #expect(html.contains("<span class=\"sort\" id=\"staff-sort-0\">Name"))
+        #expect(html.contains("<span class=\"sort\" id=\"staff-sort-1\">Age"))
+        #expect(html.contains("sort-cell"))
+        #expect(html.contains("<svg class=\"sort__arrow\""))
+        // inactive columns have no aria-sort
+        #expect(!html.contains("aria-sort"))
+    }
+
+    @Test("WebUITable active sort emits aria-sort and active affordance")
+    func tableActiveSort() {
+        let html = WebUITable(
+            headers: ["Name", "Age"],
+            rows: [[Text("A"), Text("1")]],
+            id: "staff",
+            sortableColumns: [0, 1],
+            sort: (column: 0, direction: .descending)
+        ).render()
+        #expect(html.contains("<th class=\"sort-cell\" aria-sort=\"descending\">"))
+        #expect(html.contains("<span class=\"sort sort--active sort--desc\" id=\"staff-sort-0\">Name"))
+        // inactive sortable column ("Age"): sort affordance but no aria-sort
+        #expect(html.contains("<th class=\"sort-cell\"><span class=\"sort\" id=\"staff-sort-1\">Age"))
+        // exactly one aria-sort on the page (the active column only)
+        let ariaCount = html.components(separatedBy: "aria-sort").count - 1
+        #expect(ariaCount == 1)
+    }
+
+    @Test("WebUITable selectable rows emit select controls and selected state")
+    func tableSelectableRows() {
+        let html = WebUITable(
+            headers: ["Name"],
+            rows: [[Text("A")], [Text("B")]],
+            id: "staff",
+            selectable: true,
+            rowIds: ["a", "b"],
+            selectedRows: ["b"]
+        ).render()
+        // select-all: partially selected => mixed
+        #expect(html.contains("<span class=\"table__select\" id=\"staff-select-all\" role=\"checkbox\" aria-checked=\"mixed\""))
+        // per-row controls (server is source of truth for state)
+        #expect(html.contains("id=\"staff-select-a\""))
+        #expect(html.contains("id=\"staff-select-b\""))
+        // selected row styling
+        #expect(html.contains("<tr class=\"tr--selected\">"))
+        // select column present in header + each row (3 cells)
+        let selectColCount = html.components(separatedBy: "class=\"table__select-col").count - 1
+        #expect(selectColCount == 3)
+    }
+
+    @Test("WebUITable selectable all-rows-selected select-all is checked")
+    func tableSelectAllChecked() {
+        let html = WebUITable(
+            headers: ["Name"],
+            rows: [[Text("A")], [Text("B")]],
+            id: "staff",
+            selectable: true,
+            rowIds: ["a", "b"],
+            selectedRows: ["a", "b"]
+        ).render()
+        #expect(html.contains("id=\"staff-select-all\" role=\"checkbox\" aria-checked=\"true\""))
+    }
+
+    @Test("WebUITable expandable rows emit detail row and expanded state")
+    func tableExpandableRows() {
+        let html = WebUITable(
+            headers: ["Name"],
+            rows: [[Text("A")], [Text("B")]],
+            id: "staff",
+            rowIds: ["a", "b"],
+            expandedRows: ["a"],
+            rowDetails: ["a": Text("details for a")]
+        ).render()
+        // expand button present on every data row; only detail-bearing rows
+        // carry aria-expanded, the rest are disabled
+        #expect(html.contains("id=\"staff-expand-a\" aria-expanded=\"true\""))
+        #expect(html.contains("id=\"staff-expand-b\" aria-disabled=\"true\""))
+        // only the expanded row has a detail row
+        #expect(html.contains("<tr class=\"tr--expanded\">"))
+        #expect(html.contains("<tr class=\"table__detail-row\"><td colspan=\"2\"><div class=\"table__detail\">details for a</div>"))
+    }
+
+    @Test("WebUITable empty state renders with colspan = header count")
+    func tableEmptyStateColspan() {
+        let html = WebUITable(
+            headers: ["Name", "Age"],
+            rows: [],
+            emptyState: WebUITable.EmptyState(title: "None", message: "Try adjusting your filters")
+        ).render()
+        // no rows => no select/expand columns; colspan spans the headers
+        #expect(html.contains("<td colspan=\"2\" class=\"table__empty\">"))
+        #expect(html.contains("table__empty-title"))
+        #expect(html.contains("table__empty-message"))
+    }
+
+    @Test("onClick(id:) emits a stable data-component-id and routes events to the handler")
+    func stableIdOnClick() async {
+        let router = EventRouter()
+        let context = RenderContext(router: router)
+        let html: String = RenderContext.$current.withValue(context) {
+            Div(class: "t") {
+                Text("hi")
+            }
+            .onClick(id: "stable-table") { event in
+                #expect(event.data["targetId"] == "inner")
+                return []
+            }
+            .render()
+        }
+        #expect(html.contains("data-component-id=\"stable-table\""))
+        #expect(html.contains("data-event=\"click\""))
+        // exactly one handler registered, under the stable id
+        #expect(router.handlerCount == 1)
+        // routing by the stable id invokes that handler
+        let updates = await router.handle(
+            EventData(component: "stable-table", event: "click", data: ["targetId": "inner"])
+        )
+        #expect(updates.isEmpty)
+    }
+
+    @Test("onClick(id:) is byte-stable across re-renders on the same router")
+    func stableIdOnClickByteStable() {
+        let router = EventRouter()
+        let context = RenderContext(router: router)
+        let a: String = RenderContext.$current.withValue(context) {
+            Div(class: "t") { Text("hi") }.onClick(id: "stable-table") { _ in [] }.render()
+        }
+        let b: String = RenderContext.$current.withValue(context) {
+            Div(class: "t") { Text("hi") }.onClick(id: "stable-table") { _ in [] }.render()
+        }
+        #expect(a == b)
+        #expect(a.contains("data-component-id=\"stable-table\""))
+        // contrast: the auto-incremented modifier mints a NEW id each render
+        let x: String = RenderContext.$current.withValue(context) {
+            Div(class: "t") { Text("hi") }.onClick { _ in [] }.render()
+        }
+        let y: String = RenderContext.$current.withValue(context) {
+            Div(class: "t") { Text("hi") }.onClick { _ in [] }.render()
+        }
+        #expect(x != y)
+        #expect(x.contains("data-component-id="))
+        #expect(y.contains("data-component-id="))
+    }
+
     @Test("WebUIChip uses correct BEM classes")
     func chipBEM() {
         let html = WebUIChip("Tag", variant: .info, removable: true).render()

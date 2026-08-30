@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'nonce-Vx8LUsp6rhM1BMENdna49Q'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:;">
+          <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'nonce-u001zXBRTIB5AvJCET8oTw'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:;">
   <title>WebUI UI Showcase</title>
   
   <style>
@@ -2315,10 +2315,10 @@ border-bottom: var(--border-width) solid var(--color-border);
 .table tbody tr:last-child td { border-bottom: none; }
 .table--hoverable tbody tr { transition: background var(--transition-fast); }
 .table--hoverable tbody tr:hover { background: var(--color-bg-subtle); }
-.table tbody tr--selected { background: var(--color-primary-50); }
-.table tbody tr--selected td { color: var(--color-primary-900); }
 .table--striped tbody tr:nth-child(even) { background: var(--color-bg-inset); }
 .table--striped.table--hoverable tbody tr:hover { background: var(--color-bg-subtle); }
+.table tbody tr.tr--selected { background: var(--color-primary-50); }
+.table tbody tr.tr--selected td { color: var(--color-primary-900); }
 .table tfoot td {
 padding: 0.75rem 1rem;
 font-weight: var(--font-weight-semibold);
@@ -2367,10 +2367,12 @@ color: var(--color-text-muted);
 transition: background var(--transition-fast), color var(--transition-fast);
 }
 .table__expand-btn:hover { background: var(--color-neutral-200); color: var(--color-text); }
+.table__expand-btn:disabled { cursor: default; opacity: 0.35; }
 .table__expand-icon {
 width: 0.75rem;
 height: 0.75rem;
 transition: transform var(--transition-base);
+pointer-events: none;
 }
 .tr--expanded .table__expand-icon { transform: rotate(90deg); }
 .table__detail-row { background: var(--color-bg-inset); }
@@ -2379,6 +2381,33 @@ padding: var(--space-4) var(--space-5);
 font-size: var(--font-size-sm);
 color: var(--color-text-muted);
 }
+.table th .sort__arrow { pointer-events: none; }
+.table__select {
+display: inline-grid;
+place-items: center;
+width: 1.25rem;
+height: 1.25rem;
+border-radius: var(--radius-full);
+border: var(--border-width) solid var(--color-border-strong);
+background: var(--color-bg-raised);
+cursor: pointer;
+transition: background var(--transition-fast), border-color var(--transition-fast);
+}
+.table__select:hover { border-color: var(--color-primary-500); }
+.table__select::after {
+content: "";
+width: 0.5rem;
+height: 0.5rem;
+border-radius: var(--radius-full);
+background: var(--color-on-primary-solid);
+transform: scale(0);
+transition: transform var(--transition-fast);
+}
+.table tbody .tr--selected .table__select {
+background: var(--color-primary-solid);
+border-color: var(--color-primary-solid);
+}
+.table tbody .tr--selected .table__select::after { transform: scale(1); }
 @media (max-width: 560px) {
 .table--responsive thead { position: static; display: none; }
 .table--responsive, .table--responsive tbody, .table--responsive tr, .table--responsive td { display: block; width: 100%; }
@@ -6007,8 +6036,8 @@ color: var(--color-primary-400);
 .sidebar__item--active::before { background: var(--color-primary-400); }
 .toc__link--active { color: var(--color-primary-300); }
 .tree__row--selected { background: rgba(99, 102, 241, 0.14); color: var(--color-primary-300); }
-.table tbody tr--selected { background: rgba(99, 102, 241, 0.14); }
-.table tbody tr--selected td { color: var(--color-text); }
+.table tbody tr.tr--selected { background: rgba(99, 102, 241, 0.14); }
+.table tbody tr.tr--selected td { color: var(--color-text); }
 .combo__option--selected { background: rgba(99, 102, 241, 0.14); color: var(--color-primary-300); }
 .transfer__item--selected { background: rgba(99, 102, 241, 0.14); color: var(--color-primary-300); }
 .multi-select__option--selected { color: var(--color-primary-300); }
@@ -7624,7 +7653,7 @@ Plain text content<span class="text-escaped">&lt;script&gt;alert(&#39;xss&#39;)&
 <label class="demo-label">Country:</label><select id="demo-country"><option value="us" selected>United States</option><option value="ca">Canada</option><option value="uk">United Kingdom</option><option value="de">Germany</option><option value="jp">Japan</option></select>
 </div></div>
 </div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
-<h3 class="demo-card-title">Form with CSRF</h3><div class="demo-card-body"><form id="demo-form" action="/submit" method="post"><input type="hidden" name="_csrf" value="ZGVtby1mb3JtOjE3ODgwNTgzNjQ6ZGY3YjFiZDAyM2JmZTk4ZjBjN2UxYjJkMDViODc3MjI3ZTZiYTJhOGZjZmZjNWU1Mzk5MGNiNzAxOTEwNjQ0Yg=="><div class="vstack spacing-12 align-flex-start">
+<h3 class="demo-card-title">Form with CSRF</h3><div class="demo-card-body"><form id="demo-form" action="/submit" method="post"><input type="hidden" name="_csrf" value="ZGVtby1mb3JtOjE3ODgwOTczNjg6M2ZiZjZiOGY3YzZjOGJmN2M2ZGEwYTY0YzNhYjc3ZjYyMDQ4MjRmNjhmZDlhNDE2OWNhNmE4YWYxNzBmMTE5ZQ=="><div class="vstack spacing-12 align-flex-start">
 <label class="demo-label">Name:</label><input id="form-name" type="text" placeholder="Your name"><label class="demo-label">Message:</label><textarea id="form-message" rows="3" placeholder="Your message"></textarea><button id="form-submit" type="submit">Submit</button>
 </div></form></div>
 </div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
@@ -7678,6 +7707,8 @@ Plain text content<span class="text-escaped">&lt;script&gt;alert(&#39;xss&#39;)&
 <h3 class="demo-card-title">Table — empty state</h3><div class="demo-card-body"><table class="table table--striped table--hoverable"><thead><tr><th>Name</th><th>Age</th><th>City</th></tr></thead><tbody><tr><td colspan="3" class="table__empty"><div class="table__empty-icon">🔎</div><div class="table__empty-title">No people match this filter</div><div class="table__empty-message">Clear the search box or try a different region.</div></td></tr></tbody></table></div>
 </div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
 <h3 class="demo-card-title">Table — responsive (stacks on narrow screens)</h3><div class="demo-card-body"><div class="table-wrap"><table class="table table--striped table--hoverable table--responsive"><thead><tr><th>Order</th><th>Item</th><th class="num">Price</th></tr></thead><tbody><tr><td data-label="Order">#4821</td><td data-label="Item">Mechanical keyboard</td><td data-label="Price" class="num">$149.00</td></tr><tr><td data-label="Order">#4822</td><td data-label="Item">USB-C dock</td><td data-label="Price" class="num">$89.00</td></tr></tbody></table></div></div>
+</div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
+<h3 class="demo-card-title">Table — interactive (sortable · selectable · expandable)</h3><div class="demo-card-body"><div class="table-wrap"><table id="demo-interactive" class="table table--striped table--hoverable"><thead><tr><th class="table__select-col align-center" scope="col"><span class="table__select" id="demo-interactive-select-all" role="checkbox" aria-checked="mixed" aria-label="Select all rows" tabindex="0"></span></th><th class="table__expand-col" aria-hidden="true"></th><th class="sort-cell"><span class="sort" id="demo-interactive-sort-0">Service<svg class="sort__arrow" viewBox="0 0 10 10" width="10" height="10" fill="none" aria-hidden="true"><path d="M2 6.5L5 3.5l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></th><th class="sort-cell"><span class="sort" id="demo-interactive-sort-1">Region<svg class="sort__arrow" viewBox="0 0 10 10" width="10" height="10" fill="none" aria-hidden="true"><path d="M2 6.5L5 3.5l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></th><th class="num sort-cell" aria-sort="descending"><span class="sort sort--active sort--desc" id="demo-interactive-sort-2">p95<svg class="sort__arrow" viewBox="0 0 10 10" width="10" height="10" fill="none" aria-hidden="true"><path d="M2 6.5L5 3.5l3 3" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></span></th></tr></thead><tbody><tr class="tr--expanded"><td class="table__select-col align-center"><span class="table__select" id="demo-interactive-select-web" role="checkbox" aria-checked="false" aria-label="Select row web" tabindex="0"></span></td><td class="table__expand-col"><button type="button" class="table__expand-btn" id="demo-interactive-expand-web" aria-expanded="true"><svg class="table__expand-icon" viewBox="0 0 10 10" width="10" height="10" fill="none" aria-hidden="true"><path d="M3.5 2.5L6.5 5l-3 2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button></td><td>web</td><td>us-east-1</td><td class="num">42 ms</td></tr><tr class="table__detail-row"><td colspan="5"><div class="table__detail">8 instances · 99.98% SLA · canary 10% to v2.14</div></td></tr><tr><td class="table__select-col align-center"><span class="table__select" id="demo-interactive-select-api" role="checkbox" aria-checked="false" aria-label="Select row api" tabindex="0"></span></td><td class="table__expand-col"><button type="button" class="table__expand-btn" id="demo-interactive-expand-api" aria-expanded="false"><svg class="table__expand-icon" viewBox="0 0 10 10" width="10" height="10" fill="none" aria-hidden="true"><path d="M3.5 2.5L6.5 5l-3 2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button></td><td>api</td><td>eu-west-2</td><td class="num">18 ms</td></tr><tr class="tr--selected"><td class="table__select-col align-center"><span class="table__select" id="demo-interactive-select-search" role="checkbox" aria-checked="true" aria-label="Select row search" tabindex="0"></span></td><td class="table__expand-col"><button type="button" class="table__expand-btn" id="demo-interactive-expand-search" aria-disabled="true" disabled><svg class="table__expand-icon" viewBox="0 0 10 10" width="10" height="10" fill="none" aria-hidden="true"><path d="M3.5 2.5L6.5 5l-3 2.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg></button></td><td>search</td><td>us-west-2</td><td class="num">61 ms</td></tr></tbody></table></div></div>
 </div></div>
 </div></section><section class="showcase-section" id="semantic"><div class="vstack spacing-16 align-flex-start">
 <h2>Semantic HTML5 elements</h2><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
@@ -7915,7 +7946,7 @@ Plain text content<span class="text-escaped">&lt;script&gt;alert(&#39;xss&#39;)&
 </div></main>
 </div></div>
 </div>
-  <script nonce="Vx8LUsp6rhM1BMENdna49Q">
+  <script nonce="u001zXBRTIB5AvJCET8oTw">
 
 window.WebUIRuntime = (function () {
   'use strict';

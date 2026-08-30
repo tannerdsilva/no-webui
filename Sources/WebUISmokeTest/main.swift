@@ -14,6 +14,11 @@ final class SmokeState: @unchecked Sendable {
 	private var _count: Int = 0
 	private var _progress: Double = 0.25
 	private var _echo: String = ""
+	// interactive table demo (server is the source of truth)
+	private var _tableSortColumn: Int = 0
+	private var _tableSortAsc: Bool = true
+	private var _tableSelected: Set<String> = []
+	private var _tableExpanded: Set<String> = []
 
 	var count: Int {
 		get { lock.lock(); defer { lock.unlock() }; return _count }
@@ -27,6 +32,62 @@ final class SmokeState: @unchecked Sendable {
 		get { lock.lock(); defer { lock.unlock() }; return _echo }
 		set { lock.lock(); defer { lock.unlock() }; _echo = newValue }
 	}
+	var tableSortColumn: Int {
+		get { lock.lock(); defer { lock.unlock() }; return _tableSortColumn }
+		set { lock.lock(); defer { lock.unlock() }; _tableSortColumn = newValue }
+	}
+	var tableSortAsc: Bool {
+		get { lock.lock(); defer { lock.unlock() }; return _tableSortAsc }
+		set { lock.lock(); defer { lock.unlock() }; _tableSortAsc = newValue }
+	}
+	var tableSelected: Set<String> {
+		get { lock.lock(); defer { lock.unlock() }; return _tableSelected }
+		set { lock.lock(); defer { lock.unlock() }; _tableSelected = newValue }
+	}
+	var tableExpanded: Set<String> {
+		get { lock.lock(); defer { lock.unlock() }; return _tableExpanded }
+		set { lock.lock(); defer { lock.unlock() }; _tableExpanded = newValue }
+	}
+}
+
+// MARK: - Interactive table demo data
+
+let smokeTableRecords: [(id: String, name: String, region: String, ms: Int, detail: String)] = [
+	("web", "web", "us-east-1", 42, "8 instances · 99.98% SLA · canary 10% to v2.14"),
+	("api", "api", "eu-west-2", 18, "4 instances · 99.95% SLA · zero-downtime deploys"),
+	("search", "search", "us-west-2", 61, "12 shards · 99.9% SLA · 3 warm nodes"),
+	("auth", "auth", "ap-south-1", 9, "3 instances · 100% SLA · hardware-backed keys"),
+]
+
+func interactiveTableHTML(state: SmokeState) -> String {
+	let col = state.tableSortColumn
+	let asc = state.tableSortAsc
+	let sorted = smokeTableRecords.sorted { a, b in
+		let less: Bool
+		switch col {
+		case 1: less = a.region.localizedCaseInsensitiveCompare(b.region) == .orderedAscending
+		case 2: less = a.ms < b.ms
+		default: less = a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
+		}
+		return asc ? less : !less
+	}
+	let rows = sorted.map { (rec: (id: String, name: String, region: String, ms: Int, detail: String)) in
+		[Text(rec.name), Text(rec.region), Text("\(rec.ms) ms")]
+	}
+	let details = Dictionary(uniqueKeysWithValues: sorted.map { ($0.id, Text($0.detail)) })
+	return WebUITable(
+		headers: ["Name", "Region", "p95"],
+		rows: rows,
+		alignments: [.leading, .leading, .trailing],
+		id: "interactive-table",
+		sortableColumns: [0, 1, 2],
+		sort: (col, asc ? .ascending : .descending),
+		selectable: true,
+		rowIds: sorted.map { $0.id },
+		selectedRows: state.tableSelected,
+		expandedRows: state.tableExpanded,
+		rowDetails: details
+	).render()
 }
 
 // MARK: - Display-element renderers (stable ids, no event handlers)
@@ -110,9 +171,49 @@ func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
 						}
 					Raw(echoOutHTML(state.echo))
 				}
-			}
-		}
-	}
+				// Interactive table card — sortable · selectable · expandable.
+				// The persistent .table-wrap div carries the STABLE routing anchor
+				// (data-component-id="interactive-table"); the inner element is
+				// re-patched wholesale on every state change. One container handler
+				// dispatches on event.data.targetId — the server is the source of
+				// truth for sort, selection and expansion.
+				WebUICard(variant: .outlined) {
+					Heading("Table (sort · select · expand)", level: .h3)
+					Div(id: "interactive-table-anchor", class: "table-wrap") {
+						Raw(interactiveTableHTML(state: state))
+					}
+					.onClick(id: "interactive-table") { event in
+						let target = event.data["targetId"] ?? ""
+						let prefix = "interactive-table-"
+						guard target.hasPrefix(prefix) else { return [] }
+						let suffix = String(target.dropFirst(prefix.count))
+						// mutate the server state (source of truth) FIRST, then
+						// render the patch once from the new state — rendering
+						// before the mutation would emit a frame one state stale.
+						if suffix == "select-all" {
+							if state.tableSelected.count == smokeTableRecords.count { state.tableSelected = [] }
+							else { state.tableSelected = Set(smokeTableRecords.map { $0.id }) }
+						} else if suffix.hasPrefix("select-") {
+							let rowId = String(suffix.dropFirst(7))
+							if state.tableSelected.contains(rowId) { state.tableSelected.remove(rowId) }
+							else { state.tableSelected.insert(rowId) }
+						} else if suffix.hasPrefix("sort-") {
+							let col = Int(suffix.dropFirst(5)) ?? 0
+							if state.tableSortColumn == col { state.tableSortAsc.toggle() }
+							else { state.tableSortColumn = col; state.tableSortAsc = true }
+						} else if suffix.hasPrefix("expand-") {
+							let rowId = String(suffix.dropFirst(7))
+							if state.tableExpanded.contains(rowId) { state.tableExpanded.remove(rowId) }
+							else { state.tableExpanded.insert(rowId) }
+						} else {
+							return []
+						}
+						return [FragmentUpdate(id: "interactive-table", html: interactiveTableHTML(state: state))]
+					}
+				}
+				}
+				}
+				}
 	return WebUIDocument(title: "Design System Full-Stack Smoke Test", body: body).render()
 }
 
