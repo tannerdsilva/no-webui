@@ -896,3 +896,423 @@ public struct WebUITooltip: View {
         return html
     }
 }
+
+// MARK: - WebUI Stat
+/// KPI / metric card: a label, a large tabular value, an optional
+/// trend (direction + magnitude) and compare note, and an optional
+/// sparkline. Renders the canonical `.stat` block.
+public struct WebUIStat: View {
+    public enum Size: String, Sendable {
+        case sm = "stat stat--sm"
+        case md = "stat"
+        case lg = "stat stat--lg"
+    }
+
+    public enum Trend: String, Sendable {
+        case up   = "stat__trend--up"
+        case down = "stat__trend--down"
+    }
+
+    public let label: String
+    public let value: String
+    public let size: Size
+    /// Trend magnitude text, e.g. "+4.2%" — renders with the up/down
+    /// arrow when `trendDirection` is set.
+    public let trend: String?
+    public let trendDirection: Trend?
+    /// Small muted note beside the trend, e.g. "vs last week".
+    public let compare: String?
+    /// Normalized sparkline data points (any indexed series).
+    public let spark: [Double]?
+
+    public init(
+        label: String,
+        value: String,
+        size: Size = .md,
+        trend: String? = nil,
+        trendDirection: Trend? = nil,
+        compare: String? = nil,
+        spark: [Double]? = nil
+    ) {
+        self.label = label
+        self.value = value
+        self.size = size
+        self.trend = trend
+        self.trendDirection = trendDirection
+        self.compare = compare
+        self.spark = spark
+    }
+
+    public func render() -> String {
+        var html = "<div class=\"\(size.rawValue)\">"
+        html += "<span class=\"stat__label\">\(htmlEscape(label))</span>"
+        html += "<span class=\"stat__value\">\(htmlEscape(value))</span>"
+        if let trend, let trendDirection {
+            let arrowPath = trendDirection == .up ? "M2 6.5L5 3.5l3 3" : "M2 3.5L5 6.5l3-3"
+            let arrow = "<svg class=\"stat__trend-arrow\" viewBox=\"0 0 10 10\" width=\"10\" height=\"10\" fill=\"none\" aria-hidden=\"true\"><path d=\"\(arrowPath)\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>"
+            html += "<span class=\"stat__row\">"
+            html += "<span class=\"stat__trend \(trendDirection.rawValue)\">\(arrow)\(htmlEscape(trend))</span>"
+            if let compare {
+                html += "<span class=\"stat__compare\">\(htmlEscape(compare))</span>"
+            }
+            html += "</span>"
+        } else if let compare {
+            html += "<span class=\"stat__compare\">\(htmlEscape(compare))</span>"
+        }
+        if let spark, spark.count >= 2 {
+            html += "<span class=\"stat__spark\">"
+            html += sparklineSVG(spark)
+            html += "</span>"
+        }
+        html += "</div>"
+        return html
+    }
+
+    /// A 100×32 viewBox sparkline: the series as a polyline, with a soft
+    /// area fill beneath (CSS carries the token colors).
+    private func sparklineSVG(_ points: [Double]) -> String {
+        let (minV, maxV) = (points.min() ?? 0, points.max() ?? 1)
+        let span = maxV - minV
+        let h = 32.0
+        let step = 100.0 / Double(points.count - 1)
+        let coords = points.enumerated().map { (i, v) -> String in
+            let x = Double(i) * step
+            let y = span == 0 ? h / 2 : h - ((v - minV) / span) * h
+            return String(format: "%.1f,%.1f", x, y)
+        }
+        let line = coords.joined(separator: " ")
+        let area = "\(coords.first ?? "0,16") \(line) 100,32 0,32"
+        return "<svg viewBox=\"0 0 100 32\" preserveAspectRatio=\"none\" aria-hidden=\"true\">"
+            + "<polygon class=\"stat__spark-area\" points=\"\(area)\"/>"
+            + "<polyline class=\"stat__spark-line\" points=\"\(line)\"/></svg>"
+    }
+}
+
+// MARK: - WebUI Pagination
+/// Page navigation with prev/next controls, a windowed page-number list
+/// (first, last, and a ±1 window around the current page, gaps
+/// ellipsized), and an optional rows-per-page meta control.
+/// Renders `.pagination`.
+public struct WebUIPagination: View {
+    public let page: Int
+    public let pages: Int
+    /// Stable id prefix for interactive use: `{id}-prev`, `{id}-next`,
+    /// `{id}-page-{n}`, `{id}-rows`. Omit for a purely display pagination.
+    public let id: String?
+    /// Rows-per-page meta: current size + allowed sizes.
+    public let rowsPerPage: Int?
+    public let rowsPerPageOptions: [Int]
+
+    public init(
+        page: Int,
+        pages: Int,
+        id: String? = nil,
+        rowsPerPage: Int? = nil,
+        rowsPerPageOptions: [Int] = [10, 25, 50, 100]
+    ) {
+        self.page = page
+        self.pages = pages
+        self.id = id
+        self.rowsPerPage = rowsPerPage
+        self.rowsPerPageOptions = rowsPerPageOptions
+    }
+
+    public func render() -> String {
+        let page = max(1, page)
+        let pages = max(1, pages)
+        let base = id.map { htmlEscape($0) }
+        func pid(_ s: String) -> String? { base.map { "\($0)-\(s)" } }
+
+        var html = "<nav class=\"pagination\" aria-label=\"Pagination\">"
+        let prevIdAttr = pid("prev").map { " id=\"\($0)\"" } ?? ""
+        let prevDisabled = page <= 1 ? " disabled" : ""
+        html += "<button class=\"pagination__btn\"\(prevIdAttr) type=\"button\" aria-label=\"Previous page\"\(prevDisabled)>&#8249;</button>"
+        for item in pageWindow(page: page, pages: pages) {
+            switch item {
+            case .ellipsis:
+                html += "<span class=\"pagination__ellipsis\">…</span>"
+            case .number(let n):
+                let isActive = n == page
+                let cls = isActive ? "pagination__btn pagination__btn--active" : "pagination__btn"
+                let idAttr = pid("page-\(n)").map { " id=\"\($0)\"" } ?? ""
+                let current = isActive ? " aria-current=\"page\"" : ""
+                html += "<button class=\"\(cls)\"\(idAttr) type=\"button\"\(current)>\(n)</button>"
+            }
+        }
+        let nextIdAttr = pid("next").map { " id=\"\($0)\"" } ?? ""
+        let nextDisabled = page >= pages ? " disabled" : ""
+        html += "<button class=\"pagination__btn\"\(nextIdAttr) type=\"button\" aria-label=\"Next page\"\(nextDisabled)>&#8250;</button>"
+        if let rowsPerPage {
+            let rowsIdAttr = pid("rows").map { " id=\"\($0)\"" } ?? ""
+            html += "<span class=\"pagination__meta\"><label>Rows per page</label><select class=\"select\"\(rowsIdAttr)>"
+            for opt in rowsPerPageOptions {
+                let selected = opt == rowsPerPage ? " selected" : ""
+                html += "<option value=\"\(opt)\"\(selected)>\(opt)</option>"
+            }
+            html += "</select></span>"
+        }
+        html += "</nav>"
+        return html
+    }
+
+    private enum Item {
+        case number(Int)
+        case ellipsis
+    }
+
+    /// 1 … 4 5 6 … 12 style windowing: first + last always, ±1 around the
+    /// current page, gaps collapsed to a single ellipsis.
+    private func pageWindow(page: Int, pages: Int) -> [Item] {
+        if pages <= 7 { return (1...pages).map { .number($0) } }
+        var shown: Set<Int> = [1, 2, pages - 1, pages]
+        for n in max(1, page - 1)...min(pages, page + 1) { shown.insert(n) }
+        var items: [Item] = []
+        var prev = 0
+        for n in shown.sorted() {
+            if n - prev > 1 { items.append(.ellipsis) }
+            items.append(.number(n))
+            prev = n
+        }
+        return items
+    }
+}
+
+// MARK: - WebUI Timeline
+/// A vertical (or horizontal) event timeline with status dots. Each event
+/// can be plain, completed (filled dot + check), current (pulsing dot), or
+/// error (danger dot). Renders `.timeline`.
+public struct WebUITimeline: View {
+    public enum Orientation: String, Sendable {
+        case vertical   = "timeline"
+        case horizontal = "timeline timeline--horizontal"
+    }
+
+    public enum Status: String, Sendable {
+        case plain
+        case completed = "timeline__event--completed"
+        case current   = "timeline__event--current"
+        case error     = "timeline__event--error"
+    }
+
+    public struct Event: Sendable {
+        public let time: String
+        public let title: String
+        public let desc: String?
+        public let status: Status
+
+        public init(time: String, title: String, desc: String? = nil, status: Status = .plain) {
+            self.time = time
+            self.title = title
+            self.desc = desc
+            self.status = status
+        }
+    }
+
+    public let events: [Event]
+    public let orientation: Orientation
+
+    public init(events: [Event], orientation: Orientation = .vertical) {
+        self.events = events
+        self.orientation = orientation
+    }
+
+    public func render() -> String {
+        var html = "<div class=\"\(orientation.rawValue)\">"
+        for event in events {
+            let statusCls = event.status == .plain ? "" : " \(event.status.rawValue)"
+            html += "<div class=\"timeline__event\(statusCls)\"><span class=\"timeline__dot\"></span>"
+            html += "<span class=\"timeline__time\">\(htmlEscape(event.time))</span>"
+            html += "<div class=\"timeline__title\">\(htmlEscape(event.title))</div>"
+            if let desc = event.desc {
+                html += "<div class=\"timeline__desc\">\(htmlEscape(desc))</div>"
+            }
+            html += "</div>"
+        }
+        html += "</div>"
+        return html
+    }
+}
+
+// MARK: - WebUI Tree
+/// A recursive node tree with rotating carets, leaf indicators, icons,
+/// and row selection. Open/closed state and selection are rendered from
+/// the passed-in state (server-driven, like the interactive table); row
+/// elements carry stable `id`s when a base `id` is provided.
+/// Renders `.tree`.
+public struct WebUITree: View {
+    public struct Node: Sendable {
+        public let id: String
+        public let label: String
+        public let icon: String?
+        public let children: [Node]?
+
+        public init(id: String, label: String, icon: String? = nil, children: [Node]? = nil) {
+            self.id = id
+            self.label = label
+            self.icon = icon
+            self.children = children
+        }
+    }
+
+    public let nodes: [Node]
+    public let id: String?
+    public let expanded: Set<String>
+    public let selected: String?
+
+    public init(nodes: [Node], id: String? = nil, expanded: Set<String> = [], selected: String? = nil) {
+        self.nodes = nodes
+        self.id = id
+        self.expanded = expanded
+        self.selected = selected
+    }
+
+    public func render() -> String {
+        var html = "<div class=\"tree\">"
+        for node in nodes { html += renderNode(node) }
+        html += "</div>"
+        return html
+    }
+
+    private func renderNode(_ node: Node) -> String {
+        let hasChildren = !(node.children?.isEmpty ?? true)
+        let isOpen = hasChildren && expanded.contains(node.id)
+        let nodeCls = isOpen ? "tree__node tree__node--open" : "tree__node"
+        let rowCls = selected == node.id ? "tree__row tree__row--selected" : "tree__row"
+        let caretCls = hasChildren ? "tree__caret" : "tree__caret tree__caret--leaf"
+        let rowIdAttr = id.map { " id=\"\(htmlEscape($0))-node-\(htmlEscape(node.id))\"" } ?? ""
+
+        var html = "<div class=\"\(nodeCls)\">"
+        html += "<div class=\"\(rowCls)\"\(rowIdAttr)>"
+        html += "<span class=\"\(caretCls)\"></span>"
+        if let icon = node.icon {
+            html += "<span class=\"tree__icon\">\(htmlEscape(icon))</span>"
+        }
+        html += "<span class=\"tree__label\">\(htmlEscape(node.label))</span>"
+        html += "</div>"
+        if hasChildren {
+            html += "<div class=\"tree__children\">"
+            for child in node.children! { html += renderNode(child) }
+            html += "</div>"
+        }
+        html += "</div>"
+        return html
+    }
+}
+
+// MARK: - WebUI Breadcrumb
+/// Hierarchical navigation trail. Leading items render as links; the
+/// current item is emphasized and aria-current. When `collapse` is set and
+/// the trail exceeds `maxItems`, the middle collapses to an ellipsis
+/// button. Renders `.breadcrumb`.
+public struct WebUIBreadcrumb: View {
+    public struct Item: Sendable {
+        public let label: String
+        public let href: String?
+
+        public init(_ label: String, href: String? = nil) {
+            self.label = label
+            self.href = href
+        }
+    }
+
+    public let items: [Item]
+    public let current: Item
+    public let slash: Bool
+    public let id: String?
+    /// Collapse the middle when the total exceeds `maxItems`.
+    public let collapse: Bool
+    public let maxItems: Int
+
+    public init(
+        items: [Item],
+        current: Item,
+        slash: Bool = false,
+        id: String? = nil,
+        collapse: Bool = true,
+        maxItems: Int = 5
+    ) {
+        self.items = items
+        self.current = current
+        self.slash = slash
+        self.id = id
+        self.collapse = collapse
+        self.maxItems = maxItems
+    }
+
+    public func render() -> String {
+        let all = items + [current]
+        let sep: String = slash ? "/" : "›"
+        let base = id.map { htmlEscape($0) }
+        let slashCls = slash ? " breadcrumb--slash" : ""
+
+        // which segments render as links (head), which are collapsed into
+        // the ellipsis, which render as the tail
+        let collapsed = collapse && all.count > maxItems
+        let headCount = collapsed ? 1 : all.count - 1
+        let tailCount = collapsed ? 2 : 0
+
+        func itemHTML(_ item: Item, index: Int, isCurrent: Bool) -> String {
+            let idAttr = isCurrent ? "" : base.map { " id=\"\($0)-item-\(index)\"" } ?? ""
+            if isCurrent {
+                return "<span class=\"breadcrumb__item breadcrumb__item--current\" aria-current=\"page\">\(htmlEscape(item.label))</span>"
+            }
+            if let href = item.href {
+                // canonical URL policy: a blocked scheme degrades to plain
+                // text (never an href) — mirrors the Link/Image primitives.
+                guard let safe = sanitizeURL(href) else {
+                    return "<span class=\"breadcrumb__item\"\(idAttr)>\(htmlEscape(item.label))</span>"
+                }
+                return "<a class=\"breadcrumb__item\"\(idAttr) href=\"\(htmlEscape(safe))\">\(htmlEscape(item.label))</a>"
+            }
+            return "<span class=\"breadcrumb__item\"\(idAttr)>\(htmlEscape(item.label))</span>"
+        }
+        func sepHTML() -> String {
+            "<span class=\"breadcrumb__separator\" aria-hidden=\"true\">\(htmlEscape(sep))</span>"
+        }
+
+        var html = "<nav class=\"breadcrumb\(slashCls)\" aria-label=\"Breadcrumb\">"
+        // head (links)
+        for i in 0..<headCount {
+            html += itemHTML(all[i], index: i, isCurrent: false)
+            html += sepHTML()
+        }
+        // collapsed middle
+        if collapsed {
+            let ellipsisId = base.map { " id=\"\($0)-ellipsis\"" } ?? ""
+            html += "<button type=\"button\" class=\"breadcrumb__ellipsis\"\(ellipsisId) aria-label=\"Show omitted items\">…</button>"
+            html += sepHTML()
+        }
+        // tail (last N−1 as links, final as current)
+        let tailStart = all.count - tailCount
+        for i in 0..<tailCount {
+            let idx = tailStart + i
+            let isCurrent = idx == all.count - 1
+            html += itemHTML(all[idx], index: idx, isCurrent: isCurrent)
+            if !isCurrent { html += sepHTML() }
+        }
+        html += "</nav>"
+        return html
+    }
+}
+
+// MARK: - WebUI Description List
+/// A term/detail description list — the canonical payload for an
+/// expanded table row or a detail panel. Renders `.list--desc` (a
+/// two-column grid: medium-weight term, muted detail).
+public struct WebUIDescriptionList: View {
+    public let items: [(term: String, detail: String)]
+
+    public init(_ items: [(String, String)]) {
+        self.items = items.map { (term: $0.0, detail: $0.1) }
+    }
+
+    public func render() -> String {
+        var html = "<dl class=\"list--desc\">"
+        for item in items {
+            html += "<dt>\(htmlEscape(item.term))</dt>"
+            html += "<dd>\(htmlEscape(item.detail))</dd>"
+        }
+        html += "</dl>"
+        return html
+    }
+}

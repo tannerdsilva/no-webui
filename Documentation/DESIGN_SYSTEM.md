@@ -452,6 +452,107 @@ the tooltip text is the first, unlabeled parameter; **position** is
 CSS classes: `tooltip-container`, `tooltip tooltip--{position}`, children
 `tooltip__arrow`, `tooltip__text`; `role="tooltip"`.
 
+### WebUIStat
+
+```swift
+WebUIStat(label: "Requests", value: "12.4M", size: .lg,
+          trend: "+8.1%", trendDirection: .up, compare: "vs last week",
+          spark: [3, 5, 4, 8, 7, 10, 12])
+WebUIStat(label: "Errors", value: "0.2%", size: .sm,
+          trend: "+0.1%", trendDirection: .down)
+```
+
+KPI / metric card. **Sizes:** `sm`, `md` (default), `lg` (emits
+`stat stat--{size}` — the base class is always present). `trend` renders
+only together with `trendDirection` (`.up` / `.down`) inside a
+`stat__row` with an inline-SVG `stat__trend-arrow`; `compare` is a muted
+`stat__compare` note. `spark` (≥2 points) emits a `stat__spark` block with a
+normalized 100×32 `svg` (`stat__spark-area` + `stat__spark-line`); CSS
+carries the token colors, so no per-point attributes are needed.
+
+### WebUIPagination
+
+```swift
+WebUIPagination(page: 5, pages: 12)
+WebUIPagination(page: 5, pages: 12, id: "pg", rowsPerPage: 25)
+```
+
+`<nav class="pagination">` with prev/next `pagination__btn` (disabled at
+the bounds, `aria-label`ed) and a windowed page list — first two, last two,
+and ±1 around the current page, gaps collapsed to a single
+`pagination__ellipsis`. Pages ≤7 render in full. The active page carries
+`pagination__btn--active` + `aria-current="page"`. With `id:` every
+control gets a stable id (`{id}-prev`, `{id}-next`, `{id}-page-{n}`,
+`{id}-rows`) for the interactive (server-driven) pattern. `rowsPerPage`
+adds a `pagination__meta` select.
+
+### WebUITimeline
+
+```swift
+WebUITimeline(events: [
+    .init(time: "14:02", title: "Build passed", desc: "main · 389 tests", status: .completed),
+    .init(time: "14:05", title: "Deploying", desc: "canary 10%", status: .current),
+    .init(time: "14:06", title: "Rollout scheduled"),
+])
+WebUITimeline(events: [...], orientation: .horizontal)
+```
+
+`<div class="timeline">` (or `timeline--horizontal`) of
+`timeline__event` blocks: a `timeline__dot`, a `timeline__time`, a
+`timeline__title`, and an optional `timeline__desc`. **Status:** `plain`
+(default), `completed` (filled dot + check), `current` (pulsing dot),
+`error` (danger dot) — emitted as `timeline__event--{status}`.
+
+### WebUITree
+
+```swift
+WebUITree(nodes: [
+    .init(id: "src", label: "src", icon: "📁", children: [
+        .init(id: "main", label: "main.swift", icon: "📄"),
+        .init(id: "ui", label: "ui", icon: "📁", children: [
+            .init(id: "view", label: "view.swift", icon: "📄"),
+        ]),
+    ]),
+], id: "tree", expanded: ["src", "ui"], selected: "view")
+```
+
+Recursive `<div class="tree">`. Each node is a `tree__node` (a row
+`tree__row` plus, when it has children, a `tree__children` wrapper);
+`.tree__node { display: block }` keeps children stacked below the row.
+Open nodes carry `tree__node--open` (caret rotates via CSS). Leaf rows
+use `tree__caret--leaf` (hidden). A selected row carries
+`tree__row--selected`. With `id:` rows get stable ids
+(`{id}-node-{nodeId}`) for the server-driven open/select pattern — open
+state is pure CSS (`display:none` on closed children), so toggling a node
+only requires re-rendering the tree.
+
+### WebUIBreadcrumb
+
+```swift
+WebUIBreadcrumb(items: [
+    .init("Home", href: "/"),
+    .init("Projects", href: "/projects"),
+], current: .init("Design"))
+```
+
+`<nav class="breadcrumb">` (add `breadcrumb--slash` for `/` separators).
+Leading items are links; the last is `breadcrumb__item--current` with
+`aria-current="page"`. Separators are `breadcrumb__separator`. When the
+trail exceeds `maxItems` (default 5, `collapse: true` default), the middle
+collapses to a `breadcrumb__ellipsis` button — first and last two items
+stay. hrefs run through `sanitizeURL`; a blocked scheme degrades the item
+to plain text (never an anchor), matching `Link`.
+
+### WebUIDescriptionList
+
+```swift
+WebUIDescriptionList([("Status", "Active"), ("Region", "us-east-1")])
+```
+
+`<dl class="list--desc">` — a two-column grid (medium-weight `dt`, muted
+`dd`). the canonical payload for an expanded `WebUITable` detail row or a
+detail panel.
+
 ## CSS Class Naming Convention
 
 All classes follow BEM-like naming:

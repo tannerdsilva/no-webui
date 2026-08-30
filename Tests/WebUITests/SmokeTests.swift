@@ -29,11 +29,14 @@ func extractTags(_ html: String) -> [String] {
 
             // determine if this is a closing tag
             let isClosing = tagContent.hasPrefix("/")
+            // self-closing tags (<path/>, <polygon/>, <img/>, …) are
+            // balanced by construction — never push them onto the stack.
+            let isSelfClosing = tagContent.hasSuffix("/")
             let nameStart = isClosing ? tagContent.index(after: tagContent.startIndex) : tagContent.startIndex
             let tagName = String(tagContent[nameStart...]
                 .prefix(while: { !$0.isWhitespace && $0 != "/" && $0 != ">" }))
 
-            if !tagName.isEmpty {
+            if !tagName.isEmpty, !isSelfClosing {
                 tags.append(isClosing ? "/\(tagName)" : String(tagName))
 
                 // if this is an opening raw-text tag (script, style),
@@ -578,6 +581,12 @@ struct BEMTests {
             WebUIEmptyState(title: "T", message: "M"),
             WebUISpinner(),
             WebUITooltip("T") { Text("") },
+            WebUIStat(label: "L", value: "1"),
+            WebUIPagination(page: 2, pages: 12),
+            WebUITimeline(events: [WebUITimeline.Event(time: "12:00", title: "T")]),
+            WebUITree(nodes: [WebUITree.Node(id: "a", label: "A")]),
+            WebUIBreadcrumb(items: [WebUIBreadcrumb.Item("Home", href: "/")], current: WebUIBreadcrumb.Item("Here")),
+            WebUIDescriptionList([("K", "V")]),
         ]
         for view in views {
             let html = view.render()
@@ -1486,10 +1495,203 @@ struct IntegrationTests {
             WebUIEmptyState(title: "Empty", message: "State")
             WebUISpinner()
             WebUITooltip("Tooltip") { Text("Hover") }
+            WebUIStat(label: "Revenue", value: "$12k", trend: "+4.2%", trendDirection: .up, compare: "vs last week", spark: [1, 3, 2, 5, 4, 6])
+            WebUIPagination(page: 5, pages: 12, id: "pg", rowsPerPage: 25)
+            WebUITimeline(events: [
+                WebUITimeline.Event(time: "12:00", title: "Shipped", status: .completed),
+                WebUITimeline.Event(time: "12:30", title: "Deploying", desc: "canary 10%", status: .current),
+                WebUITimeline.Event(time: "13:00", title: "Queued", status: .plain),
+            ])
+            WebUITree(nodes: [
+                WebUITree.Node(id: "src", label: "src", icon: "📁", children: [
+                    WebUITree.Node(id: "main", label: "main.swift", icon: "📄"),
+                    WebUITree.Node(id: "ui", label: "ui", icon: "📁", children: [
+                        WebUITree.Node(id: "view", label: "view.swift", icon: "📄"),
+                    ]),
+                ]),
+            ], id: "tree", expanded: ["src", "ui"], selected: "main")
+            WebUIBreadcrumb(items: [
+                WebUIBreadcrumb.Item("Home", href: "/"),
+                WebUIBreadcrumb.Item("Projects", href: "/projects"),
+                WebUIBreadcrumb.Item("Design", href: "/design"),
+                WebUIBreadcrumb.Item("Components", href: "/components"),
+                WebUIBreadcrumb.Item("Tables", href: "/tables"),
+            ], current: WebUIBreadcrumb.Item("Interactive"))
+            WebUIDescriptionList([("Status", "Active"), ("Region", "us-east-1"), ("Uptime", "99.98%")])
         }.render()
 
         #expect(validateTagBalance(html), "All components together has unbalanced tags")
         let issues = validateBEMClasses(html)
         #expect(issues.isEmpty, "BEM issues: \(issues)")
+    }
+}
+
+// MARK: - 9. Companion Primitive Tests
+
+@Suite("Companion Primitives (Stat, Pagination, Timeline, Tree, Breadcrumb, DescriptionList)")
+struct CompanionPrimitiveTests {
+
+    @Test("WebUIStat renders label, value, trend with arrow and sparkline")
+    func statFull() {
+        let html = WebUIStat(
+            label: "Requests",
+            value: "12.4M",
+            size: .lg,
+            trend: "+8.1%",
+            trendDirection: .up,
+            compare: "vs last week",
+            spark: [3, 5, 4, 8, 7, 10, 12]
+        ).render()
+        #expect(html.contains("class=\"stat stat--lg\""))
+        #expect(html.contains("<span class=\"stat__label\">Requests</span>"))
+        #expect(html.contains("<span class=\"stat__value\">12.4M</span>"))
+        #expect(html.contains("stat__trend--up"))
+        #expect(html.contains("<svg class=\"stat__trend-arrow\""))
+        #expect(html.contains("<span class=\"stat__compare\">vs last week</span>"))
+        #expect(html.contains("stat__spark-line"))
+        #expect(html.contains("stat__spark-area"))
+        // down trend emits the downward arrow path
+        let down = WebUIStat(label: "Errors", value: "0.2%", trend: "-1.3%", trendDirection: .down).render()
+        #expect(down.contains("stat__trend--down"))
+        #expect(validateTagBalance(html))
+        #expect(validateTagBalance(down))
+    }
+
+    @Test("WebUIStat minimal (no trend/spark) renders just label+value")
+    func statMinimal() {
+        let html = WebUIStat(label: "Uptime", value: "99.99%").render()
+        #expect(html.contains("class=\"stat\""))
+        #expect(html.contains("<span class=\"stat__label\">Uptime</span>"))
+        #expect(html.contains("<span class=\"stat__value\">99.99%</span>"))
+        #expect(html.range(of: "stat__trend") == nil)
+        #expect(html.range(of: "stat__spark") == nil)
+        #expect(validateTagBalance(html))
+    }
+
+    @Test("WebUIPagination windowing with prev/next disabled at bounds")
+    func paginationWindowing() {
+        // page 1 => prev disabled
+        let p1 = WebUIPagination(page: 1, pages: 12).render()
+        #expect(p1.contains("aria-label=\"Previous page\" disabled"))
+        #expect(p1.contains("pagination__btn--active"))
+        #expect(p1.contains("pagination__ellipsis"))
+        // page 12 => next disabled
+        let p12 = WebUIPagination(page: 12, pages: 12).render()
+        #expect(p12.contains("aria-label=\"Next page\" disabled"))
+        #expect(p12.contains("id=\"page-12\"") || p12.contains("aria-current=\"page\""))
+        // few pages => no ellipsis, all shown
+        let small = WebUIPagination(page: 2, pages: 4).render()
+        #expect(small.range(of: "pagination__ellipsis") == nil)
+        #expect(small.contains(">1</button>"))
+        #expect(small.contains(">4</button>"))
+        #expect(validateTagBalance(p1))
+        #expect(validateTagBalance(p12))
+    }
+
+    @Test("WebUIPagination rows-per-page meta renders a select with the chosen option selected")
+    func paginationMeta() {
+        let html = WebUIPagination(page: 3, pages: 8, id: "pg", rowsPerPage: 25, rowsPerPageOptions: [10, 25, 50]).render()
+        #expect(html.contains("pagination__meta"))
+        #expect(html.contains("id=\"pg-rows\""))
+        #expect(html.contains("<option value=\"25\" selected>25</option>"))
+        #expect(html.contains("<option value=\"10\">10</option>"))
+        #expect(validateTagBalance(html))
+    }
+
+    @Test("WebUITimeline renders status modifiers and optional desc")
+    func timeline() {
+        let html = WebUITimeline(events: [
+            WebUITimeline.Event(time: "12:00", title: "Shipped", status: .completed),
+            WebUITimeline.Event(time: "12:30", title: "Deploying", desc: "canary 10%", status: .current),
+            WebUITimeline.Event(time: "13:00", title: "Queued"),
+        ]).render()
+        #expect(html.contains("class=\"timeline\""))
+        #expect(html.contains("timeline__event--completed"))
+        #expect(html.contains("timeline__event--current"))
+        #expect(html.contains("timeline__event\""))
+        #expect(html.contains("<div class=\"timeline__desc\">canary 10%</div>"))
+        #expect(html.contains("timeline__dot"))
+        #expect(validateTagBalance(html))
+        // horizontal orientation
+        let h = WebUITimeline(events: [WebUITimeline.Event(time: "1", title: "A")], orientation: .horizontal).render()
+        #expect(h.contains("timeline--horizontal"))
+    }
+
+    @Test("WebUITree renders nested nodes, open/closed, leaf caret, and selection")
+    func tree() {
+        let nodes = [
+            WebUITree.Node(id: "src", label: "src", icon: "📁", children: [
+                WebUITree.Node(id: "main", label: "main.swift", icon: "📄"),
+                WebUITree.Node(id: "ui", label: "ui", children: [
+                    WebUITree.Node(id: "view", label: "view.swift"),
+                ]),
+            ]),
+        ]
+        let html = WebUITree(nodes: nodes, id: "t", expanded: ["src"], selected: "main").render()
+        #expect(html.contains("class=\"tree\""))
+        #expect(html.contains("tree__node tree__node--open"))
+        #expect(html.contains("tree__node\""))
+        #expect(html.contains("tree__caret--leaf"))
+        #expect(html.contains("tree__row--selected"))
+        #expect(html.contains("id=\"t-node-main\""))
+        #expect(html.contains("tree__children"))
+        // closed child (ui) still present in DOM, hidden via CSS
+        #expect(html.contains("id=\"t-node-ui\""))
+        // escaped label
+        let bad = WebUITree(nodes: [WebUITree.Node(id: "x", label: "<i>bad</i>")]).render()
+        #expect(bad.range(of: "<i>bad</i>") == nil)
+        #expect(bad.contains("&lt;i&gt;bad&lt;/i&gt;"))
+        #expect(validateTagBalance(html))
+    }
+
+    @Test("WebUIBreadcrumb collapses long trails and marks current")
+    func breadcrumb() {
+        let items = (1...6).map { WebUIBreadcrumb.Item("Step \($0)", href: "/s\($0)") }
+        let html = WebUIBreadcrumb(items: items, current: WebUIBreadcrumb.Item("Final")).render()
+        // 6 + current = 7 > maxItems(5) => collapse
+        #expect(html.contains("breadcrumb__ellipsis"))
+        #expect(html.contains("breadcrumb__item--current"))
+        #expect(html.contains("aria-current=\"page\""))
+        #expect(html.contains("href=\"/s1\""))
+        #expect(validateTagBalance(html))
+        // short trail => no collapse
+        let short = WebUIBreadcrumb(
+            items: [WebUIBreadcrumb.Item("Home", href: "/")],
+            current: WebUIBreadcrumb.Item("Here")
+        ).render()
+        #expect(short.range(of: "breadcrumb__ellipsis") == nil)
+        #expect(short.contains("class=\"breadcrumb\""))
+    }
+
+    @Test("WebUIBreadcrumb slash variant and javascript: href degrade to plain text")
+    func breadcrumbSafety() {
+        let slash = WebUIBreadcrumb(
+            items: [WebUIBreadcrumb.Item("A", href: "/a")],
+            current: WebUIBreadcrumb.Item("B"),
+            slash: true
+        ).render()
+        #expect(slash.contains("breadcrumb--slash"))
+        // javascript: href blocked => rendered as a span, not an anchor
+        let js = WebUIBreadcrumb(
+            items: [WebUIBreadcrumb.Item("Bad", href: "javascript:alert(1)")],
+            current: WebUIBreadcrumb.Item("Ok")
+        ).render()
+        #expect(js.range(of: "href=\"javascript") == nil)
+        #expect(js.contains("class=\"breadcrumb__item\">Bad</span>"))
+    }
+
+    @Test("WebUIDescriptionList renders dt/dd grid with escaping")
+    func descriptionList() {
+        let html = WebUIDescriptionList([
+            ("Status", "Active"),
+            ("Region", "us-east-1"),
+            ("Note", "<b>bold</b> & safe"),
+        ]).render()
+        #expect(html.contains("<dl class=\"list--desc\">"))
+        #expect(html.contains("<dt>Status</dt>"))
+        #expect(html.contains("<dd>Active</dd>"))
+        #expect(html.contains("&lt;b&gt;bold&lt;/b&gt; &amp; safe"))
+        #expect(html.range(of: "<b>bold</b>") == nil)
+        #expect(validateTagBalance(html))
     }
 }

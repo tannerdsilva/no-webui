@@ -42,6 +42,7 @@ struct ShowcasePage {
                 sidebarLink("Buttons", "#buttons")
                 sidebarLink("Media", "#media")
                 sidebarLink("Lists & Tables", "#lists")
+                sidebarLink("Data & Navigation", "#data-nav")
                 sidebarLink("Semantic HTML", "#semantic")
                 sidebarLink("Modifiers", "#modifiers")
                 sidebarLink("Design System", "#design-system")
@@ -381,6 +382,87 @@ struct ShowcasePage {
                                     "api": Text("4 instances · 99.95% SLA · zero-downtime deploys"),
                                 ]
                             )
+                        }
+                    }
+                }
+
+                // 6b. Data & Navigation
+                section("Data & Navigation", "data-nav") {
+                    VStack(spacing: 16) {
+                        Heading("Data & navigation primitives", level: .h2)
+
+                        demoCard("Stat — KPI with trend + sparkline") {
+                            HStack {
+                                WebUIStat(label: "Requests", value: "12.4M", size: .lg,
+                                          trend: "+8.1%", trendDirection: .up,
+                                          compare: "vs last week",
+                                          spark: [3, 5, 4, 8, 7, 10, 12])
+                                WebUIStat(label: "p95 latency", value: "42ms",
+                                          trend: "-3.2%", trendDirection: .up,
+                                          compare: "faster")
+                                WebUIStat(label: "Errors", value: "0.2%", size: .sm,
+                                          trend: "+0.1%", trendDirection: .down)
+                            }
+                        }
+
+                        demoCard("Pagination — windowed, page 5 of 12") {
+                            WebUIPagination(page: 5, pages: 12, id: "demo-pg",
+                                            rowsPerPage: 25)
+                        }
+
+                        demoCard("Timeline — vertical + horizontal") {
+                            VStack(spacing: 16) {
+                                WebUITimeline(events: [
+                                    WebUITimeline.Event(time: "14:02", title: "Build passed", desc: "main · 389 tests", status: .completed),
+                                    WebUITimeline.Event(time: "14:05", title: "Deploying", desc: "canary 10%", status: .current),
+                                    WebUITimeline.Event(time: "14:06", title: "Rollout scheduled", status: .plain),
+                                ])
+                                WebUITimeline(events: [
+                                    WebUITimeline.Event(time: "Q1", title: "Planned", status: .completed),
+                                    WebUITimeline.Event(time: "Q2", title: "In progress", status: .current),
+                                    WebUITimeline.Event(time: "Q3", title: "Review", status: .plain),
+                                    WebUITimeline.Event(time: "Q4", title: "Launch", status: .plain),
+                                ], orientation: .horizontal)
+                            }
+                        }
+
+                        demoCard("Tree — file explorer (server-driven open/selection)") {
+                            WebUITree(nodes: [
+                                WebUITree.Node(id: "src", label: "src", icon: "📁", children: [
+                                    WebUITree.Node(id: "main", label: "main.swift", icon: "📄"),
+                                    WebUITree.Node(id: "ui", label: "ui", icon: "📁", children: [
+                                        WebUITree.Node(id: "view", label: "view.swift", icon: "📄"),
+                                        WebUITree.Node(id: "state", label: "state.swift", icon: "📄"),
+                                    ]),
+                                ]),
+                                WebUITree.Node(id: "tests", label: "tests", icon: "📁", children: [
+                                    WebUITree.Node(id: "smoke", label: "smoke.swift", icon: "📄"),
+                                ]),
+                            ], id: "demo-tree", expanded: ["src", "ui"], selected: "view")
+                        }
+
+                        demoCard("Breadcrumb — collapsed + short trail") {
+                            VStack(spacing: 12) {
+                                WebUIBreadcrumb(items: [
+                                    WebUIBreadcrumb.Item("Home", href: "/"),
+                                    WebUIBreadcrumb.Item("Projects", href: "/projects"),
+                                    WebUIBreadcrumb.Item("Design", href: "/design"),
+                                    WebUIBreadcrumb.Item("Components", href: "/components"),
+                                    WebUIBreadcrumb.Item("Tables", href: "/tables"),
+                                ], current: WebUIBreadcrumb.Item("Interactive"))
+                                WebUIBreadcrumb(items: [
+                                    WebUIBreadcrumb.Item("Docs", href: "/docs"),
+                                ], current: WebUIBreadcrumb.Item("API Reference"), slash: true)
+                            }
+                        }
+
+                        demoCard("Description list — canonical expanded-row payload") {
+                            WebUIDescriptionList([
+                                ("Status", "Active"),
+                                ("Region", "us-east-1"),
+                                ("Instances", "8"),
+                                ("SLA", "99.98%"),
+                            ])
                         }
                     }
                 }

@@ -185,11 +185,17 @@ component catalog.
 | `WebUISkeleton` | variant, width, height, count |
 | `WebUIToast` | variant, message, id, dismissible — close button carries `data-dismiss` |
 | `WebUIModal` | title, id, content, footer — close button carries `data-dismiss` |
-| `WebUITable` | headers, rows ([[any View]]), striped, hoverable, compact |
+| `WebUITable` | headers, rows ([[any View]]), striped, hoverable, compact, wrapped, responsive, alignments, footer, emptyState, id, rowIds, sortable, selected, expanded, rowDetails |
 | `WebUIChip` | text, variant, removable, id — remove button carries `data-remove` |
 | `WebUIEmptyState` | icon, title, message, action (label, id) |
 | `WebUISpinner` | size, label |
 | `WebUITooltip` | text, position, content |
+| `WebUIStat` | label, value, size (sm/md/lg), trend + trendDirection (up/down), compare, spark ([Double] → inline svg) |
+| `WebUIPagination` | page, pages, id (stable control ids), rowsPerPage (+options) — windowed `…` list, `aria-current` |
+| `WebUITimeline` | events (time/title/desc/status: plain/completed/current/error), orientation (vertical/horizontal) |
+| `WebUITree` | nodes (recursive id/label/icon/children), id (row ids), expanded (Set), selected — CSS open/close, server-driven selection |
+| `WebUIBreadcrumb` | items (label/href), current, slash, id, collapse, maxItems — ellipsis middle, `sanitizeURL` on hrefs |
+| `WebUIDescriptionList` | [(term, detail)] → `<dl class="list--desc">` |
 
 dismiss/remove/close buttons render with `data-dismiss` / `data-remove`
 markers and no auto-wiring — attach `.onClick` to the container and read

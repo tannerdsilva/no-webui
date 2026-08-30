@@ -2068,7 +2068,9 @@ code, .inline-code {
 .sidebar--collapsed .sidebar__sub { display: none; }
 
 .tree { font-size: var(--font-size-sm); }
-.tree__node { display: flex; }
+/* a node stacks its row above its children — block flow, not flex row
+   (flex row would place children beside the label). */
+.tree__node { display: block; }
 .tree__row {
   display: flex;
   align-items: center;
@@ -2671,6 +2673,9 @@ code, .inline-code {
   gap: var(--space-4);
   padding-inline-start: 0;
   padding-top: var(--space-6);
+  /* a horizontal timeline spans its container (e.g. a stepper); without an
+     explicit width it collapses to content inside align-start flex parents. */
+  width: 100%;
 }
 .timeline--horizontal::before {
   left: 0.4rem;
