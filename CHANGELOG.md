@@ -4,6 +4,46 @@ all notable changes to this project are documented here.
 
 ## [unreleased]
 
+### added
+
+- interactive `WebUITable` — server-driven sort / select / expand: clickable
+  headers with `aria-sort` + `.sort` affordance, select-all / per-row
+  checkboxes (`aria-checked="mixed"` for partial selection), per-row detail
+  expansion with `.table__detail-row`. stable control ids
+  (`{id}-sort-{col}`, `{id}-select-{rowId}`, `{id}-expand-{rowId}`); the smoke
+  server's table card is the reference implementation.
+- companion primitives: `WebUIStat` (KPI card with trend + normalized inline-svg
+  sparkline), `WebUIPagination` (windowed list with `…` ellipsis, stable
+  control ids, `aria-current`), `WebUITimeline` (vertical/horizontal, four
+  statuses), `WebUITree` (recursive nodes, CSS open/close, server-driven
+  selection, stable row ids), `WebUIBreadcrumb` (ellipsis collapse, sanitized
+  hrefs), `WebUIDescriptionList` (`<dl class="list--desc">`).
+- table feature set: `.table-wrap` scroll container (sticky thead), per-column
+  `alignments` (`.num` numeric-column class), `footer` (`<tfoot>`),
+  `emptyState` (colspan row), and `striped` / `hoverable` / `compact` /
+  `responsive` variants.
+- `WebUIAuth` foundation (M0): identity model, `SessionToken`
+  (SecureRandom-only, SHA-256 hashed at rest), `HTTPCookie` parse/build with
+  the full flag surface and `__Host-` rules, `InMemoryAuthSessionStore` +
+  `LMDBAuthSessionStore`, Argon2id password verification with dummy-hash
+  equalization, `AuthContext` `@TaskLocal`.
+- `WebUIAuthExample` — login-gated interactive demo on :9091 (`admin` /
+  `password`): runtime-free native-POST login page, CSRF-protected POST
+  logout, origin-checked WebSocket upgrade, per-event session-liveness
+  enforcement (post-logout sockets are redirected and closed).
+- `constantTimeEquals` in the core (`Sources/WebUI/ConstantTime.swift`);
+  `CSRFProtection.validate` switched to it.
+
+### fixed
+
+- dark-theme accent-text contrast and the designer-preview layout.
+- page shell + form-control theming across the design system (polish pass).
+
+### changed
+
+- 398 tests / 35 suites (was 320 / 22) once the interactive table, companion
+  primitives, and auth suites landed.
+
 ### changed
 
 - `CommonCrypto` and `SecRandomCopyBytes` are replaced by the official rawdog
@@ -17,7 +57,8 @@ all notable changes to this project are documented here.
   guard for the socket-based probe, and dropped the
   `HTTPURLResponse.statusCode` readiness cast in favor of an any-body GET
   probe; `WebUIProbePlugin` shims glibc's typed `SOCK_STREAM` enum.
-- 320 tests / 22 suites (was 307 / 20) after adding the crypto suites.
+- the crypto suites added test coverage on top of the earlier 307 / 20 total
+  (the current unreleased totals are 398 tests / 35 suites — see above).
 
 
 ### docs

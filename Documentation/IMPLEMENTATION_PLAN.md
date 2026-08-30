@@ -10,7 +10,8 @@ evaluated for the M1 phase. references the design decisions in
 
 implemented and green (macOS, Swift 6.3.3): `swift build` 0 warnings/errors;
 `swift test` **374 tests across 34 suites** passed, including all of
-`WebUIAuthTests`. all M0 items (M0-T1…T11) delivered.
+`WebUIAuthTests` (the current tree totals 398 tests / 35 suites). all M0 items
+(M0-T1…T11) delivered.
 
 **M0-T8 quicklmdb lessons — recorded (verified against the pinned revision):**
 (1) `MDB_db_get_entry_static` **throws** `.notFound` on a missing key — the

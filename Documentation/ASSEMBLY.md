@@ -14,7 +14,7 @@ every developer action is a single command. there are no shell scripts.
 | unit tests | `swift test` | — |
 | host the smoke/demo server on :9123 | `swift package --disable-sandbox plugin serve` | disabled (bind requires it) |
 | host the auth demo on :9091 | `swift run WebUIAuthExample` | — |
-| smoke gate (server + 15 checks + teardown) | `swift package --disable-sandbox plugin smoke` | disabled |
+| smoke gate (server + 7 checks + teardown) | `swift package --disable-sandbox plugin smoke` | disabled |
 | full-stack gate (server + live WS round-trips + teardown) | `swift package --disable-sandbox plugin fullstack-smoke` | disabled |
 | browser gate (playwright layout, self-contained) | `node designer/browser-smoke.mjs` | none (not a plugin) |
 | port probe | `swift package plugin probe [port]` | on |
@@ -35,7 +35,7 @@ to update assets: edit the files in `designer/assets/`, then `swift build`
 
 ## stage 2 — unit verification
 
-`swift test` — 374 tests across 34 suites covering views, modifiers, event
+`swift test` — 398 tests across 35 suites covering views, modifiers, event
 routing, sanitization, design-system components, and the `WebUIAuth`
 authentication foundation (tokens, cookies, stores, Argon2id, auth context).
 

@@ -75,16 +75,17 @@ it keeps the compiler happy without deep generic nesting.
 | View | HTML Output | Key Properties |
 |---|---|---|
 | `Text` | `<span>text</span>` | Escapes HTML entities |
-| `Button` | `<button>label</button>` | `disabled`, `loading`, `fullWidth` |
-| `Input` | `<input type="...">` | Supports text, password, email, number, checkbox, radio, file, date |
+| `Heading` | `<h1>…<h6>` | `HeadingLevel` = `.h1`…`.h6`, escaped |
+| `Paragraph` | `<p>text</p>` | escaped |
+| `Button` | `<button>label</button>` | `ButtonType` (`.submit`/`.button`/`.reset`), `disabled`, `name` |
+| `Input` | `<input type="...">` | 22 html input types, `value`, `placeholder`, `required` |
 | `TextArea` | `<textarea>value</textarea>` | `rows`, `placeholder` |
-| `Select` | `<select><option>...</select>` | `options: [(label, value)]` |
+| `Select` | `<select><option>...</select>` | `SelectOption.value/label` |
 | `Link` | `<a href="...">text</a>` | URL sanitization blocks javascript: |
 | `Image` | `<img src="..." alt="...">` | URL sanitization, `loading` attribute |
 | `Form` | `<form action="...">...</form>` | Optional CSRF token hidden field |
 | `Raw` | raw HTML passthrough | No escaping — use with care |
 | `Spacer` | `<div class="spacer">` | Flexible space in layouts |
-| `Divider` | `<hr>` | Thematic break |
 
 ### Layouts
 
@@ -92,12 +93,13 @@ it keeps the compiler happy without deep generic nesting.
 |---|---|---|
 | `VStack` | `flex-direction: column` | Children stacked vertically |
 | `HStack` | `flex-direction: row` | Children arranged horizontally |
-| `ZStack` | `position: relative` + absolute | Children layered on z-axis |
-| `Grid` | `display: grid` | CSS Grid with `columns` parameter |
+| `ZStack` | `display: grid` + `place-items` | Children painted in order in one grid cell (`.zstack > *` overlap rule) |
+| `Grid` | `display: grid` | CSS Grid with a `GridColumns` track template (`GridColumns.cssValue` inline) |
 | `ScrollView` | `overflow: auto` | Scrollable container |
 
-All layouts accept `spacing`, `alignment`, `padding`, and `width`/`height`
-parameters. See `Documentation/LAYOUTS.md` for examples.
+`VStack`/`HStack`/`Grid`/`ZStack` take `spacing` (and, where noted, alignment)
+in their initializers; `padding`/`width`/`height` arrive as modifiers.
+See `Documentation/LAYOUTS.md` for signatures and output.
 
 ### Modifiers
 
@@ -216,13 +218,18 @@ A Swift enum with a static `source` property containing the embedded JS runtime
 | Type | Payload | Effect |
 |---|---|---|
 | `update` | `{ fragments: [{id, html}], seq }` | Patch DOM elements |
-| `redirect` | `{ url, replace }` | Navigate via `location.href` or `history.replaceState` |
+| `redirect` | `{ url, replace }` | Navigate via `location.href` (or `location.replace` when `replace` is true) — blocks `javascript:`/`data:`/`vbscript:` |
+| `state` | `{ path, value }` | Write the client state store at a dot path |
+| `reload` | — | Full page reload |
+| `error` | `{ code, message }` | Log a server error |
+| `pong` | — | Keepalive acknowledgement (clears the pending reconnect timer) |
 
 ### Message Types (Client → Server)
 
 | Type | Payload | Effect |
 |---|---|---|
 | `event` | `{ component, event, data }` | DOM event forwarded to handler |
+| `ping` | — | Keepalive heartbeat |
 | `navigate` | `{ url }` | Client-side navigation (popstate) |
 
 ### JS Runtime Modules

@@ -9,11 +9,13 @@ zero external CSS/JS frameworks — the entire UI compiles into the binary.
 | Module | Path | Purpose |
 |---|---|---|
 | `WebUI` | `Sources/WebUI/` | Core: View protocol, ViewBuilder, primitives, layouts, modifiers, CSS system, HTML document assembly, WebSocket protocol, JS runtime |
-| `WebUIDesignSystem` | `Sources/WebUIDesignSystem/` | Design system: ~110 CSS custom properties (tokens), 16 styled components (Button, Card, Input, Modal, etc.) |
+| `WebUIDesignSystem` | `Sources/WebUIDesignSystem/` | Design system: 225 CSS custom properties (tokens), 22 styled components (Button, Card, Input, Modal, etc.) |
 | `WebUIAuth` | `Sources/WebUIAuth/` | Authentication + sessions: identity model, session tokens, cookies, in-memory + LMDB session stores, Argon2id password verification, constant-time compare, `AuthContext` |
 | `WebUIAssetTool` | `Sources/WebUIAssetTool/` | Build-time executable that embeds CSS + JS as Swift string constants |
 | `WebUIExample` | `Sources/WebUIExample/` | HTTP/WebSocket example server (SwiftNIO-based counter app) |
 | `WebUIAuthExample` | `Sources/WebUIAuthExample/` | Login-gated interactive demo: native-POST login page + authenticated dashboard (admin / password) |
+| `WebUIShowcase` | `Sources/WebUIShowcase/` | Showcase server + static HTML generator (`showcase` plugin) |
+| `WebUISmokeTest` | `Sources/WebUISmokeTest/` | Smoke/demo server hosted by the `serve`/`smoke`/`fullstack-smoke` plugins |
 
 ## Quick Start
 
@@ -66,7 +68,8 @@ gate).
    runtime only patches DOM fragments and sends events back.
 3. **Value types everywhere** — views are structs, rendered and discarded per
    request. no mutable shared state.
-4. **Zero JS framework** — the JS runtime is ~800 lines of vanilla JS. no React,
+4. **Zero JS framework** — the JS runtime is ~900 lines of vanilla JS. no React,
    no Vue, no build step.
-5. **Dependency-light** — only swift-log for the core framework. SwiftNIO for
-   the example server (not required by the library).
+5. **Dependency-light** — swift-log + rawdog (official sha-256 / hmac / argon2
+   crypto) for the core framework. SwiftNIO for the example server (not
+   required by the library). QuickLMDB powers the `WebUIAuth` session stores.

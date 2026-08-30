@@ -1,6 +1,6 @@
 # JS Runtime
 
-The WebUI JS runtime (`designer/assets/webui-runtime.js`, ~750 lines) is a
+The WebUI JS runtime (`designer/assets/webui-runtime.js`, ~900 lines) is a
 vanilla JavaScript module that runs in the browser. It has no dependencies —
 no React, no jQuery, no build step. It ships embedded in every rendered page
 and auto-initializes on load.
@@ -185,6 +185,21 @@ A small utility object for client-side navigation:
 | `navigate(url)` | Push state via `history.pushState` |
 | `redirect(url, replace)` | Navigate via `location.href` (or `location.replace` if `replace` is true). blocks `javascript:`, `data:`, `vbscript:` URLs. c0 controls and ascii whitespace are stripped from the url before the protocol check — mirroring the browser's own parser — so padded/obfuscated schemes are blocked too. |
 | `reload()` | Reload the page via `location.reload()` |
+
+## Inbound messages (server → client)
+
+A `createMessageDispatcher` factory routes every incoming WebSocket frame by
+`type` to the patcher, state store, or router. unknown types are logged at
+`warn` and ignored:
+
+| Type | Rider | Effect |
+|---|---|---|
+| `update` | `{ fragments, seq }` | `fragmentPatcher.patch(fragments, seq)` |
+| `redirect` | `{ url, replace }` | `router.redirect(url, replace === true)` |
+| `state` | `{ path, value }` | `stateStore.set(path, value)` (prototype-pollution guards apply) |
+| `reload` | — | `router.reload()` |
+| `error` | `{ code, message }` | logged at `error` |
+| `pong` | — | keepalive acknowledgement (clears the pending reconnect timer) |
 
 ## Initialization
 

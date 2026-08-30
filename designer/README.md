@@ -17,7 +17,7 @@ That's it. No npm install. No dev server. No build step.
 no-webui/
 ├── designer/                    ← YOU ARE HERE — your workspace
 │   ├── assets/
-│   │   ├── design-system.css    ← THE file you edit (7,500+ lines)
+│   │   ├── design-system.css    ← THE file you edit (8,100+ lines)
 │   │   └── webui-runtime.js     ← JS runtime (rarely needs changes)
 │   ├── previews/
 │   │   ├── designer-preview.html  ← OPEN THIS IN YOUR BROWSER
@@ -87,7 +87,7 @@ look. It's organized into sections:
 
 | Section | What it controls |
 |---|---|
-| Design tokens (~110) | Colors, fonts, spacing, shadows, radii — the foundation |
+| Design tokens (~225) | Colors, fonts, spacing, shadows, radii — the foundation |
 | Reset & base | Box-sizing, body defaults, focus styles |
 | Button | All button variants, sizes, states |
 | Input | All input states (default, error, success, disabled) |
@@ -95,14 +95,20 @@ look. It's organized into sections:
 | Badge | All badge variants, sizes, dot indicator |
 | Alert | Info, success, warning, danger variants |
 | Tabs | Tab bar and tab items |
+| Breadcrumb | Trail, separators, ellipsis collapse |
+| Pagination | Page list, prev/next, ellipsis, rows-per-page select |
+| Tree | Recursive rows, carets, open/closed children |
 | Progress | All sizes, striped fill |
 | Avatar | All sizes, initials display |
 | Skeleton | Text, title, avatar, card variants |
+| Stat | KPI card, trend arrow, sparkline |
+| Timeline | Event rows, status dots |
 | Toast | Info, success, warning, danger variants |
 | Modal | Modal overlay and content |
 | Chip | All chip variants |
 | Spinner | All spinner sizes |
-| Table | Table variants (striped, hoverable, compact) |
+| Table | Striped/hoverable/compact variants, sort headers, select + expand controls, `.num` numeric column, `.table-wrap` scroll container |
+| Description List | Two-column `dl.list--desc` |
 | Tooltip | Tooltip positions |
 | Empty State | Empty state layout |
 | WebUI compat | Additional classes for Swift component compatibility |

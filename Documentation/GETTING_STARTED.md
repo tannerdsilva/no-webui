@@ -194,8 +194,8 @@ let page = WebUIDocument(
 )
 ```
 
-`WebUIDocument` includes the full design system CSS (303KB source, ~110 CSS
-custom properties, 16 styled components). shipped pages minify the css at
+`WebUIDocument` includes the full design system CSS (~300KB source, 225 CSS
+custom properties, 22 styled components). shipped pages minify the css at
 render time (comments and blank lines stripped), so the wire payload is
 smaller than the source. See `Documentation/DESIGN_SYSTEM.md` for the complete
 component catalog.

@@ -4,12 +4,20 @@ operational guidance for autonomous agents working on this project.
 
 ## project overview
 
-two major parts under one Package.swift:
+one Package.swift, one family — the swiftui-for-web stack:
 
-1. **no-webui core** — low-level Swift libraries (IP, futures, FIFO, pthread).
-   mature, stable, minimal changes expected.
-2. **WebUI** — SwiftUI-for-web framework. actively developed. this is
-   where most work happens.
+1. **WebUI** — the swiftui-for-web core: view protocol, primitives, layouts,
+   modifiers, css system, html document assembly, websocket protocol, js
+   runtime. the host of the design-system assets (embedded at build time).
+   actively developed — this is where most work happens.
+2. **WebUIDesignSystem** — the nexus design system: 225 css custom properties
+   (tokens) and 22 styled components. mature, stable.
+3. **WebUIAuth** — authentication + sessions: identity model, session tokens,
+   cookies, in-memory + LMDB session stores, argon2id password verification,
+   constant-time compare, `AuthContext`.
+
+the low-level core libraries (ip, futures, fifo, pthread) were removed from
+the manifest — the package is web-ui only now.
 
 ## first law — comments allowed in swift, none in shipped web assets
 
@@ -30,7 +38,7 @@ inline comments explain code, markdown files explain architecture and APIs.
 
 ```bash
 swift build             # includes the WebUIAssetPlugin that auto-generates Assets+Generated.swift
-swift test              # 307 tests, 20 suites
+swift test              # 398 tests, 35 suites
 swift run WebUIExample  # example server on :9090
 ```
 
@@ -242,7 +250,7 @@ node designer/browser-smoke.mjs     # requires node + playwright (chromium)
   reports `server did not become ready — run with --disable-sandbox`.
 - **the `.build` lock** — a running plugin (e.g. `serve`) blocks every other
   `swift package` command until it exits. never launch a gate while `serve` is up.
-- **smoke pins the interactive count** — the smoke gate asserts exactly 6
+- **smoke pins the interactive count** — the smoke gate asserts exactly 7
   `data-component-id` attributes on the smoke page. adding or removing an
   interactive component there means updating the expected count in
   `WebUISmokePlugin.swift` (the fullstack driver's `>=6` check is tolerant).

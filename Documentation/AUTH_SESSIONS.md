@@ -4,6 +4,16 @@ _Status: design decision record, augmented against an adversarial software-skept
 review (2026-08-26) and verified against the current source tree. Decisions in
 this document override the earlier exploratory analysis wherever they conflict._
 
+_Implementation status (current tree):_ AD-1 (native form-POST login) and the
+M0 foundation (identity, sessions, cookies, stores, Argon2id, `AuthContext`)
+are delivered and exerciseable via `WebUIAuthExample` on :9091. AD-2 (the
+`hello` render-token handshake), the CSP hardening deltas
+(`form-action`/`base-uri`/`frame-ancestors`), per-session state containers,
+and AD-4 (secret persistence + rotation) are designed but **not yet implemented**
+(milestones M1–M2 of `Documentation/IMPLEMENTATION_PLAN.md`). line numbers
+cited below reflect the tree at the time of the last adversarial pass and may
+drift.
+
 ## Purpose
 
 Give WebUI backends a first-class way to issue login pages and authenticated
@@ -369,7 +379,7 @@ Single `webui_sessions` env, one persistent environment, one writer:
 
 ## Gate strategy (iterate, not extend)
 
-The existing `smoke` gate pins **exactly 6** `data-component-id` attributes on
+The existing `smoke` gate pins **exactly 7** `data-component-id` attributes on
 its page (`WebUISmokePlugin.swift:113–118`) and the `fullstack-smoke`/`browser-smoke`
 drivers assert its document structure and selectors. Those gates stay untouched
 — they are the framework gate. Auth gets **its own** server and gate

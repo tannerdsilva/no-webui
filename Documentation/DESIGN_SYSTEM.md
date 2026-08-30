@@ -3,7 +3,7 @@
 The WebUI design system provides the nexus token set and styled components.
 the canonical token source is `designer/assets/design-system.css` — all tokens
 are CSS custom properties on `:root` (plus a `prefers-color-scheme: dark`
-remap), embedded in the binary as `WebUIAssets.css` (8,038 lines, 303KB).
+remap), embedded in the binary as `WebUIAssets.css` (8,130 lines, ~300KB).
 the design-token sections below are pinned by the `Design Token Integrity`
 suite and by a deployment guard that every backticked `--` token documented
 here exists in the shipped css.

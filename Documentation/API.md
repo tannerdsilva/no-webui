@@ -165,7 +165,7 @@ default `WebUIRuntime.init();` is emitted byte-for-byte.
 ### WebUIDocument
 
 `HTMLDocument` variant that ships `LayoutStyles.complete` plus the full
-`WebUIAssets.css` (the nexus design system, ~110 CSS custom properties). the
+`WebUIAssets.css` (the nexus design system, 225 CSS custom properties). the
 css is minified at render time, so served pages carry no comments and no blank
 lines. see `Documentation/DESIGN_SYSTEM.md` for the complete token and
 component catalog.
