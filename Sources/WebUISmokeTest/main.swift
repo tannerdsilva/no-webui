@@ -106,6 +106,30 @@ func echoOutHTML(_ text: String) -> String {
 	return "<div id=\"echo-out\" class=\"echo-out\" role=\"status\"><span class=\"echo-out__text\">\(safe)</span></div>"
 }
 
+// MARK: - Page shell
+
+// Page-level layout for the smoke page only (injected via the document's
+// `head:` slot, mirroring how the showcase scopes its own shell). The
+// design system owns component styling; the page owns its gutter,
+// header, and card rhythm. tokens come from the design system :root.
+let smokePageStyle: String = """
+	<style>
+	.smoke { max-width: 56rem; margin: 0 auto; padding: var(--space-8) var(--space-6) var(--space-10); }
+	.smoke__header { margin-bottom: var(--space-6); }
+	.smoke__header h1 { font-size: var(--font-size-2xl); font-weight: 700; letter-spacing: -0.02em; line-height: 1.15; }
+	.smoke__subtitle { margin-top: var(--space-2); color: var(--color-text-muted); font-size: var(--font-size-sm); }
+	.smoke__content { display: grid; gap: var(--space-5); }
+	.smoke__content > .card { padding: var(--space-5); }
+	.smoke__content > .card > h3 { font-size: var(--font-size-sm); font-weight: 600; color: var(--color-text-muted); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: var(--space-4); }
+	.smoke__actions { display: flex; gap: var(--space-2); margin-top: var(--space-4); }
+	.smoke .counter-value { font-size: var(--font-size-3xl); font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; margin-bottom: var(--space-1); }
+	.smoke .echo-out { margin-top: var(--space-3); font-size: var(--font-size-sm); color: var(--color-text-muted); min-height: 1.4em; }
+	.smoke .echo-out__text { color: var(--color-text); font-family: var(--font-mono); }
+	.smoke .table-wrap { margin-top: var(--space-2); }
+	@media (max-width: 720px) { .smoke { padding: var(--space-6) var(--space-4) var(--space-8); } }
+	</style>
+"""
+
 // MARK: - Page assembly (renders interactive views, registers handlers)
 
 func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
@@ -214,8 +238,12 @@ func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
 				}
 				}
 				}
-	return WebUIDocument(title: "Design System Full-Stack Smoke Test", body: body).render()
-}
+		return WebUIDocument(
+			title: "Design System Full-Stack Smoke Test",
+			body: body,
+			head: smokePageStyle
+		).render()
+	}
 
 // small helper to run a builder under a RenderContext value
 extension RenderContext {

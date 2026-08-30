@@ -553,6 +553,20 @@ WebUIDescriptionList([("Status", "Active"), ("Region", "us-east-1")])
 `dd`). the canonical payload for an expanded `WebUITable` detail row or a
 detail panel.
 
+## Form Control Base
+
+raw `input`/`select`/`textarea` primitives (no `.input`/`.select` class) get
+a themed base from the reset block: `--color-bg-raised` background,
+`--color-border-strong` 1px border, `--radius-input`, `padding: 0.5rem
+0.75rem`, `--color-text-faint` placeholders, a 0.6-opacity disabled state.
+checkbox/radio/range additionally get `accent-color: var(--color-primary-500)`.
+the reset also sets `color-scheme` (light / dark via media query) so native
+date-picker glyphs, scrollbars, and form popovers match the page theme.
+classed controls are excluded via `:not(.input)` / `:not(.select)` /
+`:not(.table__select)` guards — the base rule is higher-specificity than the
+component classes, so without those guards it would override `.input`
+padding and state backgrounds.
+
 ## CSS Class Naming Convention
 
 All classes follow BEM-like naming:

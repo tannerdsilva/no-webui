@@ -246,19 +246,19 @@ struct ShowcasePage {
                         Heading("Button with all types", level: .h2)
                         demoCard("Button Types") {
                             HStack(spacing: 12) {
-                                Button("Submit", type: .submit)
-                                Button("Button", type: .button)
-                                Button("Reset", type: .reset)
+                                Button("Submit", class: "button button--primary", type: .submit)
+                                Button("Button", class: "button button--secondary", type: .button)
+                                Button("Reset", class: "button button--ghost", type: .reset)
                             }
                         }
                         demoCard("Button States") {
                             VStack(spacing: 12) {
                                 HStack(spacing: 12) {
-                                    Button("Normal", id: "btn-normal", type: .button)
-                                    Button("Disabled", type: .button, disabled: true)
+                                    Button("Normal", id: "btn-normal", class: "button button--primary", type: .button)
+                                    Button("Disabled", class: "button button--primary", type: .button, disabled: true)
                                 }
                                 HStack(spacing: 12) {
-                                    Button("Named", id: nil, type: .button, name: "action")
+                                    Button("Named", class: "button button--danger", type: .button, name: "action")
                                 }
                             }
                         }
@@ -911,8 +911,10 @@ struct ShowcasePage {
     }
 
     func colorSwatch(_ name: String, _ token: String, _ value: String) -> some View {
+        // single class string: a chained .class() on a tag that already
+        // carries a class attribute is skipped by attribute injection.
         HStack(alignment: .center, spacing: 12) {
-            Div(class: "swatch") { Text("") }.width("40px").height("40px").class("swatch-\(name.lowercased())")
+            Div(class: "swatch swatch-\(name.lowercased())") { Text("") }.width("40px").height("40px")
             VStack(spacing: 2) {
                 Text(name).font(size: 14, weight: "600")
                 Text(token).font(size: 12)

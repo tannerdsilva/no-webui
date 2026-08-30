@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'nonce-_WDwTZx7tmfuLEH11exmXQ'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:;">
+          <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'nonce-y1ywV6HuHd3_iV5thFeDpg'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:;">
   <title>WebUI UI Showcase</title>
   
   <style>
@@ -252,6 +252,26 @@ select,
 textarea {
 font: inherit;
 color: inherit;
+}
+input:not(.input):not(.table__select):not([type=button]):not([type=submit]):not([type=reset]):not([type=file]):not([type=range]):not([type=color]):not([type=checkbox]):not([type=radio]):not([type=image]),
+select:not(.select),
+textarea {
+background: var(--color-bg-raised);
+border: var(--border-width) solid var(--color-border-strong);
+border-radius: var(--radius-input);
+padding: 0.5rem 0.75rem;
+}
+input:not(.input):not(.table__select):not([type=button]):not([type=submit]):not([type=reset]):not([type=file]):not([type=range]):not([type=color]):not([type=checkbox]):not([type=radio]):not([type=image])::placeholder,
+textarea::placeholder { color: var(--color-text-faint); }
+input:not(.input):not(.table__select):not([type=button]):not([type=submit]):not([type=reset]):not([type=file]):not([type=range]):not([type=color]):not([type=checkbox]):not([type=radio]):not([type=image]):disabled,
+select:disabled,
+textarea:disabled { opacity: 0.6; cursor: not-allowed; }
+input[type=checkbox],
+input[type=radio],
+input[type=range] { accent-color: var(--color-primary-500); }
+html { color-scheme: light; }
+@media (prefers-color-scheme: dark) {
+html { color-scheme: dark; }
 }
 button {
 background: none;
@@ -7654,7 +7674,7 @@ Plain text content<span class="text-escaped">&lt;script&gt;alert(&#39;xss&#39;)&
 <label class="demo-label">Country:</label><select id="demo-country"><option value="us" selected>United States</option><option value="ca">Canada</option><option value="uk">United Kingdom</option><option value="de">Germany</option><option value="jp">Japan</option></select>
 </div></div>
 </div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
-<h3 class="demo-card-title">Form with CSRF</h3><div class="demo-card-body"><form id="demo-form" action="/submit" method="post"><input type="hidden" name="_csrf" value="ZGVtby1mb3JtOjE3ODgxMDc3MTI6OTE5N2Q5OWY3N2M3YzhhOWQxOGViODAzMDQxNTdlNDUxZDRjM2RmY2IyM2Y5NmM2MGI4NDI3ODhiMzY2M2ZmMA=="><div class="vstack spacing-12 align-flex-start">
+<h3 class="demo-card-title">Form with CSRF</h3><div class="demo-card-body"><form id="demo-form" action="/submit" method="post"><input type="hidden" name="_csrf" value="ZGVtby1mb3JtOjE3ODgxMTg1MzQ6OTA5NzlhZjk5M2UyZDg3M2IxMDFjYjE1ZTkyYjI5MjExZmM0MjdiYTQ3NmM1YzE5ZGFmZDI4OTVlNWY3MmNjOA=="><div class="vstack spacing-12 align-flex-start">
 <label class="demo-label">Name:</label><input id="form-name" type="text" placeholder="Your name"><label class="demo-label">Message:</label><textarea id="form-message" rows="3" placeholder="Your message"></textarea><button id="form-submit" type="submit">Submit</button>
 </div></form></div>
 </div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
@@ -7663,14 +7683,14 @@ Plain text content<span class="text-escaped">&lt;script&gt;alert(&#39;xss&#39;)&
 </div></section><section class="showcase-section" id="buttons"><div class="vstack spacing-16 align-flex-start">
 <h2>Button with all types</h2><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
 <h3 class="demo-card-title">Button Types</h3><div class="demo-card-body"><div class="hstack spacing-12 align-center">
-<button type="submit">Submit</button><button type="button">Button</button><button type="reset">Reset</button>
+<button class="button button--primary" type="submit">Submit</button><button class="button button--secondary" type="button">Button</button><button class="button button--ghost" type="reset">Reset</button>
 </div></div>
 </div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
 <h3 class="demo-card-title">Button States</h3><div class="demo-card-body"><div class="vstack spacing-12 align-flex-start">
 <div class="hstack spacing-12 align-center">
-<button id="btn-normal" type="button">Normal</button><button type="button" disabled>Disabled</button>
+<button id="btn-normal" class="button button--primary" type="button">Normal</button><button class="button button--primary" type="button" disabled>Disabled</button>
 </div><div class="hstack spacing-12 align-center">
-<button name="action" type="button">Named</button>
+<button class="button button--danger" name="action" type="button">Named</button>
 </div>
 </div></div>
 </div></div>
@@ -7885,27 +7905,27 @@ Plain text content<span class="text-escaped">&lt;script&gt;alert(&#39;xss&#39;)&
 <h2>Design tokens and CSS custom properties</h2><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
 <h3 class="demo-card-title">Color Palette</h3><div class="demo-card-body"><div class="vstack spacing-8 align-flex-start">
 <div class="hstack spacing-12 align-center">
-<div class="swatch" style="width: 40px;" style="height: 40px;" class="swatch-primary"></div><div class="vstack spacing-2 align-flex-start">
+<div class="swatch swatch-primary" style="width: 40px;" style="height: 40px;"></div><div class="vstack spacing-2 align-flex-start">
 <span style="font-size: 14px;" style="font-weight: 600;">Primary</span><span style="font-size: 12px;" style="font-weight: normal;">--color-primary-500</span><span style="font-size: 12px;" style="font-weight: normal;">#10b89f</span>
 </div>
 </div><div class="hstack spacing-12 align-center">
-<div class="swatch" style="width: 40px;" style="height: 40px;" class="swatch-success"></div><div class="vstack spacing-2 align-flex-start">
+<div class="swatch swatch-success" style="width: 40px;" style="height: 40px;"></div><div class="vstack spacing-2 align-flex-start">
 <span style="font-size: 14px;" style="font-weight: 600;">Success</span><span style="font-size: 12px;" style="font-weight: normal;">--color-success</span><span style="font-size: 12px;" style="font-weight: normal;">#16a34a</span>
 </div>
 </div><div class="hstack spacing-12 align-center">
-<div class="swatch" style="width: 40px;" style="height: 40px;" class="swatch-warning"></div><div class="vstack spacing-2 align-flex-start">
+<div class="swatch swatch-warning" style="width: 40px;" style="height: 40px;"></div><div class="vstack spacing-2 align-flex-start">
 <span style="font-size: 14px;" style="font-weight: 600;">Warning</span><span style="font-size: 12px;" style="font-weight: normal;">--color-warning</span><span style="font-size: 12px;" style="font-weight: normal;">#d97706</span>
 </div>
 </div><div class="hstack spacing-12 align-center">
-<div class="swatch" style="width: 40px;" style="height: 40px;" class="swatch-danger"></div><div class="vstack spacing-2 align-flex-start">
+<div class="swatch swatch-danger" style="width: 40px;" style="height: 40px;"></div><div class="vstack spacing-2 align-flex-start">
 <span style="font-size: 14px;" style="font-weight: 600;">Danger</span><span style="font-size: 12px;" style="font-weight: normal;">--color-danger</span><span style="font-size: 12px;" style="font-weight: normal;">#dc2626</span>
 </div>
 </div><div class="hstack spacing-12 align-center">
-<div class="swatch" style="width: 40px;" style="height: 40px;" class="swatch-info"></div><div class="vstack spacing-2 align-flex-start">
+<div class="swatch swatch-info" style="width: 40px;" style="height: 40px;"></div><div class="vstack spacing-2 align-flex-start">
 <span style="font-size: 14px;" style="font-weight: 600;">Info</span><span style="font-size: 12px;" style="font-weight: normal;">--color-info</span><span style="font-size: 12px;" style="font-weight: normal;">#2563eb</span>
 </div>
 </div><div class="hstack spacing-12 align-center">
-<div class="swatch" style="width: 40px;" style="height: 40px;" class="swatch-neutral"></div><div class="vstack spacing-2 align-flex-start">
+<div class="swatch swatch-neutral" style="width: 40px;" style="height: 40px;"></div><div class="vstack spacing-2 align-flex-start">
 <span style="font-size: 14px;" style="font-weight: 600;">Neutral</span><span style="font-size: 12px;" style="font-weight: normal;">--color-neutral-500</span><span style="font-size: 12px;" style="font-weight: normal;">#64748b</span>
 </div>
 </div>
@@ -7967,7 +7987,7 @@ Plain text content<span class="text-escaped">&lt;script&gt;alert(&#39;xss&#39;)&
 </div></main>
 </div></div>
 </div>
-  <script nonce="_WDwTZx7tmfuLEH11exmXQ">
+  <script nonce="y1ywV6HuHd3_iV5thFeDpg">
 
 window.WebUIRuntime = (function () {
   'use strict';

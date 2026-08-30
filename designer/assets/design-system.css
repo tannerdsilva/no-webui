@@ -239,6 +239,32 @@ textarea {
   color: inherit;
 }
 
+/* native form controls theme with the page, not the UA default (white).
+   raw primitives (login forms, demo controls) get this base; classed
+   controls (.input/.select) keep their own geometry + states — the
+   :not(.input) guards stop this rule (specificity 0,8,1) from beating
+   them. */
+input:not(.input):not(.table__select):not([type=button]):not([type=submit]):not([type=reset]):not([type=file]):not([type=range]):not([type=color]):not([type=checkbox]):not([type=radio]):not([type=image]),
+select:not(.select),
+textarea {
+  background: var(--color-bg-raised);
+  border: var(--border-width) solid var(--color-border-strong);
+  border-radius: var(--radius-input);
+  padding: 0.5rem 0.75rem;
+}
+input:not(.input):not(.table__select):not([type=button]):not([type=submit]):not([type=reset]):not([type=file]):not([type=range]):not([type=color]):not([type=checkbox]):not([type=radio]):not([type=image])::placeholder,
+textarea::placeholder { color: var(--color-text-faint); }
+input:not(.input):not(.table__select):not([type=button]):not([type=submit]):not([type=reset]):not([type=file]):not([type=range]):not([type=color]):not([type=checkbox]):not([type=radio]):not([type=image]):disabled,
+select:disabled,
+textarea:disabled { opacity: 0.6; cursor: not-allowed; }
+input[type=checkbox],
+input[type=radio],
+input[type=range] { accent-color: var(--color-primary-500); }
+html { color-scheme: light; }
+@media (prefers-color-scheme: dark) {
+  html { color-scheme: dark; }
+}
+
 button {
   background: none;
   border: none;
