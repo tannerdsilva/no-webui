@@ -297,6 +297,82 @@ struct BEMTests {
         #expect(!html.contains("table--hoverable"))
     }
 
+    @Test("WebUITable wrapped emits the table-wrap container")
+    func tableWrapped() {
+        let html = WebUITable(headers: ["A"], rows: [[Text("1")]], wrapped: true).render()
+        #expect(html.hasPrefix("<div class=\"table-wrap\"><table class=\"table table--striped table--hoverable\">"))
+        #expect(html.hasSuffix("</table></div>"))
+    }
+
+    @Test("WebUITable responsive emits class and per-cell data-label")
+    func tableResponsive() {
+        let html = WebUITable(headers: ["Name", "Age"], rows: [[Text("Alice"), Text("30")]], responsive: true).render()
+        #expect(html.contains("table--responsive"))
+        #expect(html.contains("<td data-label=\"Name\">Alice</td>"))
+        #expect(html.contains("<td data-label=\"Age\">30</td>"))
+    }
+
+    @Test("WebUITable footer renders tfoot")
+    func tableFooter() {
+        let html = WebUITable(
+            headers: ["Item", "Qty"],
+            rows: [[Text("Widget"), Text("2")]],
+            footer: [Text("Total"), Text("2")]
+        ).render()
+        #expect(html.contains("<tfoot><tr><td>Total</td><td>2</td></tr></tfoot>"))
+    }
+
+    @Test("WebUITable alignment classes land on th and td")
+    func tableAlignments() {
+        let html = WebUITable(
+            headers: ["Name", "Status", "Qty"],
+            rows: [[Text("A"), Text("ok"), Text("3")]],
+            alignments: [.leading, .center, .trailing]
+        ).render()
+        #expect(html.contains("<th>Name</th>"))
+        #expect(html.contains("<th class=\"align-center\">Status</th>"))
+        #expect(html.contains("<th class=\"num\">Qty</th>"))
+        #expect(html.contains("<td>A</td>"))
+        #expect(html.contains("<td class=\"align-center\">ok</td>"))
+        #expect(html.contains("<td class=\"num\">3</td>"))
+    }
+
+    @Test("WebUITable emptyState renders in-table empty row with colspan")
+    func tableEmptyState() {
+        let html = WebUITable(
+            headers: ["Name", "Age", "City"],
+            rows: [],
+            emptyState: WebUITable.EmptyState(icon: "📭", title: "No people", message: "Try a different filter.")
+        ).render()
+        #expect(html.contains("<td colspan=\"3\" class=\"table__empty\">"))
+        #expect(html.contains("<div class=\"table__empty-icon\">📭</div>"))
+        #expect(html.contains("<div class=\"table__empty-title\">No people</div>"))
+        #expect(html.contains("<div class=\"table__empty-message\">Try a different filter.</div>"))
+    }
+
+    @Test("WebUITable emptyState content is escaped")
+    func tableEmptyStateEscaped() {
+        let html = WebUITable(
+            headers: ["A"],
+            rows: [],
+            emptyState: WebUITable.EmptyState(icon: "x", title: "<b>Bold</b>", message: "<script>")
+        ).render()
+        #expect(html.contains("<div class=\"table__empty-title\">&lt;b&gt;Bold&lt;/b&gt;</div>"))
+        #expect(html.contains("&lt;script&gt;"))
+        #expect(!html.contains("<script>"))
+    }
+
+    @Test("WebUITable emptyState ignored when rows exist")
+    func tableEmptyStateIgnoredWithRows() {
+        let html = WebUITable(
+            headers: ["A"],
+            rows: [[Text("1")]],
+            emptyState: WebUITable.EmptyState(title: "No data", message: "")
+        ).render()
+        #expect(!html.contains("table__empty"))
+        #expect(html.contains("<td>1</td>"))
+    }
+
     @Test("WebUIChip uses correct BEM classes")
     func chipBEM() {
         let html = WebUIChip("Tag", variant: .info, removable: true).render()

@@ -10,9 +10,11 @@ struct ShowcasePage {
         return RenderContext.$current.withValue(ctx) {
             VStack(spacing: 0) {
                 topBar()
-                HStack(alignment: .top, spacing: 0) {
-                    sidebar()
-                    mainContent()
+                Div(class: "showcase-shell") {
+                    HStack(alignment: .top, spacing: 0) {
+                        sidebar()
+                        mainContent()
+                    }
                 }
             }.render()
         }
@@ -302,15 +304,55 @@ struct ShowcasePage {
                                 Text("Step three")
                             }
                         }
-                        demoCard("Table") {
-                            Table(
-                                headers: ["Name", "Role", "Status"],
+                        demoCard("Table — wrapped, numeric columns, footer") {
+                            WebUITable(
+                                headers: ["Name", "Role", "Status", "Requests"],
                                 rows: [
-                                    [Text("Alice"), Text("Admin"), Text("Active")],
-                                    [Text("Bob"), Text("Editor"), Text("Active")],
-                                    [Text("Charlie"), Text("Viewer"), Text("Inactive")],
+                                    [Text("Alice Chen"), Text("Admin"), Text("Active"), Text("1,204")],
+                                    [Text("Bob Marsh"), Text("Editor"), Text("Active"), Text("842")],
+                                    [Text("Charlie Ito"), Text("Viewer"), Text("Idle"), Text("118")],
+                                    [Text("Dana Fox"), Text("Editor"), Text("Suspended"), Text("67")],
                                 ],
-                                class: "demo-table"
+                                wrapped: true,
+                                alignments: [.leading, .leading, .center, .trailing],
+                                footer: [Text("Total"), Text(""), Text(""), Text("2,231")]
+                            )
+                        }
+                        demoCard("Table — compact density") {
+                            WebUITable(
+                                headers: ["Service", "Region", "Latency (p95)"],
+                                rows: [
+                                    [Text("api-gateway"), Text("us-east-1"), Text("42 ms")],
+                                    [Text("billing"), Text("eu-west-1"), Text("188 ms")],
+                                    [Text("search"), Text("us-west-2"), Text("61 ms")],
+                                    [Text("auth"), Text("us-east-1"), Text("23 ms")],
+                                    [Text("notifications"), Text("ap-south-1"), Text("104 ms")],
+                                ],
+                                compact: true,
+                                alignments: [.leading, .leading, .trailing]
+                            )
+                        }
+                        demoCard("Table — empty state") {
+                            WebUITable(
+                                headers: ["Name", "Age", "City"],
+                                rows: [],
+                                emptyState: .init(
+                                    icon: "🔎",
+                                    title: "No people match this filter",
+                                    message: "Clear the search box or try a different region."
+                                )
+                            )
+                        }
+                        demoCard("Table — responsive (stacks on narrow screens)") {
+                            WebUITable(
+                                headers: ["Order", "Item", "Price"],
+                                rows: [
+                                    [Text("#4821"), Text("Mechanical keyboard"), Text("$149.00")],
+                                    [Text("#4822"), Text("USB-C dock"), Text("$89.00")],
+                                ],
+                                responsive: true,
+                                wrapped: true,
+                                alignments: [.leading, .leading, .trailing]
                             )
                         }
                     }

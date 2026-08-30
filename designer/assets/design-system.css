@@ -2386,13 +2386,13 @@ code, .inline-code {
   border-bottom: var(--border-width) solid var(--color-border);
 }
 .table tbody tr:last-child td { border-bottom: none; }
-.table tbody tr { transition: background var(--transition-fast); }
-.table tbody tr:hover { background: var(--color-bg-subtle); }
+.table--hoverable tbody tr { transition: background var(--transition-fast); }
+.table--hoverable tbody tr:hover { background: var(--color-bg-subtle); }
 .table tbody tr--selected { background: var(--color-primary-50); }
 .table tbody tr--selected td { color: var(--color-primary-900); }
 
 .table--striped tbody tr:nth-child(even) { background: var(--color-bg-inset); }
-.table--striped tbody tr:hover { background: var(--color-bg-subtle); }
+.table--striped.table--hoverable tbody tr:hover { background: var(--color-bg-subtle); }
 .table tfoot td {
   padding: 0.75rem 1rem;
   font-weight: var(--font-weight-semibold);
@@ -2402,6 +2402,11 @@ code, .inline-code {
 }
 .table .num { text-align: right; font-variant-numeric: tabular-nums; }
 .table th.num { text-align: right; }
+.table th.align-center { text-align: center; }
+.table td.align-center { text-align: center; }
+
+.table--compact th { padding: 0.45rem 0.75rem; }
+.table--compact td { padding: 0.45rem 0.75rem; }
 
 .table__empty {
   padding: var(--space-8) var(--space-4);
@@ -2414,6 +2419,19 @@ code, .inline-code {
   height: 2.5rem;
   margin: 0 auto var(--space-3);
   color: var(--color-text-faint);
+}
+.table__empty-title {
+  color: var(--color-text);
+  font-size: var(--font-size-base);
+  font-weight: var(--font-weight-semibold);
+  margin-top: var(--space-1);
+}
+.table__empty-message {
+  color: var(--color-text-muted);
+  margin-top: var(--space-1);
+  max-width: 24rem;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .table__expand-btn {
@@ -8011,7 +8029,13 @@ h6 {
   flex: none;
 }
 
+.showcase-shell {
+  width: 100%;
+}
 @media (max-width: 48rem) {
+  .showcase-shell > .hstack {
+    flex-direction: column;
+  }
   .showcase-content {
     padding: var(--space-4);
   }

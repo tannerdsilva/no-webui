@@ -517,23 +517,62 @@ public struct WebUIModal: View {
 
 // MARK: - WebUI Table
 public struct WebUITable: View {
+    /// Per-column cell alignment. `.trailing` maps to the `.num` class
+    /// (right-aligned + tabular numerals, the numeric-column convention).
+    public enum Alignment: Sendable {
+        case leading
+        case center
+        case trailing
+    }
+
+    /// Compact empty state rendered inside the table body when `rows` is
+    /// empty. Distinct from the standalone `WebUIEmptyState` card: it sits in
+    /// a colspan row so the table frame stays visible with no data.
+    public struct EmptyState: Sendable {
+        public let icon: String
+        public let title: String
+        public let message: String
+
+        public init(icon: String = "📭", title: String, message: String) {
+            self.icon = icon
+            self.title = title
+            self.message = message
+        }
+    }
+
     public let headers: [String]
     public let rows: [[any View]]
     public let striped: Bool
     public let hoverable: Bool
     public let compact: Bool
+    public let responsive: Bool
+    public let wrapped: Bool
+    public let alignments: [Alignment]
+    public let footer: [any View]?
+    public let emptyState: EmptyState?
+
     public init(
         headers: [String],
         rows: [[any View]],
         striped: Bool = true,
         hoverable: Bool = true,
-        compact: Bool = false
+        compact: Bool = false,
+        responsive: Bool = false,
+        wrapped: Bool = false,
+        alignments: [Alignment] = [],
+        footer: [any View]? = nil,
+        emptyState: EmptyState? = nil
     ) {
         self.headers = headers
         self.rows = rows
         self.striped = striped
         self.hoverable = hoverable
         self.compact = compact
+        self.responsive = responsive
+        self.wrapped = wrapped
+        self.alignments = alignments
+        self.footer = footer
+        self.emptyState = emptyState
     }
 
     public func render() -> String {
@@ -541,24 +580,71 @@ public struct WebUITable: View {
         if striped { classes += " table--striped" }
         if hoverable { classes += " table--hoverable" }
         if compact { classes += " table--compact" }
+        if responsive { classes += " table--responsive" }
+
+        func alignmentClass(_ index: Int) -> String? {
+            guard index < alignments.count else { return nil }
+            switch alignments[index] {
+            case .leading: return nil
+            case .center: return "align-center"
+            case .trailing: return "num"
+            }
+        }
 
         var html = "<table class=\"\(classes)\">"
         if !headers.isEmpty {
             html += "<thead><tr>"
-            for h in headers {
-                html += "<th>\(htmlEscape(h))</th>"
+            for (i, h) in headers.enumerated() {
+                if let a = alignmentClass(i) {
+                    html += "<th class=\"\(a)\">\(htmlEscape(h))</th>"
+                } else {
+                    html += "<th>\(htmlEscape(h))</th>"
+                }
             }
             html += "</tr></thead>"
         }
         html += "<tbody>"
-        for row in rows {
-            html += "<tr>"
-            for cell in row {
-                html += "<td>\(cell.render())</td>"
+        if rows.isEmpty, let empty = emptyState {
+            let colspan = max(headers.count, 1)
+            html += "<tr><td colspan=\"\(colspan)\" class=\"table__empty\">"
+            html += "<div class=\"table__empty-icon\">\(htmlEscape(empty.icon))</div>"
+            html += "<div class=\"table__empty-title\">\(htmlEscape(empty.title))</div>"
+            if !empty.message.isEmpty {
+                html += "<div class=\"table__empty-message\">\(htmlEscape(empty.message))</div>"
             }
-            html += "</tr>"
+            html += "</td></tr>"
+        } else {
+            for row in rows {
+                html += "<tr>"
+                for (i, cell) in row.enumerated() {
+                    var attrs = ""
+                    if responsive, i < headers.count {
+                        attrs += " data-label=\"\(htmlEscape(headers[i]))\""
+                    }
+                    if let a = alignmentClass(i) {
+                        attrs += " class=\"\(a)\""
+                    }
+                    html += "<td\(attrs)>\(cell.render())</td>"
+                }
+                html += "</tr>"
+            }
         }
-        html += "</tbody></table>"
+        html += "</tbody>"
+        if let footer {
+            html += "<tfoot><tr>"
+            for (i, cell) in footer.enumerated() {
+                if let a = alignmentClass(i) {
+                    html += "<td class=\"\(a)\">\(cell.render())</td>"
+                } else {
+                    html += "<td>\(cell.render())</td>"
+                }
+            }
+            html += "</tr></tfoot>"
+        }
+        html += "</table>"
+        if wrapped {
+            html = "<div class=\"table-wrap\">" + html + "</div>"
+        }
         return html
     }
 }

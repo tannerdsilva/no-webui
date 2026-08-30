@@ -330,13 +330,32 @@ CSS classes: `modal-overlay`, `modal`, `modal__header`, `modal__title`,
 WebUITable(
     headers: ["Name", "Role"],
     rows: [[Text("Ada"), Text("Admin")], [Text("Linus"), Text("Dev")]],
-    striped: true, hoverable: true, compact: false
+    striped: true, hoverable: true, compact: false,
+    responsive: false, wrapped: false,
+    alignments: [.leading, .leading, .trailing],
+    footer: [Text("Total"), Text("2")],
+    emptyState: .init(title: "No results", message: "Try a different filter.")
 )
 ```
 
 rows are `[[any View]]`, so cells can be any view (not just strings).
 
-CSS classes: `table` (+ `table--striped`, `table--hoverable`, `table--compact`).
+- **striped / hoverable / compact / responsive** — boolean variants:
+  `table--striped`, `table--hoverable`, `table--compact` (denser row padding),
+  `table--responsive` (below 560px the table stacks into cards using
+  `data-label` attributes, which the view fills in from `headers`
+  automatically).
+- **wrapped** — emits a `.table-wrap` container: rounded, bordered,
+  scrollable card around the table. This is what makes the sticky `thead`
+  meaningful in a bounded scroll context.
+- **alignments** — per-column `.leading` / `.center` / `.trailing`
+  (`.trailing` emits the `.num` class: right-aligned + tabular numerals,
+  the numeric-column convention). Applied to both `th` and `td`.
+- **footer** — optional `[any View]` summary row rendered in `<tfoot>`.
+- **emptyState** — optional `WebUITable.EmptyState(icon:title:message)`
+  rendered as a colspan `.table__empty` row when `rows` is empty. Compact
+  in-table variant; the standalone `WebUIEmptyState` is the full-card
+  version for outside-table contexts. All content is html-escaped.
 
 ### WebUIChip
 
