@@ -444,7 +444,7 @@ enum PreviewGenerator {
 	}
 
 	static func svg(_ icon: IconMeta, w: Int, h: Int) -> String {
-		"<svg viewBox=\"\(icon.viewBox)\" width=\"\(w)\" height=\"\(h)\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\">\(icon.body)</svg>"
+		"<svg viewBox=\"\(icon.viewBox)\" width=\"\(w)\" height=\"\(h)\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\" aria-hidden=\"true\">\(icon.body)</svg>"
 	}
 }
 

@@ -46,8 +46,12 @@ stage 1).
 
 - **206 icons**, 541 svg elements, ~26 KB of geometry payload (avg 126 bytes/icon,
   largest `settings` at 777 bytes).
-- **grid 24, stroke 2**, round cap + round join — the Feather / Lucide line
-  language, matched to the design system's indigo/neutral aesthetic.
+- **grid 24, stroke 2**, butt cap + miter join — a tightened take on the Feather
+  geometry: flat stroke ends and crisp corners read sharper than the original
+  round treatment while keeping the same line language and spacing.
+  zero-length geometry (the dot markers on `alert-circle`, `info`, `list`, the
+  faces, …) carries an explicit `stroke-linecap="round"` on the element, since
+  a zero-length line with the svg's butt cap would otherwise render nothing.
 - **10 categories**: actions, comms, data, device, files, media, misc,
   navigation, security, status.
 - **provenance**: Feather geometry (MIT). the manifest records the license so the
@@ -68,8 +72,8 @@ a typed icon rendered as a self-contained inline svg.
 WebUIIcon(.search)
     .render()
 // <svg class="icon icon--md" viewBox="0 0 24 24" fill="none"
-//      stroke="currentColor" stroke-width="2" stroke-linecap="round"
-//      stroke-linejoin="round" aria-hidden="true"><circle …/><line …/></svg>
+//      stroke="currentColor" stroke-width="2" stroke-linecap="butt"
+//      stroke-linejoin="miter" aria-hidden="true"><circle …/><line …/></svg>
 ```
 
 ```swift

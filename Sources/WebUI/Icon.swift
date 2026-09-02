@@ -61,7 +61,7 @@ public struct WebUIIcon: View {
 		} else {
 			aria = " aria-hidden=\"true\""
 		}
-		return "<svg class=\"\(classes)\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"\(aria)>\(name.body)</svg>"
+		return "<svg class=\"\(classes)\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\"\(aria)>\(name.body)</svg>"
 	}
 }
 
@@ -104,7 +104,7 @@ public struct WebUIIconCustom: View {
 			aria = " aria-hidden=\"true\""
 		}
 		let dataIcon = " data-icon=\"\(htmlEscape(name))\""
-		return "<svg class=\"\(classes)\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"\(dataIcon)\(aria)>\(body)</svg>"
+		return "<svg class=\"\(classes)\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\"\(dataIcon)\(aria)>\(body)</svg>"
 	}
 }
 

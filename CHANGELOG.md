@@ -41,6 +41,15 @@ all notable changes to this project are documented here.
 
 ### changed
 
+- icon stroke style tightened: `WebUIIcon` / `WebUIIconCustom` / the preview
+  generator now emit `stroke-linecap="butt"` + `stroke-linejoin="miter"`
+  (flat stroke ends, crisp corners) instead of the Feather round
+  treatment — geometry untouched. zero-length dot markers (`alert-circle`,
+  `info`, `list`, the faces, …) carry an explicit per-element
+  `stroke-linecap="round"` in the manifest so they survive the butt cap.
+  component glyphs (table sort/expand arrows, stat trend arrows) and the
+  select caret match the new style; data-ink strokes (chart lines) stay
+  round.
 - 398 tests / 35 suites (was 320 / 22) once the interactive table, companion
   primitives, and auth suites landed.
 

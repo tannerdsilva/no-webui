@@ -234,7 +234,7 @@ public func highlightCode(_ code: String, language: String) -> String {
 // MARK: - SVG Inline Helpers
 public func inlineSVG(viewBox: String = "0 0 24 24", width: Int = 24, height: Int = 24, _ content: String) -> String {
     """
-    <svg viewBox="\(viewBox)" width="\(width)" height="\(height)" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+    <svg viewBox="\(viewBox)" width="\(width)" height="\(height)" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="butt" stroke-linejoin="miter">
     \(content)
     </svg>
     """
