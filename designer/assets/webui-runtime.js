@@ -290,7 +290,7 @@ window.WebUIRuntime = (function () {
         var el = event.target;
         while (el && el !== document) {
           path.push(el);
-          el = el.parentElement;
+          el = el.parentNode;
         }
         path.push(document);
       }
@@ -525,6 +525,12 @@ window.WebUIRuntime = (function () {
       }
 
       html = sanitizeFragmentHTML(html);
+
+      if (html === '') {
+        el.remove();
+        log.debug('Removed #' + id);
+        return;
+      }
 
       var savedState = saveInputState(el);
 

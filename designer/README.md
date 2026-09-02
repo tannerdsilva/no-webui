@@ -19,12 +19,16 @@ no-webui/
 │   ├── assets/
 │   │   ├── design-system.css    ← THE file you edit (8,100+ lines)
 │   │   └── webui-runtime.js     ← JS runtime (rarely needs changes)
+│   ├── icons/
+│   │   └── icon-manifest.json   ← the svg icon catalog (206 glyphs, edit to add)
 │   ├── previews/
 │   │   ├── designer-preview.html  ← OPEN THIS IN YOUR BROWSER
-│   │   └── showcase.html        ← full generated reference page
+│   │   ├── showcase.html        ← full generated reference page
+│   │   └── icons-preview.html   ← icon visual QA page (all glyphs, 3 sizes, both themes)
 │   └── README.md                ← this file
 ├── Sources/                     ← Swift source (you don't touch this)
-│   └── WebUI/                   ← framework code
+│   ├── WebUI/                   ← framework code
+│   └── WebUIIconTool/           ← the svg icon toolset (generate/lint/list/stats/preview)
 └── ...                          ← other project files
 ```
 
@@ -43,6 +47,23 @@ Changes appear instantly. No server, no terminal, no waiting.
 The build system reads directly from `designer/assets/`. There is no sync step.
 When anyone runs `swift build`, it automatically picks up your latest changes
 from this directory and embeds them into the framework as compiled-in assets.
+
+### Icons
+
+The svg icon catalog lives in `designer/icons/icon-manifest.json`. to add or
+edit an icon:
+
+1. EDIT `designer/icons/icon-manifest.json` (name, category, title, tags,
+   `viewBox`, and the inner svg geometry — copy from a licensed 24×24 stroke set).
+2. Lint it: `swift run WebUIIconTool lint --manifest designer/icons/icon-manifest.json`
+3. `swift build` — the `WebUIIconPlugin` regenerates `IconLibrary.swift`; the
+   new case appears on `IconName`.
+4. Preview it: `swift run WebUIIconTool render-preview --manifest designer/icons/icon-manifest.json --output designer/previews/icons-preview.html`
+   then open `designer/previews/icons-preview.html` (light + dark via your OS
+   theme).
+5. `swift test` — the catalog-integrity suite proves it wired up.
+
+full guide: `Documentation/ICONS.md`.
 
 To see your work in the real framework, the developer runs these commands
 (all single commands, no scripts):

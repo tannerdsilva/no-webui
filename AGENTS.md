@@ -37,8 +37,8 @@ inline comments explain code, markdown files explain architecture and APIs.
 ## build and test
 
 ```bash
-swift build             # includes the WebUIAssetPlugin that auto-generates Assets+Generated.swift
-swift test              # 398 tests, 35 suites
+swift build             # includes the WebUIAssetPlugin + WebUIIconPlugin (auto-generates Assets+Generated.swift + IconLibrary.swift)
+swift test              # 478 tests, 49 suites
 swift run WebUIExample  # example server on :9090
 ```
 
@@ -55,6 +55,19 @@ for the designer workflow.
 | `fullstack-smoke` | `swift package --disable-sandbox plugin fullstack-smoke` | self-contained gate: spawns the server, drives live WebSocket round-trips (click/echo/redirect/optimistic) via node, tears down. |
 | `probe` | `swift package plugin probe [port]` | connect-based port check (bind-probe is sandbox-denied). |
 | `showcase` | `swift package plugin showcase --allow-writing-to-package-directory` | regenerates `designer/previews/showcase.html` directly (declared `writeToPackageDirectory`). add `--output <path>` for ad-hoc targets. |
+
+svg icon toolset (an executable target, not a plugin — the plugin
+`WebUIIconPlugin` runs `generate` automatically during every build):
+
+```bash
+swift run WebUIIconTool lint --manifest designer/icons/icon-manifest.json
+swift run WebUIIconTool list --manifest designer/icons/icon-manifest.json --category actions
+swift run WebUIIconTool stats --manifest designer/icons/icon-manifest.json
+swift run WebUIIconTool render-preview --manifest designer/icons/icon-manifest.json --output designer/previews/icons-preview.html
+```
+
+see `Documentation/ICONS.md` for the full icon guide (catalog, api,
+tooling, security).
 
 browser layout gate (not a plugin — headless Chromium cannot run inside the
 plugin sandbox):
@@ -127,6 +140,16 @@ invocation. gates host their own server, check, and tear down in one call.
   `targetId`/`targetClass` so a container handler can tell what was clicked.
   `focus`/`blur` are delivered via the bubbling `focusin`/`focusout` and
   normalized to the declared event name.
+- **typed component handlers** — `ElementRef` + `controlAttributes(id:event:handler:)`
+  give components self-wiring interactive controls: `WebUITable`
+  (`.onSort`/`.onSelectAll`/`.onSelect`/`.onToggleExpand`), `WebUIPagination`
+  (`.onPageChange`/`.onRowsPerPageChange`), `WebUIChart` (`.onSelectMark`),
+  and dismissibles (`.onDismiss`) each register their controls under stable ids
+  at page build and hand the handler an `ElementRef` + typed payload — no
+  `targetId`/`targetClass` string matching, no container handler. `me.remove()`
+  relies on the pinned empty-fragment-removes-element runtime branch.
+  `controlAttributes` re-emits the stable id on context-free fragment re-renders
+  without re-registering, which is what keeps routing alive across patches.
 - **`RuntimeConfig`** — passed to `HTMLDocument`/`WebUIDocument` to tune the
   js runtime (debounce, reconnect, settle, log level, `wsUrl`). a non-empty
   config turns the bootstrap into `WebUIRuntime.init({...})`; the default
@@ -136,6 +159,16 @@ invocation. gates host their own server, check, and tear down in one call.
   update, and rolls back to last-known-good after `optimisticSettleMs` (5s) if
   the server never confirms. predictions are render-time snapshots — use for
   value-independent transitions (reset, toggle-on, set).
+- **`WebUIIcon` / `IconName`** — native svg iconography. `IconName` is a
+  generated `CaseIterable` enum (206 glyphs from
+  `designer/icons/icon-manifest.json`); `WebUIIcon` renders inline
+  `<svg stroke="currentColor">` so coloring rides `ColorToken` via
+  `.foregroundColor(_:)`. `IconSize` is `.small/.medium/.large/.extraLarge`
+  (em multiples) or `.slot` (sized by the container's icon-slot css — used by
+  alert/empty-state/tree/table). `WebUIIconCustom` sanitizes caller-supplied
+  geometry. the emoji-based `icon: String` parameters are gone — the four
+  migrated components take `IconName` (`IconName(emoji:)` bridges ~30 legacy
+  glyphs). see `Documentation/ICONS.md`.
 - **`SpaceToken`/`ColorToken`** — back `.padding(.four)` and
   `.foregroundColor(.primary)` with `var(--space-4)` / `var(--color-primary-500)`
   references. every case resolves to a token in `design-system.css`
@@ -183,12 +216,16 @@ these must never be weakened:
    `constructor`, `prototype` keys.
 5. **Attribute escaping** — `htmlEscape()` on all attribute keys and values
    the framework emits: modifier attributes and primitive `id`/`class`/`name`/
-   `for`/`data-status`/`method` parameters alike.
+   `for`/`data-status`/`method` parameters alike. icon `aria-label`/`class`/
+   `data-icon` included.
 6. **CSRF tokens** — `CSRFProtection` with HMAC-SHA256 stateless tokens.
 7. **Thread safety** — NSLock on all EventRouter.State and ObserverList
    mutations.
 8. **Growth caps** — EventRouter.maxHandlers (10K) and ObserverList.maxObservers
    (100).
+9. **SVG icon sanitization** — `IconSanitizer.sanitize()` strips `<script>`
+   tags, `on*` event handlers, `foreignObject`, and `javascript:`/`data:`/
+   `vbscript:` hrefs from every `WebUIIconCustom` body before emission.
 
 ## common workflows
 
@@ -215,6 +252,22 @@ these must never be weakened:
 1. run `swift package plugin showcase --allow-writing-to-package-directory`
 2. review `designer/previews/showcase.html` in a browser
 
+### adding a new icon
+
+1. add the icon object to `designer/icons/icon-manifest.json` (name, category,
+   title, tags, viewBox, and the inner svg elements — real 24-grid geometry
+   from a licensed stroke set)
+2. `swift run WebUIIconTool lint --manifest designer/icons/icon-manifest.json`
+   (validates the element whitelist, self-closing tags, and on-grid bounds)
+3. `swift build` — `WebUIIconPlugin` regenerates `IconLibrary.swift`; the new
+   case is on `IconName`
+4. add/extend tests in `Tests/WebUITests/IconTests.swift` (the catalog-integrity
+   suite asserts case count == manifest icon count)
+5. `swift run WebUIIconTool render-preview --manifest designer/icons/icon-manifest.json --output designer/previews/icons-preview.html`
+   and review in a browser (light + dark)
+
+see `Documentation/ICONS.md` for the full guide.
+
 ### verifying a change end-to-end
 
 ```bash
@@ -240,6 +293,8 @@ node designer/browser-smoke.mjs     # requires node + playwright (chromium)
 - **Assets+Generated.swift** is auto-generated and lives under `.build/`
   (gitignored). if you need to inspect it, run `swift build` first then look in
   `.build/plugins/outputs/no-webui/WebUI/tools/WebUIAssetPlugin/Assets+Generated.swift`.
+  the same holds for **IconLibrary.swift** (the generated icon catalog) —
+  look in `.build/plugins/outputs/…/WebUIIconPlugin/`. neither is hand-edited.
 - **Plugin failures** — if `swift build` fails with a plugin error, check that
   `designer/assets/` exists and contains both `design-system.css`
   and `webui-runtime.js`. if those files are deleted/renamed the build still
@@ -250,9 +305,10 @@ node designer/browser-smoke.mjs     # requires node + playwright (chromium)
   reports `server did not become ready — run with --disable-sandbox`.
 - **the `.build` lock** — a running plugin (e.g. `serve`) blocks every other
   `swift package` command until it exits. never launch a gate while `serve` is up.
-- **smoke pins the interactive count** — the smoke gate asserts exactly 7
-  `data-component-id` attributes on the smoke page. adding or removing an
-  interactive component there means updating the expected count in
+- **smoke pins the interactive count** — the smoke gate asserts exactly 24
+  `data-component-id` attributes on the smoke page (3 counter + 2 progress +
+  1 echo + 12 routed table controls + 6 routed chart bars). adding or removing
+  an interactive component there means updating the expected count in
   `WebUISmokePlugin.swift` (the fullstack driver's `>=6` check is tolerant).
   the same page is what `browser-smoke` drives for optimistic + scroll
   survival, so keep those probes' target ids consistent with the page.

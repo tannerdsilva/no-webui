@@ -214,6 +214,22 @@ const scrollProbe = await page.evaluate(() => {
 if (scrollProbe.before === 30 && scrollProbe.after === 30) ok("scroll position survives a fragment patch");
 else bad(`scroll not preserved across patch: ${JSON.stringify(scrollProbe)}`);
 
+// 6. Chart interactivity (SVG-safe runtime walk + targetId dispatch):
+// clicking a bar must route to the stable container handler and re-render
+// the figure with a selection indicator.
+const chartBar = await page.$("#smoke-chart-mark-Jan-Atlas");
+if (chartBar) {
+	await chartBar.click();
+	await page.waitForTimeout(250);
+	const hasSelection = await page.evaluate(
+		() => document.querySelector("#smoke-chart-anchor")?.innerHTML.includes("chart__selection") ?? false
+	);
+	if (hasSelection) ok("chart bar click → WS round-trip → selection rendered (SVG routing intact)");
+	else bad("chart bar click did not produce a selection render");
+} else {
+	bad("chart bar #smoke-chart-mark-Jan-Atlas not found in DOM");
+}
+
 await browser.close();
 server.kill();
 

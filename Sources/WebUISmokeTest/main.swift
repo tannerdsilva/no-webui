@@ -6,6 +6,7 @@ import NIOPosix
 import NIOWebSocket
 import WebUI
 import WebUIDesignSystem
+import WebUIChart
 
 // MARK: - Shared state
 
@@ -48,6 +49,12 @@ final class SmokeState: @unchecked Sendable {
 		get { lock.lock(); defer { lock.unlock() }; return _tableExpanded }
 		set { lock.lock(); defer { lock.unlock() }; _tableExpanded = newValue }
 	}
+	// interactive chart demo (chart selection: click a bar → server re-renders)
+	private var _chartSelected: String? = nil
+	var chartSelected: String? {
+		get { lock.lock(); defer { lock.unlock() }; return _chartSelected }
+		set { lock.lock(); defer { lock.unlock() }; _chartSelected = newValue }
+	}
 }
 
 // MARK: - Interactive table demo data
@@ -75,6 +82,12 @@ func interactiveTableHTML(state: SmokeState) -> String {
 		[Text(rec.name), Text(rec.region), Text("\(rec.ms) ms")]
 	}
 	let details = Dictionary(uniqueKeysWithValues: sorted.map { ($0.id, Text($0.detail)) })
+
+	// Typed handlers: the table self-wires each control as a routed component
+	// under its stable id ({id}-sort-{col} / -select-all / -select-{rowId} /
+	// -expand-{rowId}). `me` references the table root, so the handler can
+	// re-render the table in place with zero id strings. The fullstack driver
+	// drives these same controls over the WS by their component ids.
 	return WebUITable(
 		headers: ["Name", "Region", "p95"],
 		rows: rows,
@@ -87,7 +100,28 @@ func interactiveTableHTML(state: SmokeState) -> String {
 		selectedRows: state.tableSelected,
 		expandedRows: state.tableExpanded,
 		rowDetails: details
-	).render()
+	)
+	.onSort { me, column in
+		if state.tableSortColumn == column { state.tableSortAsc.toggle() }
+		else { state.tableSortColumn = column; state.tableSortAsc = true }
+		return [me.replace(with: interactiveTableHTML(state: state))]
+	}
+	.onSelectAll { me in
+		if state.tableSelected.count == smokeTableRecords.count { state.tableSelected = [] }
+		else { state.tableSelected = Set(smokeTableRecords.map { $0.id }) }
+		return [me.replace(with: interactiveTableHTML(state: state))]
+	}
+	.onSelect { me, rowID in
+		if state.tableSelected.contains(rowID) { state.tableSelected.remove(rowID) }
+		else { state.tableSelected.insert(rowID) }
+		return [me.replace(with: interactiveTableHTML(state: state))]
+	}
+	.onToggleExpand { me, rowID in
+		if state.tableExpanded.contains(rowID) { state.tableExpanded.remove(rowID) }
+		else { state.tableExpanded.insert(rowID) }
+		return [me.replace(with: interactiveTableHTML(state: state))]
+	}
+	.render()
 }
 
 // MARK: - Display-element renderers (stable ids, no event handlers)
@@ -104,6 +138,35 @@ func progressValueHTML(_ value: Double) -> String {
 func echoOutHTML(_ text: String) -> String {
 	let safe = text.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;")
 	return "<div id=\"echo-out\" class=\"echo-out\" role=\"status\"><span class=\"echo-out__text\">\(safe)</span></div>"
+}
+
+// MARK: - Interactive chart demo data
+
+let smokeChartData: [(month: String, product: String, sales: Double)] = [
+	("Jan", "Atlas", 12), ("Jan", "Boreas", 8),
+	("Feb", "Atlas", 20), ("Feb", "Boreas", 15),
+	("Mar", "Atlas", 16), ("Mar", "Boreas", 24),
+]
+
+func smokeChartHTML(state: SmokeState) -> String {
+	var marks: [ChartMark] = []
+	for d in smokeChartData {
+		marks.append(BarMark(x: .value("Month", d.month), y: .value("Sales", d.sales))
+			.foregroundStyle(by: d.product)
+			.stacking(.unstacked)
+			.makeMark())
+	}
+	return Chart(marks)
+		.chartID("smoke-chart")
+		.chartTitle("Quarterly sales by product")
+		.chartAccessibilityLabel("Bar chart of quarterly sales by product")
+		.chartYScale(.linear(domain: 0...28))
+		.chartSelection(axis: .x, value: .category(state.chartSelected ?? ""))
+		.onSelectMark { me, category in
+			state.chartSelected = (state.chartSelected == category) ? nil : category
+			return [me.replace(with: smokeChartHTML(state: state))]
+		}
+		.render()
 }
 
 // MARK: - Page shell
@@ -126,6 +189,8 @@ let smokePageStyle: String = """
 	.smoke .echo-out { margin-top: var(--space-3); font-size: var(--font-size-sm); color: var(--color-text-muted); min-height: 1.4em; }
 	.smoke .echo-out__text { color: var(--color-text); font-family: var(--font-mono); }
 	.smoke .table-wrap { margin-top: var(--space-2); }
+	.smoke__chart { margin-top: var(--space-1); }
+	.smoke__chart-hint { margin-top: var(--space-3); font-size: var(--font-size-xs); color: var(--color-text-faint); }
 	@media (max-width: 720px) { .smoke { padding: var(--space-6) var(--space-4) var(--space-8); } }
 	</style>
 """
@@ -206,38 +271,27 @@ func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
 					Div(id: "interactive-table-anchor", class: "table-wrap") {
 						Raw(interactiveTableHTML(state: state))
 					}
-					.onClick(id: "interactive-table") { event in
-						let target = event.data["targetId"] ?? ""
-						let prefix = "interactive-table-"
-						guard target.hasPrefix(prefix) else { return [] }
-						let suffix = String(target.dropFirst(prefix.count))
-						// mutate the server state (source of truth) FIRST, then
-						// render the patch once from the new state — rendering
-						// before the mutation would emit a frame one state stale.
-						if suffix == "select-all" {
-							if state.tableSelected.count == smokeTableRecords.count { state.tableSelected = [] }
-							else { state.tableSelected = Set(smokeTableRecords.map { $0.id }) }
-						} else if suffix.hasPrefix("select-") {
-							let rowId = String(suffix.dropFirst(7))
-							if state.tableSelected.contains(rowId) { state.tableSelected.remove(rowId) }
-							else { state.tableSelected.insert(rowId) }
-						} else if suffix.hasPrefix("sort-") {
-							let col = Int(suffix.dropFirst(5)) ?? 0
-							if state.tableSortColumn == col { state.tableSortAsc.toggle() }
-							else { state.tableSortColumn = col; state.tableSortAsc = true }
-						} else if suffix.hasPrefix("expand-") {
-							let rowId = String(suffix.dropFirst(7))
-							if state.tableExpanded.contains(rowId) { state.tableExpanded.remove(rowId) }
-							else { state.tableExpanded.insert(rowId) }
-						} else {
-							return []
-						}
-						return [FragmentUpdate(id: "interactive-table", html: interactiveTableHTML(state: state))]
+				}
+				// Interactive chart card — WebUIChart bar chart; clicking a
+				// bar routes through the runtime (SVG-safe parentNode walk)
+				// to the container handler, which toggles the x-selection
+				// and re-renders the figure (server is the source of truth).
+				// The stable #smoke-chart-anchor div carries the routing
+				// anchor (data-component-id="smoke-chart") and is NEVER
+				// patched; the inner figure is re-patched in place by its own
+				// id (the runtime replaces the element the fragment names).
+				WebUICard(variant: .elevated) {
+					Heading("Chart (bars · selection)", level: .h3)
+					Div(id: "smoke-chart-anchor", class: "smoke__chart") {
+						Raw(smokeChartHTML(state: state))
+					}
+					Div(class: "smoke__chart-hint") {
+						Text("Click a bar to toggle its selection.")
 					}
 				}
-				}
-				}
-				}
+			}
+		}
+	}
 		return WebUIDocument(
 			title: "Design System Full-Stack Smoke Test",
 			body: body,

@@ -16,6 +16,10 @@ let package = Package(
             targets: ["WebUIDesignSystem"]
         ),
         .library(
+            name: "WebUIChart",
+            targets: ["WebUIChart"]
+        ),
+        .library(
             name: "WebUIAuth",
             targets: ["WebUIAuth"]
         ),
@@ -58,10 +62,18 @@ let package = Package(
             ],
             plugins: [
                 "WebUIAssetPlugin",
+                "WebUIIconPlugin",
             ]
         ),
         .target(
             name: "WebUIDesignSystem",
+            dependencies: [
+                "WebUI",
+                .product(name: "Logging", package: "swift-log"),
+            ]
+        ),
+        .target(
+            name: "WebUIChart",
             dependencies: [
                 "WebUI",
             ]
@@ -81,6 +93,11 @@ let package = Package(
         // ── Asset Tool ───────────────────────────────────────────
         .executableTarget(
             name: "WebUIAssetTool"
+        ),
+
+        // ── Icon Tool (svg iconography generator + linter) ───────
+        .executableTarget(
+            name: "WebUIIconTool"
         ),
 
         // ── Example ──────────────────────────────────────────────
@@ -116,6 +133,7 @@ let package = Package(
             dependencies: [
                 "WebUI",
                 "WebUIDesignSystem",
+                "WebUIChart",
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOHTTP1", package: "swift-nio"),
@@ -129,6 +147,7 @@ let package = Package(
             dependencies: [
                 "WebUI",
                 "WebUIDesignSystem",
+                "WebUIChart",
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOHTTP1", package: "swift-nio"),
@@ -143,6 +162,13 @@ let package = Package(
             capability: .buildTool(),
             dependencies: [
                 .target(name: "WebUIAssetTool"),
+            ]
+        ),
+        .plugin(
+            name: "WebUIIconPlugin",
+            capability: .buildTool(),
+            dependencies: [
+                .target(name: "WebUIIconTool"),
             ]
         ),
         .plugin(
@@ -217,6 +243,7 @@ let package = Package(
             dependencies: [
                 "WebUI",
                 "WebUIDesignSystem",
+                "WebUIChart",
             ]
         ),
         .testTarget(

@@ -29,7 +29,7 @@ if (html.includes('id="counter-value"') && html.includes('id="echo-input"')) ok(
 else bad("interactive view ids missing");
 if (html.includes("data-optimistic")) ok("optimistic prediction wired on served page");
 else bad("no data-optimistic on served page");
-if (html.includes('data-component-id="interactive-table"') && html.includes("interactive-table-sort-0") && html.includes("interactive-table-select-all") && html.includes("interactive-table-expand-")) ok("interactive table served (stable routing anchor + sort/select/expand affordances)");
+if (html.includes('data-component-id="interactive-table-sort-0"') && html.includes('data-component-id="interactive-table-select-all"') && html.includes('data-component-id="interactive-table-expand-') && html.includes('data-component-id="smoke-chart-mark-')) ok("interactive table + chart served (typed per-control routing)");
 else bad("interactive table wiring missing from served page");
 
 // 2. Real WebSocket — proves the upgrade + WS stack.
@@ -121,12 +121,11 @@ if (redirectHit && redirectHit.url === "/" && redirectHit.replace === true) ok("
 else bad(`redirect-test did not emit a redirect frame: ${JSON.stringify(redirectHit)}`);
 
 // 10. Interactive table — live sort / select / expand round-trips.
-// The table re-renders wholesale into #interactive-table; the stable routing
-// anchor (data-component-id="interactive-table") persists on the wrapper, so
-// every click dispatches to the same server handler via targetId.
+// Each control is its own routed component: the driver dispatches directly
+// to a control's component id (no container + targetId pattern anymore).
 const TBL = "interactive-table";
-const tblClick = (targetId) =>
-  ws.send(JSON.stringify({ type: "event", component: TBL, event: "click", data: { targetId } }));
+const tblClick = (controlId) =>
+  ws.send(JSON.stringify({ type: "event", component: controlId, event: "click", data: {} }));
 const tblUpdate = () => expectUpdate(TBL);
 // ordered data-row names: per row the tds are [select, expand, name, region, p95];
 // select/expand render empty text, so the 3rd cell is the primary name.

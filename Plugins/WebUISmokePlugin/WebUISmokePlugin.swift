@@ -95,6 +95,8 @@ struct WebUISmokePlugin: CommandPlugin {
             ("counter-value", "interactive counter rendered"),
             ("echo-out__text", "live input echo rendered"),
             ("button button--primary", "primary button rendered"),
+            ("smoke-chart-anchor", "interactive chart card rendered"),
+            ("chart__svg", "chart svg rendered"),
         ]
         for entry in signatures {
             if html.contains(entry.sig) {
@@ -111,10 +113,12 @@ struct WebUISmokePlugin: CommandPlugin {
         }
 
         let interactiveCount = html.components(separatedBy: "data-component-id=\"").count - 1
-        if interactiveCount == 7 {
-            ok("served page exposes 7 interactive components (handler wiring intact)")
+        // 3 counter + 2 progress + 1 echo + 12 table controls (3 sort + select-all
+        // + 4 select + 4 expand) + 6 chart bars = 24 routed components.
+        if interactiveCount == 24 {
+            ok("served page exposes 24 interactive components, incl. per-control table routing (handler wiring intact)")
         } else {
-            bad("expected 7 data-component-id attributes, found \(interactiveCount)")
+            bad("expected 24 data-component-id attributes, found \(interactiveCount)")
         }
 
         if html.contains("http-equiv=\"Content-Security-Policy\"") {

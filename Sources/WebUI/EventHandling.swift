@@ -33,6 +33,7 @@ public final class EventRouter: Sendable {
         private let lock = NSLock()
         private var _handlers: [ComponentID: EventHandler] = [:]
         private var _nextID: Int = 0
+        private var _nextElementID: Int = 0
 
         func register(_ handler: @escaping EventHandler, for componentID: ComponentID) {
             lock.lock()
@@ -62,10 +63,19 @@ public final class EventRouter: Sendable {
             return id
         }
 
+        func nextElementID() -> ComponentID {
+            lock.lock()
+            let id = ComponentID("e\(_nextElementID)")
+            _nextElementID += 1
+            lock.unlock()
+            return id
+        }
+
         func reset() {
             lock.lock()
             _handlers.removeAll()
             _nextID = 0
+            _nextElementID = 0
             lock.unlock()
         }
     }
@@ -88,6 +98,13 @@ public final class EventRouter: Sendable {
     }
     public func nextComponentID() -> ComponentID {
         state.nextComponentID()
+    }
+
+    /// mint the next framework element id (`e0`, `e1`, ...) for an
+    /// `ElementRef`. separate counter from component ids so a `data-component-id`
+    /// never collides with a DOM element id.
+    public func nextElementID() -> ComponentID {
+        state.nextElementID()
     }
     public var handlerCount: Int {
         state.handlerCount
@@ -119,8 +136,40 @@ public struct RenderContext: Sendable {
     public mutating func nextComponentID() -> ComponentID {
         router.nextComponentID()
     }
+
+    public mutating func nextElementID() -> ComponentID {
+        router.nextElementID()
+    }
     public mutating func register(handler: @escaping EventHandler, for componentID: ComponentID) {
         router.register(handler, for: componentID)
     }
     @TaskLocal public static var current: RenderContext?
+}
+
+// MARK: - Stable-ID Control Wiring
+
+/// Wire a caller-stable interactive control: register `handler` under the
+/// stable component `id` when a `RenderContext` is present, and return the
+/// `data-component-id`/`data-event` attributes to emit on the control.
+///
+/// When no `RenderContext` is present (a fragment re-render produced from
+/// inside a handler) the same stable attributes are emitted WITHOUT
+/// re-registering — the page-build registration persists in the router, so
+/// routing to the already-registered handler continues. This is what makes
+/// typed component handlers (`WebUITable.onSort`, chart mark selection, ...)
+/// survive fragment re-renders: the ids are a pure function of component
+/// state, so re-rendered HTML carries identical routing attributes.
+///
+/// Pass `nil` as `handler` to render the control statically (no routing
+/// attributes emitted), e.g. when the component has no interactive audience.
+public func controlAttributes(
+    id: String,
+    event: HTMLEvent = .click,
+    handler: EventHandler?
+) -> String {
+    guard let handler else { return "" }
+    if var context = RenderContext.current {
+        context.register(handler: handler, for: ComponentID(id))
+    }
+    return " data-component-id=\"\(htmlEscape(id))\" data-event=\"\(htmlEscape(event.rawValue))\""
 }

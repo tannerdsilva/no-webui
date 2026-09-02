@@ -20,6 +20,7 @@ every developer action is a single command. there are no shell scripts.
 | port probe | `swift package plugin probe [port]` | on |
 | regenerate showcase into designer/previews/ | `swift package plugin showcase --allow-writing-to-package-directory` | on (write permission) |
 | ad-hoc showcase to any path | `swift package plugin showcase --output <path> --allow-writing-to-package-directory` | on |
+| svg icon tooling (generate/lint/list/stats/render-preview) | `swift run WebUIIconTool <verb> --manifest designer/icons/icon-manifest.json …` | on |
 
 ## stage 1 — asset embedding (build time, automatic)
 
@@ -33,11 +34,29 @@ consumed by `WebUIDocument` and `WebUIRuntime`.
 to update assets: edit the files in `designer/assets/`, then `swift build`
 (any plugin/gate invocation that builds `WebUI` also picks them up).
 
+## stage 1b — svg icon generation (build time, automatic)
+
+`WebUIIconPlugin` (build tool plugin, applied to the `WebUI` target, alongside
+`WebUIAssetPlugin`) runs `WebUIIconTool generate` during every `swift build`.
+it reads `designer/icons/icon-manifest.json` — the canonical icon catalog — and
+generates `IconLibrary.swift` into the plugin work directory (under `.build/`,
+gitignored): the `IconName` enum (206 glyphs), the `WebUIIcons` catalog table,
+and the category enum, consumed by `WebUIIcon` / `WebUIIconCustom`.
+
+the generator is deterministic (same manifest → same bytes), so the build
+plugin's output never drifts from the manifest and produces no spurious diffs.
+the same tool backs the standalone verbs (`lint` for a CI gate, `list` for
+discovery, `stats` for the payload report, `render-preview` for the visual QA
+page). to update the catalog: edit `designer/icons/icon-manifest.json`, run
+`swift run WebUIIconTool lint --manifest designer/icons/icon-manifest.json`,
+then `swift build`. see `Documentation/ICONS.md`.
+
 ## stage 2 — unit verification
 
-`swift test` — 398 tests across 35 suites covering views, modifiers, event
-routing, sanitization, design-system components, and the `WebUIAuth`
-authentication foundation (tokens, cookies, stores, Argon2id, auth context).
+`swift test` — 478 tests across 49 suites covering views, modifiers, event
+routing, sanitization, the svg icon catalog + api, design-system components,
+and the `WebUIAuth` authentication foundation (tokens, cookies, stores,
+Argon2id, auth context).
 
 ## stage 3 — the server
 
@@ -98,7 +117,8 @@ all gates exit non-zero on the first failure.
 ## stage order in practice
 
 ```
-edit designer/assets/*  →  swift build (stage 1)  →  swift test (stage 2)
+edit designer/assets/*        →  swift build (stage 1)      →  swift test (stage 2)
+edit designer/icons/*.json    →  swift build (stage 1b)
 →  serve (stage 3, optional interactive)  →  smoke + fullstack-smoke + browser-smoke (stage 4)
 →  showcase  (regenerated reference page)
 ```

@@ -218,6 +218,30 @@ WebUICard(variant: .outlined, id: "settings") {
 
 CSS classes: `card card--{variant}`
 
+### WebUIIcon
+
+```swift
+WebUIIcon(.search)
+WebUIIcon(.download, size: .large, title: "Download file")
+WebUIIcon(.star).iconSize(.extraLarge).foregroundColor(.danger)
+WebUIIconCustom(name: "custom", body: "<path d=\"M12 2l9 10-9 10-9-10z\"/>")
+```
+
+A typed svg icon rendered as inline `<svg>` from the generated `IconName`
+catalog (206 glyphs, `designer/icons/icon-manifest.json`). stroke is
+`currentColor`, so it inherits the surrounding text color and recolors with
+`.foregroundColor(_ token:)`.
+
+**Sizes:** `.small`/`.medium`/`.large`/`.extraLarge` (em multiples) and `.slot`
+(sized by the container's icon-slot css — used by alert/empty-state/tree/table).
+**A11y:** `title` → `role="img"` + `aria-label`; absent → `aria-hidden="true"`.
+**Custom:** `WebUIIconCustom` sanitizes caller geometry (strips `<script>`,
+`on*`, `foreignObject`, `javascript:`/`data:`).
+
+CSS classes: `icon icon--{size}` (+ `fill-slot` on component icon slots). see
+`Documentation/ICONS.md` for the full guide and the `WebUIIconTool`/
+`WebUIIconPlugin` toolset.
+
 ### WebUIBadge
 
 ```swift
@@ -398,11 +422,41 @@ WebUITable(
   the revealed content renders in a `.table__detail-row` spanning all columns.
   Rows without a detail entry get a disabled button.
 
-Because the view is a pure function of the passed-in state, a click handler
-on the server reads `event.data["targetId"]`, mutates its own state (sort
-column/direction, selected set, expanded set), re-renders the table, and returns
-it as a `FragmentUpdate(id:)` keyed to the stable `id`. The smoke server's
-interactive-table card is the reference implementation.
+Because the view is a pure function of the passed-in state, interactivity is
+either **typed handlers** (preferred) or the legacy container pattern. with
+typed handlers the table self-wires each control as its own routed component
+under stable ids, and the handler receives typed payloads + an `ElementRef`
+(`me`) to the table root — no `targetId` parsing:
+
+```swift
+WebUITable(headers: [...], rows: [...], id: "report-table", sortableColumns: [0, 1], ...)
+    .onSort { me, column in
+        state.sort = (column, state.sort.column == column ? state.sort.direction.toggled() : .ascending)
+        return [me.replace(with: tableHTML(state: state))]
+    }
+    .onSelectAll { me in
+        state.selected = state.selected.count == state.rows.count ? [] : Set(state.rows.map { $0.id })
+        return [me.replace(with: tableHTML(state: state))]
+    }
+    .onSelect { me, rowID in
+        state.selected.formSymmetricDifference([rowID])
+        return [me.replace(with: tableHTML(state: state))]
+    }
+    .onToggleExpand { me, rowID in
+        state.expanded.formSymmetricDifference([rowID])
+        return [me.replace(with: tableHTML(state: state))]
+    }
+```
+
+control ids are derived from the stable `id:` (`{id}-sort-{col}`,
+`{id}-select-all`, `{id}-select-{rowId}`, `{id}-expand-{rowId}`); each carries
+`data-component-id`/`data-event`, re-emitted identically on fragment re-renders
+so the page-build registrations keep routing. toggling via
+`.formSymmetricDifference` is illustrative — the hander owns the toggle policy.
+
+the legacy container pattern still works unchanged: attach `.onClick(id:)` to a
+wrapper carrying the same `id`, and read `event.data["targetId"]` to decide.
+the smoke server's interactive-table card is the reference implementation.
 
 ### WebUIChip
 
@@ -552,6 +606,54 @@ WebUIDescriptionList([("Status", "Active"), ("Region", "us-east-1")])
 `<dl class="list--desc">` — a two-column grid (medium-weight `dt`, muted
 `dd`). the canonical payload for an expanded `WebUITable` detail row or a
 detail panel.
+
+## Charts (`WebUIChart`)
+
+the chart suite renders inline SVG figures (`.chart` BEM). all styling comes
+from tokens — the palette, gridlines, axis text, legends, donut center and
+empty state.
+
+### Chart Palette (`.chart__c1 … .chart__c8`)
+
+| token | light | dark |
+|-------|-------|------|
+| `--color-chart-1` | `#6366f1` (indigo) | `#a5b4fc` |
+| `--color-chart-2` | `#10b981` (emerald) | `#34d399` |
+| `--color-chart-3` | `#f59e0b` (amber) | `#fbbf24` |
+| `--color-chart-4` | `#ef4444` (red) | `#f87171` |
+| `--color-chart-5` | `#3b82f6` (blue) | `#60a5fa` |
+| `--color-chart-6` | `#8b5cf6` (violet) | `#a78bfa` |
+| `--color-chart-7` | `#14b8a6` (teal) | `#2dd4bf` |
+| `--color-chart-8` | `#f97316` (orange) | `#fb923c` |
+
+each series is assigned a slot by first-seen order; the slot class
+(`.chart__c1`…) sets `--chart-mark-color`, which `fill`/`stroke` resolve. an
+explicit `.foregroundStyle("…")` overrides the slot inline. `--color-chart-rule`
+styles `RuleMark` reference lines.
+
+### Structural Classes
+
+| class | role |
+|-------|------|
+| `.chart` | the `<figure>`; `role="img"` + `aria-label` |
+| `.chart__title` | uppercased muted subhead above the plot |
+| `.chart__svg` | the inline svg (`width:100%`, `overflow:visible`) |
+| `.chart__grid` / `.chart__grid--v` / `.chart__baseline` | plot grid |
+| `.chart__axis-label` / `--x` / `.chart__axis-title` | tick + axis text |
+| `.chart__annotation` | mark annotation text |
+| `.chart__mark` | any mark group (hover = opacity .82) |
+| `.chart__bar` `.chart__line` `.chart__area` `.chart__point` `.chart__rect` `.chart__rule` `.chart__rule--v` `.chart__sector` | per-kind mark classes |
+| `.chart__mark--selected` | selection highlight (focus ring stroke) |
+| `.chart__selection` | cartesian selection indicator line |
+| `.chart__legend` / `--top` / `--left` / `--right` / `--none` | legend block |
+| `.chart__legend-item` / `.chart__swatch` | legend entries (swatch reuses the palette slots) |
+| `.chart--pie` `.chart__donut-center` `.chart__donut-value` `.chart__donut-label` | polar layout + donut total overlay |
+| `.chart__sr` | visually-hidden data table (a11y mirror) |
+| `.chart--empty` `.chart__empty` | designed empty state (dashed card) |
+
+dark mode: the categorical palette is remapped to the light 300/400 steps for
+contrast on dark surfaces (see the table above); gridlines/labels follow the
+normal `--color-*` token flips.
 
 ## Form Control Base
 

@@ -1,6 +1,7 @@
 import Foundation
 import WebUI
 import WebUIDesignSystem
+import WebUIChart
 
 // MARK: - Showcase Page
 struct ShowcasePage {
@@ -47,7 +48,9 @@ struct ShowcasePage {
                 sidebarLink("Modifiers", "#modifiers")
                 sidebarLink("Design System", "#design-system")
                 sidebarLink("Event Handling", "#events")
+                sidebarLink("Charts", "#charts")
                 sidebarLink("CSS Theme", "#theme")
+                sidebarLink("Icons", "#icons")
             }.padding(16)
         }
     }
@@ -338,7 +341,7 @@ struct ShowcasePage {
                                 headers: ["Name", "Age", "City"],
                                 rows: [],
                                 emptyState: .init(
-                                    icon: "🔎",
+                                    icon: .search,
                                     title: "No people match this filter",
                                     message: "Clear the search box or try a different region."
                                 )
@@ -428,15 +431,15 @@ struct ShowcasePage {
 
                         demoCard("Tree — file explorer (server-driven open/selection)") {
                             WebUITree(nodes: [
-                                WebUITree.Node(id: "src", label: "src", icon: "📁", children: [
-                                    WebUITree.Node(id: "main", label: "main.swift", icon: "📄"),
-                                    WebUITree.Node(id: "ui", label: "ui", icon: "📁", children: [
-                                        WebUITree.Node(id: "view", label: "view.swift", icon: "📄"),
-                                        WebUITree.Node(id: "state", label: "state.swift", icon: "📄"),
+                                WebUITree.Node(id: "src", label: "src", icon: .folder, children: [
+                                    WebUITree.Node(id: "main", label: "main.swift", icon: .fileText),
+                                    WebUITree.Node(id: "ui", label: "ui", icon: .folder, children: [
+                                        WebUITree.Node(id: "view", label: "view.swift", icon: .fileText),
+                                        WebUITree.Node(id: "state", label: "state.swift", icon: .fileText),
                                     ]),
                                 ]),
-                                WebUITree.Node(id: "tests", label: "tests", icon: "📁", children: [
-                                    WebUITree.Node(id: "smoke", label: "smoke.swift", icon: "📄"),
+                                WebUITree.Node(id: "tests", label: "tests", icon: .folder, children: [
+                                    WebUITree.Node(id: "smoke", label: "smoke.swift", icon: .fileText),
                                 ]),
                             ], id: "demo-tree", expanded: ["src", "ui"], selected: "view")
                         }
@@ -834,7 +837,111 @@ struct ShowcasePage {
                     }
                 }
 
-                // 11. CSS Theme
+                // 11. Charts
+                section("Charts", "charts") {
+                    VStack(spacing: 16) {
+                        Heading("WebUIChart suite", level: .h2)
+                        Paragraph("Server-rendered inline-SVG charts mirroring the SwiftUI Charts API. No JS dependencies — styling comes from the design-system tokens, and it reflows in dark mode automatically.")
+                        demoCard("Grouped bars") {
+                            VStack(spacing: 0) {
+                                Chart {
+                                    ForEach([("Q1", "A", 42.0), ("Q1", "B", 28.0), ("Q2", "A", 61.0), ("Q2", "B", 39.0), ("Q3", "A", 53.0), ("Q3", "B", 71.0)]) { d in
+                                        BarMark(x: .value("Quarter", d.0), y: .value("Value", d.2))
+                                            .foregroundStyle(by: d.1)
+                                            .stacking(.unstacked)
+                                    }
+                                }
+                                .chartTitle("Revenue by quarter")
+                            }
+                        }
+                        demoCard("Stacked bars") {
+                            VStack(spacing: 0) {
+                                Chart {
+                                    ForEach([("Mon", "Core", 120.0), ("Mon", "Web", 80.0), ("Tue", "Core", 95.0), ("Tue", "Web", 120.0), ("Wed", "Core", 140.0), ("Wed", "Web", 60.0)]) { d in
+                                        BarMark(x: .value("Day", d.0), y: .value("Requests", d.2))
+                                            .foregroundStyle(by: d.1)
+                                    }
+                                }
+                                .chartTitle("Requests by service")
+                            }
+                        }
+                        demoCard("Line + points + area") {
+                            VStack(spacing: 0) {
+                                Chart {
+                                    ForEach(Array([12.0, 18.0, 15.0, 24.0, 31.0, 27.0, 38.0].enumerated().map { (x: Double($0.offset + 1), y: $0.element) })) { p in
+                                        Group {
+                                            AreaMark(x: .value("Week", p.x), y: .value("Value", p.y))
+                                                .foregroundStyle(by: "series")
+                                            LineMark(x: .value("Week", p.x), y: .value("Value", p.y))
+                                                .foregroundStyle(by: "series")
+                                                .interpolation(.catmullRom)
+                                            PointMark(x: .value("Week", p.x), y: .value("Value", p.y))
+                                                .foregroundStyle(by: "series")
+                                                .symbol(.circle)
+                                        }
+                                    }
+                                }
+                                .chartTitle("Weekly growth")
+                                .chartYScale(.linear(domain: 0...42))
+                            }
+                        }
+                        demoCard("Pie") {
+                            VStack(spacing: 0) {
+                                Chart {
+                                    SectorMark(angle: .value("Share", 44.0), category: "iOS")
+                                    SectorMark(angle: .value("Share", 31.0), category: "Android")
+                                    SectorMark(angle: .value("Share", 18.0), category: "web")
+                                    SectorMark(angle: .value("Share", 7.0), category: "other")
+                                }
+                                .chartTitle("Platform share")
+                                .chartHeight(300)
+                            }
+                        }
+                        demoCard("Donut + selection") {
+                            VStack(spacing: 0) {
+                                Chart {
+                                    SectorMark(angle: .value("Share", 44.0), category: "iOS")
+                                    SectorMark(angle: .value("Share", 31.0), category: "Android")
+                                    SectorMark(angle: .value("Share", 18.0), category: "web")
+                                    SectorMark(angle: .value("Share", 7.0), category: "other")
+                                }
+                                .chartTitle("Platform share")
+                                .chartHeight(300)
+                                .chartInnerRadius(0.55)
+                                .chartAngularInset(1.5)
+                                .chartXSelection(value: .category("iOS"))
+                            }
+                        }
+                        demoCard("Rules (grid + reference lines)") {
+                            VStack(spacing: 0) {
+                                Chart {
+                                    ForEach(Array([8.0, 14.0, 11.0, 21.0, 26.0].enumerated().map { (x: Double($0.offset + 1), y: $0.element) })) { p in
+                                        LineMark(x: .value("X", p.x), y: .value("Y", p.y))
+                                            .foregroundStyle(by: "series")
+                                            .interpolation(.monotone)
+                                    }
+                                    RuleMark(y: .value("Target", 15.0))
+                                        .foregroundStyle("var(--chart-color-2)")
+                                        .lineStyle(ChartLineStyle(width: 2, dash: [6, 4]))
+                                }
+                                .chartTitle("Against target")
+                                .chartYScale(.linear(domain: 0...30))
+                            }
+                        }
+                        demoCard("Heatmap") {
+                            VStack(spacing: 0) {
+                                Chart(heatmapCells())
+                                    .chartTitle("Activity by hour × day")
+                            }
+                        }
+                        demoCard("Empty state") {
+                            VStack(spacing: 0) {
+                                Chart([])
+                                    .chartTitle("No data yet")
+                            }
+                        }
+                    }
+                }
                 section("CSS Theme", "theme") {
                     VStack(spacing: 16) {
                         Heading("Design tokens and CSS custom properties", level: .h2)
@@ -884,10 +991,117 @@ struct ShowcasePage {
                         }
                     }
                 }
+
+                // 13. Icons
+                section("Icons", "icons") {
+                    VStack(spacing: 16) {
+                        Heading("WebUIIcon suite", level: .h2)
+                        Paragraph("Stroke-based inline-SVG icons generated from the `designer/icons/icon-manifest.json` catalog (206 glyphs, MIT/Feather geometry). Each icon inherits `currentColor`, so it takes the surrounding text color by default and recolors with `.foregroundColor(_:)`.")
+                        demoCard("Sizes") {
+                            HStack(spacing: 24) {
+                                VStack(spacing: 4) {
+                                    WebUIIcon(.star, size: .small)
+                                    Text(".small").font(size: 12).foregroundColor(.textMuted)
+                                }
+                                VStack(spacing: 4) {
+                                    WebUIIcon(.star, size: .medium)
+                                    Text(".medium").font(size: 12).foregroundColor(.textMuted)
+                                }
+                                VStack(spacing: 4) {
+                                    WebUIIcon(.star, size: .large)
+                                    Text(".large").font(size: 12).foregroundColor(.textMuted)
+                                }
+                                VStack(spacing: 4) {
+                                    WebUIIcon(.star, size: .extraLarge)
+                                    Text(".extraLarge").font(size: 12).foregroundColor(.textMuted)
+                                }
+                                VStack(spacing: 4) {
+                                    WebUIIcon(.star).iconSize(.extraLarge)
+                                    Text("iconSize(.extraLarge)").font(size: 12).foregroundColor(.textMuted)
+                                }
+                            }
+                        }
+                        demoCard("Color tokens (currentColor)") {
+                            HStack(spacing: 24) {
+                                WebUIIcon(.heart, size: .large).foregroundColor(.danger)
+                                WebUIIcon(.checkCircle, size: .large).foregroundColor(.success)
+                                WebUIIcon(.alertTriangle, size: .large).foregroundColor(.warning)
+                                WebUIIcon(.info, size: .large).foregroundColor(.info)
+                                WebUIIcon(.bell, size: .large).foregroundColor(.primary)
+                                WebUIIcon(.activity, size: .large).foregroundColor(.textMuted)
+                            }
+                        }
+                        demoCard("Accessible label (role=img)") {
+                            HStack(spacing: 16) {
+                                WebUIIcon(.search, size: .large, title: "Search")
+                                WebUIIcon(.download, size: .large, title: "Download file")
+                                WebUIIcon(.cloud, size: .large, title: "Cloud storage")
+                                WebUIIcon(.settings, size: .large)
+                                Text("last one: decorative (aria-hidden)").font(size: 12).foregroundColor(.textMuted)
+                            }
+                        }
+                        demoCard("In composition (tree + empty state + alert)") {
+                            VStack(spacing: 12) {
+                                WebUITree(
+                                    nodes: [
+                                        WebUITree.Node(id: "src", label: "src", icon: .folder, children: [
+                                            WebUITree.Node(id: "views", label: "views", icon: .folder, children: [
+                                                WebUITree.Node(id: "HomeView", label: "HomeView.swift", icon: .fileText),
+                                                WebUITree.Node(id: "SettingsView", label: "SettingsView.swift", icon: .fileText)
+                                            ])
+                                        ])
+                                    ],
+                                    expanded: ["src", "views"]
+                                )
+                                WebUIEmptyState(icon: .inbox, title: "No messages yet", message: "Check back later or connect a new account.")
+                                WebUIAlert(variant: .success, title: "Deployed", message: "Release 2.3.1 is now live in production.")
+                            }
+                        }
+                        demoCard("Custom geometry (WebUIIconCustom, sanitized)") {
+                            HStack(spacing: 24) {
+                                WebUIIconCustom(
+                                    name: "custom-diamond",
+                                    body: "<path d=\"M12 2l9 10-9 10-9-10z\"/><line x1=\"3\" y1=\"12\" x2=\"21\" y2=\"12\"/>",
+                                    size: .large,
+                                    title: "Custom diamond"
+                                )
+                                WebUIIconCustom(
+                                    name: "custom-sanitized",
+                                    body: "<script>window.xss=1</script><circle cx=\"12\" cy=\"12\" r=\"9\"/><path d=\"M8 12h8\" onmouseover=\"alert(1)\"/>",
+                                    size: .large
+                                )
+                                Text("right icon: script tag + on* handler stripped").font(size: 12).foregroundColor(.textMuted)
+                            }
+                        }
+                    }
+                }
             }.padding(32)
         }
 
     // MARK: - Helpers
+
+    func heatmapCells() -> [ChartMark] {
+        let intensities: [[Double]] = [
+            [0.1, 0.5, 0.9, 0.3, 0.7],
+            [0.2, 0.8, 0.4, 0.6, 0.1],
+            [0.9, 0.3, 0.7, 0.2, 0.5],
+            [0.4, 0.6, 0.1, 0.8, 0.3],
+            [0.7, 0.2, 0.5, 0.9, 0.6],
+        ]
+        var marks: [ChartMark] = []
+        for (h, row) in intensities.enumerated() {
+            for (d, v) in row.enumerated() {
+                marks.append(RectangleMark(
+                    xStart: .value("Hour", Double(h)),
+                    xEnd: .value("Hour", Double(h + 1)),
+                    yStart: .value("Day", Double(d)),
+                    yEnd: .value("Day", Double(d + 1)),
+                    value: v
+                ).makeMark())
+            }
+        }
+        return marks
+    }
 
     func section(_ title: String, _ id: String, @ViewBuilder content: () -> [any View]) -> some View {
         Section(class: "showcase-section") {

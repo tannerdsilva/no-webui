@@ -32,6 +32,8 @@ the concrete view type; multi-view blocks produce `[any View]`.
 | `Paragraph`, `Label`, `TextArea`, `Select`, `Table`, `Form` | escaped | `SelectOption.value/label` |
 | `ForEach<Data: RandomAccessCollection>` | — | renders each element; no wrapper |
 | `Group` | — | renders children without a wrapper |
+| `WebUIIcon(_ name:, size:, title:)` | escaped title | inline svg from the generated `IconName` catalog; `currentColor` |
+| `WebUIIconCustom(name:body:size:title:)` | sanitized body | caller-supplied svg geometry (see the WebUIIcon section) |
 
 every attribute parameter (`id`, `class`, `name`, `for`, `data-status`,
 `Form.method`, …) is html-escaped before emission. url-valued parameters
@@ -92,6 +94,11 @@ every attribute parameter (`id`, `class`, `name`, `for`, `data-status`,
 | `.onMouseOver(_ handler:)` | `data-component-id="cN" data-event="mouseover"` |
 | `.onMouseOut(_ handler:)` | `data-component-id="cN" data-event="mouseout"` |
 | `.onOptimisticClick(predict:perform:)` | click + `data-optimistic="{json prediction}"` — client patches before the round-trip, confirms on update, rolls back on timeout |
+| `.onDismiss(_ handler:)` | `Dismissible` views (`WebUIAlert`/`WebUIToast`/`WebUIModal`/`WebUIChip`) — wires the close button as a routed component; handler receives `(ElementRef, EventData)` targeting the component's own root |
+| `controlAttributes(id:event:handler:)` | free function for component authors: register a handler under a caller-stable id and emit `data-component-id`/`data-event`. registers when a `RenderContext` is present; re-emits the stable id on context-free fragment re-renders so page-build registrations keep routing |
+| `.onSort(_:)` / `.onSelectAll(_:)` / `.onSelect(_:)` / `.onToggleExpand(_:)` | `WebUITable` typed handlers — self-wire each sort header / select-all / row-select / expand button as a routed component; receive typed payloads (`column`, `rowID`) + an `ElementRef` to the table root |
+| `.onPageChange(_:)` / `.onRowsPerPageChange(_:)` | `WebUIPagination` typed handlers — prev/next/number buttons and the rows-per-page select are routed components; receive the computed page / parsed size + an `ElementRef` |
+| `.onSelectMark(_:)` | `WebUIChart` typed handler — each painted bar/sector is a routed component; receives the clicked category + an `ElementRef` to the chart root |
 
 ### Event Handling
 
@@ -100,9 +107,12 @@ every attribute parameter (`id`, `class`, `name`, `for`, `data-status`,
 | `EventData` | `{ component: String, event: String, data: [String: String] }` — `click` data carries `targetId` and `targetClass` of the clicked element |
 | `EventHandler` | `@Sendable (EventData) async -> [FragmentUpdate]` |
 | `EventRouter` | routes events to registered handlers. `maxHandlers: Int` (default 10,000), `handlerCount: Int`. one router per render pass — call `reset()` before rendering a fresh page |
-| `RenderContext` | `@TaskLocal` context providing component ID generation and handler registration |
+| `RenderContext` | `@TaskLocal` context providing component ID generation, element ID minting, and handler registration |
 | `ComponentID` | hashable/codable string wrapper for component ids |
-| `FragmentUpdate` | `{ id: String, html: String }` — DOM patch instruction |
+| `ElementRef.stable(_:)` | framework-facing factory for a ref to an element with a caller-chosen stable id (minted by typed component handlers for their root). callers should keep receiving refs rather than fabricating them |
+| `ElementRef` | typed handle to a rendered element minted by the framework. `remove()` → empty-html fragment (the runtime removes the element), `replace(with:)` → outerHTML swap, `update(view)` → re-render from a `View`. no caller-supplied ids |
+| `Dismissible` | protocol for views with a dismiss/remove affordance. `.onDismiss { me, _ in }` wires the close button to a routed component and receives the root `ElementRef` |
+| `FragmentUpdate` | `{ id: String, html: String }` — DOM patch instruction. `html: ""` removes the element (pinned contract, see `JS_RUNTIME.md` patcher) |
 | `SpaceToken` | spacing-scale tokens (`.one`…`.twentyFour`) → `var(--space-N)` |
 | `ColorToken` | nexus color tokens (`.primary`, `.text`, `.danger`, …) → `var(--color-...)` |
 | `FontWeight` | `.thin` … `.black`, `.custom(_:)` → numeric `font-weight` |
@@ -185,22 +195,81 @@ component catalog.
 | `WebUISkeleton` | variant, width, height, count |
 | `WebUIToast` | variant, message, id, dismissible — close button carries `data-dismiss` |
 | `WebUIModal` | title, id, content, footer — close button carries `data-dismiss` |
-| `WebUITable` | headers, rows ([[any View]]), striped, hoverable, compact, wrapped, responsive, alignments, footer, emptyState, id, rowIds, sortable, selected, expanded, rowDetails |
+| `WebUITable` | headers, rows ([[any View]]), striped, hoverable, compact, wrapped, responsive, alignments, footer, emptyState, id, rowIds, sortable, selected, expanded, rowDetails — typed handlers `.onSort`/`.onSelectAll`/`.onSelect`/`.onToggleExpand` (routed per control) |
 | `WebUIChip` | text, variant, removable, id — remove button carries `data-remove` |
 | `WebUIEmptyState` | icon, title, message, action (label, id) |
 | `WebUISpinner` | size, label |
 | `WebUITooltip` | text, position, content |
 | `WebUIStat` | label, value, size (sm/md/lg), trend + trendDirection (up/down), compare, spark ([Double] → inline svg) |
-| `WebUIPagination` | page, pages, id (stable control ids), rowsPerPage (+options) — windowed `…` list, `aria-current` |
+| `WebUIPagination` | page, pages, id (stable control ids), rowsPerPage (+options) — windowed `…` list, `aria-current`. typed handlers `.onPageChange`/`.onRowsPerPageChange` (routed per button/select) |
 | `WebUITimeline` | events (time/title/desc/status: plain/completed/current/error), orientation (vertical/horizontal) |
 | `WebUITree` | nodes (recursive id/label/icon/children), id (row ids), expanded (Set), selected — CSS open/close, server-driven selection |
 | `WebUIBreadcrumb` | items (label/href), current, slash, id, collapse, maxItems — ellipsis middle, `sanitizeURL` on hrefs |
 | `WebUIDescriptionList` | [(term, detail)] → `<dl class="list--desc">` |
 
 dismiss/remove/close buttons render with `data-dismiss` / `data-remove`
-markers and no auto-wiring — attach `.onClick` to the container and read
-`event.data["targetId"]`/`event.data["targetClass"]` to disambiguate (the
-runtime sends both for every click).
+markers and no auto-wiring. attach `.onDismiss { me, _ in ... }` to wire the
+close button directly — `me` is an `ElementRef` to the component's own root
+element (`me.remove()` removes it), no container handler or `targetClass`
+matching needed. without a handler the marker renders statically and a
+container `.onClick` may still read `event.data["targetId"]`/`event.data["targetClass"]`
+to disambiguate (legacy pattern).
+
+## WebUIChart
+
+Server-rendered charts (inline SVG in a `<figure class="chart">`). see
+`Documentation/CHARTS.md` for the full guide — marks, scales, selection,
+theming.
+
+```swift
+import WebUIChart
+
+Chart {
+    ForEach(data) { d in
+        BarMark(x: .value("Month", d.month), y: .value("Sales", d.sales))
+            .foregroundStyle(by: d.product)   // series → palette slot + legend
+            .stacking(.unstacked)             // .normal (stack) is the default
+    }
+}.render()
+```
+
+- **marks:** `BarMark`, `LineMark`, `AreaMark`, `PointMark`, `RectangleMark`,
+  `RuleMark`, `SectorMark` (pie/donut via `innerRadiusRatio`).
+- **plottables:** `.value("label", Int|Double|String|Date)` — strings/dates
+  make the axis categorical (or formatted-numeric); `yStart`/`yEnd` ranges.
+- **modifiers:** `.foregroundStyle(by:)` / `.foregroundStyle("var")`,
+  `.opacity`, `.cornerRadius`, `.stacking`, `.interpolation`
+  (`.linear`/`.monotone`/`.cardinal(t)`/`.catmullRom`/`.stepStart`/`.stepEnd`),
+  `.symbol`, `.lineStyle`, `.annotation`.
+- **chart modifiers:** `.chartTitle`, `.chartID` (stable mark ids for WS
+  interactivity), `.chartSelection(axis:value:)`, `.chartXScale` /
+  `.chartYScale` (`.linear(domain:)`, `.date(domain:)`, `.categorical(domain:)`),
+  `.chartXAxis` / `.chartYAxis` (`AxisConfig`: grid, ticks,
+  `labelFormat`), `.chartLegend(position:)`, `.chartPlotStyle`,
+  `.chartAccessibilityLabel`.
+- **polar:** all `SectorMark` (or a single `.angle` value per mark) → pie;
+  `innerRadiusRatio > 0` → donut with a center total.
+
+## WebUIIcon
+
+Native svg iconography (inline `<svg>` + `stroke="currentColor"`). see
+`Documentation/ICONS.md` for the full guide — catalog, tooling, security.
+
+```swift
+WebUIIcon(.search)                                   // aria-hidden by default
+WebUIIcon(.download, size: .large, title: "Download") // role=img + aria-label
+WebUIIcon(.star).iconSize(.extraLarge).foregroundColor(.danger)
+WebUIIconCustom(name: "custom", body: "<path d=\"M12 2l9 10-9 10-9-10z\"/>")
+```
+
+- **catalog:** `IconName` — a generated `CaseIterable` enum (206 glyphs from
+  `designer/icons/icon-manifest.json`); a typo is a compile error. `IconName.named(_:)`
+  (raw-name lookup) and `IconName(emoji:)` (legacy bridge).
+- **sizes:** `IconSize` `.small/.medium/.large/.extraLarge` (em multiples) and
+  `.slot` (sized by the container's icon-slot css).
+- **color:** rides `currentColor` — recolor with `.foregroundColor(_ token:)`.
+- **custom:** `WebUIIconCustom` sanitizes caller-supplied geometry (strips
+  `<script>`, `on*` handlers, `foreignObject`, `javascript:`/`data:` hrefs).
 
 ## WebUIExample
 

@@ -66,6 +66,16 @@ func runtimeStringifiesKeydownModifiers() throws {
 	#expect(js.contains("String(event.metaKey)"), "runtime sends metaKey as a JS boolean; Swift decode would reject the event")
 }
 
+@Test("an empty fragment html removes the element (ElementRef.remove() contract)")
+func runtimeEmptyFragmentRemovesElement() throws {
+	let js = WebUIAssets.js
+	// ElementRef.remove()/me.remove() emit FragmentUpdate(id:, html: "") — the
+	// runtime must treat an empty fragment as "remove the element", never as a
+	// no-op replace. this is the pinned contract behind the .onDismiss API.
+	#expect(js.contains("if (html === '')"), "runtime lost the empty-fragment removal branch (ElementRef.remove() would no-op)")
+	#expect(js.contains("el.remove()"), "runtime lost the element removal call")
+}
+
 // MARK: - WCAG contrast guardrail
 //
 // The design system is tuned by eye; this test makes that tuning checkable.

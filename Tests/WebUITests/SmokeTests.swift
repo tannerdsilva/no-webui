@@ -345,10 +345,12 @@ struct BEMTests {
         let html = WebUITable(
             headers: ["Name", "Age", "City"],
             rows: [],
-            emptyState: WebUITable.EmptyState(icon: "📭", title: "No people", message: "Try a different filter.")
+            emptyState: WebUITable.EmptyState(icon: .inbox, title: "No people", message: "Try a different filter.")
         ).render()
         #expect(html.contains("<td colspan=\"3\" class=\"table__empty\">"))
-        #expect(html.contains("<div class=\"table__empty-icon\">📭</div>"))
+        #expect(html.contains("class=\"table__empty-icon fill-slot\">"))
+        #expect(html.contains("<svg"))
+        #expect(!html.contains("📭"))
         #expect(html.contains("<div class=\"table__empty-title\">No people</div>"))
         #expect(html.contains("<div class=\"table__empty-message\">Try a different filter.</div>"))
     }
@@ -358,7 +360,7 @@ struct BEMTests {
         let html = WebUITable(
             headers: ["A"],
             rows: [],
-            emptyState: WebUITable.EmptyState(icon: "x", title: "<b>Bold</b>", message: "<script>")
+            emptyState: WebUITable.EmptyState(icon: .search, title: "<b>Bold</b>", message: "<script>")
         ).render()
         #expect(html.contains("<div class=\"table__empty-title\">&lt;b&gt;Bold&lt;/b&gt;</div>"))
         #expect(html.contains("&lt;script&gt;"))
@@ -537,11 +539,13 @@ struct BEMTests {
 
     @Test("WebUIEmptyState uses correct BEM classes")
     func emptyStateBEM() {
-        let html = WebUIEmptyState(icon: "📭", title: "Empty", message: "Nothing here").render()
+        let html = WebUIEmptyState(icon: .inbox, title: "Empty", message: "Nothing here").render()
         #expect(html.contains("class=\"empty-state\""))
-        #expect(html.contains("class=\"empty-state__icon\""))
+        #expect(html.contains("class=\"empty-state__icon fill-slot\""))
         #expect(html.contains("class=\"empty-state__title\""))
         #expect(html.contains("class=\"empty-state__message\""))
+        #expect(html.contains("<svg"))
+        #expect(!html.contains("📭"))
     }
 
     @Test("WebUISpinner uses correct BEM classes")
@@ -1503,10 +1507,10 @@ struct IntegrationTests {
                 WebUITimeline.Event(time: "13:00", title: "Queued", status: .plain),
             ])
             WebUITree(nodes: [
-                WebUITree.Node(id: "src", label: "src", icon: "📁", children: [
-                    WebUITree.Node(id: "main", label: "main.swift", icon: "📄"),
-                    WebUITree.Node(id: "ui", label: "ui", icon: "📁", children: [
-                        WebUITree.Node(id: "view", label: "view.swift", icon: "📄"),
+                WebUITree.Node(id: "src", label: "src", icon: .folder, children: [
+                    WebUITree.Node(id: "main", label: "main.swift", icon: .fileText),
+                    WebUITree.Node(id: "ui", label: "ui", icon: .folder, children: [
+                        WebUITree.Node(id: "view", label: "view.swift", icon: .fileText),
                     ]),
                 ]),
             ], id: "tree", expanded: ["src", "ui"], selected: "main")
@@ -1620,8 +1624,8 @@ struct CompanionPrimitiveTests {
     @Test("WebUITree renders nested nodes, open/closed, leaf caret, and selection")
     func tree() {
         let nodes = [
-            WebUITree.Node(id: "src", label: "src", icon: "📁", children: [
-                WebUITree.Node(id: "main", label: "main.swift", icon: "📄"),
+            WebUITree.Node(id: "src", label: "src", icon: .folder, children: [
+                WebUITree.Node(id: "main", label: "main.swift", icon: .fileText),
                 WebUITree.Node(id: "ui", label: "ui", children: [
                     WebUITree.Node(id: "view", label: "view.swift"),
                 ]),

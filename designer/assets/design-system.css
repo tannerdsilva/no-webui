@@ -7721,7 +7721,7 @@ section,
   padding: var(--space-8);
   text-align: center;
 }
-.empty-state__icon { font-size: 3rem; margin-bottom: var(--space-3); opacity: 0.5; }
+.empty-state__icon { width: 3rem; height: 3rem; margin-bottom: var(--space-3); opacity: 0.5; }
 .empty-state__title { font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); margin-bottom: var(--space-1); }
 .empty-state__message { font-size: var(--font-size-sm); color: var(--color-text-muted); max-width: 24rem; }
 
@@ -8127,4 +8127,322 @@ h6 {
   font-weight: var(--font-weight-semibold);
   font-size: inherit;
   letter-spacing: var(--letter-spacing-tight);
+}
+
+/* =====================================================================
+   Icons — SVG iconography suite (`.icon` primitives, inline SVG)
+   ---------------------------------------------------------------------
+   `WebUIIcon` / `WebUIIconCustom` emit a self-contained `<svg class="icon">`
+   whose stroke inherits `currentColor`, so an icon takes the color of its
+   text context by default and can be recolored with any `color` (token or
+   inline). Sizing is font-relative (`1em`), so icons stay in proportion to
+   the label they sit beside.
+
+   Standalone (in text / flex flow) an icon is `1em`. Inside a fixed-size
+   icon slot (alert, tree, empty state, …) it fills the slot via the
+   `> svg.icon` rules below, reusing the slot's existing size + color.
+   ===================================================================== */
+
+.icon {
+  display: inline-block;
+  width: 1em;
+  height: 1em;
+  flex: none;
+  color: currentColor;
+  overflow: visible;
+  vertical-align: middle;
+}
+.icon--sm { width: 0.75em; height: 0.75em; }
+.icon--md { width: 1em; height: 1em; }
+.icon--lg { width: 1.25em; height: 1.25em; }
+.icon--xl { width: 1.5em; height: 1.5em; }
+
+.fill-slot > svg.icon { width: 100%; height: 100%; }
+.alert__icon > svg.icon,
+.table__empty-icon > svg.icon,
+.empty-state__icon > svg.icon,
+.tree__icon > svg.icon,
+.menu__icon > svg.icon,
+.sidebar__icon > svg.icon,
+.banner__icon > svg.icon,
+.toast__icon > svg.icon { width: 100%; height: 100%; }
+
+.button > svg.icon { width: 1em; height: 1em; flex: none; }
+
+.icon--spin { animation: br-spin 0.9s linear infinite; }
+@keyframes br-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+
+/* =====================================================================
+   Charts — WebUIChart suite (`.chart` BEM, server-rendered inline SVG)
+   ---------------------------------------------------------------------
+   The `Chart` component emits a self-contained `<figure class="chart">`
+   with an inline `<svg>` plot. Marks are colored through the categorical
+   palette slots `.chart__c1` … `.chart__c8` (driven by
+   `--color-chart-1` … `--color-chart-8`); explicit per-mark colors arrive
+   as an inline `--chart-mark-color` custom property and win over the slot.
+
+   Angle convention for pie/donut: 0° = 12 o'clock, clockwise.
+   ===================================================================== */
+
+:root {
+	/* categorical chart palette — derived from the system hues
+	   (indigo, emerald, amber, red, blue, violet, teal, orange) */
+	--color-chart-1:   #6366f1;
+	--color-chart-2:   #10b981;
+	--color-chart-3:   #f59e0b;
+	--color-chart-4:   #ef4444;
+	--color-chart-5:   #3b82f6;
+	--color-chart-6:   #8b5cf6;
+	--color-chart-7:   #14b8a6;
+	--color-chart-8:   #f97316;
+	/* reference-line color (RuleMark) */
+	--color-chart-rule: var(--color-text-faint);
+}
+
+/* palette slots: each sets the mark's --chart-mark-color */
+.chart__c1 { --chart-mark-color: var(--color-chart-1); }
+.chart__c2 { --chart-mark-color: var(--color-chart-2); }
+.chart__c3 { --chart-mark-color: var(--color-chart-3); }
+.chart__c4 { --chart-mark-color: var(--color-chart-4); }
+.chart__c5 { --chart-mark-color: var(--color-chart-5); }
+.chart__c6 { --chart-mark-color: var(--color-chart-6); }
+.chart__c7 { --chart-mark-color: var(--color-chart-7); }
+.chart__c8 { --chart-mark-color: var(--color-chart-8); }
+
+.chart {
+	margin: 0;
+	position: relative;
+	font-family: var(--font-sans);
+	color: var(--color-text);
+}
+
+.chart__title {
+	font-size: var(--font-size-sm);
+	font-weight: var(--font-weight-semibold);
+	letter-spacing: var(--letter-spacing-wide);
+	color: var(--color-text-muted);
+	text-transform: uppercase;
+	margin-bottom: var(--space-3);
+}
+
+.chart__plot {
+	position: relative;
+}
+
+.chart__svg {
+	display: block;
+	width: 100%;
+	height: auto;
+	overflow: visible;
+}
+
+/* grid + baseline */
+.chart__grid {
+	stroke: var(--color-border);
+	stroke-width: 1;
+	shape-rendering: crispEdges;
+}
+.chart__grid--v { stroke: var(--color-border); opacity: .6; }
+.chart__baseline {
+	stroke: var(--color-border-strong);
+	stroke-width: 1;
+	shape-rendering: crispEdges;
+}
+
+/* axis text */
+.chart__axis-label {
+	font-size: 11px;
+	font-weight: var(--font-weight-medium);
+	fill: var(--color-text-muted);
+}
+.chart__axis-title {
+	font-size: 12px;
+	font-weight: var(--font-weight-semibold);
+	fill: var(--color-text-muted);
+	letter-spacing: var(--letter-spacing-wide);
+}
+.chart__annotation {
+	font-size: 12px;
+	font-weight: var(--font-weight-semibold);
+	fill: var(--color-text);
+}
+
+/* marks: fill/stroke resolve to --chart-mark-color (slot or inline) */
+.chart__mark {
+	fill: var(--chart-mark-color, var(--color-chart-1));
+	transition: opacity var(--transition-fast);
+}
+.chart__mark:hover { opacity: .82; }
+.chart__mark--selected {
+	stroke: var(--color-focus);
+	stroke-width: 2;
+}
+
+.chart__line {
+	fill: none;
+	stroke: var(--chart-mark-color, var(--color-chart-1));
+	stroke-linecap: round;
+	stroke-linejoin: round;
+}
+.chart__area {
+	fill: var(--chart-mark-color, var(--color-chart-1));
+	fill-opacity: .16;
+	stroke: none;
+}
+.chart__point circle,
+.chart__point rect,
+.chart__point polygon,
+.chart__point path {
+	stroke: var(--color-bg-raised);
+	stroke-width: 1.5;
+}
+.chart__rect {
+	stroke: var(--color-bg-raised);
+	stroke-width: 1;
+}
+.chart__rule,
+.chart__rule--v {
+	stroke: var(--color-chart-rule);
+	stroke-width: 1.5;
+	opacity: .9;
+}
+.chart__sector {
+	stroke: var(--color-bg-raised);
+	stroke-width: 1;
+}
+
+/* selection indicator */
+.chart__selection {
+	stroke: var(--color-primary-400);
+	stroke-width: 1.5;
+	opacity: .9;
+}
+
+/* legend */
+.chart__legend {
+	display: flex;
+	flex-wrap: wrap;
+	align-items: center;
+	gap: var(--space-2) var(--space-4);
+	margin: var(--space-3) 0 0;
+	font-size: var(--font-size-xs);
+}
+.chart__legend--top { margin: 0 0 var(--space-3); }
+.chart__legend--left,
+.chart__legend--right {
+	flex-direction: column;
+	align-items: flex-start;
+	gap: var(--space-2);
+}
+.chart__legend--none { display: none; }
+.chart__legend-item {
+	display: inline-flex;
+	align-items: center;
+	gap: var(--space-2);
+	color: var(--color-text-muted);
+	font-weight: var(--font-weight-medium);
+}
+.chart__swatch {
+	width: 0.625rem;
+	height: 0.625rem;
+	border-radius: var(--radius-sm);
+	display: inline-block;
+	flex: none;
+}
+.chart__swatch.chart__c1 { background: var(--color-chart-1); }
+.chart__swatch.chart__c2 { background: var(--color-chart-2); }
+.chart__swatch.chart__c3 { background: var(--color-chart-3); }
+.chart__swatch.chart__c4 { background: var(--color-chart-4); }
+.chart__swatch.chart__c5 { background: var(--color-chart-5); }
+.chart__swatch.chart__c6 { background: var(--color-chart-6); }
+.chart__swatch.chart__c7 { background: var(--color-chart-7); }
+.chart__swatch.chart__c8 { background: var(--color-chart-8); }
+
+/* donut center (total) — overlay on the plot */
+.chart--pie .chart__plot { position: relative; }
+.chart__donut-center {
+	position: absolute;
+	inset: 0;
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	pointer-events: none;
+	gap: 2px;
+}
+.chart__donut-value {
+	font-size: var(--font-size-2xl);
+	font-weight: var(--font-weight-bold);
+	color: var(--color-text);
+	font-variant-numeric: tabular-nums;
+}
+.chart__donut-label {
+	font-size: var(--font-size-xs);
+	font-weight: var(--font-weight-medium);
+	color: var(--color-text-muted);
+	text-transform: uppercase;
+	letter-spacing: var(--letter-spacing-wide);
+}
+
+/* screen-reader data table (visually hidden) */
+.chart__sr {
+	position: absolute;
+	width: 1px;
+	height: 1px;
+	margin: -1px;
+	padding: 0;
+	overflow: hidden;
+	clip: rect(0 0 0 0);
+	clip-path: inset(50%);
+	white-space: nowrap;
+	border: 0;
+}
+
+/* empty state */
+.chart--empty {
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	min-height: 9rem;
+	border: 1px dashed var(--color-border-strong);
+	border-radius: var(--radius-xl);
+	background: var(--color-bg-subtle);
+}
+.chart__empty {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	gap: var(--space-1);
+	padding: var(--space-6);
+	text-align: center;
+}
+.chart__empty-title {
+	font-size: var(--font-size-sm);
+	font-weight: var(--font-weight-semibold);
+	color: var(--color-text-muted);
+}
+.chart__empty-message {
+	font-size: var(--font-size-xs);
+	color: var(--color-text-faint);
+}
+
+/* dark: brighter categorical palette for contrast on dark surfaces */
+@media (prefers-color-scheme: dark) {
+	:root {
+		--color-chart-1:   #a5b4fc;
+		--color-chart-2:   #34d399;
+		--color-chart-3:   #fbbf24;
+		--color-chart-4:   #f87171;
+		--color-chart-5:   #60a5fa;
+		--color-chart-6:   #a78bfa;
+		--color-chart-7:   #2dd4bf;
+		--color-chart-8:   #fb923c;
+		--color-chart-rule: var(--color-neutral-400);
+	}
+	.chart__point circle,
+	.chart__point rect,
+	.chart__point polygon,
+	.chart__point path {
+		stroke: var(--color-bg-raised);
+	}
 }

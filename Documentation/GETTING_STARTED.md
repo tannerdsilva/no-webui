@@ -203,25 +203,49 @@ component catalog.
 ### Dismissible Components
 
 `WebUIAlert(dismissible:)`, `WebUIToast(dismissible:)`, `WebUIModal`, and
-`WebUIChip(removable:)` render close buttons with `data-dismiss`/`data-remove`
-markers. the runtime sends `targetId` and `targetClass` for every click, so a
-container handler can tell when a dismiss button was clicked:
+`WebUIChip(removable:)` are all `Dismissible` views. attach a handler with
+`.onDismiss { me, _ in ... }` and the close button becomes a routed component —
+the framework allocates its component id, registers the handler, and hands you
+an `ElementRef` (`me`) to the component's own root element. no container
+handler, no class-string matching, no id strings:
 
 ```swift
 WebUIDocument(
     title: "Notifications",
     body: Div {
-        WebUIToast(message: "Saved", dismissible: true)
-    }
-    .onClick { event in
-        if event.data["targetClass"]?.contains("toast__close") == true {
-            // remove the toast — re-render the container without it
-            return [FragmentUpdate(id: "toast-host", html: toastHostHTML(removed: true))]
-        }
-        return []
+        WebUIToast(message: "Saved", id: "toast-saved")
+            .onDismiss { me, _ in
+                // server truth: drop it from state
+                state.toasts.removeAll { $0.id == "toast-saved" }
+                // DOM truth: remove the element itself
+                return [me.remove()]
+            }
     }
 )
 ```
 
-the close buttons are deliberately not auto-wired — the framework renders the
-marker, the handler decides what dismissal means for your state.
+each `.onDismiss` wires exactly its own close button, so N dismissibles in one
+container route independently — no disambiguation strings, ever. the handler
+receives `me` even when the component carries no `id:`; the framework mints an
+element id (`e0`, `e1`, ...) for the render pass. `me` also supports
+`replace(with:)` and `update(view)` for swapping the element's contents.
+
+`me.remove()` emits `FragmentUpdate(id:, html: "")`; the runtime treats an
+empty fragment as element removal (`el.remove()`). this is a pinned, documented
+contract (see `JS_RUNTIME.md`) and the preferred way to clear a dismissed
+component — no container re-render needed.
+
+the legacy container-handler pattern is still supported unchanged: without an
+`.onDismiss` handler the close button renders the static `data-dismiss`/
+`data-remove` marker exactly as before, and a container `.onClick` can match
+`event.data["targetClass"]`/`event.data["targetId"]` to decide what dismissal
+means. prefer `.onDismiss` — it removes the class-string matching entirely.
+
+the same typed-handle medicine extends to the interactive data components:
+`WebUITable` (`.onSort { me, column in }`, `.onSelectAll`, `.onSelect`,
+`.onToggleExpand`), `WebUIPagination` (`.onPageChange { me, page in }`,
+`.onRowsPerPageChange`), and `WebUIChart` (`.onSelectMark { me, category in }`)
+all self-wire their controls as routed components and hand the handler an
+`ElementRef` + typed payload — no `targetId`/`targetClass` string matching
+anywhere. see `DESIGN_SYSTEM.md`, `CHARTS.md`, and `API.md` for the full
+before/after. the legacy container pattern remains available for all of them.

@@ -257,6 +257,7 @@ See `Documentation/JS_RUNTIME.md` for detailed documentation of each module.
 | Prototype pollution | `State.set()` rejects keys `__proto__`, `constructor`, `prototype` |
 | `javascript:` URLs | `sanitizeURL()` blocks `javascript:`, `data:`, `vbscript:` in Link, Image, Form, and the js Router — c0 controls and ascii whitespace are stripped before the scheme check, matching the browser's parser so padded/obfuscated schemes are caught |
 | Attribute injection | `htmlEscape()` on every attribute key and value the framework emits — primitive `id`/`class`/`name`/`for`/`data-status`/`method` parameters included, not just modifiers |
+| SVG icon injection | `IconSanitizer.sanitize()` (applied to every `WebUIIconCustom` body) strips `<script>`, `on*` event handlers, `foreignObject`, and `javascript:`/`data:`/`vbscript:` hrefs before emission; icon `aria-label`/`class`/`data-icon` are `htmlEscape()`d, so a hostile title cannot break out of the attribute (see `Documentation/ICONS.md`) |
 | CSP bypass | Auto-generated nonce per document, default CSP with `script-src 'nonce-...'` |
 | CSRF | `CSRFProtection` enum with HMAC-SHA256 stateless tokens, optional `Form.csrfToken` parameter |
 | Data race | `NSLock` on all `EventRouter.State` and `ObserverList` mutations |

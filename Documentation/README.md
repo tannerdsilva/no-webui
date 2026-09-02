@@ -8,10 +8,11 @@ zero external CSS/JS frameworks — the entire UI compiles into the binary.
 
 | Module | Path | Purpose |
 |---|---|---|
-| `WebUI` | `Sources/WebUI/` | Core: View protocol, ViewBuilder, primitives, layouts, modifiers, CSS system, HTML document assembly, WebSocket protocol, JS runtime |
+| `WebUI` | `Sources/WebUI/` | Core: View protocol, ViewBuilder, primitives, layouts, modifiers, CSS system, HTML document assembly, WebSocket protocol, JS runtime, native svg iconography (`WebUIIcon`, `IconName`) |
 | `WebUIDesignSystem` | `Sources/WebUIDesignSystem/` | Design system: 225 CSS custom properties (tokens), 22 styled components (Button, Card, Input, Modal, etc.) |
 | `WebUIAuth` | `Sources/WebUIAuth/` | Authentication + sessions: identity model, session tokens, cookies, in-memory + LMDB session stores, Argon2id password verification, constant-time compare, `AuthContext` |
 | `WebUIAssetTool` | `Sources/WebUIAssetTool/` | Build-time executable that embeds CSS + JS as Swift string constants |
+| `WebUIIconTool` | `Sources/WebUIIconTool/` | Build-time + standalone svg icon toolset (`generate`/`lint`/`list`/`stats`/`render-preview`) that turns `designer/icons/icon-manifest.json` into the `IconName` catalog (see `Documentation/ICONS.md`) |
 | `WebUIExample` | `Sources/WebUIExample/` | HTTP/WebSocket example server (SwiftNIO-based counter app) |
 | `WebUIAuthExample` | `Sources/WebUIAuthExample/` | Login-gated interactive demo: native-POST login page + authenticated dashboard (admin / password) |
 | `WebUIShowcase` | `Sources/WebUIShowcase/` | Showcase server + static HTML generator (`showcase` plugin) |

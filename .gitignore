@@ -13,3 +13,5 @@ node_modules/
 
 # smoke-test screenshots
 .smoke/
+
+.hermes/

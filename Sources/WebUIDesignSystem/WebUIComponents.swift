@@ -1,4 +1,5 @@
 import Foundation
+import Logging
 import WebUI
 
 // MARK: - WebUI Button
@@ -212,7 +213,7 @@ public struct WebUIBadge: View {
 }
 
 // MARK: - WebUI Alert
-public struct WebUIAlert: View {
+public struct WebUIAlert: View, Dismissible {
     public enum Variant: String, Sendable {
         case info    = "alert--info"
         case success = "alert--success"
@@ -220,41 +221,71 @@ public struct WebUIAlert: View {
         case danger  = "alert--danger"
     }
 
+    /// Semantic default glyph for a variant (used when `icon` is not set).
+    private static func defaultIcon(for variant: Variant) -> IconName {
+        switch variant {
+        case .info:    return .info
+        case .success: return .checkCircle
+        case .warning: return .alertTriangle
+        case .danger:  return .xCircle
+        }
+    }
+
     public let variant: Variant
     public let title: String?
     public let message: String
     public let dismissible: Bool
-    public let icon: String?
+    /// Stable element id for the alert root. When set, the `ElementRef`
+    /// handed to `.onDismiss` references it, so re-rendered fragments keep
+    /// routing to the same handler.
+    public let id: String?
+    /// Icon to render. `nil` (the default) renders the variant's semantic
+    /// glyph (info → `.info`, success → `.checkCircle`, warning →
+    /// `.alertTriangle`, danger → `.xCircle`); pass a specific `IconName` to
+    /// override.
+    public let icon: IconName
+    /// handler wired onto the close button; `nil` renders the static
+    /// `data-dismiss` marker only.
+    public var onDismiss: DismissHandler?
 
     public init(
         variant: Variant = .info,
         title: String? = nil,
         message: String,
         dismissible: Bool = false,
-        icon: String? = nil
+        icon: IconName? = nil,
+        id: String? = nil
     ) {
         self.variant = variant
         self.title = title
         self.message = message
         self.dismissible = dismissible
-        self.icon = icon
+        self.icon = icon ?? Self.defaultIcon(for: variant)
+        self.id = id
+        self.onDismiss = nil
     }
 
+    public var dismissButtonClass: String { "alert__close" }
+    public var dismissMarker: String { "data-dismiss" }
+    public var dismissRootIdentifier: String? { id }
+
     public func render() -> String {
+        let dismissal = makeDismissal(ariaLabel: "Dismiss")
         var html = "<div class=\"alert \(variant.rawValue)\" role=\"alert\""
-        if dismissible { html += " data-dismissible" }
-        html += ">"
-        if let icon {
-            html += "<div class=\"alert__icon\">\(htmlEscape(icon))</div>"
+        if let elementID = dismissal.elementID ?? id {
+            html += " id=\"\(htmlEscape(elementID))\""
         }
+        if dismissible || onDismiss != nil { html += " data-dismissible" }
+        html += ">"
+        html += "<div class=\"alert__icon fill-slot\">" + WebUIIcon(icon, size: .slot).render() + "</div>"
         html += "<div class=\"alert__body\">"
         if let title {
             html += "<div class=\"alert__title\">\(htmlEscape(title))</div>"
         }
         html += "<div class=\"alert__message\">\(htmlEscape(message))</div>"
         html += "</div>"
-        if dismissible {
-            html += "<button class=\"alert__close\" data-dismiss aria-label=\"Dismiss\">&times;</button>"
+        if dismissible || onDismiss != nil {
+            html += dismissal.buttonHTML
         }
         html += "</div>"
         return html
@@ -431,7 +462,7 @@ public struct WebUISkeleton: View {
 }
 
 // MARK: - WebUI Toast
-public struct WebUIToast: View {
+public struct WebUIToast: View, Dismissible {
     public enum Variant: String, Sendable {
         case info    = "toast--info"
         case success = "toast--success"
@@ -443,6 +474,9 @@ public struct WebUIToast: View {
     public let message: String
     public let id: String?
     public let dismissible: Bool
+    /// handler wired onto the close button; `nil` renders the static
+    /// `data-dismiss` marker only.
+    public var onDismiss: DismissHandler?
 
     public init(
         variant: Variant = .info,
@@ -454,16 +488,24 @@ public struct WebUIToast: View {
         self.message = message
         self.id = id
         self.dismissible = dismissible
+        self.onDismiss = nil
     }
 
+    public var dismissButtonClass: String { "toast__close" }
+    public var dismissMarker: String { "data-dismiss" }
+    public var dismissRootIdentifier: String? { id }
+
     public func render() -> String {
+        let dismissal = makeDismissal(ariaLabel: "Dismiss")
         var html = "<div class=\"toast \(variant.rawValue)\" role=\"alert\""
-        if let id { html += " id=\"\(htmlEscape(id))\"" }
+        if let elementID = dismissal.elementID ?? id {
+            html += " id=\"\(htmlEscape(elementID))\""
+        }
         html += ">"
         html += "<span class=\"toast__icon\"></span>"
         html += "<span class=\"toast__message\">\(htmlEscape(message))</span>"
-        if dismissible {
-            html += "<button class=\"toast__close\" data-dismiss aria-label=\"Dismiss\">&times;</button>"
+        if dismissible || onDismiss != nil {
+            html += dismissal.buttonHTML
         }
         html += "</div>"
         return html
@@ -471,11 +513,14 @@ public struct WebUIToast: View {
 }
 
 // MARK: - WebUI Modal
-public struct WebUIModal: View {
+public struct WebUIModal: View, Dismissible {
     public let title: String
     public let id: String?
     public let children: [any View]
     public let footer: [any View]?
+    /// handler wired onto the close button; `nil` renders the static
+    /// `data-dismiss` marker only.
+    public var onDismiss: DismissHandler?
 
     public init(
         title: String,
@@ -487,16 +532,24 @@ public struct WebUIModal: View {
         self.id = id
         self.children = content()
         self.footer = footer()
+        self.onDismiss = nil
     }
 
+    public var dismissButtonClass: String { "modal__close" }
+    public var dismissMarker: String { "data-dismiss" }
+    public var dismissRootIdentifier: String? { id }
+
     public func render() -> String {
+        let dismissal = makeDismissal(ariaLabel: "Close")
         var html = "<div class=\"modal-overlay\""
-        if let id { html += " id=\"\(htmlEscape(id))\"" }
+        if let elementID = dismissal.elementID ?? id {
+            html += " id=\"\(htmlEscape(elementID))\""
+        }
         html += ">"
         html += "<div class=\"modal\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"\(htmlEscape(id ?? ""))-title\">"
         html += "<div class=\"modal__header\">"
         html += "<h2 class=\"modal__title\" id=\"\(htmlEscape(id ?? ""))-title\">\(htmlEscape(title))</h2>"
-        html += "<button class=\"modal__close\" data-dismiss aria-label=\"Close\">&times;</button>"
+        html += dismissal.buttonHTML
         html += "</div>"
         html += "<div class=\"modal__body\">"
         for child in children {
@@ -515,6 +568,21 @@ public struct WebUIModal: View {
     }
 }
 
+// MARK: - Typed interactive handlers
+
+/// sort-header click: `(me, column)` — `me` is the table root (`ElementRef`),
+/// `column` the clicked column index. the handler decides the next sort state.
+public typealias TableSortHandler = @Sendable (ElementRef, Int) async -> [FragmentUpdate]
+
+/// select-all checkbox click: `(me)` — handler decides the new selection set.
+public typealias TableSelectAllHandler = @Sendable (ElementRef) async -> [FragmentUpdate]
+
+/// per-row select checkbox click: `(me, rowID)`.
+public typealias TableSelectRowHandler = @Sendable (ElementRef, String) async -> [FragmentUpdate]
+
+/// expand/collapse button click: `(me, rowID)`.
+public typealias TableExpandHandler = @Sendable (ElementRef, String) async -> [FragmentUpdate]
+
 // MARK: - WebUI Table
 public struct WebUITable: View {
     /// Per-column cell alignment. `.trailing` maps to the `.num` class
@@ -529,11 +597,11 @@ public struct WebUITable: View {
     /// empty. Distinct from the standalone `WebUIEmptyState` card: it sits in
     /// a colspan row so the table frame stays visible with no data.
     public struct EmptyState: Sendable {
-        public let icon: String
+        public let icon: IconName
         public let title: String
         public let message: String
 
-        public init(icon: String = "📭", title: String, message: String) {
+        public init(icon: IconName = .inbox, title: String, message: String) {
             self.icon = icon
             self.title = title
             self.message = message
@@ -559,11 +627,10 @@ public struct WebUITable: View {
 
     /// Stable element id for the outermost rendered element (the `.table-wrap`
     /// div when `wrapped`, otherwise the `<table>` tag). Interactive tables
-    /// re-emit themselves as `FragmentUpdate(id:)` patches and attach
-    /// `.onClick(id:)` with this same id — because the id is stable across
-    /// re-renders, the EventRouter handler registered once keeps routing.
-    /// Inner control ids are derived: `{id}-sort-{col}`, `{id}-select-all`,
-    /// `{id}-select-{rowId}`, `{id}-expand-{rowId}`.
+    /// re-emit themselves as `FragmentUpdate(id:)` patches and register typed
+    /// handlers (`onSort`/`onSelectAll`/`onSelect`/`onToggleExpand`) under
+    /// stable control ids derived from this value (`{id}-sort-{col}`,
+    /// `{id}-select-all`, `{id}-select-{rowId}`, `{id}-expand-{rowId}`).
     public let id: String?
     /// Column indices that may be clicked to sort (emit `.sort` affordance).
     public let sortableColumns: Set<Int>
@@ -581,6 +648,16 @@ public struct WebUITable: View {
     public let expandedRows: Set<String>
     /// Per-row expanded detail content, keyed by row id.
     public let rowDetails: [String: any View]?
+
+    /// sorted-column click; `nil` renders sort headers statically (no routing).
+    public var onSort: TableSortHandler?
+    /// select-all click; `nil` renders the checkbox statically.
+    public var onSelectAll: TableSelectAllHandler?
+    /// per-row select click; `nil` renders row checkboxes statically.
+    public var onSelect: TableSelectRowHandler?
+    /// expand/collapse click; `nil` renders expand buttons statically.
+    public var onToggleExpand: TableExpandHandler?
+    private static let log = Logger(label: "webui.table")
 
     public init(
         headers: [String],
@@ -620,6 +697,10 @@ public struct WebUITable: View {
         self.selectedRows = selectedRows
         self.expandedRows = expandedRows
         self.rowDetails = rowDetails
+        self.onSort = nil
+        self.onSelectAll = nil
+        self.onSelect = nil
+        self.onToggleExpand = nil
     }
 
     public func render() -> String {
@@ -634,6 +715,16 @@ public struct WebUITable: View {
         let hasSelect = selectable && !rows.isEmpty && rowIds.count == rows.count
         let hasExpand = !(rowDetails?.isEmpty ?? true) && !rows.isEmpty
         let totalColumns = headers.count + (hasSelect ? 1 : 0) + (hasExpand ? 1 : 0)
+
+        let interactiveWanted = onSort != nil || onSelectAll != nil || onSelect != nil || onToggleExpand != nil
+        if interactiveWanted, id == nil {
+            Self.log.warning("WebUITable: typed handlers require a stable `id:` for routing; rendering controls statically.")
+        }
+        // `me` is the ref the typed handlers receive; the table root carries
+        // the caller's stable `id`, so `me.update(...)` patches the table in
+        // place and re-emitted fragments carry identical routing ids.
+        let me = ElementRef.stable(base)
+        let wired = interactiveWanted && id != nil
 
         let sortArrow = "<svg class=\"sort__arrow\" viewBox=\"0 0 10 10\" width=\"10\" height=\"10\" fill=\"none\" aria-hidden=\"true\"><path d=\"M2 6.5L5 3.5l3 3\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>"
         let expandIcon = "<svg class=\"table__expand-icon\" viewBox=\"0 0 10 10\" width=\"10\" height=\"10\" fill=\"none\" aria-hidden=\"true\"><path d=\"M3.5 2.5L6.5 5l-3 2.5\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>"
@@ -659,7 +750,15 @@ public struct WebUITable: View {
                 if selectedRows.count == rowIds.count { state = "true" }
                 else if selectedRows.isEmpty { state = "false" }
                 else { state = "mixed" }
-                html += "<th class=\"table__select-col align-center\" scope=\"col\"><span class=\"table__select\" id=\"\(htmlEscape(base))-select-all\" role=\"checkbox\" aria-checked=\"\(state)\" aria-label=\"Select all rows\" tabindex=\"0\"></span></th>"
+                var selectAllHandler: EventHandler? = nil
+                if let onSelectAll {
+                    let h: TableSelectAllHandler = onSelectAll
+                    selectAllHandler = { event in await h(me) }
+                }
+                let selectAllAttrs = wired
+                    ? controlAttributes(id: "\(base)-select-all", handler: selectAllHandler)
+                    : ""
+                html += "<th class=\"table__select-col align-center\" scope=\"col\"><span class=\"table__select\" id=\"\(htmlEscape(base))-select-all\" role=\"checkbox\" aria-checked=\"\(state)\" aria-label=\"Select all rows\" tabindex=\"0\"\(selectAllAttrs)></span></th>"
             }
             if hasExpand {
                 html += "<th class=\"table__expand-col\" aria-hidden=\"true\"></th>"
@@ -667,15 +766,23 @@ public struct WebUITable: View {
             for (i, h) in headers.enumerated() {
                 let align = alignmentClass(i)
                 let sortPrefix = (align.map { "\($0) " } ?? "") + "sort-cell"
+                var sortHandler: EventHandler? = nil
+                if let onSort {
+                    let h: TableSortHandler = onSort
+                    sortHandler = { event in await h(me, i) }
+                }
+                let sortAttrs = wired
+                    ? controlAttributes(id: "\(base)-sort-\(i)", handler: sortHandler)
+                    : ""
                 if let sort, sort.column == i {
                     let aria = sort.direction == .ascending ? "ascending" : "descending"
                     let desc = sort.direction == .descending ? " sort--desc" : ""
                     html += "<th class=\"\(sortPrefix)\" aria-sort=\"\(aria)\">"
-                    html += "<span class=\"sort sort--active\(desc)\" id=\"\(htmlEscape(base))-sort-\(i)\">\(htmlEscape(h))\(sortArrow)</span>"
+                    html += "<span class=\"sort sort--active\(desc)\" id=\"\(htmlEscape(base))-sort-\(i)\"\(sortAttrs)>\(htmlEscape(h))\(sortArrow)</span>"
                     html += "</th>"
                 } else if sortableColumns.contains(i) {
                     html += "<th class=\"\(sortPrefix)\">"
-                    html += "<span class=\"sort\" id=\"\(htmlEscape(base))-sort-\(i)\">\(htmlEscape(h))\(sortArrow)</span>"
+                    html += "<span class=\"sort\" id=\"\(htmlEscape(base))-sort-\(i)\"\(sortAttrs)>\(htmlEscape(h))\(sortArrow)</span>"
                     html += "</th>"
                 } else if let a = align {
                     html += "<th class=\"\(a)\">\(htmlEscape(h))</th>"
@@ -689,7 +796,7 @@ public struct WebUITable: View {
         if rows.isEmpty, let empty = emptyState {
             let colspan = totalColumns > 0 ? totalColumns : 1
             html += "<tr><td colspan=\"\(colspan)\" class=\"table__empty\">"
-            html += "<div class=\"table__empty-icon\">\(htmlEscape(empty.icon))</div>"
+            html += "<div class=\"table__empty-icon fill-slot\">" + WebUIIcon(empty.icon, size: .slot).render() + "</div>"
             html += "<div class=\"table__empty-title\">\(htmlEscape(empty.title))</div>"
             if !empty.message.isEmpty {
                 html += "<div class=\"table__empty-message\">\(htmlEscape(empty.message))</div>"
@@ -707,14 +814,30 @@ public struct WebUITable: View {
                 let trAttrs = trClass.isEmpty ? "" : " class=\"\(trClass)\""
                 html += "<tr\(trAttrs)>"
                 if hasSelect {
-                    html += "<td class=\"table__select-col align-center\"><span class=\"table__select\" id=\"\(htmlEscape(base))-select-\(htmlEscape(rowId))\" role=\"checkbox\" aria-checked=\"\(selected)\" aria-label=\"Select row \(htmlEscape(rowId))\" tabindex=\"0\"></span></td>"
+                    var selectHandler: EventHandler? = nil
+                    if let onSelect {
+                        let h: TableSelectRowHandler = onSelect
+                        selectHandler = { event in await h(me, rowId) }
+                    }
+                    let selectAttrs = wired
+                        ? controlAttributes(id: "\(base)-select-\(rowId)", handler: selectHandler)
+                        : ""
+                    html += "<td class=\"table__select-col align-center\"><span class=\"table__select\" id=\"\(htmlEscape(base))-select-\(htmlEscape(rowId))\" role=\"checkbox\" aria-checked=\"\(selected)\" aria-label=\"Select row \(htmlEscape(rowId))\" tabindex=\"0\"\(selectAttrs)></span></td>"
                 }
                 if hasExpand {
                     let canExpand = rowDetails?[rowId] != nil
+                    var expandHandler: EventHandler? = nil
+                    if let onToggleExpand {
+                        let h: TableExpandHandler = onToggleExpand
+                        expandHandler = { event in await h(me, rowId) }
+                    }
+                    let expandAttrs = wired
+                        ? controlAttributes(id: "\(base)-expand-\(rowId)", handler: expandHandler)
+                        : ""
                     if canExpand {
-                        html += "<td class=\"table__expand-col\"><button type=\"button\" class=\"table__expand-btn\" id=\"\(htmlEscape(base))-expand-\(htmlEscape(rowId))\" aria-expanded=\"\(expanded)\">\(expandIcon)</button></td>"
+                        html += "<td class=\"table__expand-col\"><button type=\"button\" class=\"table__expand-btn\" id=\"\(htmlEscape(base))-expand-\(htmlEscape(rowId))\" aria-expanded=\"\(expanded)\"\(expandAttrs)>\(expandIcon)</button></td>"
                     } else {
-                        html += "<td class=\"table__expand-col\"><button type=\"button\" class=\"table__expand-btn\" id=\"\(htmlEscape(base))-expand-\(htmlEscape(rowId))\" aria-disabled=\"true\" disabled>\(expandIcon)</button></td>"
+                        html += "<td class=\"table__expand-col\"><button type=\"button\" class=\"table__expand-btn\" id=\"\(htmlEscape(base))-expand-\(htmlEscape(rowId))\" aria-disabled=\"true\" disabled\(expandAttrs)>\(expandIcon)</button></td>"
                     }
                 }
                 for (i, cell) in row.enumerated() {
@@ -758,8 +881,41 @@ public struct WebUITable: View {
     }
 }
 
+// MARK: - WebUITable typed handlers
+
+public extension WebUITable {
+    /// attach a sorted-column click handler. `me` references the table root
+    /// element; the receiver decides the next sort state.
+    func onSort(_ handler: @escaping TableSortHandler) -> Self {
+        var copy = self
+        copy.onSort = handler
+        return copy
+    }
+
+    /// attach a select-all click handler. `me` references the table root.
+    func onSelectAll(_ handler: @escaping TableSelectAllHandler) -> Self {
+        var copy = self
+        copy.onSelectAll = handler
+        return copy
+    }
+
+    /// attach a per-row select handler; receives the clicked row id.
+    func onSelect(_ handler: @escaping TableSelectRowHandler) -> Self {
+        var copy = self
+        copy.onSelect = handler
+        return copy
+    }
+
+    /// attach an expand/collapse handler; receives the toggled row id.
+    func onToggleExpand(_ handler: @escaping TableExpandHandler) -> Self {
+        var copy = self
+        copy.onToggleExpand = handler
+        return copy
+    }
+}
+
 // MARK: - WebUI Chip
-public struct WebUIChip: View {
+public struct WebUIChip: View, Dismissible {
     public enum Variant: String, Sendable {
         case primary   = "chip--primary"
         case secondary = "chip--secondary"
@@ -774,6 +930,9 @@ public struct WebUIChip: View {
     public let variant: Variant
     public let removable: Bool
     public let id: String?
+    /// handler wired onto the remove button; `nil` renders the static
+    /// `data-remove` marker only.
+    public var onDismiss: DismissHandler?
 
     public init(
         _ text: String,
@@ -785,15 +944,23 @@ public struct WebUIChip: View {
         self.variant = variant
         self.removable = removable
         self.id = id
+        self.onDismiss = nil
     }
 
+    public var dismissButtonClass: String { "chip__remove" }
+    public var dismissMarker: String { "data-remove" }
+    public var dismissRootIdentifier: String? { id }
+
     public func render() -> String {
+        let dismissal = makeDismissal(ariaLabel: "Remove")
         var html = "<span class=\"chip \(variant.rawValue)\""
-        if let id { html += " id=\"\(htmlEscape(id))\"" }
+        if let elementID = dismissal.elementID ?? id {
+            html += " id=\"\(htmlEscape(elementID))\""
+        }
         html += ">"
         html += "<span class=\"chip__label\">\(htmlEscape(text))</span>"
-        if removable {
-            html += "<button class=\"chip__remove\" data-remove aria-label=\"Remove\">&times;</button>"
+        if removable || onDismiss != nil {
+            html += dismissal.buttonHTML
         }
         html += "</span>"
         return html
@@ -802,13 +969,13 @@ public struct WebUIChip: View {
 
 // MARK: - WebUI Empty State
 public struct WebUIEmptyState: View {
-    public let icon: String
+    public let icon: IconName
     public let title: String
     public let message: String
     public let action: (label: String, id: String)?
 
     public init(
-        icon: String = "📭",
+        icon: IconName = .inbox,
         title: String,
         message: String,
         action: (String, String)? = nil
@@ -821,7 +988,7 @@ public struct WebUIEmptyState: View {
 
     public func render() -> String {
         var html = "<div class=\"empty-state\">"
-        html += "<div class=\"empty-state__icon\">\(htmlEscape(icon))</div>"
+        html += "<div class=\"empty-state__icon fill-slot\">" + WebUIIcon(icon, size: .slot).render() + "</div>"
         html += "<h3 class=\"empty-state__title\">\(htmlEscape(title))</h3>"
         html += "<p class=\"empty-state__message\">\(htmlEscape(message))</p>"
         if let (label, actionId) = action {
@@ -1002,6 +1169,12 @@ public struct WebUIPagination: View {
     /// Rows-per-page meta: current size + allowed sizes.
     public let rowsPerPage: Int?
     public let rowsPerPageOptions: [Int]
+    /// page-change click (prev/next/number); `nil` renders the controls
+    /// statically. receives `(me, targetPage)`.
+    public var onPageChange: (@Sendable (ElementRef, Int) async -> [FragmentUpdate])?
+    /// rows-per-page select change (`.change` event); receives `(me, newSize)`.
+    public var onRowsPerPageChange: (@Sendable (ElementRef, Int) async -> [FragmentUpdate])?
+    private static let log = Logger(label: "webui.pagination")
 
     public init(
         page: Int,
@@ -1015,6 +1188,8 @@ public struct WebUIPagination: View {
         self.id = id
         self.rowsPerPage = rowsPerPage
         self.rowsPerPageOptions = rowsPerPageOptions
+        self.onPageChange = nil
+        self.onRowsPerPageChange = nil
     }
 
     public func render() -> String {
@@ -1023,10 +1198,25 @@ public struct WebUIPagination: View {
         let base = id.map { htmlEscape($0) }
         func pid(_ s: String) -> String? { base.map { "\($0)-\(s)" } }
 
+        let interactiveWanted = onPageChange != nil || onRowsPerPageChange != nil
+        if interactiveWanted, id == nil {
+            Self.log.warning("WebUIPagination: typed handlers require a stable `id:` for routing; rendering controls statically.")
+        }
+        let wired = interactiveWanted && id != nil
+        let me = id.map { ElementRef.stable($0) } ?? ElementRef.stable("webui-pagination")
+
         var html = "<nav class=\"pagination\" aria-label=\"Pagination\">"
         let prevIdAttr = pid("prev").map { " id=\"\($0)\"" } ?? ""
         let prevDisabled = page <= 1 ? " disabled" : ""
-        html += "<button class=\"pagination__btn\"\(prevIdAttr) type=\"button\" aria-label=\"Previous page\"\(prevDisabled)>&#8249;</button>"
+        var prevHandler: EventHandler? = nil
+        if wired, let onPageChange {
+            let h: @Sendable (ElementRef, Int) async -> [FragmentUpdate] = onPageChange
+            prevHandler = { event in await h(me, max(1, page - 1)) }
+        }
+        let prevRoute = wired
+            ? controlAttributes(id: base.map { "\($0)-prev" } ?? "", handler: prevHandler)
+            : ""
+        html += "<button class=\"pagination__btn\"\(prevIdAttr) type=\"button\" aria-label=\"Previous page\"\(prevDisabled)\(prevRoute)>&#8249;</button>"
         for item in pageWindow(page: page, pages: pages) {
             switch item {
             case .ellipsis:
@@ -1036,15 +1226,47 @@ public struct WebUIPagination: View {
                 let cls = isActive ? "pagination__btn pagination__btn--active" : "pagination__btn"
                 let idAttr = pid("page-\(n)").map { " id=\"\($0)\"" } ?? ""
                 let current = isActive ? " aria-current=\"page\"" : ""
-                html += "<button class=\"\(cls)\"\(idAttr) type=\"button\"\(current)>\(n)</button>"
+                var pageHandler: EventHandler? = nil
+                if wired, let onPageChange {
+                    let h: @Sendable (ElementRef, Int) async -> [FragmentUpdate] = onPageChange
+                    pageHandler = { event in await h(me, n) }
+                }
+                let pageRoute = wired
+                    ? controlAttributes(id: base.map { "\($0)-page-\(n)" } ?? "", handler: pageHandler)
+                    : ""
+                html += "<button class=\"\(cls)\"\(idAttr) type=\"button\"\(current)\(pageRoute)>\(n)</button>"
             }
         }
         let nextIdAttr = pid("next").map { " id=\"\($0)\"" } ?? ""
         let nextDisabled = page >= pages ? " disabled" : ""
-        html += "<button class=\"pagination__btn\"\(nextIdAttr) type=\"button\" aria-label=\"Next page\"\(nextDisabled)>&#8250;</button>"
+        var nextHandler: EventHandler? = nil
+        if wired, let onPageChange {
+            let h: @Sendable (ElementRef, Int) async -> [FragmentUpdate] = onPageChange
+            nextHandler = { event in await h(me, min(pages, page + 1)) }
+        }
+        let nextRoute = wired
+            ? controlAttributes(id: base.map { "\($0)-next" } ?? "", handler: nextHandler)
+            : ""
+        html += "<button class=\"pagination__btn\"\(nextIdAttr) type=\"button\" aria-label=\"Next page\"\(nextDisabled)\(nextRoute)>&#8250;</button>"
         if let rowsPerPage {
             let rowsIdAttr = pid("rows").map { " id=\"\($0)\"" } ?? ""
-            html += "<span class=\"pagination__meta\"><label>Rows per page</label><select class=\"select\"\(rowsIdAttr)>"
+            var rowsHandler: EventHandler? = nil
+            if wired, let onRowsPerPageChange {
+                let h: @Sendable (ElementRef, Int) async -> [FragmentUpdate] = onRowsPerPageChange
+                rowsHandler = { event in
+                    let raw = event.data["value"] ?? ""
+                    let size = Int(raw) ?? rowsPerPage
+                    return await h(me, size)
+                }
+            }
+            let rowsRoute = wired
+                ? controlAttributes(
+                    id: base.map { "\($0)-rows" } ?? "",
+                    event: .change,
+                    handler: rowsHandler
+                )
+                : ""
+            html += "<span class=\"pagination__meta\"><label>Rows per page</label><select class=\"select\"\(rowsIdAttr)\(rowsRoute)>"
             for opt in rowsPerPageOptions {
                 let selected = opt == rowsPerPage ? " selected" : ""
                 html += "<option value=\"\(opt)\"\(selected)>\(opt)</option>"
@@ -1074,6 +1296,25 @@ public struct WebUIPagination: View {
             prev = n
         }
         return items
+    }
+}
+
+// MARK: - WebUIPagination typed handlers
+
+public extension WebUIPagination {
+    /// attach a page-change handler. `me` references the pagination root;
+    /// the receiver decides the next page.
+    func onPageChange(_ handler: @escaping @Sendable (ElementRef, Int) async -> [FragmentUpdate]) -> Self {
+        var copy = self
+        copy.onPageChange = handler
+        return copy
+    }
+
+    /// attach a rows-per-page change handler; receives the new size.
+    func onRowsPerPageChange(_ handler: @escaping @Sendable (ElementRef, Int) async -> [FragmentUpdate]) -> Self {
+        var copy = self
+        copy.onRowsPerPageChange = handler
+        return copy
     }
 }
 
@@ -1143,10 +1384,10 @@ public struct WebUITree: View {
     public struct Node: Sendable {
         public let id: String
         public let label: String
-        public let icon: String?
+        public let icon: IconName?
         public let children: [Node]?
 
-        public init(id: String, label: String, icon: String? = nil, children: [Node]? = nil) {
+        public init(id: String, label: String, icon: IconName? = nil, children: [Node]? = nil) {
             self.id = id
             self.label = label
             self.icon = icon
@@ -1185,7 +1426,7 @@ public struct WebUITree: View {
         html += "<div class=\"\(rowCls)\"\(rowIdAttr)>"
         html += "<span class=\"\(caretCls)\"></span>"
         if let icon = node.icon {
-            html += "<span class=\"tree__icon\">\(htmlEscape(icon))</span>"
+            html += "<span class=\"tree__icon fill-slot\">" + WebUIIcon(icon, size: .slot).render() + "</span>"
         }
         html += "<span class=\"tree__label\">\(htmlEscape(node.label))</span>"
         html += "</div>"

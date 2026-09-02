@@ -570,19 +570,23 @@ func webuiAlertRenders() {
     #expect(html.contains("Something went wrong"))
 }
 
-@Test("WebUIAlert omits icon div when icon is nil")
+@Test("WebUIAlert renders a semantic icon by default")
 func webuiAlertOmitsIcon() {
     let view = WebUIAlert(message: "Info")
     let html = view.render()
-    #expect(!html.contains("alert__icon"))
+    // an info alert now carries its default `.info` glyph as inline SVG
+    #expect(html.contains("alert__icon"))
+    #expect(html.contains("<svg"))
+    #expect(!html.contains("📭") && !html.contains("ℹ️"))
 }
 
 @Test("WebUIAlert renders icon when provided")
 func webuiAlertRendersIcon() {
-    let view = WebUIAlert(message: "Info", icon: "ℹ️")
+    let view = WebUIAlert(message: "Info", icon: .info)
     let html = view.render()
     #expect(html.contains("alert__icon"))
-    #expect(html.contains("ℹ️"))
+    #expect(html.contains("<svg"))
+    #expect(!html.contains("ℹ️"))
 }
 
 @Test("WebUITabs renders with active tab")
@@ -657,7 +661,7 @@ func webuiChipRemovable() {
 @Test("WebUIEmptyState renders with action button")
 func webuiEmptyStateWithAction() {
     let view = WebUIEmptyState(
-        icon: "📦",
+        icon: .package,
         title: "No items",
         message: "Get started by adding an item.",
         action: ("Add Item", "add-btn")
@@ -666,6 +670,8 @@ func webuiEmptyStateWithAction() {
     #expect(html.contains("No items"))
     #expect(html.contains("Add Item"))
     #expect(html.contains("id=\"add-btn\""))
+    #expect(html.contains("<svg"))
+    #expect(!html.contains("📦"))
 }
 
 @Test("WebUISpinner renders with size")

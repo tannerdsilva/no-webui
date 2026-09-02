@@ -96,6 +96,14 @@ Receives fragment updates from the server and patches the DOM.
 using `createContextualFragment()` + `replaceChild()`. this preserves the
 element's position and surrounding DOM.
 
+**Removal:** a fragment whose `html` is exactly `""` removes the element from
+the DOM (`el.remove()`) instead of replacing it. this is the pinned contract
+behind `ElementRef.remove()` / `.onDismiss { me in me.remove() }`: the server
+emits `FragmentUpdate(id:, html: "")` and the client deletes the target. it is
+an explicit branch in `replaceElement()`, not a side effect of replacing with
+an empty fragment — a regression there breaks every `.onDismiss` removal and
+fails the `runtimeEmptyFragmentRemovesElement` deployment test.
+
 **HTML sanitization:** before insertion, the HTML is sanitized:
 - numeric and named character references (`&#x61;`, `&#97;`, `&colon;`) are
   decoded first — the DOM would decode them anyway — so entity-encoded

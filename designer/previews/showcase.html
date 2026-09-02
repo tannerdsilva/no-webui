@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'nonce-y1ywV6HuHd3_iV5thFeDpg'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:;">
+          <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'nonce-Qf_GFLVQMhbEMwbcWj__aw'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:;">
   <title>WebUI UI Showcase</title>
   
   <style>
@@ -7245,7 +7245,7 @@ justify-content: center;
 padding: var(--space-8);
 text-align: center;
 }
-.empty-state__icon { font-size: 3rem; margin-bottom: var(--space-3); opacity: 0.5; }
+.empty-state__icon { width: 3rem; height: 3rem; margin-bottom: var(--space-3); opacity: 0.5; }
 .empty-state__title { font-size: var(--font-size-lg); font-weight: var(--font-weight-bold); margin-bottom: var(--space-1); }
 .empty-state__message { font-size: var(--font-size-sm); color: var(--color-text-muted); max-width: 24rem; }
 h1 {
@@ -7604,6 +7604,265 @@ font-weight: var(--font-weight-semibold);
 font-size: inherit;
 letter-spacing: var(--letter-spacing-tight);
 }
+.icon {
+display: inline-block;
+width: 1em;
+height: 1em;
+flex: none;
+color: currentColor;
+overflow: visible;
+vertical-align: middle;
+}
+.icon--sm { width: 0.75em; height: 0.75em; }
+.icon--md { width: 1em; height: 1em; }
+.icon--lg { width: 1.25em; height: 1.25em; }
+.icon--xl { width: 1.5em; height: 1.5em; }
+.fill-slot > svg.icon { width: 100%; height: 100%; }
+.alert__icon > svg.icon,
+.table__empty-icon > svg.icon,
+.empty-state__icon > svg.icon,
+.tree__icon > svg.icon,
+.menu__icon > svg.icon,
+.sidebar__icon > svg.icon,
+.banner__icon > svg.icon,
+.toast__icon > svg.icon { width: 100%; height: 100%; }
+.button > svg.icon { width: 1em; height: 1em; flex: none; }
+.icon--spin { animation: br-spin 0.9s linear infinite; }
+@keyframes br-spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
+:root {
+--color-chart-1:   #6366f1;
+--color-chart-2:   #10b981;
+--color-chart-3:   #f59e0b;
+--color-chart-4:   #ef4444;
+--color-chart-5:   #3b82f6;
+--color-chart-6:   #8b5cf6;
+--color-chart-7:   #14b8a6;
+--color-chart-8:   #f97316;
+--color-chart-rule: var(--color-text-faint);
+}
+.chart__c1 { --chart-mark-color: var(--color-chart-1); }
+.chart__c2 { --chart-mark-color: var(--color-chart-2); }
+.chart__c3 { --chart-mark-color: var(--color-chart-3); }
+.chart__c4 { --chart-mark-color: var(--color-chart-4); }
+.chart__c5 { --chart-mark-color: var(--color-chart-5); }
+.chart__c6 { --chart-mark-color: var(--color-chart-6); }
+.chart__c7 { --chart-mark-color: var(--color-chart-7); }
+.chart__c8 { --chart-mark-color: var(--color-chart-8); }
+.chart {
+margin: 0;
+position: relative;
+font-family: var(--font-sans);
+color: var(--color-text);
+}
+.chart__title {
+font-size: var(--font-size-sm);
+font-weight: var(--font-weight-semibold);
+letter-spacing: var(--letter-spacing-wide);
+color: var(--color-text-muted);
+text-transform: uppercase;
+margin-bottom: var(--space-3);
+}
+.chart__plot {
+position: relative;
+}
+.chart__svg {
+display: block;
+width: 100%;
+height: auto;
+overflow: visible;
+}
+.chart__grid {
+stroke: var(--color-border);
+stroke-width: 1;
+shape-rendering: crispEdges;
+}
+.chart__grid--v { stroke: var(--color-border); opacity: .6; }
+.chart__baseline {
+stroke: var(--color-border-strong);
+stroke-width: 1;
+shape-rendering: crispEdges;
+}
+.chart__axis-label {
+font-size: 11px;
+font-weight: var(--font-weight-medium);
+fill: var(--color-text-muted);
+}
+.chart__axis-title {
+font-size: 12px;
+font-weight: var(--font-weight-semibold);
+fill: var(--color-text-muted);
+letter-spacing: var(--letter-spacing-wide);
+}
+.chart__annotation {
+font-size: 12px;
+font-weight: var(--font-weight-semibold);
+fill: var(--color-text);
+}
+.chart__mark {
+fill: var(--chart-mark-color, var(--color-chart-1));
+transition: opacity var(--transition-fast);
+}
+.chart__mark:hover { opacity: .82; }
+.chart__mark--selected {
+stroke: var(--color-focus);
+stroke-width: 2;
+}
+.chart__line {
+fill: none;
+stroke: var(--chart-mark-color, var(--color-chart-1));
+stroke-linecap: round;
+stroke-linejoin: round;
+}
+.chart__area {
+fill: var(--chart-mark-color, var(--color-chart-1));
+fill-opacity: .16;
+stroke: none;
+}
+.chart__point circle,
+.chart__point rect,
+.chart__point polygon,
+.chart__point path {
+stroke: var(--color-bg-raised);
+stroke-width: 1.5;
+}
+.chart__rect {
+stroke: var(--color-bg-raised);
+stroke-width: 1;
+}
+.chart__rule,
+.chart__rule--v {
+stroke: var(--color-chart-rule);
+stroke-width: 1.5;
+opacity: .9;
+}
+.chart__sector {
+stroke: var(--color-bg-raised);
+stroke-width: 1;
+}
+.chart__selection {
+stroke: var(--color-primary-400);
+stroke-width: 1.5;
+opacity: .9;
+}
+.chart__legend {
+display: flex;
+flex-wrap: wrap;
+align-items: center;
+gap: var(--space-2) var(--space-4);
+margin: var(--space-3) 0 0;
+font-size: var(--font-size-xs);
+}
+.chart__legend--top { margin: 0 0 var(--space-3); }
+.chart__legend--left,
+.chart__legend--right {
+flex-direction: column;
+align-items: flex-start;
+gap: var(--space-2);
+}
+.chart__legend--none { display: none; }
+.chart__legend-item {
+display: inline-flex;
+align-items: center;
+gap: var(--space-2);
+color: var(--color-text-muted);
+font-weight: var(--font-weight-medium);
+}
+.chart__swatch {
+width: 0.625rem;
+height: 0.625rem;
+border-radius: var(--radius-sm);
+display: inline-block;
+flex: none;
+}
+.chart__swatch.chart__c1 { background: var(--color-chart-1); }
+.chart__swatch.chart__c2 { background: var(--color-chart-2); }
+.chart__swatch.chart__c3 { background: var(--color-chart-3); }
+.chart__swatch.chart__c4 { background: var(--color-chart-4); }
+.chart__swatch.chart__c5 { background: var(--color-chart-5); }
+.chart__swatch.chart__c6 { background: var(--color-chart-6); }
+.chart__swatch.chart__c7 { background: var(--color-chart-7); }
+.chart__swatch.chart__c8 { background: var(--color-chart-8); }
+.chart--pie .chart__plot { position: relative; }
+.chart__donut-center {
+position: absolute;
+inset: 0;
+display: flex;
+flex-direction: column;
+align-items: center;
+justify-content: center;
+pointer-events: none;
+gap: 2px;
+}
+.chart__donut-value {
+font-size: var(--font-size-2xl);
+font-weight: var(--font-weight-bold);
+color: var(--color-text);
+font-variant-numeric: tabular-nums;
+}
+.chart__donut-label {
+font-size: var(--font-size-xs);
+font-weight: var(--font-weight-medium);
+color: var(--color-text-muted);
+text-transform: uppercase;
+letter-spacing: var(--letter-spacing-wide);
+}
+.chart__sr {
+position: absolute;
+width: 1px;
+height: 1px;
+margin: -1px;
+padding: 0;
+overflow: hidden;
+clip: rect(0 0 0 0);
+clip-path: inset(50%);
+white-space: nowrap;
+border: 0;
+}
+.chart--empty {
+display: flex;
+align-items: center;
+justify-content: center;
+min-height: 9rem;
+border: 1px dashed var(--color-border-strong);
+border-radius: var(--radius-xl);
+background: var(--color-bg-subtle);
+}
+.chart__empty {
+display: flex;
+flex-direction: column;
+align-items: center;
+gap: var(--space-1);
+padding: var(--space-6);
+text-align: center;
+}
+.chart__empty-title {
+font-size: var(--font-size-sm);
+font-weight: var(--font-weight-semibold);
+color: var(--color-text-muted);
+}
+.chart__empty-message {
+font-size: var(--font-size-xs);
+color: var(--color-text-faint);
+}
+@media (prefers-color-scheme: dark) {
+:root {
+--color-chart-1:   #a5b4fc;
+--color-chart-2:   #34d399;
+--color-chart-3:   #fbbf24;
+--color-chart-4:   #f87171;
+--color-chart-5:   #60a5fa;
+--color-chart-6:   #a78bfa;
+--color-chart-7:   #2dd4bf;
+--color-chart-8:   #fb923c;
+--color-chart-rule: var(--color-neutral-400);
+}
+.chart__point circle,
+.chart__point rect,
+.chart__point polygon,
+.chart__point path {
+stroke: var(--color-bg-raised);
+}
+}
 </style>
 </head>
 <body>
@@ -7612,7 +7871,7 @@ letter-spacing: var(--letter-spacing-tight);
 <h1 class="showcase-title">WebUI UI Showcase</h1><span class="showcase-badge">v1.0</span><div class="spacer" style="flex:1;min-width:0px;min-height:0px"></div><span class="showcase-status"><span id="ws-status">connected</span></span>
 </div></header><div class="showcase-shell"><div class="hstack spacing-0 align-flex-start">
 <nav class="showcase-sidebar"><div class="vstack spacing-4 align-flex-start" style="padding: 16px;">
-<a href="#typography" class="showcase-sidebar-link" style="display: block;" style="padding: 6px 12px;">Typography</a><a href="#layout" class="showcase-sidebar-link" style="display: block;" style="padding: 6px 12px;">Layout</a><a href="#forms" class="showcase-sidebar-link" style="display: block;" style="padding: 6px 12px;">Forms &amp; Input</a><a href="#buttons" class="showcase-sidebar-link" style="display: block;" style="padding: 6px 12px;">Buttons</a><a href="#media" class="showcase-sidebar-link" style="display: block;" style="padding: 6px 12px;">Media</a><a href="#lists" class="showcase-sidebar-link" style="display: block;" style="padding: 6px 12px;">Lists &amp; Tables</a><a href="#data-nav" class="showcase-sidebar-link" style="display: block;" style="padding: 6px 12px;">Data &amp; Navigation</a><a href="#semantic" class="showcase-sidebar-link" style="display: block;" style="padding: 6px 12px;">Semantic HTML</a><a href="#modifiers" class="showcase-sidebar-link" style="display: block;" style="padding: 6px 12px;">Modifiers</a><a href="#design-system" class="showcase-sidebar-link" style="display: block;" style="padding: 6px 12px;">Design System</a><a href="#events" class="showcase-sidebar-link" style="display: block;" style="padding: 6px 12px;">Event Handling</a><a href="#theme" class="showcase-sidebar-link" style="display: block;" style="padding: 6px 12px;">CSS Theme</a>
+<a href="#typography" class="showcase-sidebar-link" style="display: block;" style="padding: 6px 12px;">Typography</a><a href="#layout" class="showcase-sidebar-link" style="display: block;" style="padding: 6px 12px;">Layout</a><a href="#forms" class="showcase-sidebar-link" style="display: block;" style="padding: 6px 12px;">Forms &amp; Input</a><a href="#buttons" class="showcase-sidebar-link" style="display: block;" style="padding: 6px 12px;">Buttons</a><a href="#media" class="showcase-sidebar-link" style="display: block;" style="padding: 6px 12px;">Media</a><a href="#lists" class="showcase-sidebar-link" style="display: block;" style="padding: 6px 12px;">Lists &amp; Tables</a><a href="#data-nav" class="showcase-sidebar-link" style="display: block;" style="padding: 6px 12px;">Data &amp; Navigation</a><a href="#semantic" class="showcase-sidebar-link" style="display: block;" style="padding: 6px 12px;">Semantic HTML</a><a href="#modifiers" class="showcase-sidebar-link" style="display: block;" style="padding: 6px 12px;">Modifiers</a><a href="#design-system" class="showcase-sidebar-link" style="display: block;" style="padding: 6px 12px;">Design System</a><a href="#events" class="showcase-sidebar-link" style="display: block;" style="padding: 6px 12px;">Event Handling</a><a href="#charts" class="showcase-sidebar-link" style="display: block;" style="padding: 6px 12px;">Charts</a><a href="#theme" class="showcase-sidebar-link" style="display: block;" style="padding: 6px 12px;">CSS Theme</a><a href="#icons" class="showcase-sidebar-link" style="display: block;" style="padding: 6px 12px;">Icons</a>
 </div></nav><main class="showcase-content"><div class="vstack spacing-32 align-flex-start" style="padding: 32px;">
 <section class="showcase-section" id="typography"><div class="vstack spacing-16 align-flex-start">
 <h2>Text renders escaped content</h2><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
@@ -7674,7 +7933,7 @@ Plain text content<span class="text-escaped">&lt;script&gt;alert(&#39;xss&#39;)&
 <label class="demo-label">Country:</label><select id="demo-country"><option value="us" selected>United States</option><option value="ca">Canada</option><option value="uk">United Kingdom</option><option value="de">Germany</option><option value="jp">Japan</option></select>
 </div></div>
 </div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
-<h3 class="demo-card-title">Form with CSRF</h3><div class="demo-card-body"><form id="demo-form" action="/submit" method="post"><input type="hidden" name="_csrf" value="ZGVtby1mb3JtOjE3ODgxMTg1MzQ6OTA5NzlhZjk5M2UyZDg3M2IxMDFjYjE1ZTkyYjI5MjExZmM0MjdiYTQ3NmM1YzE5ZGFmZDI4OTVlNWY3MmNjOA=="><div class="vstack spacing-12 align-flex-start">
+<h3 class="demo-card-title">Form with CSRF</h3><div class="demo-card-body"><form id="demo-form" action="/submit" method="post"><input type="hidden" name="_csrf" value="ZGVtby1mb3JtOjE3ODgzMTgwMDA6YmM0Y2Y2NzY1ZDQxYzk5ZWQxZjU2MjNlMDQwYzA3ZWIyNTZhODQyYTU5MDk4ZDc3NDYyMzIzMDVhZTZiZTYzYQ=="><div class="vstack spacing-12 align-flex-start">
 <label class="demo-label">Name:</label><input id="form-name" type="text" placeholder="Your name"><label class="demo-label">Message:</label><textarea id="form-message" rows="3" placeholder="Your message"></textarea><button id="form-submit" type="submit">Submit</button>
 </div></form></div>
 </div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
@@ -7725,7 +7984,7 @@ Plain text content<span class="text-escaped">&lt;script&gt;alert(&#39;xss&#39;)&
 </div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
 <h3 class="demo-card-title">Table — compact density</h3><div class="demo-card-body"><table class="table table--striped table--hoverable table--compact"><thead><tr><th>Service</th><th>Region</th><th class="num">Latency (p95)</th></tr></thead><tbody><tr><td>api-gateway</td><td>us-east-1</td><td class="num">42 ms</td></tr><tr><td>billing</td><td>eu-west-1</td><td class="num">188 ms</td></tr><tr><td>search</td><td>us-west-2</td><td class="num">61 ms</td></tr><tr><td>auth</td><td>us-east-1</td><td class="num">23 ms</td></tr><tr><td>notifications</td><td>ap-south-1</td><td class="num">104 ms</td></tr></tbody></table></div>
 </div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
-<h3 class="demo-card-title">Table — empty state</h3><div class="demo-card-body"><table class="table table--striped table--hoverable"><thead><tr><th>Name</th><th>Age</th><th>City</th></tr></thead><tbody><tr><td colspan="3" class="table__empty"><div class="table__empty-icon">🔎</div><div class="table__empty-title">No people match this filter</div><div class="table__empty-message">Clear the search box or try a different region.</div></td></tr></tbody></table></div>
+<h3 class="demo-card-title">Table — empty state</h3><div class="demo-card-body"><table class="table table--striped table--hoverable"><thead><tr><th>Name</th><th>Age</th><th>City</th></tr></thead><tbody><tr><td colspan="3" class="table__empty"><div class="table__empty-icon fill-slot"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg></div><div class="table__empty-title">No people match this filter</div><div class="table__empty-message">Clear the search box or try a different region.</div></td></tr></tbody></table></div>
 </div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
 <h3 class="demo-card-title">Table — responsive (stacks on narrow screens)</h3><div class="demo-card-body"><div class="table-wrap"><table class="table table--striped table--hoverable table--responsive"><thead><tr><th>Order</th><th>Item</th><th class="num">Price</th></tr></thead><tbody><tr><td data-label="Order">#4821</td><td data-label="Item">Mechanical keyboard</td><td data-label="Price" class="num">$149.00</td></tr><tr><td data-label="Order">#4822</td><td data-label="Item">USB-C dock</td><td data-label="Price" class="num">$89.00</td></tr></tbody></table></div></div>
 </div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
@@ -7743,7 +8002,7 @@ Plain text content<span class="text-escaped">&lt;script&gt;alert(&#39;xss&#39;)&
 <div class="timeline"><div class="timeline__event timeline__event--completed"><span class="timeline__dot"></span><span class="timeline__time">14:02</span><div class="timeline__title">Build passed</div><div class="timeline__desc">main · 389 tests</div></div><div class="timeline__event timeline__event--current"><span class="timeline__dot"></span><span class="timeline__time">14:05</span><div class="timeline__title">Deploying</div><div class="timeline__desc">canary 10%</div></div><div class="timeline__event"><span class="timeline__dot"></span><span class="timeline__time">14:06</span><div class="timeline__title">Rollout scheduled</div></div></div><div class="timeline timeline--horizontal"><div class="timeline__event timeline__event--completed"><span class="timeline__dot"></span><span class="timeline__time">Q1</span><div class="timeline__title">Planned</div></div><div class="timeline__event timeline__event--current"><span class="timeline__dot"></span><span class="timeline__time">Q2</span><div class="timeline__title">In progress</div></div><div class="timeline__event"><span class="timeline__dot"></span><span class="timeline__time">Q3</span><div class="timeline__title">Review</div></div><div class="timeline__event"><span class="timeline__dot"></span><span class="timeline__time">Q4</span><div class="timeline__title">Launch</div></div></div>
 </div></div>
 </div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
-<h3 class="demo-card-title">Tree — file explorer (server-driven open/selection)</h3><div class="demo-card-body"><div class="tree"><div class="tree__node tree__node--open"><div class="tree__row" id="demo-tree-node-src"><span class="tree__caret"></span><span class="tree__icon">📁</span><span class="tree__label">src</span></div><div class="tree__children"><div class="tree__node"><div class="tree__row" id="demo-tree-node-main"><span class="tree__caret tree__caret--leaf"></span><span class="tree__icon">📄</span><span class="tree__label">main.swift</span></div></div><div class="tree__node tree__node--open"><div class="tree__row" id="demo-tree-node-ui"><span class="tree__caret"></span><span class="tree__icon">📁</span><span class="tree__label">ui</span></div><div class="tree__children"><div class="tree__node"><div class="tree__row tree__row--selected" id="demo-tree-node-view"><span class="tree__caret tree__caret--leaf"></span><span class="tree__icon">📄</span><span class="tree__label">view.swift</span></div></div><div class="tree__node"><div class="tree__row" id="demo-tree-node-state"><span class="tree__caret tree__caret--leaf"></span><span class="tree__icon">📄</span><span class="tree__label">state.swift</span></div></div></div></div></div></div><div class="tree__node"><div class="tree__row" id="demo-tree-node-tests"><span class="tree__caret"></span><span class="tree__icon">📁</span><span class="tree__label">tests</span></div><div class="tree__children"><div class="tree__node"><div class="tree__row" id="demo-tree-node-smoke"><span class="tree__caret tree__caret--leaf"></span><span class="tree__icon">📄</span><span class="tree__label">smoke.swift</span></div></div></div></div></div></div>
+<h3 class="demo-card-title">Tree — file explorer (server-driven open/selection)</h3><div class="demo-card-body"><div class="tree"><div class="tree__node tree__node--open"><div class="tree__row" id="demo-tree-node-src"><span class="tree__caret"></span><span class="tree__icon fill-slot"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span><span class="tree__label">src</span></div><div class="tree__children"><div class="tree__node"><div class="tree__row" id="demo-tree-node-main"><span class="tree__caret tree__caret--leaf"></span><span class="tree__icon fill-slot"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span><span class="tree__label">main.swift</span></div></div><div class="tree__node tree__node--open"><div class="tree__row" id="demo-tree-node-ui"><span class="tree__caret"></span><span class="tree__icon fill-slot"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span><span class="tree__label">ui</span></div><div class="tree__children"><div class="tree__node"><div class="tree__row tree__row--selected" id="demo-tree-node-view"><span class="tree__caret tree__caret--leaf"></span><span class="tree__icon fill-slot"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span><span class="tree__label">view.swift</span></div></div><div class="tree__node"><div class="tree__row" id="demo-tree-node-state"><span class="tree__caret tree__caret--leaf"></span><span class="tree__icon fill-slot"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span><span class="tree__label">state.swift</span></div></div></div></div></div></div><div class="tree__node"><div class="tree__row" id="demo-tree-node-tests"><span class="tree__caret"></span><span class="tree__icon fill-slot"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span><span class="tree__label">tests</span></div><div class="tree__children"><div class="tree__node"><div class="tree__row" id="demo-tree-node-smoke"><span class="tree__caret tree__caret--leaf"></span><span class="tree__icon fill-slot"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span><span class="tree__label">smoke.swift</span></div></div></div></div></div></div>
 </div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
 <h3 class="demo-card-title">Breadcrumb — collapsed + short trail</h3><div class="demo-card-body"><div class="vstack spacing-12 align-flex-start">
 <nav class="breadcrumb" aria-label="Breadcrumb"><a class="breadcrumb__item" href="/">Home</a><span class="breadcrumb__separator" aria-hidden="true">›</span><button type="button" class="breadcrumb__ellipsis" aria-label="Show omitted items">…</button><span class="breadcrumb__separator" aria-hidden="true">›</span><a class="breadcrumb__item" href="/tables">Tables</a><span class="breadcrumb__separator" aria-hidden="true">›</span><span class="breadcrumb__item breadcrumb__item--current" aria-current="page">Interactive</span></nav><nav class="breadcrumb breadcrumb--slash" aria-label="Breadcrumb"><a class="breadcrumb__item" href="/docs">Docs</a><span class="breadcrumb__separator" aria-hidden="true">/</span></nav>
@@ -7840,11 +8099,11 @@ Plain text content<span class="text-escaped">&lt;script&gt;alert(&#39;xss&#39;)&
 </div></div>
 </div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
 <h3 class="demo-card-title">WebUIAlert — all variants</h3><div class="demo-card-body"><div class="vstack spacing-12 align-flex-start">
-<div class="alert alert--info" role="alert"><div class="alert__body"><div class="alert__message">This is an informational alert.</div></div></div><div class="alert alert--success" role="alert"><div class="alert__body"><div class="alert__message">Operation completed successfully!</div></div></div><div class="alert alert--warning" role="alert"><div class="alert__body"><div class="alert__message">Please review your input before continuing.</div></div></div><div class="alert alert--danger" role="alert"><div class="alert__body"><div class="alert__message">An error occurred while processing your request.</div></div></div>
+<div class="alert alert--info" role="alert"><div class="alert__icon fill-slot"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></div><div class="alert__body"><div class="alert__message">This is an informational alert.</div></div></div><div class="alert alert--success" role="alert"><div class="alert__icon fill-slot"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div><div class="alert__body"><div class="alert__message">Operation completed successfully!</div></div></div><div class="alert alert--warning" role="alert"><div class="alert__icon fill-slot"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div><div class="alert__body"><div class="alert__message">Please review your input before continuing.</div></div></div><div class="alert alert--danger" role="alert"><div class="alert__icon fill-slot"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg></div><div class="alert__body"><div class="alert__message">An error occurred while processing your request.</div></div></div>
 </div></div>
 </div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
 <h3 class="demo-card-title">WebUIAlert — with title and dismissible</h3><div class="demo-card-body"><div class="vstack spacing-12 align-flex-start">
-<div class="alert alert--info" role="alert" data-dismissible><div class="alert__body"><div class="alert__title">Heads up!</div><div class="alert__message">This alert has a title and can be dismissed.</div></div><button class="alert__close" data-dismiss aria-label="Dismiss">&times;</button></div><div class="alert alert--warning" role="alert" data-dismissible><div class="alert__body"><div class="alert__title">Warning</div><div class="alert__message">Dismissible warning alert.</div></div><button class="alert__close" data-dismiss aria-label="Dismiss">&times;</button></div>
+<div class="alert alert--info" role="alert" data-dismissible><div class="alert__icon fill-slot"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></div><div class="alert__body"><div class="alert__title">Heads up!</div><div class="alert__message">This alert has a title and can be dismissed.</div></div><button class="alert__close" data-dismiss aria-label="Dismiss">&times;</button></div><div class="alert alert--warning" role="alert" data-dismissible><div class="alert__icon fill-slot"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg></div><div class="alert__body"><div class="alert__title">Warning</div><div class="alert__message">Dismissible warning alert.</div></div><button class="alert__close" data-dismiss aria-label="Dismiss">&times;</button></div>
 </div></div>
 </div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
 <h3 class="demo-card-title">WebUITabs</h3><div class="demo-card-body"><nav class="tabs" id="demo-tabs" role="tablist"><button class="tabs__tab tabs__tab--active" role="tab" aria-selected="true" data-tab="tab-overview">Overview</button><button class="tabs__tab" role="tab" aria-selected="false" data-tab="tab-details">Details</button><button class="tabs__tab" role="tab" aria-selected="false" data-tab="tab-settings">Settings</button></nav></div>
@@ -7899,6 +8158,40 @@ Plain text content<span class="text-escaped">&lt;script&gt;alert(&#39;xss&#39;)&
 </div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
 <h3 class="demo-card-title">Tab Content Switching</h3><div class="demo-card-body"><div class="vstack spacing-12 align-flex-start">
 <p>Click tabs to switch content via event handlers.</p><nav class="tabs" id="content-tabs" role="tablist"><button class="tabs__tab tabs__tab--active" role="tab" aria-selected="true" data-tab="tab-info">Info</button><button class="tabs__tab" role="tab" aria-selected="false" data-tab="tab-stats">Stats</button><button class="tabs__tab" role="tab" aria-selected="false" data-tab="tab-log">Log</button></nav><div id="tab-content" class="tab-content-box"><p>Information tab content. Click other tabs to switch.</p></div>
+</div></div>
+</div></div>
+</div></section><section class="showcase-section" id="charts"><div class="vstack spacing-16 align-flex-start">
+<h2>WebUIChart suite</h2><p>Server-rendered inline-SVG charts mirroring the SwiftUI Charts API. No JS dependencies — styling comes from the design-system tokens, and it reflows in dark mode automatically.</p><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
+<h3 class="demo-card-title">Grouped bars</h3><div class="demo-card-body"><div class="vstack spacing-0 align-flex-start">
+<figure class="chart" role="img" aria-label="Chart with 6 marks"><figcaption class="chart__title">Revenue by quarter</figcaption><div class="chart__plot"><svg class="chart__svg" viewBox="0 0 640 320" role="presentation"><line class="chart__grid" x1="44" y1="280" x2="624" y2="280"/><line class="chart__grid" x1="44" y1="214" x2="624" y2="214"/><line class="chart__grid" x1="44" y1="147" x2="624" y2="147"/><line class="chart__grid" x1="44" y1="81" x2="624" y2="81"/><line class="chart__grid chart__grid--v" x1="130" y1="44" x2="130" y2="280"/><line class="chart__grid chart__grid--v" x1="334" y1="44" x2="334" y2="280"/><line class="chart__grid chart__grid--v" x1="538" y1="44" x2="538" y2="280"/><line class="chart__baseline" x1="44" y1="280" x2="624" y2="280"/><g><title>A 42</title><rect class="chart__mark chart__c1 chart__bar" x="54.18" y="140.39" width="76.32" height="139.61" rx="0"/></g><g><title>B 28</title><rect class="chart__mark chart__c2 chart__bar" x="130.49" y="186.93" width="76.32" height="93.07" rx="0"/></g><g><title>A 61</title><rect class="chart__mark chart__c1 chart__bar" x="257.68" y="77.24" width="76.32" height="202.76" rx="0"/></g><g><title>B 39</title><rect class="chart__mark chart__c2 chart__bar" x="334" y="150.37" width="76.32" height="129.63" rx="0"/></g><g><title>A 53</title><rect class="chart__mark chart__c1 chart__bar" x="461.19" y="103.83" width="76.32" height="176.17" rx="0"/></g><g><title>B 71</title><rect class="chart__mark chart__c2 chart__bar" x="537.51" y="44" width="76.32" height="236" rx="0"/></g><text class="chart__axis-label" x="38" y="283" text-anchor="end">0</text><text class="chart__axis-label" x="38" y="217" text-anchor="end">20</text><text class="chart__axis-label" x="38" y="150" text-anchor="end">40</text><text class="chart__axis-label" x="38" y="84" text-anchor="end">60</text><text class="chart__axis-label chart__axis-label--x" x="130" y="296" text-anchor="middle">Q1</text><text class="chart__axis-label chart__axis-label--x" x="334" y="296" text-anchor="middle">Q2</text><text class="chart__axis-label chart__axis-label--x" x="538" y="296" text-anchor="middle">Q3</text></svg></div><figcaption class="chart__legend chart__legend--bottom"><span class="chart__legend-item"><span class="chart__swatch chart__c1"></span>A</span><span class="chart__legend-item"><span class="chart__swatch chart__c2"></span>B</span></figcaption><table class="chart__sr" role="presentation"><caption>Series values</caption><tbody><tr><th scope="row">A</th><td>42, 61, 53</td></tr><tr><th scope="row">B</th><td>28, 39, 71</td></tr></tbody></table></figure>
+</div></div>
+</div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
+<h3 class="demo-card-title">Stacked bars</h3><div class="demo-card-body"><div class="vstack spacing-0 align-flex-start">
+<figure class="chart" role="img" aria-label="Chart with 6 marks"><figcaption class="chart__title">Requests by service</figcaption><div class="chart__plot"><svg class="chart__svg" viewBox="0 0 640 320" role="presentation"><line class="chart__grid" x1="44" y1="280" x2="624" y2="280"/><line class="chart__grid" x1="44" y1="170" x2="624" y2="170"/><line class="chart__grid" x1="44" y1="60" x2="624" y2="60"/><line class="chart__grid chart__grid--v" x1="130" y1="44" x2="130" y2="280"/><line class="chart__grid chart__grid--v" x1="334" y1="44" x2="334" y2="280"/><line class="chart__grid chart__grid--v" x1="538" y1="44" x2="538" y2="280"/><line class="chart__baseline" x1="44" y1="280" x2="624" y2="280"/><g><title>Core 120</title><rect class="chart__mark chart__c1 chart__bar" x="54.18" y="148.28" width="152.63" height="131.72" rx="0"/></g><g><title>Web 80</title><rect class="chart__mark chart__c2 chart__bar" x="54.18" y="60.47" width="152.63" height="87.81" rx="0"/></g><g><title>Core 95</title><rect class="chart__mark chart__c1 chart__bar" x="257.68" y="175.72" width="152.63" height="104.28" rx="0"/></g><g><title>Web 120</title><rect class="chart__mark chart__c2 chart__bar" x="257.68" y="44" width="152.63" height="131.72" rx="0"/></g><g><title>Core 140</title><rect class="chart__mark chart__c1 chart__bar" x="461.19" y="126.33" width="152.63" height="153.67" rx="0"/></g><g><title>Web 60</title><rect class="chart__mark chart__c2 chart__bar" x="461.19" y="60.47" width="152.63" height="65.86" rx="0"/></g><text class="chart__axis-label" x="38" y="283" text-anchor="end">0</text><text class="chart__axis-label" x="38" y="173" text-anchor="end">100</text><text class="chart__axis-label" x="38" y="63" text-anchor="end">200</text><text class="chart__axis-label chart__axis-label--x" x="130" y="296" text-anchor="middle">Mon</text><text class="chart__axis-label chart__axis-label--x" x="334" y="296" text-anchor="middle">Tue</text><text class="chart__axis-label chart__axis-label--x" x="538" y="296" text-anchor="middle">Wed</text></svg></div><figcaption class="chart__legend chart__legend--bottom"><span class="chart__legend-item"><span class="chart__swatch chart__c1"></span>Core</span><span class="chart__legend-item"><span class="chart__swatch chart__c2"></span>Web</span></figcaption><table class="chart__sr" role="presentation"><caption>Series values</caption><tbody><tr><th scope="row">Core</th><td>120, 95, 140</td></tr><tr><th scope="row">Web</th><td>80, 120, 60</td></tr></tbody></table></figure>
+</div></div>
+</div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
+<h3 class="demo-card-title">Line + points + area</h3><div class="demo-card-body"><div class="vstack spacing-0 align-flex-start">
+<figure class="chart" role="img" aria-label="Chart with 21 marks"><figcaption class="chart__title">Weekly growth</figcaption><div class="chart__plot"><svg class="chart__svg" viewBox="0 0 640 320" role="presentation"><line class="chart__grid" x1="44" y1="280" x2="624" y2="280"/><line class="chart__grid" x1="44" y1="224" x2="624" y2="224"/><line class="chart__grid" x1="44" y1="168" x2="624" y2="168"/><line class="chart__grid" x1="44" y1="111" x2="624" y2="111"/><line class="chart__grid" x1="44" y1="55" x2="624" y2="55"/><line class="chart__grid chart__grid--v" x1="141" y1="44" x2="141" y2="280"/><line class="chart__grid chart__grid--v" x1="334" y1="44" x2="334" y2="280"/><line class="chart__grid chart__grid--v" x1="527" y1="44" x2="527" y2="280"/><line class="chart__baseline" x1="44" y1="280" x2="624" y2="280"/><path class="chart__mark chart__area chart__c1" d="M44,212.57 L44,212.57 L44,212.57 L140.67,178.86 L140.67,178.86 L140.67,178.86 L237.33,195.71 L237.33,195.71 L237.33,195.71 L334,145.14 L334,145.14 L334,145.14 L430.67,105.81 L430.67,105.81 L430.67,105.81 L527.33,128.29 L527.33,128.29 L527.33,128.29 L624,66.48 L624,66.48 L624,66.48 L624,280 L44,280 Z"/><path class="chart__mark chart__line chart__c1" d="M44,212.57 C44,212.57 44,212.57 44,212.57 C44,212.57 27.89,218.19 44,212.57 C60.11,206.95 124.56,184.48 140.67,178.86 C156.78,173.24 140.67,178.86 140.67,178.86 C140.67,178.86 124.56,176.05 140.67,178.86 C156.78,181.67 221.22,192.9 237.33,195.71 C253.44,198.52 237.33,195.71 237.33,195.71 C237.33,195.71 221.22,204.14 237.33,195.71 C253.44,187.29 317.89,153.57 334,145.14 C350.11,136.71 334,145.14 334,145.14 C334,145.14 317.89,151.7 334,145.14 C350.11,138.59 414.56,112.37 430.67,105.81 C446.78,99.25 430.67,105.81 430.67,105.81 C430.67,105.81 414.56,102.06 430.67,105.81 C446.78,109.56 511.22,124.54 527.33,128.29 C543.44,132.03 527.33,128.29 527.33,128.29 C527.33,128.29 511.22,138.59 527.33,128.29 C543.44,117.98 607.89,76.78 624,66.48 C640.11,56.17 624,66.48 624,66.48 C624,66.48 624,66.48 624,66.48" stroke-width="2"/><g class="chart__mark chart__c1 chart__point"><title>series</title><circle cx="44" cy="212.57" r="3.5"/></g><g class="chart__mark chart__c1 chart__point"><title>series</title><circle cx="140.67" cy="178.86" r="3.5"/></g><g class="chart__mark chart__c1 chart__point"><title>series</title><circle cx="237.33" cy="195.71" r="3.5"/></g><g class="chart__mark chart__c1 chart__point"><title>series</title><circle cx="334" cy="145.14" r="3.5"/></g><g class="chart__mark chart__c1 chart__point"><title>series</title><circle cx="430.67" cy="105.81" r="3.5"/></g><g class="chart__mark chart__c1 chart__point"><title>series</title><circle cx="527.33" cy="128.29" r="3.5"/></g><g class="chart__mark chart__c1 chart__point"><title>series</title><circle cx="624" cy="66.48" r="3.5"/></g><text class="chart__axis-label" x="38" y="283" text-anchor="end">0</text><text class="chart__axis-label" x="38" y="227" text-anchor="end">10</text><text class="chart__axis-label" x="38" y="171" text-anchor="end">20</text><text class="chart__axis-label" x="38" y="114" text-anchor="end">30</text><text class="chart__axis-label" x="38" y="58" text-anchor="end">40</text><text class="chart__axis-label chart__axis-label--x" x="141" y="296" text-anchor="middle">2</text><text class="chart__axis-label chart__axis-label--x" x="334" y="296" text-anchor="middle">4</text><text class="chart__axis-label chart__axis-label--x" x="527" y="296" text-anchor="middle">6</text></svg></div><figcaption class="chart__legend chart__legend--bottom"><span class="chart__legend-item"><span class="chart__swatch chart__c1"></span>series</span></figcaption><table class="chart__sr" role="presentation"><caption>Series values</caption><tbody><tr><th scope="row">series</th><td>12, 12, 12, 18, 18, 18, 15, 15, 15, 24, 24, 24, 31, 31, 31, 27, 27, 27, 38, 38, 38</td></tr></tbody></table></figure>
+</div></div>
+</div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
+<h3 class="demo-card-title">Pie</h3><div class="demo-card-body"><div class="vstack spacing-0 align-flex-start">
+<figure class="chart chart--pie" role="img" aria-label="Chart with 4 marks"><figcaption class="chart__title">Platform share</figcaption><svg class="chart__svg" viewBox="0 0 600 300" role="presentation"><g class="chart__mark chart__c1 chart__sector"><title>iOS: 44%</title><path d="M300,150 L300,12 A138,138 0 0 1 350.8,278.31 Z"/></g><g class="chart__mark chart__c2 chart__sector"><title>Android: 31%</title><path d="M300,150 L350.8,278.31 A138,138 0 0 1 162,150 Z"/></g><g class="chart__mark chart__c3 chart__sector"><title>web: 18%</title><path d="M300,150 L162,150 A138,138 0 0 1 241.24,25.13 Z"/></g><g class="chart__mark chart__c4 chart__sector"><title>other: 7%</title><path d="M300,150 L241.24,25.13 A138,138 0 0 1 300,12 Z"/></g></svg><figcaption class="chart__legend chart__legend--bottom"><span class="chart__legend-item"><span class="chart__swatch chart__c1"></span>iOS</span><span class="chart__legend-item"><span class="chart__swatch chart__c2"></span>Android</span><span class="chart__legend-item"><span class="chart__swatch chart__c3"></span>web</span><span class="chart__legend-item"><span class="chart__swatch chart__c4"></span>other</span></figcaption><table class="chart__sr" role="presentation"><caption>Sector values</caption><tbody><tr><th scope="row">iOS</th><td>44%</td></tr><tr><th scope="row">Android</th><td>31%</td></tr><tr><th scope="row">web</th><td>18%</td></tr><tr><th scope="row">other</th><td>7%</td></tr></tbody></table></figure>
+</div></div>
+</div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
+<h3 class="demo-card-title">Donut + selection</h3><div class="demo-card-body"><div class="vstack spacing-0 align-flex-start">
+<figure class="chart chart--pie" role="img" aria-label="Chart with 4 marks"><figcaption class="chart__title">Platform share</figcaption><svg class="chart__svg" viewBox="0 0 600 300" role="presentation"><g class="chart__mark chart__c1 chart__sector chart__mark--selected"><title>iOS: 44%</title><path d="M301.81,12.01 A138,138 0 0 1 352.48,277.63 L328.86,220.2 A75.9,75.9 0 0 0 300.99,74.11 Z"/></g><g class="chart__mark chart__c2 chart__sector"><title>Android: 31%</title><path d="M349.12,278.96 A138,138 0 0 1 162.01,151.81 L224.11,150.99 A75.9,75.9 0 0 0 327.01,220.93 Z"/></g><g class="chart__mark chart__c3 chart__sector"><title>web: 18%</title><path d="M162.01,148.19 A138,138 0 0 1 239.61,25.91 L266.79,81.75 A75.9,75.9 0 0 0 224.11,149.01 Z"/></g><g class="chart__mark chart__c4 chart__sector"><title>other: 7%</title><path d="M242.88,24.38 A138,138 0 0 1 298.19,12.01 L299.01,74.11 A75.9,75.9 0 0 0 268.59,80.91 Z"/></g></svg><figcaption class="chart__donut-center"><span class="chart__donut-value">100</span><span class="chart__donut-label">Total</span></figcaption><figcaption class="chart__legend chart__legend--bottom"><span class="chart__legend-item"><span class="chart__swatch chart__c1"></span>iOS</span><span class="chart__legend-item"><span class="chart__swatch chart__c2"></span>Android</span><span class="chart__legend-item"><span class="chart__swatch chart__c3"></span>web</span><span class="chart__legend-item"><span class="chart__swatch chart__c4"></span>other</span></figcaption><table class="chart__sr" role="presentation"><caption>Sector values</caption><tbody><tr><th scope="row">iOS</th><td>44%</td></tr><tr><th scope="row">Android</th><td>31%</td></tr><tr><th scope="row">web</th><td>18%</td></tr><tr><th scope="row">other</th><td>7%</td></tr></tbody></table></figure>
+</div></div>
+</div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
+<h3 class="demo-card-title">Rules (grid + reference lines)</h3><div class="demo-card-body"><div class="vstack spacing-0 align-flex-start">
+<figure class="chart" role="img" aria-label="Chart with 6 marks"><figcaption class="chart__title">Against target</figcaption><div class="chart__plot"><svg class="chart__svg" viewBox="0 0 640 320" role="presentation"><line class="chart__grid" x1="44" y1="280" x2="624" y2="280"/><line class="chart__grid" x1="44" y1="201" x2="624" y2="201"/><line class="chart__grid" x1="44" y1="123" x2="624" y2="123"/><line class="chart__grid" x1="44" y1="44" x2="624" y2="44"/><line class="chart__grid chart__grid--v" x1="44" y1="44" x2="44" y2="280"/><line class="chart__grid chart__grid--v" x1="189" y1="44" x2="189" y2="280"/><line class="chart__grid chart__grid--v" x1="334" y1="44" x2="334" y2="280"/><line class="chart__grid chart__grid--v" x1="479" y1="44" x2="479" y2="280"/><line class="chart__grid chart__grid--v" x1="624" y1="44" x2="624" y2="280"/><line class="chart__baseline" x1="44" y1="280" x2="624" y2="280"/><line class="chart__mark chart__mark chart__rule" x1="44" y1="162" x2="624" y2="162"/><path class="chart__mark chart__line chart__c1" d="M44,217.07 C92.33,201.33 140.67,169.87 189,169.87 C237.33,169.87 285.67,193.47 334,193.47 C382.33,193.47 430.67,130.07 479,114.8 C527.33,99.53 575.67,88.58 624,75.47" stroke-width="2"/><text class="chart__axis-label" x="38" y="283" text-anchor="end">0</text><text class="chart__axis-label" x="38" y="204" text-anchor="end">10</text><text class="chart__axis-label" x="38" y="126" text-anchor="end">20</text><text class="chart__axis-label" x="38" y="47" text-anchor="end">30</text><text class="chart__axis-label chart__axis-label--x" x="44" y="296" text-anchor="middle">1</text><text class="chart__axis-label chart__axis-label--x" x="189" y="296" text-anchor="middle">2</text><text class="chart__axis-label chart__axis-label--x" x="334" y="296" text-anchor="middle">3</text><text class="chart__axis-label chart__axis-label--x" x="479" y="296" text-anchor="middle">4</text><text class="chart__axis-label chart__axis-label--x" x="624" y="296" text-anchor="middle">5</text></svg></div><figcaption class="chart__legend chart__legend--bottom"><span class="chart__legend-item"><span class="chart__swatch chart__c1"></span>series</span></figcaption><table class="chart__sr" role="presentation"><caption>Series values</caption><tbody><tr><th scope="row">series</th><td>8, 14, 11, 21, 26</td></tr><tr><th scope="row">Series</th><td>15</td></tr></tbody></table></figure>
+</div></div>
+</div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
+<h3 class="demo-card-title">Heatmap</h3><div class="demo-card-body"><div class="vstack spacing-0 align-flex-start">
+<figure class="chart" role="img" aria-label="Chart with 25 marks"><figcaption class="chart__title">Activity by hour × day</figcaption><div class="chart__plot"><svg class="chart__svg" viewBox="0 0 640 320" role="presentation"><line class="chart__grid" x1="44" y1="280" x2="624" y2="280"/><line class="chart__grid" x1="44" y1="193" x2="624" y2="193"/><line class="chart__grid" x1="44" y1="105" x2="624" y2="105"/><line class="chart__grid chart__grid--v" x1="44" y1="44" x2="44" y2="280"/><line class="chart__grid chart__grid--v" x1="160" y1="44" x2="160" y2="280"/><line class="chart__grid chart__grid--v" x1="276" y1="44" x2="276" y2="280"/><line class="chart__grid chart__grid--v" x1="392" y1="44" x2="392" y2="280"/><line class="chart__grid chart__grid--v" x1="508" y1="44" x2="508" y2="280"/><line class="chart__grid chart__grid--v" x1="624" y1="44" x2="624" y2="280"/><line class="chart__baseline" x1="44" y1="280" x2="624" y2="280"/><g class="chart__mark chart__c1 chart__rect"><title>Mark</title><rect x="44" y="236.3" width="116" height="43.7" style="fill-opacity: 0.1"/></g><g class="chart__mark chart__c1 chart__rect"><title>Mark</title><rect x="44" y="192.59" width="116" height="43.7" style="fill-opacity: 0.5"/></g><g class="chart__mark chart__c1 chart__rect"><title>Mark</title><rect x="44" y="148.89" width="116" height="43.7" style="fill-opacity: 0.9"/></g><g class="chart__mark chart__c1 chart__rect"><title>Mark</title><rect x="44" y="105.19" width="116" height="43.7" style="fill-opacity: 0.3"/></g><g class="chart__mark chart__c1 chart__rect"><title>Mark</title><rect x="44" y="61.48" width="116" height="43.7" style="fill-opacity: 0.7"/></g><g class="chart__mark chart__c1 chart__rect"><title>Mark</title><rect x="160" y="236.3" width="116" height="43.7" style="fill-opacity: 0.2"/></g><g class="chart__mark chart__c1 chart__rect"><title>Mark</title><rect x="160" y="192.59" width="116" height="43.7" style="fill-opacity: 0.8"/></g><g class="chart__mark chart__c1 chart__rect"><title>Mark</title><rect x="160" y="148.89" width="116" height="43.7" style="fill-opacity: 0.4"/></g><g class="chart__mark chart__c1 chart__rect"><title>Mark</title><rect x="160" y="105.19" width="116" height="43.7" style="fill-opacity: 0.6"/></g><g class="chart__mark chart__c1 chart__rect"><title>Mark</title><rect x="160" y="61.48" width="116" height="43.7" style="fill-opacity: 0.1"/></g><g class="chart__mark chart__c1 chart__rect"><title>Mark</title><rect x="276" y="236.3" width="116" height="43.7" style="fill-opacity: 0.9"/></g><g class="chart__mark chart__c1 chart__rect"><title>Mark</title><rect x="276" y="192.59" width="116" height="43.7" style="fill-opacity: 0.3"/></g><g class="chart__mark chart__c1 chart__rect"><title>Mark</title><rect x="276" y="148.89" width="116" height="43.7" style="fill-opacity: 0.7"/></g><g class="chart__mark chart__c1 chart__rect"><title>Mark</title><rect x="276" y="105.19" width="116" height="43.7" style="fill-opacity: 0.2"/></g><g class="chart__mark chart__c1 chart__rect"><title>Mark</title><rect x="276" y="61.48" width="116" height="43.7" style="fill-opacity: 0.5"/></g><g class="chart__mark chart__c1 chart__rect"><title>Mark</title><rect x="392" y="236.3" width="116" height="43.7" style="fill-opacity: 0.4"/></g><g class="chart__mark chart__c1 chart__rect"><title>Mark</title><rect x="392" y="192.59" width="116" height="43.7" style="fill-opacity: 0.6"/></g><g class="chart__mark chart__c1 chart__rect"><title>Mark</title><rect x="392" y="148.89" width="116" height="43.7" style="fill-opacity: 0.1"/></g><g class="chart__mark chart__c1 chart__rect"><title>Mark</title><rect x="392" y="105.19" width="116" height="43.7" style="fill-opacity: 0.8"/></g><g class="chart__mark chart__c1 chart__rect"><title>Mark</title><rect x="392" y="61.48" width="116" height="43.7" style="fill-opacity: 0.3"/></g><g class="chart__mark chart__c1 chart__rect"><title>Mark</title><rect x="508" y="236.3" width="116" height="43.7" style="fill-opacity: 0.7"/></g><g class="chart__mark chart__c1 chart__rect"><title>Mark</title><rect x="508" y="192.59" width="116" height="43.7" style="fill-opacity: 0.2"/></g><g class="chart__mark chart__c1 chart__rect"><title>Mark</title><rect x="508" y="148.89" width="116" height="43.7" style="fill-opacity: 0.5"/></g><g class="chart__mark chart__c1 chart__rect"><title>Mark</title><rect x="508" y="105.19" width="116" height="43.7" style="fill-opacity: 0.9"/></g><g class="chart__mark chart__c1 chart__rect"><title>Mark</title><rect x="508" y="61.48" width="116" height="43.7" style="fill-opacity: 0.6"/></g><text class="chart__axis-label" x="38" y="283" text-anchor="end">0</text><text class="chart__axis-label" x="38" y="196" text-anchor="end">2</text><text class="chart__axis-label" x="38" y="108" text-anchor="end">4</text><text class="chart__axis-label chart__axis-label--x" x="44" y="296" text-anchor="middle">0</text><text class="chart__axis-label chart__axis-label--x" x="160" y="296" text-anchor="middle">1</text><text class="chart__axis-label chart__axis-label--x" x="276" y="296" text-anchor="middle">2</text><text class="chart__axis-label chart__axis-label--x" x="392" y="296" text-anchor="middle">3</text><text class="chart__axis-label chart__axis-label--x" x="508" y="296" text-anchor="middle">4</text><text class="chart__axis-label chart__axis-label--x" x="624" y="296" text-anchor="middle">5</text></svg></div><table class="chart__sr" role="presentation"><caption>Series values</caption><tbody></tbody></table></figure>
+</div></div>
+</div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
+<h3 class="demo-card-title">Empty state</h3><div class="demo-card-body"><div class="vstack spacing-0 align-flex-start">
+<figure class="chart chart--empty" role="img" aria-label="Chart"><figcaption class="chart__empty"><span class="chart__empty-title">No data</span><span class="chart__empty-message">Add points to display a chart.</span></figcaption></figure>
 </div></div>
 </div></div>
 </div></section><section class="showcase-section" id="theme"><div class="vstack spacing-16 align-flex-start">
@@ -7983,11 +8276,43 @@ Plain text content<span class="text-escaped">&lt;script&gt;alert(&#39;xss&#39;)&
 </div></div>
 </div></div>
 </div></div>
+</div></section><section class="showcase-section" id="icons"><div class="vstack spacing-16 align-flex-start">
+<h2>WebUIIcon suite</h2><p>Stroke-based inline-SVG icons generated from the `designer/icons/icon-manifest.json` catalog (206 glyphs, MIT/Feather geometry). Each icon inherits `currentColor`, so it takes the surrounding text color by default and recolors with `.foregroundColor(_:)`.</p><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
+<h3 class="demo-card-title">Sizes</h3><div class="demo-card-body"><div class="hstack spacing-24 align-center">
+<div class="vstack spacing-4 align-flex-start">
+<svg class="icon icon--sm" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg><span style="font-size: 12px;" style="font-weight: normal;" style="color: var(--color-text-muted);">.small</span>
+</div><div class="vstack spacing-4 align-flex-start">
+<svg class="icon icon--md" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg><span style="font-size: 12px;" style="font-weight: normal;" style="color: var(--color-text-muted);">.medium</span>
+</div><div class="vstack spacing-4 align-flex-start">
+<svg class="icon icon--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg><span style="font-size: 12px;" style="font-weight: normal;" style="color: var(--color-text-muted);">.large</span>
+</div><div class="vstack spacing-4 align-flex-start">
+<svg class="icon icon--xl" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg><span style="font-size: 12px;" style="font-weight: normal;" style="color: var(--color-text-muted);">.extraLarge</span>
+</div><div class="vstack spacing-4 align-flex-start">
+<svg class="icon icon--xl" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg><span style="font-size: 12px;" style="font-weight: normal;" style="color: var(--color-text-muted);">iconSize(.extraLarge)</span>
+</div>
+</div></div>
+</div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
+<h3 class="demo-card-title">Color tokens (currentColor)</h3><div class="demo-card-body"><div class="hstack spacing-24 align-center">
+<svg class="icon icon--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--color-danger);"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"/></svg><svg class="icon icon--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--color-success);"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg><svg class="icon icon--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--color-warning);"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><svg class="icon icon--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--color-info);"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg><svg class="icon icon--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--color-primary-500);"><path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/></svg><svg class="icon icon--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="color: var(--color-text-muted);"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12"/></svg>
+</div></div>
+</div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
+<h3 class="demo-card-title">Accessible label (role=img)</h3><div class="demo-card-body"><div class="hstack spacing-16 align-center">
+<svg class="icon icon--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Search"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg><svg class="icon icon--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Download file"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg><svg class="icon icon--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" role="img" aria-label="Cloud storage"><path d="M18 10h-1.26A8 8 0 1 0 9 20h9a5 5 0 0 0 0-10z"/></svg><svg class="icon icon--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg><span style="font-size: 12px;" style="font-weight: normal;" style="color: var(--color-text-muted);">last one: decorative (aria-hidden)</span>
+</div></div>
+</div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
+<h3 class="demo-card-title">In composition (tree + empty state + alert)</h3><div class="demo-card-body"><div class="vstack spacing-12 align-flex-start">
+<div class="tree"><div class="tree__node tree__node--open"><div class="tree__row"><span class="tree__caret"></span><span class="tree__icon fill-slot"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span><span class="tree__label">src</span></div><div class="tree__children"><div class="tree__node tree__node--open"><div class="tree__row"><span class="tree__caret"></span><span class="tree__icon fill-slot"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span><span class="tree__label">views</span></div><div class="tree__children"><div class="tree__node"><div class="tree__row"><span class="tree__caret tree__caret--leaf"></span><span class="tree__icon fill-slot"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span><span class="tree__label">HomeView.swift</span></div></div><div class="tree__node"><div class="tree__row"><span class="tree__caret tree__caret--leaf"></span><span class="tree__icon fill-slot"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg></span><span class="tree__label">SettingsView.swift</span></div></div></div></div></div></div></div><div class="empty-state"><div class="empty-state__icon fill-slot"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11L2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg></div><h3 class="empty-state__title">No messages yet</h3><p class="empty-state__message">Check back later or connect a new account.</p></div><div class="alert alert--success" role="alert"><div class="alert__icon fill-slot"><svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg></div><div class="alert__body"><div class="alert__title">Deployed</div><div class="alert__message">Release 2.3.1 is now live in production.</div></div></div>
+</div></div>
+</div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
+<h3 class="demo-card-title">Custom geometry (WebUIIconCustom, sanitized)</h3><div class="demo-card-body"><div class="hstack spacing-24 align-center">
+<svg class="icon icon--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-icon="custom-diamond" role="img" aria-label="Custom diamond"><path d="M12 2l9 10-9 10-9-10z"/><line x1="3" y1="12" x2="21" y2="12"/></svg><svg class="icon icon--lg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" data-icon="custom-sanitized" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M8 12h8" on-disabled="alert(1)"/></svg><span style="font-size: 12px;" style="font-weight: normal;" style="color: var(--color-text-muted);">right icon: script tag + on* handler stripped</span>
+</div></div>
+</div></div>
 </div></section>
 </div></main>
 </div></div>
 </div>
-  <script nonce="y1ywV6HuHd3_iV5thFeDpg">
+  <script nonce="Qf_GFLVQMhbEMwbcWj__aw">
 
 window.WebUIRuntime = (function () {
   'use strict';
@@ -8280,7 +8605,7 @@ window.WebUIRuntime = (function () {
         var el = event.target;
         while (el && el !== document) {
           path.push(el);
-          el = el.parentElement;
+          el = el.parentNode;
         }
         path.push(document);
       }
