@@ -160,7 +160,7 @@ invocation. gates host their own server, check, and tear down in one call.
   the server never confirms. predictions are render-time snapshots — use for
   value-independent transitions (reset, toggle-on, set).
 - **`WebUIIcon` / `IconName`** — native svg iconography. `IconName` is a
-  generated `CaseIterable` enum (206 glyphs from
+  generated `CaseIterable` enum (618 glyphs from
   `designer/icons/icon-manifest.json`); `WebUIIcon` renders inline
   `<svg stroke="currentColor">` so coloring rides `ColorToken` via
   `.foregroundColor(_:)`. `IconSize` is `.small/.medium/.large/.extraLarge`

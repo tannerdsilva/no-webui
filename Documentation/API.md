@@ -262,7 +262,7 @@ WebUIIcon(.star).iconSize(.extraLarge).foregroundColor(.danger)
 WebUIIconCustom(name: "custom", body: "<path d=\"M12 2l9 10-9 10-9-10z\"/>")
 ```
 
-- **catalog:** `IconName` — a generated `CaseIterable` enum (206 glyphs from
+- **catalog:** `IconName` — a generated `CaseIterable` enum (618 glyphs from
   `designer/icons/icon-manifest.json`); a typo is a compile error. `IconName.named(_:)`
   (raw-name lookup) and `IconName(emoji:)` (legacy bridge).
 - **sizes:** `IconSize` `.small/.medium/.large/.extraLarge` (em multiples) and

@@ -7,7 +7,8 @@ existing `ColorToken` slots — no canvas, no client-side icon font, no sprite
 sheet, no network fetch.
 
 the design goal is a first-class design-system surface: a curated catalog of
-real geometry (206 glyphs from Feather, MIT), a type-safe Swift API, and a
+real geometry (618 glyphs — the full Feather catalog plus a curated 348 from
+Lucide, both MIT-lineage), a type-safe Swift API, and a
 build-time toolset that keeps the generated catalog from ever drifting from the
 manifest it came from.
 
@@ -44,8 +45,8 @@ stage 1).
 
 ## the catalog
 
-- **206 icons**, 541 svg elements, ~26 KB of geometry payload (avg 126 bytes/icon,
-  largest `settings` at 777 bytes).
+- **618 icons**, 2,265 svg elements, ~99 KB of geometry payload (avg
+  160 bytes/icon, largest `settings` at 777 bytes).
 - **grid 24, stroke 2**, butt cap + miter join — a tightened take on the Feather
   geometry: flat stroke ends and crisp corners read sharper than the original
   round treatment while keeping the same line language and spacing.
@@ -54,8 +55,11 @@ stage 1).
   a zero-length line with the svg's butt cap would otherwise render nothing.
 - **10 categories**: actions, comms, data, device, files, media, misc,
   navigation, security, status.
-- **provenance**: Feather geometry (MIT). the manifest records the license so the
-  shipped payload stays clear of trademarked brand marks.
+- **provenance**: Feather geometry (MIT, 287 icons — the original 206 plus 64
+  additions) extended with a curated 348 from Lucide (ISC,
+  lucide-icons/lucide), which is Feather's successor and keeps its grid,
+  stroke, and line language. trademarked brand marks are excluded from the
+  catalog; the manifest records both licenses.
 
 every icon's geometry is validated by the `lint` verb before it may enter the
 catalog: allowed-element whitelist, self-closing tags, on-grid bounds (the

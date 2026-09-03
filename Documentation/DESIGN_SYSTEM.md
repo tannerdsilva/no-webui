@@ -228,7 +228,7 @@ WebUIIconCustom(name: "custom", body: "<path d=\"M12 2l9 10-9 10-9-10z\"/>")
 ```
 
 A typed svg icon rendered as inline `<svg>` from the generated `IconName`
-catalog (206 glyphs, `designer/icons/icon-manifest.json`). stroke is
+catalog (618 glyphs, `designer/icons/icon-manifest.json`). stroke is
 `currentColor`, so it inherits the surrounding text color and recolors with
 `.foregroundColor(_ token:)`.
 

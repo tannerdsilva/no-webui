@@ -40,7 +40,7 @@ to update assets: edit the files in `designer/assets/`, then `swift build`
 `WebUIAssetPlugin`) runs `WebUIIconTool generate` during every `swift build`.
 it reads `designer/icons/icon-manifest.json` — the canonical icon catalog — and
 generates `IconLibrary.swift` into the plugin work directory (under `.build/`,
-gitignored): the `IconName` enum (206 glyphs), the `WebUIIcons` catalog table,
+gitignored): the `IconName` enum (618 glyphs), the `WebUIIcons` catalog table,
 and the category enum, consumed by `WebUIIcon` / `WebUIIconCustom`.
 
 the generator is deterministic (same manifest → same bytes), so the build

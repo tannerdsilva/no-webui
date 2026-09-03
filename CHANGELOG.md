@@ -6,6 +6,14 @@ all notable changes to this project are documented here.
 
 ### added
 
+- icon catalog tripled: **618 glyphs** (was 206). the 64 remaining
+  non-brand Feather icons plus a curated 348 from Lucide (ISC — Feather's
+  successor, same 24-grid / 2-stroke line language; 19 further brand
+  logos and 3 icons whose compact arc data trips the bounds tokenizer are
+  excluded). manifest `_meta`
+  records both licenses; titles follow the existing `Name Title` convention
+  and tags combine name words with the upstream tag list. the full preview
+  was vision-passed in both themes across all 10 categories.
 - interactive `WebUITable` — server-driven sort / select / expand: clickable
   headers with `aria-sort` + `.sort` affordance, select-all / per-row
   checkboxes (`aria-checked="mixed"` for partial selection), per-row detail

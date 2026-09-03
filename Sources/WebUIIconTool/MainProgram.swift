@@ -430,7 +430,7 @@ enum PreviewGenerator {
 		s += ".count{font-variant-numeric:tabular-nums}\n"
 		s += "</style>\n</head>\n<body>\n"
 		s += "<h1>webui-icons -- preview</h1>\n"
-		s += "<p class=\"sub\"><span class=\"count\">\(icons.count)</span> icons | grid \(m.grid) | stroke \(SwiftGenerator.fmt(m.strokeWidth)) | MIT (Feather geometry)</p>\n"
+		s += "<p class=\"sub\"><span class=\"count\">\(icons.count)</span> icons | grid \(m.grid) | stroke \(SwiftGenerator.fmt(m.strokeWidth)) | \(m.license)</p>\n"
 		for cat in m.categories.sorted() {
 			let group = icons.filter { $0.category == cat }.sorted { $0.name < $1.name }
 			s += "<div class=\"cat\"><h2>\(cat) <span class=\"count\">(\(group.count))</span></h2><div class=\"grid\">\n"

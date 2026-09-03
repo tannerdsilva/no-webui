@@ -20,7 +20,7 @@ no-webui/
 │   │   ├── design-system.css    ← THE file you edit (8,100+ lines)
 │   │   └── webui-runtime.js     ← JS runtime (rarely needs changes)
 │   ├── icons/
-│   │   └── icon-manifest.json   ← the svg icon catalog (206 glyphs, edit to add)
+│   │   └── icon-manifest.json   ← the svg icon catalog (618 glyphs, edit to add)
 │   ├── previews/
 │   │   ├── designer-preview.html  ← OPEN THIS IN YOUR BROWSER
 │   │   ├── showcase.html        ← full generated reference page

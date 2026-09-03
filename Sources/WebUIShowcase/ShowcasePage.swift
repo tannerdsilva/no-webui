@@ -996,7 +996,7 @@ struct ShowcasePage {
                 section("Icons", "icons") {
                     VStack(spacing: 16) {
                         Heading("WebUIIcon suite", level: .h2)
-                        Paragraph("Stroke-based inline-SVG icons generated from the `designer/icons/icon-manifest.json` catalog (206 glyphs, MIT/Feather geometry). Each icon inherits `currentColor`, so it takes the surrounding text color by default and recolors with `.foregroundColor(_:)`.")
+                        Paragraph("Stroke-based inline-SVG icons generated from the `designer/icons/icon-manifest.json` catalog (618 glyphs, Feather/MIT + Lucide/ISC geometry). Each icon inherits `currentColor`, so it takes the surrounding text color by default and recolors with `.foregroundColor(_:)`.")
                         demoCard("Sizes") {
                             HStack(spacing: 24) {
                                 VStack(spacing: 4) {
