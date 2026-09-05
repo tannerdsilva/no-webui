@@ -288,6 +288,10 @@ final class HTTPByteBufferResponsePartHandler: ChannelOutboundHandler {
 	}
 }
 
+// MARK: - Auth server entry point
+
+/// the auth demo server: `@main` entry type (see `--port` above).
+@main
 struct WebUIAuthExample {
 	// demo credentials (trivial by design — this is the demonstration login)
 	static let demoUsername = "admin"
@@ -397,6 +401,16 @@ struct WebUIAuthExample {
 	// MARK: server
 
 	static func main() async throws {
+		// port is a flag so the ceremony tests can boot on an ephemeral port
+		// without contending with a running demo on :9091.
+		let port: Int
+		if let flagIndex = CommandLine.arguments.firstIndex(of: "--port"),
+		   flagIndex + 1 < CommandLine.arguments.count,
+		   let parsed = Int(CommandLine.arguments[flagIndex + 1]), parsed > 0, parsed < 65536 {
+			port = parsed
+		} else {
+			port = 9091
+		}
 		let csrfSecret = CSRFProtection.generateSecret()
 		let passwordRecord = PasswordRecord(
 			salt: try PasswordVerifier.makeSalt(),
@@ -426,7 +440,7 @@ struct WebUIAuthExample {
 			.serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
 
 		let channel: NIOAsyncChannel<EventLoopFuture<AuthUpgradeResult>, Never> = try await bootstrap.bind(
-			host: "0.0.0.0", port: 9091
+			host: "0.0.0.0", port: port
 		) { channel in
 			channel.eventLoop.makeCompletedFuture {
 				let upgrader = NIOTypedWebSocketServerUpgrader<AuthUpgradeResult>(
@@ -490,7 +504,7 @@ struct WebUIAuthExample {
 			}
 		}
 
-		logger.info("auth demo on http://localhost:9091 (ws://localhost:9091/ws)")
+		logger.info("auth demo on http://localhost:\(port) (ws://localhost:\(port)/ws)")
 
 		try await withThrowingDiscardingTaskGroup { group in
 			try await channel.executeThenClose { inbound in
@@ -837,7 +851,3 @@ enum AuthUpgradeResult: Sendable {
 	case websocket(NIOAsyncChannel<WebSocketFrame, WebSocketFrame>, router: EventRouter?, tokenHash: Data?)
 	case http(NIOAsyncChannel<HTTPServerRequestPart, HTTPPart<HTTPResponseHead, ByteBuffer>>)
 }
-
-// MARK: - Entry point
-
-try await WebUIAuthExample.main()
