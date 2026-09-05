@@ -283,7 +283,13 @@ public enum CSRFProtection {
     }
     public static func token(for formID: String, secret: String, maxAge: TimeInterval = defaultMaxAge) -> String {
         let expires = Date().timeIntervalSince1970 + maxAge
-        let payload = "\(formID):\(Int(expires))"
+        // a per-token random nonce is required: the embedded expiry is
+        // second-quantized (`Int` truncation), so without a nonce two tokens
+        // minted in the same wall-clock second would be byte-identical —
+        // harmless for stateless validation, but fatal for the single-use
+        // login-token store, which would reject the second one as consumed.
+        let nonce = UUID().uuidString.replacingOccurrences(of: "-", with: "")
+        let payload = "\(formID):\(Int(expires)):\(nonce)"
         let signature = hmacSHA256(key: secret, message: payload)
         let tokenData = "\(payload):\(signature)".data(using: .utf8)!
         return tokenData.base64EncodedString()
@@ -293,11 +299,12 @@ public enum CSRFProtection {
               let tokenStr = String(data: tokenData, encoding: .utf8) else {
             return false
         }
-        let parts = tokenStr.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
-        guard parts.count == 3 else { return false }
+        let parts = tokenStr.split(separator: ":", maxSplits: 3, omittingEmptySubsequences: false)
+        guard parts.count == 4 else { return false }
         let payloadFormID = String(parts[0])
         let expiresStr = String(parts[1])
-        let signature = String(parts[2])
+        let nonce = String(parts[2])
+        let signature = String(parts[3])
 
         guard payloadFormID == formID,
               let expires = TimeInterval(expiresStr),
@@ -305,10 +312,22 @@ public enum CSRFProtection {
             return false
         }
 
-        let expectedSignature = hmacSHA256(key: secret, message: "\(formID):\(expiresStr)")
+        let expectedSignature = hmacSHA256(key: secret, message: "\(formID):\(expiresStr):\(nonce)")
         // constant-time compare — the caller's signature is attacker-controlled,
         // and a short-circuiting == would leak prefix bytes of the MAC.
         return constantTimeEquals(Array(signature.utf8), Array(expectedSignature.utf8))
+    }
+    /// the embedded expiry (seconds since 1970) of a well-formed token, or
+    /// `nil` when the token does not decode to `formID:expiry:nonce:signature`.
+    /// callers should only pass tokens that have already passed `validate`.
+    public static func expiry(of token: String) -> TimeInterval? {
+        guard let tokenData = Data(base64Encoded: token),
+              let tokenStr = String(data: tokenData, encoding: .utf8) else {
+            return nil
+        }
+        let parts = tokenStr.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
+        guard parts.count == 3 else { return nil }
+        return TimeInterval(parts[1])
     }
     private static func hmacSHA256(key: String, message: String) -> String {
         guard let keyData = key.data(using: .utf8),

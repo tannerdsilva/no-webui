@@ -55,4 +55,31 @@ struct CSRFRegressionTests {
 		#expect(CSRFProtection.validate(token, for: "other-form", secret: secret) == false)
 		#expect(CSRFProtection.validate(token, for: "login-form", secret: "different") == false)
 	}
+
+	@Test("expiry(of:) reads the embedded timestamp of a valid token")
+	func expiryAccessor() {
+		let secret = CSRFProtection.generateSecret()
+		let before = Date().timeIntervalSince1970
+		let token = CSRFProtection.token(for: "login", secret: secret, maxAge: 1800)
+		let expiry = CSRFProtection.expiry(of: token)
+		#expect(expiry != nil)
+		#expect(expiry! > before)
+		#expect(expiry! <= before + 1800 + 1)
+		// the expiry is in the future while the token is valid.
+		#expect(CSRFProtection.validate(token, for: "login", secret: secret))
+		#expect(CSRFProtection.expiry(of: "not-a-token") == nil)
+		#expect(CSRFProtection.expiry(of: "!!!bad!!!") == nil)
+	}
+
+	@Test("tokens minted in the same wall-clock second are unique")
+	func sameSecondUniqueness() {
+		let secret = CSRFProtection.generateSecret()
+		// the expiry payload is second-truncated; without the per-token nonce
+		// these would be byte-identical, which would break single-use stores.
+		let first = CSRFProtection.token(for: "login", secret: secret)
+		let second = CSRFProtection.token(for: "login", secret: secret)
+		#expect(first != second)
+		#expect(CSRFProtection.validate(first, for: "login", secret: secret))
+		#expect(CSRFProtection.validate(second, for: "login", secret: secret))
+	}
 }

@@ -32,6 +32,59 @@ final class RouterRegistry: @unchecked Sendable {
 	}
 }
 
+// MARK: - Authenticated connection registry (logout teardown)
+
+// maps a session's token hash to the live WebSocket channels bound to it.
+// logout (and any future server-side invalidation) closes every channel here
+// so revocation tears the connection down immediately — the per-event liveness
+// check is the backstop, not the primary mechanism. channels self-unregister
+// when the connection ends (including idle-reaped ones).
+actor AuthConnectionRegistry {
+	private var nextID = 0
+	private var channels: [Data: [Int: NIOAsyncChannel<WebSocketFrame, WebSocketFrame>]] = [:]
+
+	/// register `channel` under its session; returns a handle for unregister.
+	func register(_ channel: NIOAsyncChannel<WebSocketFrame, WebSocketFrame>, tokenHash: Data) -> Int {
+		nextID += 1
+		channels[tokenHash, default: [:]][nextID] = channel
+		return nextID
+	}
+
+	func unregister(_ id: Int, tokenHash: Data) {
+		guard var byID = channels[tokenHash] else { return }
+		byID.removeValue(forKey: id)
+		if byID.isEmpty {
+			channels.removeValue(forKey: tokenHash)
+		} else {
+			channels[tokenHash] = byID
+		}
+	}
+
+	/// close every socket bound to `tokenHash` (fire-and-forget).
+	func closeAll(forTokenHash tokenHash: Data) {
+		guard let byID = channels.removeValue(forKey: tokenHash) else { return }
+		for channel in byID.values {
+			_ = channel.channel.close()
+		}
+	}
+}
+
+// MARK: - Idle socket reaping
+
+// an authenticated socket that stops sending (no pings, no events) is closed
+// after the read-idle window — a silent zombie never outlives its timeout.
+// the runtime pings every 30s, so a healthy connection resets the counter.
+final class AuthIdleCloseHandler: ChannelInboundHandler {
+	typealias InboundIn = WebSocketFrame
+	func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
+		if event is IdleStateHandler.IdleStateEvent {
+			context.close(promise: nil)
+		} else {
+			context.fireUserInboundEventTriggered(event)
+		}
+	}
+}
+
 // MARK: - Demo state (per-process interactive model, like WebUIExample)
 
 final class AuthDemoState: @unchecked Sendable {
@@ -245,6 +298,10 @@ struct WebUIAuthExample {
 	let csrfSecret: String
 	let adminPasswordRecord: PasswordRecord
 	let routers = RouterRegistry()
+	let connections = AuthConnectionRegistry()
+	let argon2Limiter = AsyncSemaphore(permits: 4)
+	let loginThrottle = LoginThrottle(windowSeconds: 60, maxAttempts: 20)
+	let loginTokenStore = SingleUseTokenStore()
 
 	// uploads beyond this are rejected with 413 — the demo accepts only tiny
 	// urlencoded forms.
@@ -300,6 +357,11 @@ struct WebUIAuthExample {
 		// clickjacking control — X-Frame-Options is header-only (the
 		// frame-ancestors CSP directive is inert in a <meta> element).
 		head.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
+		// authenticated pages must not be cacheable: no-store keeps the
+		// dashboard (username, roles, logout token) out of the http cache and
+		// out of the back-forward cache after logout on shared machines.
+		head.headers.replaceOrAdd(name: "Cache-Control", value: "no-store")
+		head.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
 		for (name, value) in headers {
 			head.headers.replaceOrAdd(name: name, value: value)
 		}
@@ -314,6 +376,22 @@ struct WebUIAuthExample {
 		var setCookieHeaders = setCookies
 		setCookieHeaders.insert(("Location", target), at: 0)
 		try await loginResponse(outbound: outbound, status: .seeOther, headers: setCookieHeaders, body: "")
+	}
+
+	/// refused upgrade response: write the rejection and close, then return
+	/// `nil` so the upgrader declines. the typed upgrader's fallback replay
+	/// re-delivers only `.end` (the request head is not buffered), so routing
+	/// can never see a refused upgrade — the answer has to go out here.
+	func rejectUpgrade(channel: Channel, status: HTTPResponseStatus) -> EventLoopFuture<HTTPHeaders?> {
+		var head = HTTPResponseHead(version: .http1_1, status: status)
+		head.headers.replaceOrAdd(name: "Content-Length", value: "0")
+		head.headers.replaceOrAdd(name: "Connection", value: "close")
+		head.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
+		let body = ByteBuffer(string: "")
+		_ = channel.writeAndFlush(NIOAny(HTTPServerResponsePart.head(head)))
+		_ = channel.writeAndFlush(NIOAny(HTTPServerResponsePart.body(.byteBuffer(body))))
+		return channel.writeAndFlush(NIOAny(HTTPServerResponsePart.end(nil)))
+			.map { nil as HTTPHeaders? }
 	}
 
 	// MARK: server
@@ -355,17 +433,40 @@ struct WebUIAuthExample {
 					shouldUpgrade: { channel, head in
 						// the demo binds the socket to the page's per-session
 						// router at upgrade time (cookie -> token hash -> router
-						// registered by the last full render) and refuses
-						// foreign origins. an unauthenticated or foreign-origin
-						// upgrade is not upgraded (falls through to HTTP 404),
-						// so pre-login / cross-site sockets are inert.
-						let ok = head.method == .GET
+						// registered by the last full render), refuses foreign
+						// origins, and — since the login page never connects —
+						// requires a real, unexpired session cookie before the
+						// 101 is ever sent. refusals are answered directly here
+						// (the upgrader's fallback replay only re-delivers
+						// `.end`, so routing can't see the request head).
+						let structurallyValid = head.method == .GET
 							&& head.uri == "/ws"
 							&& example.originMatchesHost(head: head)
-						return channel.eventLoop.makeSucceededFuture(ok ? HTTPHeaders() : nil)
+						guard structurallyValid else {
+							return example.rejectUpgrade(channel: channel, status: .forbidden)
+						}
+						let sessionValid: EventLoopFuture<Bool> = channel.eventLoop.makeFutureWithTask {
+							guard let tokenHash = example.tokenHash(for: head),
+							      let session = try? await example.sessionStore.find(tokenHash: tokenHash),
+							      !session.isExpired() else {
+								return false
+							}
+							return true
+						}
+						return sessionValid.flatMap { valid in
+							if valid {
+								return channel.eventLoop.makeSucceededFuture(HTTPHeaders())
+							}
+							return example.rejectUpgrade(channel: channel, status: .forbidden)
+						}
 					},
 						upgradePipelineHandler: { channel, head in
 						channel.eventLoop.makeCompletedFuture {
+							// an authenticated socket that stops sending (no
+							// pings, no events) is reaped after the read-idle
+							// window instead of pinning resources forever.
+							try channel.pipeline.syncOperations.addHandler(IdleStateHandler(readTimeout: .seconds(120)))
+							try channel.pipeline.syncOperations.addHandler(AuthIdleCloseHandler())
 							let ws = try NIOAsyncChannel<WebSocketFrame, WebSocketFrame>(wrappingChannelSynchronously: channel)
 							let tokenHash = example.tokenHash(for: head)
 							let router = tokenHash.flatMap { example.routers.router(forTokenHash: $0) }
@@ -418,32 +519,45 @@ struct WebUIAuthExample {
 	}
 
 	private func handleWebsocket(_ channel: NIOAsyncChannel<WebSocketFrame, WebSocketFrame>, router: EventRouter?, tokenHash: Data?) async throws {
-		try await channel.executeThenClose { inbound, outbound in
-			try await withThrowingTaskGroup(of: Void.self) { tg in
-				tg.addTask {
-					for try await frame in inbound {
-						switch frame.opcode {
-						case .text:
-							let payload = String(buffer: frame.unmaskedData)
-							await self.dispatch(eventText: payload, router: router, tokenHash: tokenHash, outbound: outbound)
-						case .ping:
-							let buf = ByteBuffer()
-							let pong = WebSocketFrame(fin: true, opcode: .pong, data: buf)
-							try await outbound.write(pong)
-						case .connectionClose:
-							var data = frame.unmaskedData
-							let code = data.readSlice(length: 2) ?? ByteBuffer()
-							let close = WebSocketFrame(fin: true, opcode: .connectionClose, data: code)
-							try await outbound.write(close)
-							return
-						default:
-							break
+		// register before reading so logout teardown can close this socket;
+		// unregister when the connection ends (normal close or idle reap).
+		var connectionID: Int?
+		if let tokenHash {
+			connectionID = await connections.register(channel, tokenHash: tokenHash)
+		}
+		do {
+			try await channel.executeThenClose { inbound, outbound in
+				try await withThrowingTaskGroup(of: Void.self) { tg in
+					tg.addTask {
+						for try await frame in inbound {
+							switch frame.opcode {
+							case .text:
+								let payload = String(buffer: frame.unmaskedData)
+								await self.dispatch(eventText: payload, router: router, tokenHash: tokenHash, outbound: outbound)
+							case .ping:
+								let buf = ByteBuffer()
+								let pong = WebSocketFrame(fin: true, opcode: .pong, data: buf)
+								try await outbound.write(pong)
+							case .connectionClose:
+								var data = frame.unmaskedData
+								let code = data.readSlice(length: 2) ?? ByteBuffer()
+								let close = WebSocketFrame(fin: true, opcode: .connectionClose, data: code)
+								try await outbound.write(close)
+								return
+							default:
+								break
+							}
 						}
 					}
+					try await tg.next()
+					tg.cancelAll()
 				}
-				try await tg.next()
-				tg.cancelAll()
 			}
+		} catch {
+			// connection error; the unregister below still runs.
+		}
+		if let tokenHash, let connectionID {
+			await connections.unregister(connectionID, tokenHash: tokenHash)
 		}
 	}
 
@@ -459,14 +573,7 @@ struct WebUIAuthExample {
 			let msg = try JSONDecoder().decode(WSIncoming.self, from: data)
 			switch msg {
 			case .event(let component, let event, let data):
-				if let tokenHash {
-					let session = try? await sessionStore.find(tokenHash: tokenHash)
-					guard session != nil, !(session?.isExpired() ?? true) else {
-						try? await writeJSON(WSOutgoing.redirect(url: "/login", replace: true), outbound: outbound)
-						try? await writeClose(outbound: outbound)
-						return
-					}
-				}
+				guard await sessionIsAlive(tokenHash: tokenHash, outbound: outbound) else { return }
 				guard let router else { return }
 				let eventData = EventData(component: ComponentID(component), event: event, data: data)
 				let updates = await router.handle(eventData)
@@ -474,6 +581,10 @@ struct WebUIAuthExample {
 				let out = WSOutgoing.update(fragments: updates)
 				try await writeJSON(out, outbound: outbound)
 			case .ping:
+				// pings keep an idle socket alive — session liveness is
+				// enforced here too, so an expired or revoked session's
+				// socket cannot ping forever.
+				guard await sessionIsAlive(tokenHash: tokenHash, outbound: outbound) else { return }
 				try await writeJSON(WSOutgoing.pong, outbound: outbound)
 			case .navigate:
 				break
@@ -482,6 +593,22 @@ struct WebUIAuthExample {
 			let err = WSOutgoing.error(code: "decode", message: "bad event: \(error)")
 			try? await writeJSON(err, outbound: outbound)
 		}
+	}
+
+	/// `true` when the session behind `tokenHash` still exists and is
+	/// unexpired. when it is not, the client is redirected to `/login` and the
+	/// socket closed — revocation is enforced on the next interaction, and
+	/// this backstop runs for events and pings alike.
+	private func sessionIsAlive(tokenHash: Data?, outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>) async -> Bool {
+		if let tokenHash {
+			let session = try? await sessionStore.find(tokenHash: tokenHash)
+			guard session != nil, !(session?.isExpired() ?? true) else {
+				try? await writeJSON(WSOutgoing.redirect(url: "/login", replace: true), outbound: outbound)
+				try? await writeClose(outbound: outbound)
+				return false
+			}
+		}
+		return true
 	}
 
 	private func writeClose(outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>) async throws {
@@ -525,7 +652,8 @@ struct WebUIAuthExample {
 					if bodyTooLarge {
 						try await loginResponse(outbound: outbound, status: .payloadTooLarge, headers: [], body: "request body too large")
 					} else {
-						try await self.route(head: head, body: Data(bodyBytes), outbound: outbound)
+						let peerIP = channel.channel.remoteAddress?.ipAddress ?? "unknown"
+						try await self.route(head: head, body: Data(bodyBytes), peerIP: peerIP, outbound: outbound)
 					}
 					return
 				}
@@ -533,7 +661,7 @@ struct WebUIAuthExample {
 		}
 	}
 
-	private func route(head: HTTPRequestHead, body: Data, outbound: NIOAsyncChannelOutboundWriter<HTTPPart<HTTPResponseHead, ByteBuffer>>) async throws {
+	private func route(head: HTTPRequestHead, body: Data, peerIP: String, outbound: NIOAsyncChannelOutboundWriter<HTTPPart<HTTPResponseHead, ByteBuffer>>) async throws {
 		// assets are public (the design system css + js runtime)
 		switch (head.method, head.uri) {
 		case (.GET, "/__assets/css"):
@@ -551,7 +679,7 @@ struct WebUIAuthExample {
 			let token = CSRFProtection.token(for: "login", secret: csrfSecret)
 			try await loginResponse(outbound: outbound, status: .ok, headers: [("Content-Type", "text/html; charset=utf-8")], body: renderLoginPage(error: nil, csrfToken: token))
 		case (.POST, "/login"):
-			try await handleLogin(head: head, body: body, outbound: outbound)
+			try await handleLogin(head: head, body: body, peerIP: peerIP, outbound: outbound)
 		case (.POST, "/logout"):
 			try await handleLogout(head: head, body: body, outbound: outbound)
 		case (.GET, "/logout"):
@@ -568,10 +696,13 @@ struct WebUIAuthExample {
 		}
 	}
 
-	private func handleLogin(head: HTTPRequestHead, body: Data, outbound: NIOAsyncChannelOutboundWriter<HTTPPart<HTTPResponseHead, ByteBuffer>>) async throws {
+	private func handleLogin(head: HTTPRequestHead, body: Data, peerIP: String, outbound: NIOAsyncChannelOutboundWriter<HTTPPart<HTTPResponseHead, ByteBuffer>>) async throws {
 		func failure(_ message: String) async throws {
 			let token = CSRFProtection.token(for: "login", secret: csrfSecret)
 			try await loginResponse(outbound: outbound, status: .ok, headers: [("Content-Type", "text/html; charset=utf-8")], body: renderLoginPage(error: message, csrfToken: token))
+		}
+		func tooMany(_ message: String) async throws {
+			try await loginResponse(outbound: outbound, status: .tooManyRequests, headers: [("Retry-After", "60")], body: message)
 		}
 
 		// the only accepted encoding is the browser's urlencoded form POST.
@@ -590,21 +721,46 @@ struct WebUIAuthExample {
 		let username = fields["username"] ?? ""
 		let password = fields["password"] ?? ""
 
+		// single-use login tokens: the stateless HMAC token may only be
+		// submitted once. a replayed or scraped token is rejected here, before
+		// any KDF work is spent.
+		guard await loginTokenStore.consume(csrf, expiresAt: CSRFProtection.expiry(of: csrf) ?? Date().timeIntervalSince1970) else {
+			return try await failure("invalid or expired form token — try again")
+		}
+
+		// per-IP + per-account throttles key on the socket peer (no trusted
+		// proxy is configured, so X-Forwarded-For is never honored here).
+		let ipKey = "ip:\(peerIP)"
+		guard loginThrottle.record(ipKey) else {
+			return try await tooMany("too many attempts — try again later")
+		}
+		let userKey = "user:\(username.lowercased())"
+		guard loginThrottle.record(userKey) else {
+			return try await tooMany("too many attempts — try again later")
+		}
+
 		// username + password verification: constant-time username compare and
-		// Argon2id verification against the precomputed demo record.
+		// Argon2id verification against the precomputed demo record. the KDF is
+		// the one-box DoS amplifier on a public endpoint, so it runs under a
+		// global concurrency cap.
 		let userMatches = constantTimeEquals([UInt8](username.utf8), [UInt8](Self.demoUsername.utf8))
 		let passwordValid: Bool
 		if userMatches {
+			await argon2Limiter.wait()
+			defer { argon2Limiter.signal() }
 			passwordValid = try PasswordVerifier.verify(password: [UInt8](password.utf8), record: adminPasswordRecord)
 		} else {
 			// dummy-hash discipline: burn the same cost as a real verify so the
 			// timing of "unknown user" equals "wrong password".
+			await argon2Limiter.wait()
+			defer { argon2Limiter.signal() }
 			_ = try PasswordVerifier.verify(password: [UInt8](password.utf8), record: adminPasswordRecord)
 			passwordValid = false
 		}
 		guard userMatches, passwordValid else {
 			return try await failure("invalid credentials")
 		}
+		loginThrottle.reset(userKey)
 
 		// establish the session: fresh token, hash-at-rest, in-memory store.
 		let token = try SessionToken.generate()
@@ -645,6 +801,10 @@ struct WebUIAuthExample {
 			if let session = try? await sessionStore.find(tokenHash: tokenHash) {
 				try? await sessionStore.invalidate(id: session.id)
 				routers.remove(forTokenHash: tokenHash)
+				// teardown: close every live socket bound to this session now,
+				// not on the next client event. the per-event liveness check
+				// remains as the backstop for sockets opened during the race.
+				await connections.closeAll(forTokenHash: tokenHash)
 			}
 			clearCookie = try HTTPCookie(
 				name: DemoSession.cookieName,

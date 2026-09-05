@@ -6,13 +6,23 @@ this document override the earlier exploratory analysis wherever they conflict._
 
 _Implementation status (current tree):_ AD-1 (native form-POST login) and the
 M0 foundation (identity, sessions, cookies, stores, Argon2id, `AuthContext`)
-are delivered and exerciseable via `WebUIAuthExample` on :9091. AD-2 (the
-`hello` render-token handshake), the CSP hardening deltas
-(`form-action`/`base-uri`/`frame-ancestors`), per-session state containers,
-and AD-4 (secret persistence + rotation) are designed but **not yet implemented**
-(milestones M1–M2 of `Documentation/IMPLEMENTATION_PLAN.md`). line numbers
-cited below reflect the tree at the time of the last adversarial pass and may
-drift.
+are delivered and exerciseable via `WebUIAuthExample` on :9091. hardening
+deltas now implemented in the example: accept-time session validation on the
+WebSocket upgrade (refused upgrades answer 403), per-session connection
+registry with logout teardown, ping-path liveness checks, an idle read
+timeout, a global Argon2 concurrency cap, per-IP + per-account login
+throttles, single-use login CSRF tokens (with a per-token nonce in the token
+format), `Cache-Control: no-store` + `X-Content-Type-Options: nosniff` on
+every response, and a client `sanitizeFragmentHTML` scheme check that strips
+ASCII whitespace/C0 controls (whitespace-obfuscated `javascript:` schemes are
+neutralized on the client side exactly as the server-side sanitizer does).
+still designed but **not yet implemented**: AD-2 (the `hello` render-token
+handshake), session-bound CSRF (`AuthenticatedSession.csrfSeed` is stored but
+unused), per-session state containers, AD-4 (secret persistence + rotation),
+a framework-level teardown fan-out `SessionManager`, the sweep `Service`, and
+the audit trail (milestones M1–M2 of `Documentation/IMPLEMENTATION_PLAN.md`).
+line numbers cited below reflect the tree at the time of the last adversarial
+pass and may drift.
 
 ## Purpose
 
@@ -221,25 +231,40 @@ Single `webui_sessions` env, one persistent environment, one writer:
 ## Login ceremony (normative sequence)
 
 1. `GET /login` → `200` static page (`includeRuntime: false`). `LoginView`
-   renders the username/password form, a pre-auth CSRF token, and a `next`
-   allowlist (open-redirect defense).
-2. `POST /login` (urlencoded, server-owned single-route parser) → throttle
-   check (§hardening) → `PasswordAuthenticator` with Argon2id; **dummy-hash
+   renders the username/password form and a pre-auth CSRF token (single-use —
+   see step 4); a `next` allowlist (open-redirect defense) is still future work.
+2. `POST /login` (urlencoded, server-owned single-route parser) → CSRF
+   validation → **single-use check** (the stateless token is recorded as
+   consumed before any KDF work) → per-IP + per-account throttle
+   (§hardening; `429` + `Retry-After` when exceeded) → `PasswordAuthenticator`
+   with Argon2id under a **global concurrency cap** (default 4); **dummy-hash
    discipline**: unknown usernames hash a fixed dummy so timing does not
    reveal existence.
-3. success → create session row, cap check, `303 See Other` + `Set-Cookie:
-   __Host-auth=…` → `next` (allowlisted). Fresh session ID on every login
-   (session-fixation defense).
+3. success → create session row, `303 See Other` + `Set-Cookie: …` → `/`.
+   Fresh session token + id on every login (session-fixation defense).
 4. failure → `200` re-render of the static login page with a generic error and
-   a fresh CSRF token (pre-auth tokens are formID-scoped and single-bind).
-5. `POST /logout` → invalidate session row → `SessionManager` tears down all
-   connections for that session (fan-out close) → `303` to `/login`.
+   a fresh CSRF token. pre-auth tokens are formID-scoped and **single-use**:
+   the login page mints a new token every GET, and each token may be submitted
+   exactly once (a replayed or scraped token is rejected before the KDF).
+5. `POST /logout` → CSRF validation → invalidate session row → remove the
+   per-session router → **close every live socket for that session** (the demo
+   connection registry is the teardown fan-out; per-event liveness checks
+   remain the backstop) → `303` to `/login`.
 
 ## WebSocket integration
 
-- **accept-time:** `shouldUpgrade` now requires a valid session cookie
-  (resolved against the store) **and** `Origin == Host`. Anything else rejects
-  with 403. The login page never upgrades, so a strict policy is safe.
+- **accept-time:** `shouldUpgrade` requires a valid session cookie (resolved
+  against the store) **and** `Origin == Host`. Anything else is refused; the
+  rejection is written directly by `shouldUpgrade` (a `403` + close) because
+  the typed upgrader's fallback replay re-delivers only `.end` — routing can
+  never see a refused upgrade's request head. The login page never upgrades,
+  so a strict policy is safe. confirmed live: no-cookie, wrong-method, and
+  wrong-origin upgrades all receive `403`, while a valid session upgrades `101`.
+  per-session sockets are registered in an in-memory connection registry so
+  `invalidate()` (logout) closes them immediately; each socket also carries an
+  `IdleStateHandler` read timeout (120s) so a silent authenticated socket is
+  reaped, and the ping path runs the same per-event liveness check as events
+  (a revoked session's socket cannot ping forever).
 - **hello handshake:** first message carries the render token; the server binds
   `connection → (session, render) → router` (Decision 2).
 - **per-event:** `AuthenticatedRouter` wraps dispatch: liveness backstop via the
@@ -263,31 +288,44 @@ Single `webui_sessions` env, one persistent environment, one writer:
 
 ## CSRF
 
-- pre-auth login form: existing formID-scoped stateless tokens (correct — no
-  session exists yet, and `SameSite=Lax` is the second layer).
+- token format: base64(`formID:expiration:nonce:signature`) — HMAC over
+  `formID:expiration:nonce` with the shared server secret. the **per-token
+  random nonce** makes every freshly-minted token unique even within the same
+  wall-clock second (the embedded expiry is second-truncated, so without it a
+  single-use store would reject the second of two same-second tokens as
+  already consumed). validated with `constantTimeEquals`.
+- pre-auth login form: formID-scoped stateless tokens (correct — no session
+  exists yet, and `SameSite=Lax` is the second layer). in the example these
+  are additionally **single-use** via the `SingleUseTokenStore`: recorded as
+  consumed before any KDF work, so a replayed or scraped token is rejected
+  once.
 - authenticated forms: session-bound tokens — HMAC payload becomes
   `sessionID:formID:expiration` so a token minted for one session cannot be
   replayed against another. `Form(csrfToken:)` renders them unchanged.
-- `CSRFProtection.validate` switches to `constantTimeEquals`.
-- logout is CSRF-protected (session-bound token on the logout form).
+  **not yet implemented** — `AuthenticatedSession.csrfSeed` is stored but
+  unused; the example's logout token is still the global stateless formID
+  token.
+- logout is CSRF-protected (POST only; `GET` → 405).
 
 ## Hardening deltas (extends the ARCHITECTURE.md security table)
 
 | Threat | Mitigation |
 |---|---|
-| Clickjacking | add `frame-ancestors 'self'` to the CSP (absent today — `HTMLDocument.swift:34`); `form-action 'self'` and `base-uri 'self'` added in the same change |
+| Clickjacking | `X-Frame-Options: SAMEORIGIN` on every response (the `frame-ancestors` CSP directive is inert in a `<meta>` element). implemented. `form-action 'self'` + `base-uri 'self'` on the login page CSP |
 | Timing side channels | `constantTimeEquals` on all MAC/token compares |
 | Token theft at rest | tokens hashed in LMDB; raw token never logged |
-| Entropy weakness | `SecureRandom.bytes` only — the `SystemRandomNumberGenerator` fallback (`Utilities.swift:280–283`) is unreachable for session/token material |
-| Open redirect | server-side `next` allowlist; runtime redirect already blocks `javascript:`/`data:` |
-| Brute force / stuffing | per-account + per-IP throttle (LMDB-backed attempt log) + **global Argon2 concurrency cap** (default 4) — login hashing is a one-box DoS amplifier on a public endpoint |
+| Entropy weakness | `SecureRandom.bytes` only — the `SystemRandomNumberGenerator` fallback (`Utilities.swift`) is unreachable for session/token material (it remains the CSRF-secret fallback; noted as a future fail-loud change) |
+| Open redirect | server-fixed redirect targets in the example (login → `/`, logout → `/login`); runtime redirect already blocks `javascript:`/`data:` |
+| Brute force / stuffing | per-account + per-IP **fixed-window throttle** (`LoginThrottle`, `429` + `Retry-After`) + **global Argon2 concurrency cap** (`AsyncSemaphore`, default 4) + **single-use login CSRF** (`SingleUseTokenStore`) — all implemented in the example. LMDB-backed attempt log still future |
 | Account enumeration | dummy-hash discipline equalizes timing |
-| Proxy spoofing | trusted-proxy configuration for `X-Forwarded-For`; unconfigured ⇒ per-IP throttles key on the socket peer |
-| Session fixation | fresh session ID on every login; logout-everywhere |
-| Cross-site WS hijacking | `Origin == Host` at accept-time |
-| Revoked-session push | teardown-before-push ordering (above) |
+| Proxy spoofing | trusted-proxy configuration for `X-Forwarded-For`; unconfigured ⇒ per-IP throttles key on the socket peer (the example keys on the NIO peer address) |
+| Session fixation | fresh session token + id on every login; logout-everywhere |
+| Cross-site WS hijacking | `Origin == Host` **and** a valid session cookie at accept-time; refused upgrades answer `403` and close |
+| Revoked-session push | **implemented in the example**: per-session connection registry — logout closes every live socket immediately; per-event + ping liveness checks remain the backstop |
+| Cache / bfcache leak | `Cache-Control: no-store` + `X-Content-Type-Options: nosniff` on every response (keeps the authenticated dashboard out of the http cache and out of the back-forward cache after logout) |
+| Client fragment XSS | `sanitizeFragmentHTML` strips ASCII whitespace/C0 controls from URL values before the scheme check — whitespace-obfuscated `javascript:` schemes (`java&#x09;script:`, `java\t script:`) are neutralized client-side, mirroring the server sanitizer |
 | Stale client replay | queue scrub on redirect/terminal failure (above) |
-| Secret loss on restart | persisted HMAC secret + documented rotation (Decision 4) |
+| Secret loss on restart | persisted HMAC secret + documented rotation (Decision 4) — **not yet implemented** |
 | Credential database loss | LMDB backup/restore runbook (§operational surface) |
 
 ## JS runtime changes (comment-free, string-pinned)

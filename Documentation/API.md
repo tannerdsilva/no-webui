@@ -343,25 +343,38 @@ in `Documentation/IMPLEMENTATION_PLAN.md`.
 |---|---|
 | `AuthContext` | `@TaskLocal` carrying `(session, identity?)` — set around authenticated renders and around event dispatch; `hasRole(_:)` helper. mirrors `RenderContext` mechanics |
 
+### Hardening controls
+
+| Type | Description |
+|---|---|
+| `AsyncSemaphore` | async counting semaphore for expensive verifications (the Argon2 concurrency cap). `wait()` suspends, never blocks a thread; `signal()` releases. NSLock guarded, all critical sections funneled through sync helpers (Foundation marks `NSLock` unavailable in async contexts) |
+| `LoginThrottle` | fixed-window attempt limiter keyed by caller strings (`"ip:…"`, `"user:…"`). `record(_:now:)` returns whether the attempt is within the window budget; `reset(_:)` clears on success; `prune(before:)` bounds memory |
+| `SingleUseTokenStore` | bounded, expiring set of consumed stateless tokens; makes pre-auth CSRF tokens single-use. `consume(_:expiresAt:)` records the token and fails closed at capacity |
+
 ## WebUIAuthExample
 
 A SwiftNIO-based login-gated interactive demo on :9091 (sign in with `admin` /
 `password`). demonstrates the auth stack end to end: runtime-free login page
-(native POST, synchronizer CSRF, hardened CSP, `X-Frame-Options`), Argon2id
-credential verification with dummy-hash equalization, `SessionToken` +
-in-memory session store + cookie issuance, the interactive dashboard
-(counter / progress / echo / optimistic reset) under `AuthContext`, a
-per-session interactive router, Origin-checked WebSocket upgrade, per-event
-session-liveness enforcement (post-logout sockets are redirected and closed),
+(native POST, synchronizer CSRF, hardened CSP, `X-Frame-Options`), single-use
+login CSRF tokens, per-IP + per-account login throttles, a global Argon2id
+concurrency cap, dummy-hash equalization, `SessionToken` + in-memory session
+store + cookie issuance, the interactive dashboard (counter / progress / echo
+/ optimistic reset) under `AuthContext`, a per-session interactive router,
+**session-gated** WebSocket upgrade (foreign/no-origin/no-session refusals
+answer `403`), a per-session connection registry that **closes every live
+socket on logout**, per-event + ping liveness enforcement, an idle read
+timeout on sockets, `Cache-Control: no-store` + `nosniff` on every response,
 and CSRF-protected POST logout.
 
 **Endpoints:**
-- `GET /login` — static login page (no JS runtime)
-- `POST /login` — urlencoded credentials + CSRF → `303` + `Set-Cookie`
+- `GET /login` — static login page (no JS runtime); mints a fresh CSRF token
+- `POST /login` — urlencoded credentials + single-use CSRF → `303` + `Set-Cookie`;
+  `429` under throttle
 - `GET /` — authenticated dashboard, else `303` to `/login`
-- `POST /logout` — CSRF-protected logout → `303` + cookie clear (`GET` → 405)
+- `POST /logout` — CSRF-protected logout → `303` + cookie clear + live-socket
+  teardown (`GET` → 405)
 - `GET /__assets/css` / `GET /__assets/js` — design system + runtime
-- `WebSocket /ws` — same-origin interactive events (foreign/no-origin refused)
+- `WebSocket /ws` — valid-session same-origin interactive events only
 
 **Port:** 9091
 
