@@ -111,7 +111,12 @@ fails the `runtimeEmptyFragmentRemovesElement` deployment test.
 - `<script>` tags are stripped (including content)
 - event handler attributes (`onclick`, `onerror`, `onload`, etc.) are stripped
 - `javascript:` URLs in `href`, `src`, `action`, `formaction`, `xlink:href` are
-  replaced with empty strings
+  replaced with empty strings. the value is normalized with
+  `stripUrlControlChars` (ASCII whitespace + C0 controls removed) **before**
+  the scheme check, mirroring the browser's own URL parsing — so
+  whitespace-obfuscated schemes (`java\t script:`, `java&#x09;script:` after
+  decode, leading-space variants) are caught just like the server-side
+  `sanitizeURL` catches them
 
 **Input state preservation:** before replacing an element, if the element
 contains an `<input>`, `<textarea>`, or `<select>`, the current value, checked

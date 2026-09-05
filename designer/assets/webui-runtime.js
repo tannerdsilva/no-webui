@@ -512,8 +512,12 @@ window.WebUIRuntime = (function () {
 
       html = html.replace(new RegExp("\\s+on\\w+\\s*=\\s*(?:\"[^\"]*\"|'[^']*'|[^\\s>]+)", 'gi'), '');
 
-      html = html.replace(new RegExp('\\s+(href|src|action|formaction|xlink:href)\\s*=\\s*"javascript:[^"]*"', 'gi'), ' $1=""');
-      html = html.replace(new RegExp("\\s+(href|src|action|formaction|xlink:href)\\s*=\\s*'javascript:[^']*'", 'gi'), " $1=''");
+      html = html.replace(new RegExp('(\\s+(?:href|src|action|formaction|xlink:href)\\s*=\\s*)"([^"]*)"', 'gi'), function (m, prefix, value) {
+        return isSafeUrl(stripUrlControlChars(value)) ? m : prefix + '""';
+      });
+      html = html.replace(new RegExp("(\\s+(?:href|src|action|formaction|xlink:href)\\s*=\\s*)'([^']*)'", 'gi'), function (m, prefix, value) {
+        return isSafeUrl(stripUrlControlChars(value)) ? m : prefix + "''";
+      });
       return html;
     }
 
