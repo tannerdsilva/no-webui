@@ -13,7 +13,8 @@ one Package.swift, one family — the swiftui-for-web stack:
 2. **WebUIDesignSystem** — the nexus design system: 225 css custom properties
    (tokens) and 22 styled components. mature, stable.
 3. **WebUIAuth** — authentication + sessions: identity model, session tokens,
-   cookies, in-memory + LMDB session stores, argon2id password verification,
+   cookies, in-memory session store behind an `AuthSessionStore` protocol,
+   argon2id password verification,
    constant-time compare, `AuthContext`.
 
 the low-level core libraries (ip, futures, fifo, pthread) were removed from

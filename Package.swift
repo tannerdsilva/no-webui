@@ -43,18 +43,10 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-log.git", "1.0.0"..<"2.0.0"),
         .package(url: "https://github.com/apple/swift-nio.git", "2.0.0"..<"3.0.0"),
-        // rawdog resolves to the same local rawdog-v21 tree QuickLMDB uses
-        // (they are mid-flip from 20.x; the local tree is exactly tag 21.0.0).
-        // keeping both manifests on one path gives the graph a single rawdog
-        // identity — mixing a URL dep here with QuickLMDB's path dep makes
-        // swiftpm see two packages exporting the same targets. flip both to
+        // TEMP local path while the rawdog21 tag is unpublished; flip to
         // `.package(url: "https://github.com/tannerdsilva/rawdog.git", from: "21.0.0")`
-        // in the same commit once QuickLMDB lands its own flip.
+        // once pushed.
         .package(name: "rawdog", path: "../rawdog-v21"),
-        // TEMP local path while the rawdog21 branch/tag is unpublished; flip to
-        // .package(url: "https://github.com/tannerdsilva/QuickLMDB.git", branch: "rawdog21")
-        // then `from: <tag>` once pushed (see Documentation/IMPLEMENTATION_PLAN.md)
-        .package(name: "QuickLMDB", path: "../QuickLMDB"),
     ],
     targets: [
 
@@ -90,7 +82,6 @@ let package = Package(
             dependencies: [
                 "WebUI",
                 .product(name: "Logging", package: "swift-log"),
-                .product(name: "QuickLMDB", package: "QuickLMDB"),
                 .product(name: "RAW", package: "rawdog"),
                 .product(name: "RAW_sha256", package: "rawdog"),
                 .product(name: "RAW_argon2", package: "rawdog"),

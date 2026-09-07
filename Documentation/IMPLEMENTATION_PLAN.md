@@ -13,6 +13,12 @@ implemented and green (macOS, Swift 6.3.3): `swift build` 0 warnings/errors;
 `WebUIAuthTests` (the current tree totals 398 tests / 35 suites). all M0 items
 (M0-T1…T11) delivered.
 
+**QuickLMDB removed from the package (2026-09):** `LMDBAuthSessionStore`, its
+tests, and the QuickLMDB dependency were removed from the core package.
+`WebUIAuth` ships the `AuthSessionStore` protocol + `InMemoryAuthSessionStore`
+only; a persistent store is backend-provided. the quicklmdb lessons recorded
+below are preserved for backend implementers who build a store with QuickLMDB.
+
 **M0-T8 quicklmdb lessons — recorded (verified against the pinned revision):**
 (1) `MDB_db_get_entry_static` **throws** `.notFound` on a missing key — the
 `loadEntry` optional return never delivers nil, so every `loadEntry` must be
@@ -94,7 +100,7 @@ pinned demo.
 
 | Dependency | Why | First used by |
 |---|---|---|
-| `tannerdsilva/QuickLMDB` (+ `CLMDB`) | session store per house LMDB preference; proven in arc-agent/wiremand | M0-T8 |
+| ~~`tannerdsilva/QuickLMDB` (+ `CLMDB`)~~ — **removed 2026-09**, see top note | session store was per house LMDB preference (proven in arc-agent/wiremand); no database dependency in the current core | (was) M0-T8 |
 | `apple/swift-service-lifecycle` | Second Law: `WebUIAuthServer`, `SessionManager`, sweep are `Service`s under one `ServiceGroup` (the reference servers currently run as bare task groups — the auth server must not) | M1-T1 |
 | SMTP client (under `Mailer` protocol) | password reset out-of-band channel — **named, not selected**: provider chosen at M2-T6b, never in the core | M2-T6b |
 
@@ -158,7 +164,7 @@ server or wire changes. the package builds on macOS and Linux.
   listSessions/purgeExpired; concurrent access safe
 - acceptance: full lifecycle tests; logout-everywhere fan-out of the model
 
-### M0-T8 — `LMDBAuthSessionStore`
+### M0-T8 — `LMDBAuthSessionStore` *(delivered, then removed from the package — see the top-of-plan note)*
 - surface: `Sources/WebUIAuth/LMDBAuthSessionStore.swift`; `Package.swift`
 - QuickLMDB dependency; one persistent environment (never the transient
   open/close-per-call pattern); schema per `AUTH_SESSIONS.md`:

@@ -73,4 +73,6 @@ gate).
    no Vue, no build step.
 5. **Dependency-light** — swift-log + rawdog (official sha-256 / hmac / argon2
    crypto) for the core framework. SwiftNIO for the example server (not
-   required by the library). QuickLMDB powers the `WebUIAuth` session stores.
+   required by the library). session storage is protocol-driven
+   (`AuthSessionStore`); the core ships an in-memory store and no database
+   dependency.

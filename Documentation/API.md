@@ -301,7 +301,7 @@ in `Documentation/IMPLEMENTATION_PLAN.md`.
 
 | Type | Description |
 |---|---|
-| `AuthenticatedSession` | `{ id: Data, tokenHash: Data, identityID: String, csrfSeed: Data, createdAt, expiresAt, lastSeenAt }` — the raw token never reaches storage, only its SHA-256 `tokenHash`. `id` is 16 random bytes (the LMDB store enforces this size) |
+| `AuthenticatedSession` | `{ id: Data, tokenHash: Data, identityID: String, csrfSeed: Data, createdAt, expiresAt, lastSeenAt }` — the raw token never reaches storage, only its SHA-256 `tokenHash`. `id` is 16 random bytes |
 | `SessionToken.generate()` | 32 bytes from `SecureRandom` **only** — fails loudly on entropy failure, no PRNG fallback |
 | `SessionToken.hash(_:)` | SHA-256 of a token — the only form a store may persist |
 
@@ -318,7 +318,7 @@ in `Documentation/IMPLEMENTATION_PLAN.md`.
 | Store | Notes |
 |---|---|
 | `InMemoryAuthSessionStore` | actor-backed test double + reference semantics: primary id map, tokenHash index, per-identity reverse index |
-| `LMDBAuthSessionStore` | one persistent LMDB environment (`tok`, `tk`, `user`, `audit` databases), one transaction per actor call on the actor's thread. quicklmdb discipline: every `loadEntry` must be guarded by a `containsEntry` in the same transaction (the get path **throws** `.notFound` on a missing key); the `user` index is a denormalized raw array of fixed 16-byte id records (not LMDB dupsort — that requires consumer-declared `MDB_comparable` types) |
+| *(your own)* | `AuthSessionStore` is the contract for persistent stores — the core ships no database dependency |
 
 ### Cookies
 

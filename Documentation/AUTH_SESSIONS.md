@@ -200,6 +200,11 @@ public struct AuthenticatedSession: Sendable, Codable {
 
 ## Session store & LMDB layout
 
+The core package ships **no database dependency**: `AuthSessionStore` is the
+contract, `InMemoryAuthSessionStore` is the bundled implementation, and a
+persistent store is backend-provided. this layout is a design record of the
+recommended persistent shape a backend store should implement.
+
 Single `webui_sessions` env, one persistent environment, one writer:
 
 | Key | Value | Purpose |
@@ -211,9 +216,10 @@ Single `webui_sessions` env, one persistent environment, one writer:
 - expiry is computed from `createdAt`/`expiresAt`; a sweep `Service` in the
   `ServiceGroup` purges expired rows on a 5-minute cadence and evicts stale
   validation-cache cells.
-- QuickLMDB is a **new dependency** for this package (today only swift-log,
-  swift-nio, rawdog are present). Accepted and recorded; the store protocol
-  keeps it swappable for tests (`InMemoryAuthSessionStore`).
+- the LMDB-backed store that shipped in earlier trees was removed from the
+  package (2026-09) to keep QuickLMDB out of the core dependency graph; the
+  store protocol keeps the backend free to provide any persistent store (LMDB
+  or otherwise) conforming to `AuthSessionStore`.
 
 ## Cookie layer
 
@@ -385,7 +391,8 @@ Single `webui_sessions` env, one persistent environment, one writer:
 - `Identity`, `Credential`, `AuthenticatedSession`, protocol set
 - `constantTimeEquals` + `CSRFProtection.validate` switch
 - `HTTPCookie` parse/build with full flag surface
-- `InMemoryAuthSessionStore` + `LMDBAuthSessionStore` (new dependency: QuickLMDB)
+- `InMemoryAuthSessionStore` (+ `AuthSessionStore` protocol; persistent
+  stores are backend-provided — no database dependency in the core)
 - rawdog Argon2id wrapper: hash + verify + parameter serialization + dummy-hash
 - Swift Testing: cookie round-trips, session lifecycle, constant-time compare,
   Argon2 verify vectors

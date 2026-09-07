@@ -32,15 +32,22 @@ all notable changes to this project are documented here.
   `responsive` variants.
 - `WebUIAuth` foundation (M0): identity model, `SessionToken`
   (SecureRandom-only, SHA-256 hashed at rest), `HTTPCookie` parse/build with
-  the full flag surface and `__Host-` rules, `InMemoryAuthSessionStore` +
-  `LMDBAuthSessionStore`, Argon2id password verification with dummy-hash
-  equalization, `AuthContext` `@TaskLocal`.
+  the full flag surface and `__Host-` rules, `InMemoryAuthSessionStore` and
+  the `AuthSessionStore` protocol, Argon2id password verification with
+  dummy-hash equalization, `AuthContext` `@TaskLocal`.
 - `WebUIAuthExample` — login-gated interactive demo on :9091 (`admin` /
   `password`): runtime-free native-POST login page, CSRF-protected POST
   logout, origin-checked WebSocket upgrade, per-event session-liveness
   enforcement (post-logout sockets are redirected and closed).
 - `constantTimeEquals` in the core (`Sources/WebUI/ConstantTime.swift`);
   `CSRFProtection.validate` switched to it.
+
+### removed
+
+- the QuickLMDB-backed `LMDBAuthSessionStore` and its tests. `WebUIAuth`
+  session storage is protocol-driven (`AuthSessionStore` + in-memory store);
+  a persistent store is backend-provided — no database dependency remains in
+  the package.
 
 ### fixed
 

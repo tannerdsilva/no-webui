@@ -1,15 +1,6 @@
 {
-  "originHash" : "3caaca25db07a39c03246deb19d5257443b8a7b2f004c88cb8b82eaf96540c0b",
+  "originHash" : "dad8975d7c66ca9efcb8c9a6a3420486dd7e4a86b308933518872525dbde0672",
   "pins" : [
-    {
-      "identity" : "clmdb",
-      "kind" : "remoteSourceControl",
-      "location" : "https://github.com/tannerdsilva/CLMDB.git",
-      "state" : {
-        "revision" : "4ce5826424f8e65f395efc5b4c611479384722b1",
-        "version" : "0.9.30"
-      }
-    },
     {
       "identity" : "swift-atomics",
       "kind" : "remoteSourceControl",

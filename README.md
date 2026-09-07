@@ -10,7 +10,7 @@ for live UI updates.
 |---|---|---|
 | `WebUI` | View protocol, primitives, layouts, modifiers, CSS system, HTML document assembly, WebSocket protocol, JS runtime | swift-log, rawdog |
 | `WebUIDesignSystem` | design system: 225 CSS custom properties, 22 styled components | WebUI |
-| `WebUIAuth` | authentication + sessions: identity model, session tokens, cookies, in-memory + LMDB session stores, Argon2id password verification, `AuthContext` | WebUI, swift-log, QuickLMDB, rawdog |
+| `WebUIAuth` | authentication + sessions: identity model, session tokens, cookies, `AuthSessionStore` protocol + in-memory store, Argon2id password verification, `AuthContext` | WebUI, swift-log, rawdog |
 | `WebUIAssetTool` | build-time executable that embeds CSS + JS as Swift string constants | — |
 | `WebUIExample` | HTTP/WebSocket example server (SwiftNIO) | WebUI, WebUIDesignSystem, swift-nio |
 | `WebUIAuthExample` | login-gated interactive demo (`admin` / `password`), runs on :9091 | WebUI, WebUIDesignSystem, WebUIAuth, swift-nio |
@@ -66,7 +66,7 @@ no-webui/
 ├── Sources/
 │   ├── WebUI/                    # web UI framework core
 │   ├── WebUIDesignSystem/        # design system
-│   ├── WebUIAuth/                # authentication + sessions (LMDB stores)
+│   ├── WebUIAuth/                # authentication + sessions (protocol-driven stores)
 │   ├── WebUIAssetTool/           # asset embedding tool
 │   ├── WebUIExample/             # example server (:9090)
 │   ├── WebUIAuthExample/         # login-gated demo server (:9091)
@@ -125,7 +125,7 @@ See `designer/README.md` for the full designer guide.
 
 - Swift 6.2+ (verified on macOS 15 and Ubuntu 24.04 with Swift 6.3.3)
 - macOS 15+ **and** Linux — cross-platform from day one
-- Dependencies: swift-log, swift-nio, rawdog (v21+ — official sha-256 / hmac suite),
-  and QuickLMDB (WebUIAuth's persistent session store; currently a local-path
-  dependency until the `rawdog21` branch/tag is pushed)
+- Dependencies: swift-log, swift-nio, rawdog (v21+ — official sha-256 / hmac suite).
+  session storage is protocol-driven (`AuthSessionStore`); the core ships an
+  in-memory store and no database dependency.
 - node + playwright only for the browser layout gate (`designer/browser-smoke.mjs`)
