@@ -1,4 +1,9 @@
 import Foundation
+#if os(Linux)
+import Glibc
+#else
+import Darwin
+#endif
 
 // MARK: - Entry
 
@@ -21,14 +26,19 @@ enum WebUIIconTool {
 			case "render-preview": try Run.renderPreview(rest)
 			case "self", "--self", "-h", "--help", "help": printSelf()
 			default:
-				FileHandle.standardError.write(Data("unknown verb '\(verb)'\n".utf8))
+				writeError("unknown verb '\(verb)'")
 				printSelf()
 				exit(2)
 			}
 		} catch {
-			FileHandle.standardError.write(Data("error: \(error)\n".utf8))
+			writeError("error: \(error)")
 			exit(1)
 		}
+	}
+
+	/// print to standard error without creating `Data` (fputs on the c stderr).
+	private static func writeError(_ message: String) {
+		fputs(message + "\n", stderr)
 	}
 
 	static func printSelf() {

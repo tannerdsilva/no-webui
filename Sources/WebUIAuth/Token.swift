@@ -1,4 +1,3 @@
-import Foundation
 import WebUI
 import RAW_sha256
 
@@ -21,15 +20,15 @@ public enum SessionToken {
 	}
 
 	/// generate a fresh 32-byte token.
-	public static func generate() throws -> Data {
+	public static func generate() throws -> [UInt8] {
 		guard let bytes = SecureRandom.bytes(byteCount) else {
 			throw TokenError.entropyUnavailable
 		}
-		return Data(bytes)
+		return bytes
 	}
 
 	/// the SHA-256 of a token — the only form a session store may persist.
-	public static func hash(_ token: Data) throws -> Data {
+	public static func hash(_ token: [UInt8]) throws -> [UInt8] {
 		guard token.count == byteCount else {
 			throw TokenError.invalidLength
 		}
@@ -41,6 +40,6 @@ public enum SessionToken {
 		try out.withUnsafeMutableBytes { buffer in
 			try hasher.finish(into: buffer.baseAddress!)
 		}
-		return Data(out)
+		return out
 	}
 }

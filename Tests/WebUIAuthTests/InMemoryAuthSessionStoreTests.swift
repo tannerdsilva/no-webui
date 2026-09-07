@@ -8,10 +8,10 @@ struct InMemoryAuthSessionStoreTests {
 
 	func makeSession(id: UInt8, identityID: String = "u1", createdAt: Double = 1_000, expiresAt: Double = 10_000) -> AuthenticatedSession {
 		AuthenticatedSession(
-			id: Data([id]),
-			tokenHash: Data(repeating: id, count: 32),
+			id: [id],
+			tokenHash: [UInt8](repeating: id, count: 32),
 			identityID: identityID,
-			csrfSeed: Data([id, 0xEE]),
+			csrfSeed: [id, 0xEE],
 			createdAt: Date(timeIntervalSince1970: createdAt),
 			expiresAt: Date(timeIntervalSince1970: expiresAt),
 			lastSeenAt: Date(timeIntervalSince1970: createdAt)
@@ -30,7 +30,7 @@ struct InMemoryAuthSessionStoreTests {
 	@Test("find returns nil for an unknown token hash")
 	func findUnknown() async throws {
 		let store = InMemoryAuthSessionStore()
-		#expect(try await store.find(tokenHash: Data(repeating: 0x77, count: 32)) == nil)
+		#expect(try await store.find(tokenHash: [UInt8](repeating: 0x77, count: 32)) == nil)
 	}
 
 	@Test("duplicate create throws")
@@ -122,10 +122,10 @@ struct InMemoryAuthSessionStoreTests {
 			for i in 0..<100 {
 				group.addTask {
 					let session = AuthenticatedSession(
-						id: Data([UInt8(i % 250), UInt8(i >> 8)]),
-						tokenHash: Data(repeating: UInt8(i), count: 32),
+						id: [UInt8(i % 250), UInt8(i >> 8)],
+						tokenHash: [UInt8](repeating: UInt8(i), count: 32),
 						identityID: "load",
-						csrfSeed: Data([0x00]),
+						csrfSeed: [0x00],
 						createdAt: Date(),
 						expiresAt: .distantFuture,
 						lastSeenAt: Date()

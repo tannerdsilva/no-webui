@@ -38,10 +38,10 @@ struct PasswordVerifierTests {
 	func verify() throws {
 		let record = PasswordRecord(
 			salt: try PasswordVerifier.makeSalt(),
-			hash: Data(),
+			hash: [],
 			parameters: .interactive
 		)
-		let hash = try PasswordVerifier.hash(password: [UInt8]("correct horse".utf8), salt: [UInt8](record.salt), parameters: .interactive)
+		let hash = try PasswordVerifier.hash(password: [UInt8]("correct horse".utf8), salt: record.salt, parameters: .interactive)
 		let full = PasswordRecord(salt: record.salt, hash: hash, parameters: .interactive)
 		#expect(try PasswordVerifier.verify(password: [UInt8]("correct horse".utf8), record: full))
 		#expect(try PasswordVerifier.verify(password: [UInt8]("battery staple".utf8), record: full) == false)
@@ -74,7 +74,7 @@ struct PasswordVerifierTests {
 	func encodingRoundTrip() throws {
 		let record = PasswordRecord(
 			salt: try PasswordVerifier.makeSalt(),
-			hash: Data(repeating: 0x5A, count: 32),
+			hash: [UInt8](repeating: 0x5A, count: 32),
 			parameters: .interactive
 		)
 		let decoded = try PasswordRecord(encoded: record.encodedString())

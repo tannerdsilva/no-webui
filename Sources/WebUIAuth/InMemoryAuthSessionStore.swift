@@ -9,9 +9,9 @@ import Foundation
 /// `identityID → set of session ids` for logout-everywhere and session caps.
 public actor InMemoryAuthSessionStore: AuthSessionStore {
 
-	private var sessions: [Data: AuthenticatedSession] = [:]
-	private var tokenIndex: [Data: Data] = [:]
-	private var byIdentity: [String: Set<Data>] = [:]
+	private var sessions: [[UInt8]: AuthenticatedSession] = [:]
+	private var tokenIndex: [[UInt8]: [UInt8]] = [:]
+	private var byIdentity: [String: Set<[UInt8]>] = [:]
 
 	public init() {}
 
@@ -24,7 +24,7 @@ public actor InMemoryAuthSessionStore: AuthSessionStore {
 		byIdentity[session.identityID, default: []].insert(session.id)
 	}
 
-	public func find(tokenHash: Data) throws -> AuthenticatedSession? {
+	public func find(tokenHash: [UInt8]) throws -> AuthenticatedSession? {
 		guard let id = tokenIndex[tokenHash], let session = sessions[id] else {
 			return nil
 		}
@@ -39,7 +39,7 @@ public actor InMemoryAuthSessionStore: AuthSessionStore {
 		sessions[session.id] = stored
 	}
 
-	public func invalidate(id: Data) throws {
+	public func invalidate(id: [UInt8]) throws {
 		guard let session = sessions.removeValue(forKey: id) else {
 			throw AuthStoreError.notFound
 		}

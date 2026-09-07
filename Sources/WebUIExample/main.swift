@@ -226,9 +226,8 @@ struct WebUIExample {
 	}
 
 	private func dispatch(eventText payload: String, outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>) async {
-		guard let data = payload.data(using: .utf8) else { return }
 		do {
-			let msg = try JSONDecoder().decode(WSIncoming.self, from: data)
+			let msg = try WSIncoming(jsonText: payload)
 			switch msg {
 			case .event(let component, let event, let data):
 				let eventData = EventData(component: ComponentID(component), event: event, data: data)
@@ -248,9 +247,9 @@ struct WebUIExample {
 	}
 
 	private func writeJSON(_ msg: WSOutgoing, outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>) async throws {
-		let data = try JSONEncoder().encode(msg)
+		let bytes = msg.jsonBytes
 		var buf = ByteBuffer()
-		buf.writeBytes(data)
+		buf.writeBytes(bytes)
 		let frame = WebSocketFrame(fin: true, opcode: .text, data: buf)
 		try await outbound.write(frame)
 	}

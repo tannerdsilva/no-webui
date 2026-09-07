@@ -17,18 +17,20 @@ import WebUIAuth
 // server loop while the map mutates safely.
 final class RouterRegistry: Sendable {
 	private struct Values {
-		var routers: [Data: EventRouter] = [:]
+		var routers: [[UInt8]: EventRouter] = [:]
 	}
 	private let values = Mutex(Values())
 
-	func router(forTokenHash hash: Data) -> EventRouter? {
+	func router(forTokenHash hash: [UInt8]) -> EventRouter? {
 		values.withLock { $0.routers[hash] }
 	}
-	func set(_ router: EventRouter, forTokenHash hash: Data) {
+	func set(_ router: EventRouter, forTokenHash hash: [UInt8]) {
 		values.withLock { $0.routers[hash] = router }
 	}
-	func remove(forTokenHash hash: Data) {
-		values.withLock { $0.routers.removeValue(forKey: hash) }
+	func remove(forTokenHash hash: [UInt8]) {
+		values.withLock { values in
+			_ = values.routers.removeValue(forKey: hash)
+		}
 	}
 }
 
@@ -41,16 +43,16 @@ final class RouterRegistry: Sendable {
 // when the connection ends (including idle-reaped ones).
 actor AuthConnectionRegistry {
 	private var nextID = 0
-	private var channels: [Data: [Int: NIOAsyncChannel<WebSocketFrame, WebSocketFrame>]] = [:]
+	private var channels: [[UInt8]: [Int: NIOAsyncChannel<WebSocketFrame, WebSocketFrame>]] = [:]
 
 	/// register `channel` under its session; returns a handle for unregister.
-	func register(_ channel: NIOAsyncChannel<WebSocketFrame, WebSocketFrame>, tokenHash: Data) -> Int {
+	func register(_ channel: NIOAsyncChannel<WebSocketFrame, WebSocketFrame>, tokenHash: [UInt8]) -> Int {
 		nextID += 1
 		channels[tokenHash, default: [:]][nextID] = channel
 		return nextID
 	}
 
-	func unregister(_ id: Int, tokenHash: Data) {
+	func unregister(_ id: Int, tokenHash: [UInt8]) {
 		guard var byID = channels[tokenHash] else { return }
 		byID.removeValue(forKey: id)
 		if byID.isEmpty {
@@ -61,7 +63,7 @@ actor AuthConnectionRegistry {
 	}
 
 	/// close every socket bound to `tokenHash` (fire-and-forget).
-	func closeAll(forTokenHash tokenHash: Data) {
+	func closeAll(forTokenHash tokenHash: [UInt8]) {
 		guard let byID = channels.removeValue(forKey: tokenHash) else { return }
 		for channel in byID.values {
 			_ = channel.channel.close()
@@ -315,21 +317,21 @@ struct WebUIAuthExample {
 
 	// MARK: auth helpers
 
-	func sessionDescription(for request: HTTPRequestHead) async -> (session: AuthenticatedSession, token: Data)? {
+	func sessionDescription(for request: HTTPRequestHead) async -> (session: AuthenticatedSession, token: [UInt8])? {
 		guard let cookieHeader = request.headers.first(name: "cookie"),
 		      let cookieValue = CookieParser.requestCookies(cookieHeader)[DemoSession.cookieName] else {
 			return nil
 		}
-		let tokenData = Self.decodeCookieToken(cookieValue)
-		guard let tokenHash = try? SessionToken.hash(tokenData) else { return nil }
+		let tokenBytes = Self.decodeCookieToken(cookieValue)
+		guard let tokenHash = try? SessionToken.hash(tokenBytes) else { return nil }
 		guard let session = try? await sessionStore.find(tokenHash: tokenHash),
 		      !session.isExpired() else {
 			return nil
 		}
-		return (session, tokenData)
+		return (session, tokenBytes)
 	}
 
-	func tokenHash(for request: HTTPRequestHead) -> Data? {
+	func tokenHash(for request: HTTPRequestHead) -> [UInt8]? {
 		guard let cookieHeader = request.headers.first(name: "cookie"),
 		      let cookieValue = CookieParser.requestCookies(cookieHeader)[DemoSession.cookieName] else {
 			return nil
@@ -337,10 +339,10 @@ struct WebUIAuthExample {
 		return try? SessionToken.hash(Self.decodeCookieToken(cookieValue))
 	}
 
-	static func decodeCookieToken(_ token: String) -> Data {
+	static func decodeCookieToken(_ token: String) -> [UInt8] {
 		// sessions are minted as base64 of the raw 32-byte token; only that
 		// form is accepted (no utf8 fallback — the encoding is unambiguous).
-		Data(base64Encoded: token) ?? Data()
+		Base64.decode(token) ?? []
 	}
 
 	/// the WebSocket upgrade is refused for foreign origins: a same-origin
@@ -394,9 +396,9 @@ struct WebUIAuthExample {
 		head.headers.replaceOrAdd(name: "Connection", value: "close")
 		head.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
 		let body = ByteBuffer(string: "")
-		_ = channel.writeAndFlush(NIOAny(HTTPServerResponsePart.head(head)))
-		_ = channel.writeAndFlush(NIOAny(HTTPServerResponsePart.body(.byteBuffer(body))))
-		return channel.writeAndFlush(NIOAny(HTTPServerResponsePart.end(nil)))
+		_ = channel.writeAndFlush(HTTPServerResponsePart.head(head))
+		_ = channel.writeAndFlush(HTTPServerResponsePart.body(.byteBuffer(body)))
+		return channel.writeAndFlush(HTTPServerResponsePart.end(nil))
 			.map { nil as HTTPHeaders? }
 	}
 
@@ -416,12 +418,12 @@ struct WebUIAuthExample {
 		let csrfSecret = CSRFProtection.generateSecret()
 		let passwordRecord = PasswordRecord(
 			salt: try PasswordVerifier.makeSalt(),
-			hash: Data(),
+			hash: [],
 			parameters: .interactive
 		)
 		let hash = try PasswordVerifier.hash(
 			password: [UInt8](demoPassword.utf8),
-			salt: [UInt8](passwordRecord.salt),
+			salt: passwordRecord.salt,
 			parameters: .interactive
 		)
 		let record = PasswordRecord(salt: passwordRecord.salt, hash: hash, parameters: .interactive)
@@ -534,7 +536,7 @@ struct WebUIAuthExample {
 		}
 	}
 
-	private func handleWebsocket(_ channel: NIOAsyncChannel<WebSocketFrame, WebSocketFrame>, router: EventRouter?, tokenHash: Data?) async throws {
+	private func handleWebsocket(_ channel: NIOAsyncChannel<WebSocketFrame, WebSocketFrame>, router: EventRouter?, tokenHash: [UInt8]?) async throws {
 		// register before reading so logout teardown can close this socket;
 		// unregister when the connection ends (normal close or idle reap).
 		var connectionID: Int?
@@ -583,10 +585,9 @@ struct WebUIAuthExample {
 	// enforced **per event**: the session must still exist and be unexpired in
 	// the store, or the client is redirected to /login and the socket closed —
 	// an already-open socket has no residual power after logout.
-	private func dispatch(eventText payload: String, router: EventRouter?, tokenHash: Data?, outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>) async {
-		guard let data = payload.data(using: .utf8) else { return }
+	private func dispatch(eventText payload: String, router: EventRouter?, tokenHash: [UInt8]?, outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>) async {
 		do {
-			let msg = try JSONDecoder().decode(WSIncoming.self, from: data)
+			let msg = try WSIncoming(jsonText: payload)
 			switch msg {
 			case .event(let component, let event, let data):
 				guard await sessionIsAlive(tokenHash: tokenHash, outbound: outbound) else { return }
@@ -615,7 +616,7 @@ struct WebUIAuthExample {
 	/// unexpired. when it is not, the client is redirected to `/login` and the
 	/// socket closed — revocation is enforced on the next interaction, and
 	/// this backstop runs for events and pings alike.
-	private func sessionIsAlive(tokenHash: Data?, outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>) async -> Bool {
+	private func sessionIsAlive(tokenHash: [UInt8]?, outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>) async -> Bool {
 		if let tokenHash {
 			let session = try? await sessionStore.find(tokenHash: tokenHash)
 			guard session != nil, !(session?.isExpired() ?? true) else {
@@ -635,9 +636,9 @@ struct WebUIAuthExample {
 	}
 
 	private func writeJSON(_ msg: WSOutgoing, outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>) async throws {
-		let data = try JSONEncoder().encode(msg)
+		let bytes = msg.jsonBytes
 		var buf = ByteBuffer()
-		buf.writeBytes(data)
+		buf.writeBytes(bytes)
 		let frame = WebSocketFrame(fin: true, opcode: .text, data: buf)
 		try await outbound.write(frame)
 	}
@@ -669,7 +670,7 @@ struct WebUIAuthExample {
 						try await loginResponse(outbound: outbound, status: .payloadTooLarge, headers: [], body: "request body too large")
 					} else {
 						let peerIP = channel.channel.remoteAddress?.ipAddress ?? "unknown"
-						try await self.route(head: head, body: Data(bodyBytes), peerIP: peerIP, outbound: outbound)
+						try await self.route(head: head, body: bodyBytes, peerIP: peerIP, outbound: outbound)
 					}
 					return
 				}
@@ -677,7 +678,7 @@ struct WebUIAuthExample {
 		}
 	}
 
-	private func route(head: HTTPRequestHead, body: Data, peerIP: String, outbound: NIOAsyncChannelOutboundWriter<HTTPPart<HTTPResponseHead, ByteBuffer>>) async throws {
+	private func route(head: HTTPRequestHead, body: [UInt8], peerIP: String, outbound: NIOAsyncChannelOutboundWriter<HTTPPart<HTTPResponseHead, ByteBuffer>>) async throws {
 		// assets are public (the design system css + js runtime)
 		switch (head.method, head.uri) {
 		case (.GET, "/__assets/css"):
@@ -712,7 +713,7 @@ struct WebUIAuthExample {
 		}
 	}
 
-	private func handleLogin(head: HTTPRequestHead, body: Data, peerIP: String, outbound: NIOAsyncChannelOutboundWriter<HTTPPart<HTTPResponseHead, ByteBuffer>>) async throws {
+	private func handleLogin(head: HTTPRequestHead, body: [UInt8], peerIP: String, outbound: NIOAsyncChannelOutboundWriter<HTTPPart<HTTPResponseHead, ByteBuffer>>) async throws {
 		func failure(_ message: String) async throws {
 			let token = CSRFProtection.token(for: "login", secret: csrfSecret)
 			try await loginResponse(outbound: outbound, status: .ok, headers: [("Content-Type", "text/html; charset=utf-8")], body: renderLoginPage(error: message, csrfToken: token))
@@ -728,8 +729,8 @@ struct WebUIAuthExample {
 			return
 		}
 
-		guard let bodyText = String(data: body, encoding: .utf8),
-		      let fields = try? URLEncodedForm.parse(bodyText),
+		let bodyText = String(decoding: body, as: UTF8.self)
+		guard let fields = try? URLEncodedForm.parse(bodyText),
 		      let csrf = fields["_csrf"],
 		      CSRFProtection.validate(csrf, for: "login", secret: csrfSecret) else {
 			return try await failure("invalid or expired form token — try again")
@@ -781,10 +782,10 @@ struct WebUIAuthExample {
 		// establish the session: fresh token, hash-at-rest, in-memory store.
 		let token = try SessionToken.generate()
 		let session = AuthenticatedSession(
-			id: Data(SecureRandom.bytes(16) ?? []),
+			id: SecureRandom.bytes(16) ?? [],
 			tokenHash: try SessionToken.hash(token),
 			identityID: Self.demoUsername,
-			csrfSeed: Data(SecureRandom.bytes(16) ?? []),
+			csrfSeed: SecureRandom.bytes(16) ?? [],
 			createdAt: Date(),
 			expiresAt: Date().addingTimeInterval(TimeInterval(DemoSession.maxAgeSeconds)),
 			lastSeenAt: Date()
@@ -793,17 +794,17 @@ struct WebUIAuthExample {
 
 		let cookie = try HTTPCookie(
 			name: DemoSession.cookieName,
-			value: token.base64EncodedString(),
+			value: Base64.encode(token),
 			attributes: .init(maxAge: DemoSession.maxAgeSeconds, path: "/", httpOnly: true, sameSite: .lax)
 		).setCookieHeaderValue()
 		try await redirect(outbound: outbound, to: "/", setCookies: [("Set-Cookie", cookie)])
 	}
 
-	private func handleLogout(head: HTTPRequestHead, body: Data, outbound: NIOAsyncChannelOutboundWriter<HTTPPart<HTTPResponseHead, ByteBuffer>>) async throws {
+	private func handleLogout(head: HTTPRequestHead, body: [UInt8], outbound: NIOAsyncChannelOutboundWriter<HTTPPart<HTTPResponseHead, ByteBuffer>>) async throws {
 		// CSRF-protected POST logout: the token comes from the per-render
 		// logout form on the dashboard (plan M2-T4 spirit).
-		guard let bodyText = String(data: body, encoding: .utf8),
-		      let fields = try? URLEncodedForm.parse(bodyText),
+		let bodyText = String(decoding: body, as: UTF8.self)
+		guard let fields = try? URLEncodedForm.parse(bodyText),
 		      let csrf = fields["_csrf"],
 		      CSRFProtection.validate(csrf, for: "logout", secret: csrfSecret) else {
 			try await loginResponse(outbound: outbound, status: .forbidden, headers: [], body: "invalid or expired form token")
@@ -850,6 +851,6 @@ struct WebUIAuthExample {
 }
 
 enum AuthUpgradeResult: Sendable {
-	case websocket(NIOAsyncChannel<WebSocketFrame, WebSocketFrame>, router: EventRouter?, tokenHash: Data?)
+	case websocket(NIOAsyncChannel<WebSocketFrame, WebSocketFrame>, router: EventRouter?, tokenHash: [UInt8]?)
 	case http(NIOAsyncChannel<HTTPServerRequestPart, HTTPPart<HTTPResponseHead, ByteBuffer>>)
 }

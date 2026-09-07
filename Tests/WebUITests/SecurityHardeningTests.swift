@@ -226,8 +226,8 @@ struct CSSMinificationTests {
 
 	@Test("embedded asset constant still matches the source bytes")
 	func embeddedConstantUnchanged() throws {
-		let source = try Data(contentsOf: packageRootURL().appendingPathComponent("designer/assets/design-system.css"))
-		#expect(Data(WebUIAssets.css.utf8) == source)
+		let source = [UInt8]((try String(contentsOf: packageRootURL().appendingPathComponent("designer/assets/design-system.css"), encoding: .utf8)).utf8)
+		#expect(Array(WebUIAssets.css.utf8) == source)
 	}
 }
 

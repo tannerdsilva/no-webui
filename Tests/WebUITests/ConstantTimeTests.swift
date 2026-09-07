@@ -24,11 +24,11 @@ struct ConstantTimeEqualsTests {
 		#expect(constantTimeEquals([], [1]) == false)
 	}
 
-	@Test("data overload behaves identically")
+	@Test("byte-sequence comparison matches expected results")
 	func dataOverload() {
-		#expect(constantTimeEquals(Data([1, 2, 3]), Data([1, 2, 3])))
-		#expect(constantTimeEquals(Data([1, 2, 3]), Data([1, 2, 4])) == false)
-		#expect(constantTimeEquals(Data(), Data([1])) == false)
+		#expect(constantTimeEquals([1, 2, 3], [1, 2, 3]))
+		#expect(constantTimeEquals([1, 2, 3], [1, 2, 4]) == false)
+		#expect(constantTimeEquals([], [1]) == false)
 	}
 
 	@Test("differing at the last byte still fails")

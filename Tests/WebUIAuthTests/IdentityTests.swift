@@ -28,7 +28,7 @@ struct CredentialTests {
 
 	@Test("credential carries raw password bytes through to the authenticator")
 	func credentialCarriesSecret() {
-		let secret = Data("s3cret".utf8)
+		let secret = [UInt8]("s3cret".utf8)
 		let credential = Credential(username: "tanner", secret: secret)
 		#expect(credential.username == "tanner")
 		#expect(credential.secret == secret)

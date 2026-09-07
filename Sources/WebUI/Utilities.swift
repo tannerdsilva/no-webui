@@ -275,7 +275,7 @@ public enum CSRFProtection {
     public static let defaultMaxAge: TimeInterval = 1800
     public static func generateSecret() -> String {
         let bytes = SecureRandom.bytes(32) ?? fallbackEntropy(count: 32)
-        return Data(bytes).base64EncodedString()
+        return Base64.encode(bytes)
     }
     private static func fallbackEntropy(count: Int) -> [UInt8] {
         var generator = SystemRandomNumberGenerator()
@@ -291,14 +291,13 @@ public enum CSRFProtection {
         let nonce = UUID().uuidString.replacingOccurrences(of: "-", with: "")
         let payload = "\(formID):\(Int(expires)):\(nonce)"
         let signature = hmacSHA256(key: secret, message: payload)
-        let tokenData = "\(payload):\(signature)".data(using: .utf8)!
-        return tokenData.base64EncodedString()
+        return Base64.encode([UInt8]("\(payload):\(signature)".utf8))
     }
     public static func validate(_ token: String, for formID: String, secret: String) -> Bool {
-        guard let tokenData = Data(base64Encoded: token),
-              let tokenStr = String(data: tokenData, encoding: .utf8) else {
+        guard let tokenBytes = Base64.decode(token) else {
             return false
         }
+        let tokenStr = String(decoding: tokenBytes, as: UTF8.self)
         let parts = tokenStr.split(separator: ":", maxSplits: 3, omittingEmptySubsequences: false)
         guard parts.count == 4 else { return false }
         let payloadFormID = String(parts[0])
@@ -321,20 +320,16 @@ public enum CSRFProtection {
     /// `nil` when the token does not decode to `formID:expiry:nonce:signature`.
     /// callers should only pass tokens that have already passed `validate`.
     public static func expiry(of token: String) -> TimeInterval? {
-        guard let tokenData = Data(base64Encoded: token),
-              let tokenStr = String(data: tokenData, encoding: .utf8) else {
+        guard let tokenBytes = Base64.decode(token) else {
             return nil
         }
+        let tokenStr = String(decoding: tokenBytes, as: UTF8.self)
         let parts = tokenStr.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
         guard parts.count == 3 else { return nil }
         return TimeInterval(parts[1])
     }
     private static func hmacSHA256(key: String, message: String) -> String {
-        guard let keyData = key.data(using: .utf8),
-              let messageData = message.data(using: .utf8) else {
-            return ""
-        }
-        return (try? HMACSHA256.hex(message: [UInt8](messageData), key: [UInt8](keyData))) ?? ""
+        (try? HMACSHA256.hex(message: [UInt8](message.utf8), key: [UInt8](key.utf8))) ?? ""
     }
 }
 

@@ -37,7 +37,7 @@ struct SessionTokenTests {
 	@Test("hashing a wrong-length token throws")
 	func invalidLength() {
 		#expect(throws: SessionToken.TokenError.invalidLength) {
-			_ = try SessionToken.hash(Data([0x01, 0x02]))
+			_ = try SessionToken.hash([0x01, 0x02])
 		}
 	}
 }

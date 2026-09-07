@@ -19,9 +19,9 @@ func packageRootURL() -> URL {
 	}
 }
 
-func readDesignerAsset(_ name: String) throws -> Data {
+func readDesignerAsset(_ name: String) throws -> [UInt8] {
 	let path = packageRootURL().appendingPathComponent("designer/assets/\(name)")
-	return try Data(contentsOf: path)
+	return [UInt8]((try String(contentsOf: path, encoding: .utf8)).utf8)
 }
 
 // MARK: - Deployment integrity
@@ -29,14 +29,14 @@ func readDesignerAsset(_ name: String) throws -> Data {
 @Test("embedded css is byte-identical to designer/assets/design-system.css")
 func embeddedCSSMatchesSource() throws {
 	let source = try readDesignerAsset("design-system.css")
-	let embedded = Data(WebUIAssets.css.utf8)
+	let embedded = Array(WebUIAssets.css.utf8)
 	#expect(source == embedded, "embedded WebUIAssets.css differs from designer/assets/design-system.css (\(embedded.count) vs \(source.count) bytes)")
 }
 
 @Test("embedded js is byte-identical to designer/assets/webui-runtime.js")
 func embeddedJSMatchesSource() throws {
 	let source = try readDesignerAsset("webui-runtime.js")
-	let embedded = Data(WebUIAssets.js.utf8)
+	let embedded = Array(WebUIAssets.js.utf8)
 	#expect(source == embedded, "embedded WebUIAssets.js differs from designer/assets/webui-runtime.js (\(embedded.count) vs \(source.count) bytes)")
 }
 

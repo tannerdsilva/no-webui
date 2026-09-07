@@ -32,9 +32,9 @@ public enum Role {
 /// that consumes it.
 public struct Credential: Sendable, Equatable {
 	public let username: String
-	public let secret: Data
+	public let secret: [UInt8]
 
-	public init(username: String, secret: Data) {
+	public init(username: String, secret: [UInt8]) {
 		self.username = username
 		self.secret = secret
 	}

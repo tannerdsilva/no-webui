@@ -153,7 +153,11 @@ default `WebUIRuntime.init();` is emitted byte-for-byte.
 | Function | Description |
 |---|---|
 | `htmlEscape(_ string: String) -> String` | escape HTML special characters (&, <, >, ", ') |
-| `constantTimeEquals(_ lhs:, _ rhs:)` | constant-time equality over byte sequences (`[UInt8]`, `Data`) — no early exit on an equal-length input; used for MAC and token compares |
+| `Base64` | data-free rfc 4648 base64/base64url over `[UInt8]`: `encode`/`decode` (standard, `=` padding), `encodeURL`/`decodeURL` (url alphabet, no padding; decode tolerates missing padding, rejects invalid bytes) — replaces `Foundation.Data` base64 |
+| `JSONValue` | data-free rfc 8259 json value: `parse(_ text:)` (strict; rejects trailing tokens, unescaped control chars, malformed numbers, lone surrogates), `serialize()` (compact, integral numbers without `.0`), `escapeString(_:)` — replaces `JSONEncoder`/`JSONDecoder`/`JSONSerialization` on `Data` |
+| `WSIncoming(jsonText:)` / `WSIncoming(jsonBytes:)` | data-free decode of a `{"type":...}` client message (throws `WSMessageError.malformed`) |
+| `WSOutgoing.jsonText` / `jsonBytes` | compact data-free emission of a server message |
+| `constantTimeEquals(_ lhs:, _ rhs:)` | constant-time equality over byte sequences (any `Sequence` of `UInt8`, e.g. `[UInt8]`) — no early exit on an equal-length input; used for MAC and token compares |
 | `injectAttributes(into html: String, _ attributes: String) -> String` | inject attributes into the first HTML tag |
 | `sanitizeURL(_ url: String) -> String?` | nil for `javascript:`, `data:`, `vbscript:` — strips c0 controls and ascii whitespace first, matching the browser's URL parser, so padded/obfuscated schemes are caught too |
 | `markdownToHTML(_ markdown: String) -> String` | minimal safe markdown subset: atx headings, bullet/numbered lists, `**bold**`, `*emphasis*`, `` `code` ``, `[label](url)` (url-sanitized). input is escaped before tokenizing; unpaired delimiters render literally |
@@ -295,13 +299,13 @@ in `Documentation/IMPLEMENTATION_PLAN.md`.
 |---|---|
 | `Identity` | `{ id: String, roles: Set<String> }` — `Codable`, `Hashable`, `Sendable`. `id` is the backend's stable identifier; `roles` is the role set guards branch on |
 | `Role` | well-known role strings: `Role.member` (`"member"`), `Role.admin` (`"admin"`) |
-| `Credential` | `{ username: String, secret: Data }` — raw password bytes, single-use |
+| `Credential` | `{ username: String, secret: [UInt8] }` — raw password bytes, single-use |
 
 ### Sessions
 
 | Type | Description |
 |---|---|
-| `AuthenticatedSession` | `{ id: Data, tokenHash: Data, identityID: String, csrfSeed: Data, createdAt, expiresAt, lastSeenAt }` — the raw token never reaches storage, only its SHA-256 `tokenHash`. `id` is 16 random bytes |
+| `AuthenticatedSession` | `{ id: [UInt8], tokenHash: [UInt8], identityID: String, csrfSeed: [UInt8], createdAt, expiresAt, lastSeenAt }` — the raw token never reaches storage, only its SHA-256 `tokenHash`. `id` is 16 random bytes |
 | `SessionToken.generate()` | 32 bytes from `SecureRandom` **only** — fails loudly on entropy failure, no PRNG fallback |
 | `SessionToken.hash(_:)` | SHA-256 of a token — the only form a store may persist |
 

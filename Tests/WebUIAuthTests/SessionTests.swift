@@ -8,10 +8,10 @@ struct SessionTests {
 
 	func makeSession(expiresAt: Date = .distantFuture) -> AuthenticatedSession {
 		AuthenticatedSession(
-			id: Data([0x01, 0x02, 0x03, 0x04]),
-			tokenHash: Data(repeating: 0xAB, count: 32),
+			id: [0x01, 0x02, 0x03, 0x04],
+			tokenHash: [UInt8](repeating: 0xAB, count: 32),
 			identityID: "u1",
-			csrfSeed: Data([0x05, 0x06]),
+			csrfSeed: [0x05, 0x06],
 			createdAt: Date(timeIntervalSince1970: 1_000),
 			expiresAt: expiresAt,
 			lastSeenAt: Date(timeIntervalSince1970: 1_000)

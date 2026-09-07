@@ -19,10 +19,7 @@ public struct HTMLDocument: Sendable {
         guard let bytes = SecureRandom.bytes(16) else {
             return UUID().uuidString.replacingOccurrences(of: "-", with: "")
         }
-        return Data(bytes).base64EncodedString()
-            .replacingOccurrences(of: "+", with: "-")
-            .replacingOccurrences(of: "/", with: "_")
-            .trimmingCharacters(in: CharacterSet(charactersIn: "="))
+        return Base64.encodeURL(bytes)
     }
     private func effectiveCSP(nonce: String) -> String? {
         if let csp = contentSecurityPolicy {

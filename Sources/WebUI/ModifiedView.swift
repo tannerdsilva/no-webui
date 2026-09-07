@@ -253,13 +253,16 @@ public struct OptimisticClickModifier: ViewModifier {
         }
         let componentID = context.nextComponentID()
         context.register(handler: handler, for: componentID)
-        let encoded: String
-        if let data = try? JSONEncoder().encode(prediction),
-           let json = String(data: data, encoding: .utf8) {
-            encoded = json
-        } else {
-            encoded = "[]"
-        }
+        // data-free json emission of the predicted fragments — the runtime
+        // parses this exactly like the JSONEncoder-serialized form it replaces
+        // (`[{"id":..., "html":...}]`).
+        let predictions = JSONValue.array(prediction.map { update in
+            .object([
+                "id": .string(update.id),
+                "html": .string(update.html),
+            ])
+        })
+        let encoded = predictions.serialize()
         return injectAttributes(
             into: html,
             "data-component-id=\"\(componentID.value)\" data-event=\"click\" data-optimistic=\"\(htmlEscape(encoded))\""

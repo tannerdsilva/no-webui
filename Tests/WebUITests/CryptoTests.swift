@@ -123,7 +123,7 @@ struct SecureRandomTests {
 	func csrfSurface() {
 		let secret = CSRFProtection.generateSecret()
 		#expect(!secret.isEmpty)
-		#expect(Data(base64Encoded: secret)?.count == 32)
+		#expect(Base64.decode(secret)?.count == 32)
 		let token = CSRFProtection.token(for: "form-1", secret: secret)
 		#expect(CSRFProtection.validate(token, for: "form-1", secret: secret))
 		#expect(!CSRFProtection.validate(token, for: "form-2", secret: secret))

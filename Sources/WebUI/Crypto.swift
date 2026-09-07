@@ -31,11 +31,7 @@ public enum HMACSHA256 {
 	}
 
 	public static func hex(message: String, key: String) throws -> String? {
-		guard let keyData = key.data(using: .utf8),
-		      let messageData = message.data(using: .utf8) else {
-			return nil
-		}
-		return try hex(message: [UInt8](messageData), key: [UInt8](keyData))
+		try hex(message: [UInt8](message.utf8), key: [UInt8](key.utf8))
 	}
 }
 

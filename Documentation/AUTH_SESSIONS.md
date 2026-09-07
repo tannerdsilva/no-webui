@@ -159,16 +159,16 @@ public protocol UserStore: Sendable {              // backend supplies
 }
 public struct Credential: Sendable {               // opaque to the framework
     public let username: String
-    public let secret: Data                        // raw password bytes, single use
+    public let secret: [UInt8]                        // raw password bytes, single use
 }
 public protocol Authenticator: Sendable {          // verify credentials
     func authenticate(_ credential: Credential) async throws -> Identity?
 }
 public protocol AuthSessionStore: Sendable {
     func create(_ session: AuthenticatedSession) async throws
-    func find(tokenHash: Data) async throws -> AuthenticatedSession?
+    func find(tokenHash: [UInt8]) async throws -> AuthenticatedSession?
     func touch(_ session: AuthenticatedSession) async throws
-    func invalidate(id: Data) async throws
+    func invalidate(id: [UInt8]) async throws
     func invalidateAll(for identityID: String) async throws   // logout-everywhere
     func listSessions(for identityID: String) async throws -> [AuthenticatedSession]
     func purgeExpired(before: Date) async throws
@@ -178,10 +178,10 @@ public struct Identity: Sendable, Codable, Hashable {
     public let roles: Set<String>                  // "member", "admin", ...
 }
 public struct AuthenticatedSession: Sendable, Codable {
-    public let id: Data                            // 16 random bytes
-    public let tokenHash: Data                     // SHA-256 of the 32-byte token
+    public let id: [UInt8]                            // 16 random bytes
+    public let tokenHash: [UInt8]                     // SHA-256 of the 32-byte token
     public let identityID: String
-    public let csrfSeed: Data                      // per-session CSRF keying
+    public let csrfSeed: [UInt8]                      // per-session CSRF keying
     public let createdAt: Date
     public let expiresAt: Date
     public let lastSeenAt: Date

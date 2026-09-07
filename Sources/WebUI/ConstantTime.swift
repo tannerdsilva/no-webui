@@ -1,5 +1,3 @@
-import Foundation
-
 // MARK: - Constant-time comparison
 
 // constant-time equality over byte sequences. the length check short-circuits
@@ -18,12 +16,4 @@ public func constantTimeEquals<L: Sequence, R: Sequence>(_ lhs: L, _ rhs: R) -> 
         diff |= a[i] ^ b[i]
     }
     return diff == 0
-}
-
-public func constantTimeEquals(_ lhs: Data, _ rhs: Data) -> Bool {
-    lhs.withUnsafeBytes { a in
-        rhs.withUnsafeBytes { b in
-            constantTimeEquals(a.bindMemory(to: UInt8.self), b.bindMemory(to: UInt8.self))
-        }
-    }
 }

@@ -1,5 +1,6 @@
 import Foundation
 import Testing
+import WebUI
 
 #if os(Linux)
 import Glibc
@@ -251,7 +252,7 @@ private struct UpgradeResult {
 /// a raw websocket handshake (no framing) — just enough to verify the
 /// upgrade gate: 403 for refusals, 101 + a live socket for accepted upgrades.
 private func wsUpgrade(port: Int, cookie: String?) throws -> UpgradeResult {
-	let key = Data((0..<16).map { _ in UInt8.random(in: 0...255) }).base64EncodedString()
+	let key = Base64.encode((0..<16).map { _ in UInt8.random(in: 0...255) })
 	var request = "GET /ws HTTP/1.1\r\n"
 	request += "Host: 127.0.0.1:\(port)\r\n"
 	request += "Connection: Upgrade\r\n"
@@ -405,8 +406,8 @@ final class RawSocket {
 		}
 	}
 
-	func readExactly(_ count: Int) throws -> Data {
-		var out = Data()
+	func readExactly(_ count: Int) throws -> [UInt8] {
+		var out: [UInt8] = []
 		out.reserveCapacity(count)
 		while out.count < count {
 			if consumed < buffer.count {
@@ -420,8 +421,8 @@ final class RawSocket {
 		return out
 	}
 
-	func readToEnd() throws -> Data {
-		var out = Data()
+	func readToEnd() throws -> [UInt8] {
+		var out: [UInt8] = []
 		while true {
 			if consumed < buffer.count {
 				out.append(contentsOf: buffer[consumed...])

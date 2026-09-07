@@ -42,7 +42,9 @@ public final class LoginThrottle: Sendable {
 
     /// clear a key's history (call after a successful authentication).
     public func reset(_ key: String) {
-        state.withLock { $0.windows.removeValue(forKey: key) }
+        state.withLock { state in
+            _ = state.windows.removeValue(forKey: key)
+        }
     }
 
     /// drop every window that has rolled over.

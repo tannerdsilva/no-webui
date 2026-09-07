@@ -12,7 +12,7 @@ struct StableControlAttributesTests {
     @Test("registers the handler and emits routing attributes when a context is present")
     func registersWithContext() async {
         let router = EventRouter()
-        var context = RenderContext(router: router)
+        let context = RenderContext(router: router)
         let attrs = controlAttributes(id: "ctrl-1", handler: { _ in [] })
         #expect(attrs.contains("data-component-id=\"ctrl-1\""))
         #expect(attrs.contains("data-event=\"click\""))
@@ -27,7 +27,7 @@ struct StableControlAttributesTests {
         // page build: render INSIDE a RenderContext so the handler registers
         // under the stable id, and the control HTML carries routing attributes.
         let router = EventRouter()
-        var context = RenderContext(router: router)
+        let context = RenderContext(router: router)
         let attrs = RenderContext.$current.withValue(context) {
             controlAttributes(id: "ctrl-1", handler: { _ in [] })
         }
@@ -99,10 +99,10 @@ struct TableTypedHandlerTests {
         #expect(html.contains("data-component-id=\"tbl-expand-b\""), "emitted: \(html)")
 
         // dispatch to each control id → only that typed handler fires
-        await router.handle(EventData(component: "tbl-sort-1", event: "click", data: [:]))
-        await router.handle(EventData(component: "tbl-select-all", event: "click", data: [:]))
-        await router.handle(EventData(component: "tbl-select-a", event: "click", data: [:]))
-        await router.handle(EventData(component: "tbl-expand-b", event: "click", data: [:]))
+        _ = await router.handle(EventData(component: "tbl-sort-1", event: "click", data: [:]))
+        _ = await router.handle(EventData(component: "tbl-select-all", event: "click", data: [:]))
+        _ = await router.handle(EventData(component: "tbl-select-a", event: "click", data: [:]))
+        _ = await router.handle(EventData(component: "tbl-expand-b", event: "click", data: [:]))
 
         #expect(box.sortCalls.count == 1)
         #expect(box.sortCalls[0].column == 1)
@@ -163,10 +163,10 @@ struct PaginationTypedHandlerTests {
         #expect(html.contains("data-component-id=\"pg-next\""), "emitted: \(html)")
         #expect(html.contains("data-component-id=\"pg-page-5\""), "emitted: \(html)")
 
-        await router.handle(EventData(component: "pg-prev", event: "click", data: [:]))
-        await router.handle(EventData(component: "pg-next", event: "click", data: [:]))
+        _ = await router.handle(EventData(component: "pg-prev", event: "click", data: [:]))
+        _ = await router.handle(EventData(component: "pg-next", event: "click", data: [:]))
         // page window at 5/12: 1 2 4 5 6 11 12 → click page 6
-        await router.handle(EventData(component: "pg-page-6", event: "click", data: [:]))
+        _ = await router.handle(EventData(component: "pg-page-6", event: "click", data: [:]))
 
         #expect(box.pages == [4, 6, 6])
     }
@@ -185,7 +185,7 @@ struct PaginationTypedHandlerTests {
         #expect(html.contains("data-component-id=\"pg-rows\""), "emitted: \(html)")
         #expect(html.contains("data-event=\"change\""), "emitted: \(html)")
 
-        await router.handle(EventData(component: "pg-rows", event: "change", data: ["value": "50"]))
+        _ = await router.handle(EventData(component: "pg-rows", event: "change", data: ["value": "50"]))
         #expect(box.rows == [50])
     }
 
@@ -233,7 +233,7 @@ struct ChartTypedHandlerTests {
         #expect(html.contains("data-component-id=\"chart-1-mark-Jan-A\""), "emitted: \(html)")
         #expect(html.contains("data-component-id=\"chart-1-mark-Feb-A\""), "emitted: \(html)")
 
-        await router.handle(EventData(component: "chart-1-mark-Feb-A", event: "click", data: [:]))
+        _ = await router.handle(EventData(component: "chart-1-mark-Feb-A", event: "click", data: [:]))
         #expect(box.categories == ["Feb"])
     }
 

@@ -39,9 +39,9 @@ public protocol Authenticator: Sendable {
 /// token — the raw token never reaches the store.
 public protocol AuthSessionStore: Sendable {
 	func create(_ session: AuthenticatedSession) async throws
-	func find(tokenHash: Data) async throws -> AuthenticatedSession?
+	func find(tokenHash: [UInt8]) async throws -> AuthenticatedSession?
 	func touch(_ session: AuthenticatedSession) async throws
-	func invalidate(id: Data) async throws
+	func invalidate(id: [UInt8]) async throws
 	/// invalidate every session belonging to an identity (logout-everywhere).
 	func invalidateAll(for identityID: String) async throws
 	/// list a user's sessions, newest first.

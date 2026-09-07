@@ -7,22 +7,22 @@ import Foundation
 /// separate random identifier used for invalidation and index bookkeeping.
 public struct AuthenticatedSession: Sendable, Codable, Equatable, Hashable {
 	/// session identifier, 16 random bytes. indexing key and invalidation target.
-	public let id: Data
+	public let id: [UInt8]
 	/// SHA-256 of the client-held 32-byte token.
-	public let tokenHash: Data
+	public let tokenHash: [UInt8]
 	/// the identity this session authenticates.
 	public let identityID: String
 	/// per-session seed for session-bound CSRF tokens.
-	public let csrfSeed: Data
+	public let csrfSeed: [UInt8]
 	public let createdAt: Date
 	public let expiresAt: Date
 	public var lastSeenAt: Date
 
 	public init(
-		id: Data,
-		tokenHash: Data,
+		id: [UInt8],
+		tokenHash: [UInt8],
 		identityID: String,
-		csrfSeed: Data,
+		csrfSeed: [UInt8],
 		createdAt: Date,
 		expiresAt: Date,
 		lastSeenAt: Date

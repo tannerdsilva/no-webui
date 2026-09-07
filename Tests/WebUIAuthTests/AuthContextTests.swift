@@ -8,10 +8,10 @@ struct AuthContextTests {
 
 	func makeSession() -> AuthenticatedSession {
 		AuthenticatedSession(
-			id: Data([0x01]),
-			tokenHash: Data(repeating: 0xAB, count: 32),
+			id: [0x01],
+			tokenHash: [UInt8](repeating: 0xAB, count: 32),
 			identityID: "member-7",
-			csrfSeed: Data([0x02]),
+			csrfSeed: [0x02],
 			createdAt: Date(),
 			expiresAt: .distantFuture,
 			lastSeenAt: Date()

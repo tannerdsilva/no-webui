@@ -5,8 +5,8 @@ import WebUIDesignSystem
 
 // MARK: - Icon catalog + generated library
 
-struct IconManifest: Decodable {
-	struct Icon: Decodable, Identifiable {
+struct IconManifest {
+	struct Icon: Identifiable {
 		let name: String
 		let category: String
 		let title: String
@@ -18,9 +18,45 @@ struct IconManifest: Decodable {
 	let icons: [Icon]
 }
 
+/// reads and decodes the icon manifest data-free (String + `JSONValue`), so
+/// the catalog-integrity suite exercises the hand-rolled json parser too.
 func loadIconManifest() throws -> IconManifest {
 	let url = packageRootURL().appendingPathComponent("designer/icons/icon-manifest.json")
-	return try JSONDecoder().decode(IconManifest.self, from: Data(contentsOf: url))
+	let value = try JSONValue.parse(try String(contentsOf: url, encoding: .utf8))
+	guard case .object(let root) = value,
+	      case .array(let icons)? = root["icons"] else {
+		throw ManifestDecodeError.missingField("icons")
+	}
+	var result: [IconManifest.Icon] = []
+	result.reserveCapacity(icons.count)
+	for iconValue in icons {
+		guard case .object(let icon) = iconValue else { throw ManifestDecodeError.wrongType("icon") }
+		let string = { (key: String) throws -> String in
+			guard case .string(let s)? = icon[key] else { throw ManifestDecodeError.missingField(key) }
+			return s
+		}
+		let stringArray = { (key: String) throws -> [String] in
+			guard case .array(let arr)? = icon[key] else { throw ManifestDecodeError.missingField(key) }
+			return try arr.map {
+				guard case .string(let s) = $0 else { throw ManifestDecodeError.wrongType(key) }
+				return s
+			}
+		}
+		result.append(IconManifest.Icon(
+			name: try string("name"),
+			category: try string("category"),
+			title: try string("title"),
+			tags: try stringArray("tags"),
+			viewBox: try string("viewBox"),
+			elements: try stringArray("elements")
+		))
+	}
+	return IconManifest(icons: result)
+}
+
+enum ManifestDecodeError: Error {
+	case missingField(String)
+	case wrongType(String)
 }
 
 @Suite("Icon catalog integrity")
@@ -266,7 +302,7 @@ struct IconCSSDeploymentTests {
 
 	@Test("embedded css is byte-identical to the designer source")
 	func byteIdentical() throws {
-		let source = try Data(contentsOf: packageRootURL().appendingPathComponent("designer/assets/design-system.css"))
-		#expect(source == Data(WebUIAssets.css.utf8))
+		let source = [UInt8]((try String(contentsOf: packageRootURL().appendingPathComponent("designer/assets/design-system.css"), encoding: .utf8)).utf8)
+		#expect(Array(WebUIAssets.css.utf8) == source)
 	}
 }

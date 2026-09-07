@@ -119,13 +119,13 @@ server or wire changes. the package builds on macOS and Linux.
 ### M0-T2 — identity & credential model
 - surface: `Sources/WebUIAuth/Identity.swift`
 - `Identity` (`id: String`, `roles: Set<String>`, `Hashable/Codable/Sendable`),
-  `Credential` (`username: String`, `secret: Data`, single-use semantics),
+  `Credential` (`username: String`, `secret: [UInt8]`, single-use semantics),
   `Role` helper constants (`"member"`, `"admin"` — strings, app-extensible)
 - acceptance: unit tests for codable round-trip, role set semantics
 
 ### M0-T3 — `AuthenticatedSession` + protocol set
 - surface: `Sources/WebUIAuth/Session.swift`, `Sources/WebUIAuth/Protocols.swift`
-- `AuthenticatedSession { id: Data(16), tokenHash: Data(32), identityID, csrfSeed: Data, createdAt, expiresAt, lastSeenAt }`
+- `AuthenticatedSession { id: [UInt8](16), tokenHash: [UInt8](32), identityID, csrfSeed: [UInt8], createdAt, expiresAt, lastSeenAt }`
 - protocols `UserStore`, `Authenticator`, `AuthSessionStore` per
   `AUTH_SESSIONS.md`, with nested `Error` types; `AuthSessionStore` includes
   `invalidateAll(for:)`, `listSessions(for:)`, `purgeExpired(before:)`
