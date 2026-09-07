@@ -4,6 +4,7 @@ import NIOCore
 import NIOHTTP1
 import NIOPosix
 import NIOWebSocket
+import Synchronization
 import WebUI
 import WebUIDesignSystem
 import WebUIAuth
@@ -14,21 +15,20 @@ import WebUIAuth
 // its dashboard page. replaced on every GET / re-render (one router per render
 // pass). reference-backed so the demo struct stays immutable across the async
 // server loop while the map mutates safely.
-final class RouterRegistry: @unchecked Sendable {
-	private let lock = NSLock()
-	private var routers: [Data: EventRouter] = [:]
+final class RouterRegistry: Sendable {
+	private struct Values {
+		var routers: [Data: EventRouter] = [:]
+	}
+	private let values = Mutex(Values())
 
 	func router(forTokenHash hash: Data) -> EventRouter? {
-		lock.lock(); defer { lock.unlock() }
-		return routers[hash]
+		values.withLock { $0.routers[hash] }
 	}
 	func set(_ router: EventRouter, forTokenHash hash: Data) {
-		lock.lock(); defer { lock.unlock() }
-		routers[hash] = router
+		values.withLock { $0.routers[hash] = router }
 	}
 	func remove(forTokenHash hash: Data) {
-		lock.lock(); defer { lock.unlock() }
-		routers.removeValue(forKey: hash)
+		values.withLock { $0.routers.removeValue(forKey: hash) }
 	}
 }
 
@@ -87,23 +87,25 @@ final class AuthIdleCloseHandler: ChannelInboundHandler {
 
 // MARK: - Demo state (per-process interactive model, like WebUIExample)
 
-final class AuthDemoState: @unchecked Sendable {
-	private let lock = NSLock()
-	private var _count: Int = 0
-	private var _progress: Double = 0.25
-	private var _echo: String = ""
+final class AuthDemoState: Sendable {
+	private struct Values {
+		var count = 0
+		var progress = 0.25
+		var echo = ""
+	}
+	private let values = Mutex(Values())
 
 	var count: Int {
-		get { lock.lock(); defer { lock.unlock() }; return _count }
-		set { lock.lock(); defer { lock.unlock() }; _count = newValue }
+		get { values.withLock { $0.count } }
+		set { values.withLock { $0.count = newValue } }
 	}
 	var progress: Double {
-		get { lock.lock(); defer { lock.unlock() }; return _progress }
-		set { lock.lock(); defer { lock.unlock() }; _progress = newValue }
+		get { values.withLock { $0.progress } }
+		set { values.withLock { $0.progress = newValue } }
 	}
 	var echo: String {
-		get { lock.lock(); defer { lock.unlock() }; return _echo }
-		set { lock.lock(); defer { lock.unlock() }; _echo = newValue }
+		get { values.withLock { $0.echo } }
+		set { values.withLock { $0.echo = newValue } }
 	}
 }
 

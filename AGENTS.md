@@ -130,8 +130,8 @@ invocation. gates host their own server, check, and tear down in one call.
 - **ViewModifier protocol** — `func apply(to html: String) -> String`. wraps
   rendered HTML with attributes or styles.
 - **EventRouter** — routes WebSocket events to registered handlers. thread-safe
-  via NSLock. max 10,000 handlers by default. missing-handler events log at
-  `.warning` and `handlerCount` is public.
+  via `Synchronization.Mutex`. max 10,000 handlers by default. missing-handler
+  events log at `.debug` (via the unified `logger.emit` funnel) and `handlerCount` is public.
 - **event modifiers** — `.onClick`/`.onSubmit`/`.onInput`/`.onChange` plus
   keyboard, mouse, and focus variants (`.onKeyUp`, `.onMouseDown`,
   `.onFocus`/`.onBlur`, `.onFocusIn`/`.onFocusOut`, ...) emit
@@ -220,8 +220,8 @@ these must never be weakened:
    `for`/`data-status`/`method` parameters alike. icon `aria-label`/`class`/
    `data-icon` included.
 6. **CSRF tokens** — `CSRFProtection` with HMAC-SHA256 stateless tokens.
-7. **Thread safety** — NSLock on all EventRouter.State and ObserverList
-   mutations.
+7. **Thread safety** — `Mutex` (Swift `Synchronization`) on all EventRouter.State
+   and ObserverList mutations.
 8. **Growth caps** — EventRouter.maxHandlers (10K) and ObserverList.maxObservers
    (100).
 9. **SVG icon sanitization** — `IconSanitizer.sanitize()` strips `<script>`
@@ -324,9 +324,12 @@ node designer/browser-smoke.mjs     # requires node + playwright (chromium)
 - **`Logger.Message` type** — swift-log's `Logger` methods take `Logger.Message`,
   not `String`. string concatenation with `+` doesn't produce `Logger.Message`.
   use string interpolation or a single string literal.
-- **`@unchecked Sendable`** — used for NSLock-guarded classes. the lock is the
-  synchronization mechanism, not the type system. do not remove `@unchecked`
-  without adding real Sendable safety.
+- **`@unchecked Sendable`** — retired for the lock layer: `EventRouter.State`,
+  `ObserverList`, `AsyncSemaphore`, `LoginThrottle`, and the example state
+  classes are Mutex-backed and now declare plain `Sendable`. `@unchecked` should
+  still be avoided unless the class genuinely cannot prove Sendability; prefer
+  `Synchronization.Mutex` with a `Sendable` payload so the lock is the
+  synchronization mechanism and the type system sees real Sendability.
 - **`#if DEBUG`** — avoid for security-relevant warnings. use unconditional
   `Logger.warning()` instead so production builds also see the warning.
 - **`defer { txnAbort }` after `txnCommit`** — aborting a committed LMDB

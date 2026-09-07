@@ -1,5 +1,5 @@
-import Foundation
 import Logging
+import Synchronization
 
 // MARK: - ComponentID
 public struct ComponentID: Sendable, Hashable, Codable, ExpressibleByStringLiteral {
@@ -29,54 +29,48 @@ public final class EventRouter: Sendable {
     private let state: State
     public let observers: ObserverList
     public let logger: Logger
-    private final class State: @unchecked Sendable {
-        private let lock = NSLock()
-        private var _handlers: [ComponentID: EventHandler] = [:]
-        private var _nextID: Int = 0
-        private var _nextElementID: Int = 0
+    private final class State: Sendable {
+        private struct Values {
+            var handlers: [ComponentID: EventHandler] = [:]
+            var nextID: Int = 0
+            var nextElementID: Int = 0
+        }
+        private let values = Mutex(Values())
 
         func register(_ handler: @escaping EventHandler, for componentID: ComponentID) {
-            lock.lock()
-            _handlers[componentID] = handler
-            lock.unlock()
+            values.withLock { $0.handlers[componentID] = handler }
         }
 
         var handlerCount: Int {
-            lock.lock()
-            let c = _handlers.count
-            lock.unlock()
-            return c
+            values.withLock { $0.handlers.count }
         }
 
         func handler(for componentID: ComponentID) -> EventHandler? {
-            lock.lock()
-            let h = _handlers[componentID]
-            lock.unlock()
-            return h
+            values.withLock { $0.handlers[componentID] }
         }
 
         func nextComponentID() -> ComponentID {
-            lock.lock()
-            let id = ComponentID("c\(_nextID)")
-            _nextID += 1
-            lock.unlock()
-            return id
+            values.withLock { values in
+                let id = ComponentID("c\(values.nextID)")
+                values.nextID += 1
+                return id
+            }
         }
 
         func nextElementID() -> ComponentID {
-            lock.lock()
-            let id = ComponentID("e\(_nextElementID)")
-            _nextElementID += 1
-            lock.unlock()
-            return id
+            values.withLock { values in
+                let id = ComponentID("e\(values.nextElementID)")
+                values.nextElementID += 1
+                return id
+            }
         }
 
         func reset() {
-            lock.lock()
-            _handlers.removeAll()
-            _nextID = 0
-            _nextElementID = 0
-            lock.unlock()
+            values.withLock { values in
+                values.handlers.removeAll()
+                values.nextID = 0
+                values.nextElementID = 0
+            }
         }
     }
     public init(
@@ -113,8 +107,9 @@ public final class EventRouter: Sendable {
         logger.emit(ObservableEvent.eventReceived(component: event.component.value, event: event.event), observers: observers)
 
         guard let handler = state.handler(for: event.component) else {
-            logger.warning("no handler registered for component '\(event.component.value)'")
-            observers.emit(ObservableEvent.debug(message: "no handler registered for component '\(event.component.value)'"))
+            // route through `logger.emit` so the observer fan-out stays on the
+            // single funnel every other emission uses (log line + notify).
+            logger.emit(ObservableEvent.debug(message: "no handler registered for component '\(event.component.value)'"), observers: observers)
             return []
         }
 

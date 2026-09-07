@@ -123,8 +123,8 @@ every attribute parameter (`id`, `class`, `name`, `for`, `data-status`,
 
 | Type | Description |
 |---|---|
-| `ObservableEvent` | enum with 10 cases: viewRendered, eventReceived, eventHandled, fragmentSent, websocketConnected/Disconnected/Error, error, debug |
-| `ObserverList` | thread-safe collection of `Observable` conformers. `maxObservers: Int` (default 100) |
+| `ObservableEvent` | enum with 9 cases: viewRendered, eventReceived, eventHandled, fragmentSent, websocketConnected/Disconnected/Error, error, debug. the framework itself emits eventReceived, eventHandled, and debug (from `EventRouter`); the rest are extension points for adopters whose transport/render layer emits them |
+| `ObserverList` | thread-safe collection (`Synchronization.Mutex`-backed, no Foundation) of `Observable` conformers. `maxObservers: Int` (default 100), identity-deduped registration, warning on cap rejection, strong retention until `remove(_:)` |
 | `Logger.emit(_:observers:)` | logs an event and notifies observers |
 
 ### HTML Document
@@ -347,7 +347,7 @@ in `Documentation/IMPLEMENTATION_PLAN.md`.
 
 | Type | Description |
 |---|---|
-| `AsyncSemaphore` | async counting semaphore for expensive verifications (the Argon2 concurrency cap). `wait()` suspends, never blocks a thread; `signal()` releases. NSLock guarded, all critical sections funneled through sync helpers (Foundation marks `NSLock` unavailable in async contexts) |
+| `AsyncSemaphore` | async counting semaphore for expensive verifications (the Argon2 concurrency cap). `wait()` suspends, never blocks a thread; `signal()` releases. `Mutex` (Swift `Synchronization`) guarded; waiters resume outside the lock |
 | `LoginThrottle` | fixed-window attempt limiter keyed by caller strings (`"ip:…"`, `"user:…"`). `record(_:now:)` returns whether the attempt is within the window budget; `reset(_:)` clears on success; `prune(before:)` bounds memory |
 | `SingleUseTokenStore` | bounded, expiring set of consumed stateless tokens; makes pre-auth CSRF tokens single-use. `consume(_:expiresAt:)` records the token and fails closed at capacity |
 

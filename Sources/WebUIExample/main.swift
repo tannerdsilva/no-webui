@@ -4,23 +4,26 @@ import NIOCore
 import NIOHTTP1
 import NIOPosix
 import NIOWebSocket
+import Synchronization
 import WebUI
 import WebUIDesignSystem
 
 // MARK: - Shared state
 
-final class ExampleState: @unchecked Sendable {
-	private let lock = NSLock()
-	private var _count: Int = 0
-	private var _echo: String = ""
+final class ExampleState: Sendable {
+	private struct Values {
+		var count = 0
+		var echo = ""
+	}
+	private let values = Mutex(Values())
 
 	var count: Int {
-		get { lock.lock(); defer { lock.unlock() }; return _count }
-		set { lock.lock(); defer { lock.unlock() }; _count = newValue }
+		get { values.withLock { $0.count } }
+		set { values.withLock { $0.count = newValue } }
 	}
 	var echo: String {
-		get { lock.lock(); defer { lock.unlock() }; return _echo }
-		set { lock.lock(); defer { lock.unlock() }; _echo = newValue }
+		get { values.withLock { $0.echo } }
+		set { values.withLock { $0.echo = newValue } }
 	}
 }
 

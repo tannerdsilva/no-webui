@@ -1,6 +1,7 @@
 import Testing
 import Foundation
 import Logging
+import Synchronization
 import WebUI
 import WebUIDesignSystem
 
@@ -100,6 +101,136 @@ func eventRouterEmitsHandled() async {
         return false
     }
     #expect(hasHandled)
+}
+
+// MARK: - ObserverList Hardening Tests (P0)
+
+@Test("ObserverList dedupes identity-duplicate registrations")
+func observerListDedupes() {
+    let list = ObserverList()
+    let collector = EventCollector()
+    let observer = TestObserver { collector.add($0) }
+    list.add(observer)
+    list.add(observer) // duplicate — must be a no-op
+    list.emit(.debug(message: "x"))
+    #expect(collector.count == 1)
+}
+
+@Test("ObserverList cap drops the first observer beyond maxObservers")
+func observerListCapDrops() {
+    let list = ObserverList(maxObservers: 1)
+    let a = EventCollector()
+    let b = EventCollector()
+    list.add(TestObserver { a.add($0) })
+    list.add(TestObserver { b.add($0) }) // rejected at cap
+    list.emit(.debug(message: "x"))
+    #expect(a.count == 1)
+    #expect(b.count == 0)
+}
+
+@Test("duplicate registrations do not consume cap slots")
+func observerListDuplicatesDoNotStarve() {
+    let list = ObserverList(maxObservers: 2)
+    let a = EventCollector()
+    let b = EventCollector()
+    let oa = TestObserver { a.add($0) }
+    list.add(oa)
+    list.add(oa) // duplicate must not eat a second slot
+    list.add(TestObserver { b.add($0) })
+    list.emit(.debug(message: "x"))
+    #expect(a.count == 1)
+    #expect(b.count == 1)
+}
+
+@Test("observer removed during emit completes its current turn then stops")
+func observerRemovedDuringEmit() {
+    let list = ObserverList()
+    let remover = SelfRemovingObserver(list: list)
+    let collector = EventCollector()
+    list.add(remover)
+    list.add(TestObserver { collector.add($0) })
+    list.emit(.debug(message: "turn"))
+    list.emit(.debug(message: "turn2"))
+    #expect(remover.received == 1)
+    #expect(collector.count == 2)
+}
+
+@Test("observer added during emit receives the next event, not the current one")
+func observerAddedDuringEmit() {
+    let list = ObserverList()
+    let lateCollector = EventCollector()
+    let adder = AddingObserver(list: list, late: TestObserver { lateCollector.add($0) })
+    list.add(adder)
+    list.emit(.debug(message: "turn"))
+    #expect(lateCollector.count == 0)
+    list.emit(.debug(message: "turn2"))
+    #expect(lateCollector.count == 1)
+}
+
+@Test("Logger.emit forwards events to registered observers")
+func loggerEmitForwardsToObservers() {
+    let observers = ObserverList()
+    let collector = EventCollector()
+    observers.add(TestObserver { collector.add($0) })
+    let logger = Logger(label: "test.emit")
+    logger.emit(.eventReceived(component: "c0", event: "click"), observers: observers)
+    #expect(collector.count == 1)
+    if case .eventReceived = collector.events[0] {} else {
+        Issue.record("expected .eventReceived through the logger funnel")
+    }
+}
+
+@Test("missing handler emits received + debug and never handled")
+func eventRouterMissingHandlerFunnel() async {
+    let observers = ObserverList()
+    let collector = EventCollector()
+    observers.add(TestObserver { collector.add($0) })
+    let router = EventRouter(observers: observers)
+    _ = await router.handle(EventData(component: "ghost", event: "click", data: [:]))
+    let kinds = collector.events.map { kindName(of: $0) }
+    #expect(kinds == ["received", "debug"])
+}
+
+@Test("ObservableEvent Codable round-trips every case")
+func observableEventCodableRoundTrip() throws {
+    let encoder = JSONEncoder()
+    let decoder = JSONDecoder()
+    let samples: [ObservableEvent] = [
+        .viewRendered(viewType: "Card", durationNanoseconds: 123),
+        .eventReceived(component: "c0", event: "click"),
+        .eventHandled(component: "c0", event: "click", fragmentCount: 2),
+        .fragmentSent(fragmentCount: 2, seq: 7),
+        .fragmentSent(fragmentCount: 1, seq: nil),
+        .websocketConnected,
+        .websocketDisconnected,
+        .websocketError(error: "boom"),
+        .error(message: "oops"),
+        .debug(message: "dbg"),
+    ]
+    for sample in samples {
+        let data = try encoder.encode(sample)
+        let back = try decoder.decode(ObservableEvent.self, from: data)
+        #expect(String(describing: back) == String(describing: sample))
+    }
+}
+
+@Test("ObserverList survives concurrent emit/add without deadlock")
+func observerListConcurrentHammer() {
+    let list = ObserverList()
+    let group = DispatchGroup()
+    let queue = DispatchQueue(label: "hammer", attributes: .concurrent)
+    for _ in 0..<8 {
+        queue.async(group: group) {
+            for _ in 0..<2000 {
+                if Int.random(in: 0..<10) == 0 {
+                    list.add(TestObserver { _ in })
+                } else {
+                    list.emit(.debug(message: "hammer"))
+                }
+            }
+        }
+    }
+    #expect(group.wait(timeout: .now() + 30) == .success)
 }
 
 // MARK: - Asset Embedding Tests
@@ -297,34 +428,30 @@ func fullPipelineRender() {
 // MARK: - Helpers
 
 /// thread-safe event collector for testing.
-private final class EventCollector: @unchecked Sendable {
-    private var _events: [ObservableEvent] = []
-    private var _count: Int = 0
-    private let lock = NSLock()
+private final class EventCollector: Sendable {
+    private struct State {
+        var events: [ObservableEvent] = []
+        var count = 0
+    }
+    private let state = Mutex(State())
 
     var events: [ObservableEvent] {
-        lock.lock()
-        defer { lock.unlock() }
-        return _events
+        state.withLock { $0.events }
     }
 
     var count: Int {
-        lock.lock()
-        defer { lock.unlock() }
-        return _count
+        state.withLock { $0.count }
     }
 
     func add(_ event: ObservableEvent) {
-        lock.lock()
-        _events.append(event)
-        _count += 1
-        lock.unlock()
+        state.withLock { state in
+            state.events.append(event)
+            state.count += 1
+        }
     }
 
     func increment() {
-        lock.lock()
-        _count += 1
-        lock.unlock()
+        state.withLock { $0.count += 1 }
     }
 }
 
@@ -335,5 +462,51 @@ private final class TestObserver: Observable {
     }
     func observe(_ event: ObservableEvent) {
         handler(event)
+    }
+}
+
+/// an observer that removes itself from the list the first time it observes.
+private final class SelfRemovingObserver: Observable, Sendable {
+    let list: ObserverList
+    private struct State {
+        var received = 0
+    }
+    private let state = Mutex(State())
+    var received: Int {
+        state.withLock { $0.received }
+    }
+    init(list: ObserverList) {
+        self.list = list
+    }
+    func observe(_ event: ObservableEvent) {
+        state.withLock { $0.received += 1 }
+        list.remove(self)
+    }
+}
+
+/// an observer that registers another observer the first time it observes.
+private final class AddingObserver: Observable, Sendable {
+    let list: ObserverList
+    let late: TestObserver
+    init(list: ObserverList, late: TestObserver) {
+        self.list = list
+        self.late = late
+    }
+    func observe(_ event: ObservableEvent) {
+        list.add(late)
+    }
+}
+
+private func kindName(of event: ObservableEvent) -> String {
+    switch event {
+    case .eventReceived: return "received"
+    case .eventHandled: return "handled"
+    case .debug: return "debug"
+    case .viewRendered: return "viewRendered"
+    case .fragmentSent: return "fragmentSent"
+    case .websocketConnected: return "wsConnected"
+    case .websocketDisconnected: return "wsDisconnected"
+    case .websocketError: return "wsError"
+    case .error: return "error"
     }
 }

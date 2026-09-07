@@ -4,56 +4,59 @@ import NIOCore
 import NIOHTTP1
 import NIOPosix
 import NIOWebSocket
+import Synchronization
 import WebUI
 import WebUIDesignSystem
 import WebUIChart
 
 // MARK: - Shared state
 
-final class SmokeState: @unchecked Sendable {
-	private let lock = NSLock()
-	private var _count: Int = 0
-	private var _progress: Double = 0.25
-	private var _echo: String = ""
-	// interactive table demo (server is the source of truth)
-	private var _tableSortColumn: Int = 0
-	private var _tableSortAsc: Bool = true
-	private var _tableSelected: Set<String> = []
-	private var _tableExpanded: Set<String> = []
+final class SmokeState: Sendable {
+	private struct Values {
+		var count = 0
+		var progress = 0.25
+		var echo = ""
+		// interactive table demo (server is the source of truth)
+		var tableSortColumn = 0
+		var tableSortAsc = true
+		var tableSelected: Set<String> = []
+		var tableExpanded: Set<String> = []
+		// interactive chart demo (chart selection: click a bar → server re-renders)
+		var chartSelected: String? = nil
+	}
+	private let values = Mutex(Values())
 
 	var count: Int {
-		get { lock.lock(); defer { lock.unlock() }; return _count }
-		set { lock.lock(); defer { lock.unlock() }; _count = newValue }
+		get { values.withLock { $0.count } }
+		set { values.withLock { $0.count = newValue } }
 	}
 	var progress: Double {
-		get { lock.lock(); defer { lock.unlock() }; return _progress }
-		set { lock.lock(); defer { lock.unlock() }; _progress = newValue }
+		get { values.withLock { $0.progress } }
+		set { values.withLock { $0.progress = newValue } }
 	}
 	var echo: String {
-		get { lock.lock(); defer { lock.unlock() }; return _echo }
-		set { lock.lock(); defer { lock.unlock() }; _echo = newValue }
+		get { values.withLock { $0.echo } }
+		set { values.withLock { $0.echo = newValue } }
 	}
 	var tableSortColumn: Int {
-		get { lock.lock(); defer { lock.unlock() }; return _tableSortColumn }
-		set { lock.lock(); defer { lock.unlock() }; _tableSortColumn = newValue }
+		get { values.withLock { $0.tableSortColumn } }
+		set { values.withLock { $0.tableSortColumn = newValue } }
 	}
 	var tableSortAsc: Bool {
-		get { lock.lock(); defer { lock.unlock() }; return _tableSortAsc }
-		set { lock.lock(); defer { lock.unlock() }; _tableSortAsc = newValue }
+		get { values.withLock { $0.tableSortAsc } }
+		set { values.withLock { $0.tableSortAsc = newValue } }
 	}
 	var tableSelected: Set<String> {
-		get { lock.lock(); defer { lock.unlock() }; return _tableSelected }
-		set { lock.lock(); defer { lock.unlock() }; _tableSelected = newValue }
+		get { values.withLock { $0.tableSelected } }
+		set { values.withLock { $0.tableSelected = newValue } }
 	}
 	var tableExpanded: Set<String> {
-		get { lock.lock(); defer { lock.unlock() }; return _tableExpanded }
-		set { lock.lock(); defer { lock.unlock() }; _tableExpanded = newValue }
+		get { values.withLock { $0.tableExpanded } }
+		set { values.withLock { $0.tableExpanded = newValue } }
 	}
-	// interactive chart demo (chart selection: click a bar → server re-renders)
-	private var _chartSelected: String? = nil
 	var chartSelected: String? {
-		get { lock.lock(); defer { lock.unlock() }; return _chartSelected }
-		set { lock.lock(); defer { lock.unlock() }; _chartSelected = newValue }
+		get { values.withLock { $0.chartSelected } }
+		set { values.withLock { $0.chartSelected = newValue } }
 	}
 }
 

@@ -166,9 +166,24 @@ let html = RenderContext.$current.withValue(context) {
 
 ### ObserverList
 
-`ObserverList` is a thread-safe collection of `Observable` protocol conformers.
-Observers receive `ObservableEvent` values for every framework event (rendering,
-event handling, WebSocket state changes). Use for logging, metrics, or debugging.
+`ObserverList` is a thread-safe collection of `Observable` protocol conformers,
+synchronized with the Swift `Synchronization` framework's `Mutex` (no
+`NSLock`/Foundation in the lock layer). registration is identity-deduped;
+rejections at the `maxObservers` cap log a warning instead of failing silently.
+observers are retained strongly until removed. delivers to a snapshot taken
+under the lock, so mutations from inside an `observe(_:)` callback take effect
+on the next `emit`.
+
+**what fires today.** the framework itself emits exactly three event kinds, all
+from `EventRouter.handle`: `eventReceived`, `eventHandled`, and `debug`
+(missing handler). the remaining cases — `viewRendered`, `fragmentSent`, the
+`websocket*` triad, and `error` — are extension points: the framework owns no
+transport (the WebSocket servers in the example targets drive NIO directly),
+and `View.render()` is a pure function by contract, so a render-timing emission
+cannot live inside `render()` without violating that invariant. adopters whose
+transport/render layer emits these should route them through
+`logger.emit(event, observers:)` so logging and notification stay on the single
+funnel. use the stack for logging, metrics, or debugging.
 
 ## Layer 3: HTML Document Assembly
 
@@ -260,5 +275,5 @@ See `Documentation/JS_RUNTIME.md` for detailed documentation of each module.
 | SVG icon injection | `IconSanitizer.sanitize()` (applied to every `WebUIIconCustom` body) strips `<script>`, `on*` event handlers, `foreignObject`, and `javascript:`/`data:`/`vbscript:` hrefs before emission; icon `aria-label`/`class`/`data-icon` are `htmlEscape()`d, so a hostile title cannot break out of the attribute (see `Documentation/ICONS.md`) |
 | CSP bypass | Auto-generated nonce per document, default CSP with `script-src 'nonce-...'` |
 | CSRF | `CSRFProtection` enum with HMAC-SHA256 stateless tokens, optional `Form.csrfToken` parameter |
-| Data race | `NSLock` on all `EventRouter.State` and `ObserverList` mutations |
+| Data race | `Mutex` (Swift `Synchronization`) on all `EventRouter.State` and `ObserverList` mutations |
 | Unbounded growth | Caps on `EventRouter.maxHandlers` (10K) and `ObserverList.maxObservers` (100) |

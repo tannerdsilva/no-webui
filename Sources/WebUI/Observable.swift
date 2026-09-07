@@ -1,5 +1,5 @@
-import Foundation
 import Logging
+import Synchronization
 
 // MARK: - ObservableEvent
 public enum ObservableEvent: Sendable, Codable {
@@ -20,37 +20,55 @@ public protocol Observable: AnyObject, Sendable {
 }
 
 // MARK: - ObserverList
-public final class ObserverList: @unchecked Sendable {
-    public let maxObservers: Int
-    private let lock = NSLock()
-    private var observers: [any Observable] = []
 
-    public init(maxObservers: Int = 100) {
+/// a thread-safe collection of `Observable` conformers. observers are retained
+/// strongly until removed — call `remove(_:)` when an observer's lifetime ends.
+/// registration is identity-deduped (adding the same instance twice is a no-op),
+/// and a rejection at the `maxObservers` cap is logged as a warning instead of
+/// failing silently, so a monitoring stack can never lose a sink without a trace.
+/// delivers to a snapshot taken under the lock: observers added or removed
+/// mid-emission take effect on the next `emit`. observers must not synchronously
+/// re-emit — reentrant dispatch is permitted but unguarded.
+public final class ObserverList: Sendable {
+    public let maxObservers: Int
+    public let logger: Logger
+    private struct State {
+        var observers: [any Observable] = []
+    }
+    private let state = Mutex(State())
+
+    public init(
+        maxObservers: Int = 100,
+        logger: Logger = Logger(label: "webui.observers")
+    ) {
         self.maxObservers = maxObservers
+        self.logger = logger
     }
+
+    /// register an observer. duplicate registrations are ignored; once the
+    /// `maxObservers` cap is reached new observers are rejected with a warning.
     public func add(_ observer: any Observable) {
-        lock.lock()
-        if observers.count >= maxObservers {
-            lock.unlock()
-            return
+        state.withLock { state in
+            guard !state.observers.contains(where: { $0 === observer }) else { return }
+            guard state.observers.count < maxObservers else {
+                logger.warning("ObserverList: observer cap reached (\(maxObservers)); remove(_:) unused observers or raise maxObservers.")
+                return
+            }
+            state.observers.append(observer)
         }
-        observers.append(observer)
-        lock.unlock()
     }
+
     public func remove(_ observer: any Observable) {
-        lock.lock()
-        observers.removeAll { $0 === observer }
-        lock.unlock()
+        state.withLock { $0.observers.removeAll { $0 === observer } }
     }
+
     public func removeAll() {
-        lock.lock()
-        observers.removeAll()
-        lock.unlock()
+        state.withLock { $0.observers.removeAll() }
     }
+
+    /// deliver an event to a snapshot of the current observers.
     public func emit(_ event: ObservableEvent) {
-        lock.lock()
-        let current = observers
-        lock.unlock()
+        let current = state.withLock { $0.observers }
         for observer in current {
             observer.observe(event)
         }
@@ -63,8 +81,9 @@ extension Logger {
     public func emit(_ event: ObservableEvent, observers: ObserverList? = nil) {
         switch event {
         case .viewRendered(let viewType, let durationNs):
-            let ms = Double(durationNs) / 1_000_000
-            self.trace("rendered \(viewType) in \(String(format: "%.2f", ms))ms")
+            // integer microseconds: stdlib-only arithmetic, no locale dependence
+            let us = durationNs / 1_000
+            self.trace("rendered \(viewType) in \(us)µs")
         case .eventReceived(let component, let event):
             self.debug("event received: \(event) on \(component)")
         case .eventHandled(let component, let event, let count):
