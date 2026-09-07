@@ -72,7 +72,7 @@ func runtimeEmptyFragmentRemovesElement() throws {
 	// ElementRef.remove()/me.remove() emit FragmentUpdate(id:, html: "") — the
 	// runtime must treat an empty fragment as "remove the element", never as a
 	// no-op replace. this is the pinned contract behind the .onDismiss API.
-	#expect(js.contains("if (html === '')"), "runtime lost the empty-fragment removal branch (ElementRef.remove() would no-op)")
+	#expect(js.contains("if (!fragment.firstChild)"), "runtime lost the empty-fragment removal branch (ElementRef.remove() would no-op)")
 	#expect(js.contains("el.remove()"), "runtime lost the element removal call")
 }
 

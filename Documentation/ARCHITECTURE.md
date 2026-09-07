@@ -268,7 +268,7 @@ See `Documentation/JS_RUNTIME.md` for detailed documentation of each module.
 
 | Threat | Mitigation |
 |---|---|
-| XSS via fragment injection | `sanitizeFragmentHTML()` decodes numeric/named character references first, then strips `<script>`, event handlers, and javascript: URLs before DOM insertion — entity-encoded `jav&#x61;script:` cannot ride through |
+| XSS via fragment injection | the fragment sanitizer parses each patch into a detached DOM subtree (target element as parse context), then strips `<script>` elements, `on*` event-handler attributes, and unsafe `href`/`src`/`action`/`formaction`/`xlink:href` values on the real nodes — the parser resolves character references and quoting, so entity-encoded (`jav&#x61;script:`, `java&Tab;script:`), unquoted, and space-less-handler payloads cannot reach the DOM |
 | Prototype pollution | `State.set()` rejects keys `__proto__`, `constructor`, `prototype` |
 | `javascript:` URLs | `sanitizeURL()` blocks `javascript:`, `data:`, `vbscript:` in Link, Image, Form, and the js Router — c0 controls and ascii whitespace are stripped before the scheme check, matching the browser's parser so padded/obfuscated schemes are caught |
 | Attribute injection | `htmlEscape()` on every attribute key and value the framework emits — primitive `id`/`class`/`name`/`for`/`data-status`/`method` parameters included, not just modifiers |

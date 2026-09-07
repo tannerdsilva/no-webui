@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'nonce-NsMf0jzuamUfc5EyPuNLcw'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:;">
+          <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'nonce-JO_opj6LwJPbtu6zp-Wihw'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:;">
   <title>WebUI UI Showcase</title>
   
   <style>
@@ -7933,7 +7933,7 @@ Plain text content<span class="text-escaped">&lt;script&gt;alert(&#39;xss&#39;)&
 <label class="demo-label">Country:</label><select id="demo-country"><option value="us" selected>United States</option><option value="ca">Canada</option><option value="uk">United Kingdom</option><option value="de">Germany</option><option value="jp">Japan</option></select>
 </div></div>
 </div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
-<h3 class="demo-card-title">Form with CSRF</h3><div class="demo-card-body"><form id="demo-form" action="/submit" method="post"><input type="hidden" name="_csrf" value="ZGVtby1mb3JtOjE3ODgzOTY0MTI6NWFjZmRiNDZlYTVkMDM1OTA3YmU5N2I0NDIzYmZlODI2YmRkMTY5ODM2ZWIzYTg0NTIxN2QxNzQwODcxOGExYw=="><div class="vstack spacing-12 align-flex-start">
+<h3 class="demo-card-title">Form with CSRF</h3><div class="demo-card-body"><form id="demo-form" action="/submit" method="post"><input type="hidden" name="_csrf" value="ZGVtby1mb3JtOjE3ODg3ODgxNDQ6Q0I2QjAwRDE1RTIyNDM0MDg1MkFDNDI0OUMyNDlCMkI6MjEyM2FhNTBhZWI0MmEzYWEyMjNiMmIwNjFiZDRiYWUwZDc1NzI2MTQ4ZmNlZmM4M2E1YWYzZjNjY2FmYTg2Mg=="><div class="vstack spacing-12 align-flex-start">
 <label class="demo-label">Name:</label><input id="form-name" type="text" placeholder="Your name"><label class="demo-label">Message:</label><textarea id="form-message" rows="3" placeholder="Your message"></textarea><button id="form-submit" type="submit">Submit</button>
 </div></form></div>
 </div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
@@ -8312,7 +8312,7 @@ Plain text content<span class="text-escaped">&lt;script&gt;alert(&#39;xss&#39;)&
 </div></main>
 </div></div>
 </div>
-  <script nonce="NsMf0jzuamUfc5EyPuNLcw">
+  <script nonce="JO_opj6LwJPbtu6zp-Wihw">
 
 window.WebUIRuntime = (function () {
   'use strict';
@@ -8817,19 +8817,39 @@ window.WebUIRuntime = (function () {
       delete pending[id];
     }
 
-    function sanitizeFragmentHTML(html) {
+    var URL_ATTRS = ['href', 'src', 'action', 'formaction', 'xlink:href'];
 
-      html = html.replace(/&#(\d+);/g, function (_, n) { return String.fromCharCode(Number(n)); });
-      html = html.replace(/&#x([0-9a-f]+);/gi, function (_, h) { return String.fromCharCode(parseInt(h, 16)); });
-      html = html.replace(/&colon;/gi, ':');
-
-      html = html.replace(new RegExp('<script[^<]*(?:<[^<]*)*' + '<' + '/script>', 'gi'), '');
-
-      html = html.replace(new RegExp("\\s+on\\w+\\s*=\\s*(?:\"[^\"]*\"|'[^']*'|[^\\s>]+)", 'gi'), '');
-
-      html = html.replace(new RegExp('\\s+(href|src|action|formaction|xlink:href)\\s*=\\s*"javascript:[^"]*"', 'gi'), ' $1=""');
-      html = html.replace(new RegExp("\\s+(href|src|action|formaction|xlink:href)\\s*=\\s*'javascript:[^']*'", 'gi'), " $1=''");
-      return html;
+    function sanitizeFragment(html, el) {
+      var range = document.createRange();
+      range.selectNode(el);
+      var frag = range.createContextualFragment(html);
+      var offenders = Array.prototype.slice.call(frag.querySelectorAll('*'));
+      var pendingTemplates = Array.prototype.slice.call(frag.querySelectorAll('template'));
+      while (pendingTemplates.length) {
+        var t = pendingTemplates.shift();
+        pendingTemplates = pendingTemplates.concat(Array.prototype.slice.call(t.content.querySelectorAll('template')));
+        offenders = offenders.concat(Array.prototype.slice.call(t.content.querySelectorAll('*')));
+      }
+      for (var i = 0; i < offenders.length; i++) {
+        var node = offenders[i];
+        if (node.tagName === 'SCRIPT') {
+          node.parentNode.removeChild(node);
+          continue;
+        }
+        var attrs = node.attributes;
+        for (var j = attrs.length - 1; j >= 0; j--) {
+          var name = attrs[j].name;
+          if (/^on/i.test(name)) {
+            node.removeAttribute(name);
+            continue;
+          }
+          var lower = name.toLowerCase();
+          if (URL_ATTRS.indexOf(lower) !== -1 && !isSafeUrl(node.getAttribute(name))) {
+            node.setAttribute(name, '');
+          }
+        }
+      }
+      return frag;
     }
 
     function replaceElement(id, html) {
@@ -8839,9 +8859,9 @@ window.WebUIRuntime = (function () {
         return;
       }
 
-      html = sanitizeFragmentHTML(html);
+      var fragment = sanitizeFragment(html, el);
 
-      if (html === '') {
+      if (!fragment.firstChild) {
         el.remove();
         log.debug('Removed #' + id);
         return;
@@ -8849,9 +8869,6 @@ window.WebUIRuntime = (function () {
 
       var savedState = saveInputState(el);
 
-      var range = document.createRange();
-      range.selectNode(el);
-      var fragment = range.createContextualFragment(html);
       el.parentNode.replaceChild(fragment, el);
 
       restoreInputState(id, savedState);

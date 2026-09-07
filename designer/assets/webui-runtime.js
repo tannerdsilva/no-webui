@@ -502,23 +502,39 @@ window.WebUIRuntime = (function () {
       delete pending[id];
     }
 
-    function sanitizeFragmentHTML(html) {
+    var URL_ATTRS = ['href', 'src', 'action', 'formaction', 'xlink:href'];
 
-      html = html.replace(/&#(\d+);/g, function (_, n) { return String.fromCharCode(Number(n)); });
-      html = html.replace(/&#x([0-9a-f]+);/gi, function (_, h) { return String.fromCharCode(parseInt(h, 16)); });
-      html = html.replace(/&colon;/gi, ':');
-
-      html = html.replace(new RegExp('<script[^<]*(?:<[^<]*)*' + '<' + '/script>', 'gi'), '');
-
-      html = html.replace(new RegExp("\\s+on\\w+\\s*=\\s*(?:\"[^\"]*\"|'[^']*'|[^\\s>]+)", 'gi'), '');
-
-      html = html.replace(new RegExp('(\\s+(?:href|src|action|formaction|xlink:href)\\s*=\\s*)"([^"]*)"', 'gi'), function (m, prefix, value) {
-        return isSafeUrl(stripUrlControlChars(value)) ? m : prefix + '""';
-      });
-      html = html.replace(new RegExp("(\\s+(?:href|src|action|formaction|xlink:href)\\s*=\\s*)'([^']*)'", 'gi'), function (m, prefix, value) {
-        return isSafeUrl(stripUrlControlChars(value)) ? m : prefix + "''";
-      });
-      return html;
+    function sanitizeFragment(html, el) {
+      var range = document.createRange();
+      range.selectNode(el);
+      var frag = range.createContextualFragment(html);
+      var offenders = Array.prototype.slice.call(frag.querySelectorAll('*'));
+      var pendingTemplates = Array.prototype.slice.call(frag.querySelectorAll('template'));
+      while (pendingTemplates.length) {
+        var t = pendingTemplates.shift();
+        pendingTemplates = pendingTemplates.concat(Array.prototype.slice.call(t.content.querySelectorAll('template')));
+        offenders = offenders.concat(Array.prototype.slice.call(t.content.querySelectorAll('*')));
+      }
+      for (var i = 0; i < offenders.length; i++) {
+        var node = offenders[i];
+        if (node.tagName === 'SCRIPT') {
+          node.parentNode.removeChild(node);
+          continue;
+        }
+        var attrs = node.attributes;
+        for (var j = attrs.length - 1; j >= 0; j--) {
+          var name = attrs[j].name;
+          if (/^on/i.test(name)) {
+            node.removeAttribute(name);
+            continue;
+          }
+          var lower = name.toLowerCase();
+          if (URL_ATTRS.indexOf(lower) !== -1 && !isSafeUrl(node.getAttribute(name))) {
+            node.setAttribute(name, '');
+          }
+        }
+      }
+      return frag;
     }
 
     function replaceElement(id, html) {
@@ -528,9 +544,9 @@ window.WebUIRuntime = (function () {
         return;
       }
 
-      html = sanitizeFragmentHTML(html);
+      var fragment = sanitizeFragment(html, el);
 
-      if (html === '') {
+      if (!fragment.firstChild) {
         el.remove();
         log.debug('Removed #' + id);
         return;
@@ -538,9 +554,6 @@ window.WebUIRuntime = (function () {
 
       var savedState = saveInputState(el);
 
-      var range = document.createRange();
-      range.selectNode(el);
-      var fragment = range.createContextualFragment(html);
       el.parentNode.replaceChild(fragment, el);
 
       restoreInputState(id, savedState);

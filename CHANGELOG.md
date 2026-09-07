@@ -136,8 +136,12 @@ all notable changes to this project are documented here.
 - every `id` / `class` / `name` / `for` / `data-status` / `method` / icon
   emission site across the core primitives, semantic containers, and
   design-system components is now html-escaped.
-- `sanitizeFragmentHTML()` decodes numeric and named character references
-  before stripping, so entity-encoded `javascript:` URLs are neutralized.
+- the fragment sanitizer now parses each patch into a detached DOM subtree
+  and strips scripts, `on*` handlers, and unsafe URL attributes on the real
+  nodes — the parser itself resolves character references and quoting, so
+  entity-obfuscated, unquoted, and whitespace-obfuscated `javascript:` URLs
+  are all neutralized (the previously-bypassing `&Tab;`/`&NewLine;`/unquoted/
+  space-less-handler payloads are now blocked).
 - focus/blur events are delivered via the bubbling `focusin` / `focusout` and
   normalized to the declared event name — `.onFocus` and `.onBlur` now
   actually fire.
@@ -245,8 +249,9 @@ all notable changes to this project are documented here.
 - `EventRouter.maxHandlers` cap (default 10,000) to prevent unbounded growth.
 - `sanitizeURL()` — blocks `javascript:`, `data:`, `vbscript:` protocols.
   applied to `Link`, `Image`, `Form`.
-- `sanitizeFragmentHTML()` — strips `<script>` tags, event handler attributes,
-  and `javascript:` URLs before DOM insertion.
+- fragment sanitizer (`sanitizeFragment`) — parses each patch into a detached
+  DOM subtree and strips `<script>` tags, event handler attributes, and
+  unsafe URL attributes before insertion.
 - auto-generated CSP with per-document nonces. all inline `<script>` tags
   include `nonce="..."`.
 - prototype pollution protection — `State.set()` rejects `__proto__`,
@@ -304,7 +309,10 @@ all notable changes to this project are documented here.
   array would have failed to decode).
 - JS runtime `destroy()` now removes the `popstate` listener it registered.
 - prototype pollution via `State.set("__proto__.polluted", value)`.
-- XSS via WebSocket fragment injection (`sanitizeFragmentHTML`).
+- XSS via WebSocket fragment injection — the string-regex sanitizer passes
+  were replaced by a DOM-based sanitizer that also blocks
+  `&Tab;`/`&NewLine;`-entity-obfuscated schemes, unquoted URL values, and
+  space-less `on*` attributes.
 - `javascript:` URL execution in `Link.href`, `Image.src`, `Form.action`.
 - attribute injection via `EventHandlerModifier` and `HTMLAttribute`.
 - CSP bypass — no default CSP and `'unsafe-inline'` required.

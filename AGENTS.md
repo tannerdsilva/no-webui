@@ -211,8 +211,13 @@ these must never be weakened:
    style-src, img-src, connect-src.
 2. **URL sanitization** — `sanitizeURL()` blocks `javascript:`, `data:`,
    `vbscript:` protocols. applied to Link, Image, Form, Router.
-3. **HTML sanitization** — `sanitizeFragmentHTML()` strips `<script>` tags,
-   event handler attributes, and javascript: URLs before DOM insertion.
+3. **HTML sanitization** — the runtime parses each fragment into a detached
+   DOM subtree (the target element as parse context, so table fragments
+   survive), then strips `<script>` elements, `on*` event-handler attributes,
+   and unsafe `href`/`src`/`action`/`formaction`/`xlink:href` values on the
+   real nodes — the parser itself resolves character references and attribute
+   quoting, so entity- and whitespace-obfuscated `javascript:` schemes cannot
+   ride into the DOM.
 4. **Prototype pollution protection** — `State.set()` rejects `__proto__`,
    `constructor`, `prototype` keys.
 5. **Attribute escaping** — `htmlEscape()` on all attribute keys and values

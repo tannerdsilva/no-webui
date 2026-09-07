@@ -13,9 +13,10 @@ registry with logout teardown, ping-path liveness checks, an idle read
 timeout, a global Argon2 concurrency cap, per-IP + per-account login
 throttles, single-use login CSRF tokens (with a per-token nonce in the token
 format), `Cache-Control: no-store` + `X-Content-Type-Options: nosniff` on
-every response, and a client `sanitizeFragmentHTML` scheme check that strips
-ASCII whitespace/C0 controls (whitespace-obfuscated `javascript:` schemes are
-neutralized on the client side exactly as the server-side sanitizer does).
+every response, and a client side fragment sanitizer that parses each
+patch into a detached DOM subtree before insertion (entity- and
+whitespace-obfuscated `javascript:` schemes are neutralized on the client
+side exactly as the server-side sanitizer does).
 still designed but **not yet implemented**: AD-2 (the `hello` render-token
 handshake), session-bound CSRF (`AuthenticatedSession.csrfSeed` is stored but
 unused), per-session state containers, AD-4 (secret persistence + rotation),
@@ -329,7 +330,7 @@ Single `webui_sessions` env, one persistent environment, one writer:
 | Cross-site WS hijacking | `Origin == Host` **and** a valid session cookie at accept-time; refused upgrades answer `403` and close |
 | Revoked-session push | **implemented in the example**: per-session connection registry — logout closes every live socket immediately; per-event + ping liveness checks remain the backstop |
 | Cache / bfcache leak | `Cache-Control: no-store` + `X-Content-Type-Options: nosniff` on every response (keeps the authenticated dashboard out of the http cache and out of the back-forward cache after logout) |
-| Client fragment XSS | `sanitizeFragmentHTML` strips ASCII whitespace/C0 controls from URL values before the scheme check — whitespace-obfuscated `javascript:` schemes (`java&#x09;script:`, `java\t script:`) are neutralized client-side, mirroring the server sanitizer |
+| Client fragment XSS | the fragment sanitizer parses each patch into a detached DOM subtree (target element as context) and strips `<script>` elements, `on*` handlers, and unsafe `href`/`src`/`action`/`formaction`/`xlink:href` values on the real nodes — the parser resolves character references and quoting, so entity-obfuscated (`java&Tab;script:`), whitespace-obfuscated (`java&#x09;script:`), unquoted, and space-less-handler payloads are all neutralized client-side, mirroring the server sanitizer |
 | Stale client replay | queue scrub on redirect/terminal failure (above) |
 | Secret loss on restart | persisted HMAC secret + documented rotation (Decision 4) — **not yet implemented** |
 | Credential database loss | LMDB backup/restore runbook (§operational surface) |
