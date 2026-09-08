@@ -81,8 +81,11 @@ let channel = try await bootstrap.bind(host: "0.0.0.0", port: 9090).get()
 
 ## 6. Handle WebSocket Events
 
-the client sends a wrapped `{type:"event", component, event, data}` frame.
-decode it as `WSIncoming`, route it through `router.handle`, and wrap the
+the client sends a wrapped `{type:"event", component, event, data}` frame
+(plus an optional `token` — the per-render ws binding id — when the page was
+served with a `RuntimeConfig.renderToken`). decode it with
+`WSIncoming(jsonText:)` (the data-free, nesting-capped wire path), route it
+through `router.handle`, and wrap the
 resulting fragments in `WSOutgoing.update(fragments:)` so the runtime patches
 the targets:
 

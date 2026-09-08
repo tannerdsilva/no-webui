@@ -131,8 +131,8 @@ every attribute parameter (`id`, `class`, `name`, `for`, `data-status`,
 
 | Type | Parameters | Description |
 |---|---|---|
-| `HTMLDocument` | title, body, styles, rawStyles, scripts, contentSecurityPolicy, includeRuntime, runtimeConfig, devMode, head, bodyAttributes, lang | complete HTML document with auto-generated CSP and nonce. shipped css is minified (comments + blank lines stripped) at render time |
-| `WebUIDocument` | same as HTMLDocument | HTML document with the full design system css (`LayoutStyles.complete` + `WebUIAssets.css`) |
+| `HTMLDocument` | title, body, styles, rawStyles, scripts, contentSecurityPolicy, includeRuntime, runtimeConfig, devMode, head, bodyAttributes, lang, preMinifiedStyles | complete HTML document with auto-generated CSP and nonce. shipped css is minified (comments + blank lines stripped) unless `preMinifiedStyles: true` embeds the caller-provided combined sheet verbatim (used by `WebUIDocument`'s hoisted sheet) |
+| `WebUIDocument` | same as HTMLDocument | HTML document with the full design system css — the record sheet (layout rules + embedded css) is minified once into `WebUIDocument.minifiedDesignStyles` and embedded verbatim on every render (`preMinifiedStyles: true`), removing the old per-render minify of ~300 kb css (~11 ms in release → <0.01 ms) |
 
 `runtimeConfig` (a `RuntimeConfig?`) changes only the runtime bootstrap: with a
 non-empty config the page emits `WebUIRuntime.init({...})`; with no config the
@@ -173,6 +173,8 @@ conformance decodes through the underlying decoder's own bounds (the shipped
 servers use the capped path) |
 | `WSOutgoing.jsonText` / `jsonBytes` | compact data-free emission of a server message |
 | `constantTimeEquals(_ lhs:, _ rhs:)` | constant-time equality over byte sequences (any `Sequence` of `UInt8`, e.g. `[UInt8]`) — no early exit on an equal-length input; used for MAC and token compares |
+| `DesignSystemAssets.minifiedCss` | `WebUIAssets.css` minified once — what the reference servers serve on `/__assets/css` (comment-free; the raw working file with designer notes never ships). `DesignSystemAssets.prewarm()` eagerly initialises both hoisted sheets at startup |
+| `ConnectionGate` | Mutex-backed admission counter for concurrent connections (`tryAcquire`/`release`/`activeCount`). the reference servers acquire it in the child channel initializer — before any request or upgrade negotiation — so bare connect-only sockets count toward `--max-connections` (default 256) and a connect-flood cannot sidestep the cap; slots return on channel close |
 | `injectAttributes(into html: String, _ attributes: String) -> String` | inject attributes into the first HTML tag |
 | `sanitizeURL(_ url: String) -> String?` | nil for `javascript:`, `data:`, `vbscript:` — strips c0 controls and ascii whitespace first, matching the browser's URL parser, so padded/obfuscated schemes are caught too |
 | `markdownToHTML(_ markdown: String) -> String` | minimal safe markdown subset: atx headings, bullet/numbered lists, `**bold**`, `*emphasis*`, `` `code` ``, `[label](url)` (url-sanitized). input is escaped before tokenizing; unpaired delimiters render literally |
@@ -376,14 +378,21 @@ A SwiftNIO-based login-gated interactive demo on :9091 (sign in with `admin` /
 `password`). demonstrates the auth stack end to end: runtime-free login page
 (native POST, synchronizer CSRF, hardened CSP, `X-Frame-Options`), single-use
 login CSRF tokens, per-IP + per-account login throttles, a global Argon2id
-concurrency cap, dummy-hash equalization, `SessionToken` + in-memory session
-store + cookie issuance, the interactive dashboard (counter / progress / echo
-/ optimistic reset) under `AuthContext`, a per-session interactive router,
-**session-gated** WebSocket upgrade (foreign/no-origin/no-session refusals
-answer `403`), a per-session connection registry that **closes every live
-socket on logout**, per-event + ping liveness enforcement, an idle read
-timeout on sockets, `Cache-Control: no-store` + `nosniff` on every response,
-and CSRF-protected POST logout.
+concurrency cap on a dedicated `NIOThreadPool` (never the event loop),
+dummy-hash equalization, `SessionToken` + in-memory session store + cookie
+issuance, the interactive dashboard (counter / progress / echo / optimistic
+reset) under `AuthContext`, a per-session interactive router keyed by a
+**per-render ws token** (every `event`/`ping` carries it; unknown tokens get a
+redirect + close — a stale page from another session cannot drive the
+session's router), a **session-gated** WebSocket upgrade (foreign/no-origin/
+no-session refusals answer `403`), a per-session connection registry that
+**closes every live socket on logout**, per-event + ping liveness enforcement,
+an accept-time connection gate (`--max-connections`, default 256), a top-level
+120 s read-idle reaper (plain http + websockets), awaited terminal-write
+responses, `Cache-Control: no-store` + `nosniff` + `X-Frame-Options` on every
+response, the minified design sheet on `/__assets/css`, a 60-second
+maintenance sweep (sessions, routers, throttle windows, token store), and
+CSRF-protected POST logout.
 
 **Endpoints:**
 - `GET /login` — static login page (no JS runtime); mints a fresh CSRF token
@@ -392,10 +401,15 @@ and CSRF-protected POST logout.
 - `GET /` — authenticated dashboard, else `303` to `/login`
 - `POST /logout` — CSRF-protected logout → `303` + cookie clear + live-socket
   teardown (`GET` → 405)
-- `GET /__assets/css` / `GET /__assets/js` — design system + runtime
+- `GET /__assets/css` / `GET /__assets/js` — minified design sheet + runtime
 - `WebSocket /ws` — valid-session same-origin interactive events only
 
 **Port:** 9091
 
-not a deployment template: the Argon2 concurrency cap, session caps/sweep, and
-per-session state containers are deferred to M2 (see the plan).
+**Flags:** `--port`, `--event-loops` (nio group size, default core count),
+`--argon2-workers` (kdf pool, default 2), `--max-connections` (default 256) —
+tuned for small hosts (a 2 gb / 4-core box).
+
+not a deployment template: session caps per user and per-session state
+containers are deferred (see the plan); the Argon2 cap, sweep, and render-token
+binding described above are shipped.

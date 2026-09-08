@@ -174,6 +174,7 @@ Manages the WebSocket connection with automatic reconnection.
 | `debounceMaxWaitMs` | 1000ms | Maximum input debounce wait |
 | `optimisticSettleMs` | 5000ms | Unconfirmed optimistic patch rollback timeout |
 | `logLevel` | `warn` | One of `debug`, `info`, `warn`, `error`, `silent` |
+| `renderToken` | (none) | The page's per-render ws binding id; when set, every `event`/`ping` carries it so a server that mints tokens can route each message to the page's render and reject stale pages from other sessions (see the AUTH_SESSIONS render-token section) |
 
 **Reconnection:** uses exponential backoff starting at 1 second, doubling each
 attempt, capped at `wsMaxReconnectDelay`. a jitter multiplier of 0.5–1.5× is

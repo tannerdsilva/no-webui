@@ -10,10 +10,10 @@ zero external CSS/JS frameworks — the entire UI compiles into the binary.
 |---|---|---|
 | `WebUI` | `Sources/WebUI/` | Core: View protocol, ViewBuilder, primitives, layouts, modifiers, CSS system, HTML document assembly, WebSocket protocol, JS runtime, native svg iconography (`WebUIIcon`, `IconName`) |
 | `WebUIDesignSystem` | `Sources/WebUIDesignSystem/` | Design system: 225 CSS custom properties (tokens), 22 styled components (Button, Card, Input, Modal, etc.) |
-| `WebUIAuth` | `Sources/WebUIAuth/` | Authentication + sessions: identity model, session tokens, cookies, in-memory + LMDB session stores, Argon2id password verification, constant-time compare, `AuthContext` |
+| `WebUIAuth` | `Sources/WebUIAuth/` | Authentication + sessions: identity model, session tokens, cookies, the `AuthSessionStore` protocol + in-memory store, Argon2id password verification (thread-pool offloaded in the reference server), constant-time compare, `AuthContext` — a persistent store is backend-provided (the LMDB store was removed from the package 2026-09) |
 | `WebUIAssetTool` | `Sources/WebUIAssetTool/` | Build-time executable that embeds CSS + JS as Swift string constants |
 | `WebUIIconTool` | `Sources/WebUIIconTool/` | Build-time + standalone svg icon toolset (`generate`/`lint`/`list`/`stats`/`render-preview`) that turns `designer/icons/icon-manifest.json` into the `IconName` catalog (see `Documentation/ICONS.md`) |
-| `WebUIExample` | `Sources/WebUIExample/` | HTTP/WebSocket example server (SwiftNIO-based counter app) |
+| `WebUIExample` | `Sources/WebUIExample/` | HTTP/WebSocket example server (SwiftNIO-based counter app; awaited-write responses, accept-time `ConnectionGate`, 120 s idle reaper, security headers) |
 | `WebUIAuthExample` | `Sources/WebUIAuthExample/` | Login-gated interactive demo: native-POST login page + authenticated dashboard (admin / password) |
 | `WebUIShowcase` | `Sources/WebUIShowcase/` | Showcase server + static HTML generator (`showcase` plugin) |
 | `WebUISmokeTest` | `Sources/WebUISmokeTest/` | Smoke/demo server hosted by the `serve`/`smoke`/`fullstack-smoke` plugins |

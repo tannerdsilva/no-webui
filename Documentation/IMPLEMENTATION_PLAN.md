@@ -1,5 +1,16 @@
 # Implementation Plan — Authentication & Sessions
 
+_Status: **historical plan.** execution began 2026-08-27; M0 shipped, and the
+M1/M2 shapes shifted on the way (2026-09). the authoritative, current design
+lives in `Documentation/AUTH_SESSIONS.md` — notably Decision 2, where AD-2
+shipped as a **per-message render token** on every `event`/`ping`: no `hello`
+message, no queue scrub, no reconnect cap (the server-side token gate is the
+cross-session replay defense). the maintenance sweep runs as a 60-second
+structured task in the reference servers, not a `ServiceGroup` `Service`, and
+the reference servers run as `@main` async task groups (no
+swift-service-lifecycle dependency). items below that describe the superseded
+shapes are marked `[superseded]`._
+
 _Status: proposed, revision 2. revision 2 folds in the plan-skeptic review
 (2026-08-27); every change from revision 1 is marked `[r2]`. execution began
 2026-08-27 — milestone M0 is implemented (see "execution status" below). to be
@@ -92,7 +103,7 @@ pinned demo.
 | ID | Decision | Consequence for the plan |
 |---|---|---|
 | AD-1 | login is native HTTP form POST; login page ships without the JS runtime | new single-route urlencoded parser; `includeRuntime: false` document convenience |
-| AD-2 | one `hello` WS message carries a per-render token | protocol + runtime + both node drivers + both reference servers change atomically (item M1-T2) |
+| AD-2 | per-message render token: every `event`/`ping` carries the page's render token — shipped **without** a `hello` message `[superseded the original one-shot design]` | protocol + runtime + reference servers change atomically (item M1-T2); the shipped shape is `AUTH_SESSIONS.md` Decision 2 |
 | AD-3 | absolute session expiry, throttled touch, validation-cache backstop | per-event authz is cache reads, not LMDB; primary enforcement is teardown |
 | AD-4 | auth HMAC secret persisted in an LMDB metadata env, env-var override | secret lifecycle item M2-T8; rotation invalidates tokens (documented) |
 
@@ -250,7 +261,11 @@ not a deployable release.
   the test target — M0-T11 harness); POST body parsed correctly plus malformed
   body 400; cookie flags exact; the `Secure` warning fires
 
-### M1-T2 — `hello` handshake (atomic across all compile sites) `[r2]`
+### M1-T2 — `hello` handshake (atomic across all compile sites) `[r2]` `[superseded]`
+
+_[superseded] — shipped as the per-message render token (every `event`/`ping`
+carries it); see `AUTH_SESSIONS.md` Decision 2. the body below is retained as
+the original design record._
 - surface, one commit: `Sources/WebUI/WebSocketProtocol.swift`
   (`WSIncoming.hello`), `Sources/WebUI/HTMLDocument.swift` (emit
   `data-webui-render` on `body`), `designer/assets/webui-runtime.js` (send
@@ -353,7 +368,11 @@ not a deployable release.
   in a cross-origin iframe (probe with a live iframe test, not a substring
   check); the meta CSP contains `form-action 'self'` + `base-uri 'self'`
 
-### M1-T8 — runtime: queue scrub + configurable terminal failure path `[r2]`
+### M1-T8 — runtime: queue scrub + configurable terminal failure path `[r2]` `[superseded]`
+
+_[superseded] — not shipped: no queue scrub, no reconnect cap, no terminal
+redirect step. the per-message render token closes the cross-session replay
+server-side; see `AUTH_SESSIONS.md` Decision 2 and the JS runtime section._
 - surface: `designer/assets/webui-runtime.js`, `Sources/WebUI/RuntimeConfig.swift`
   + bootstrap, pins
 - scrub the offline message queue on server-initiated `redirect`; capped
@@ -480,7 +499,13 @@ table; adversary probes pass; the `ARCHITECTURE.md` security table is extended
 - acceptance: fresh boot persists + reloads; env override wins; rotation
   invalidates old tokens within one CSRF max-age
 
-### M2-T9 — sweep service
+### M2-T9 — sweep service `[superseded]`
+
+_[superseded] — shipped (2026-09) as a 60-second structured maintenance task
+inside the reference auth server's task group, not a `ServiceGroup` `Service`:
+purges expired session rows + router entries and prunes throttle windows + the
+single-use token store; a persistent backend store should schedule the
+equivalent sweep._
 - surface: `Sources/WebUIAuth/Server/SessionSweepService.swift`
 - 5-minute cadence: purge expired session rows + stale throttle attempts
   (`[r2]` note: validation-cache cells self-expire by TTL — the sweep does not

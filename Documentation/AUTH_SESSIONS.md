@@ -13,15 +13,23 @@ registry with logout teardown, ping-path liveness checks, an idle read
 timeout, a global Argon2 concurrency cap, per-IP + per-account login
 throttles, single-use login CSRF tokens (with a per-token nonce in the token
 format), `Cache-Control: no-store` + `X-Content-Type-Options: nosniff` on
-every response, and a client side fragment sanitizer that parses each
-patch into a detached DOM subtree before insertion (entity- and
-whitespace-obfuscated `javascript:` schemes are neutralized on the client
-side exactly as the server-side sanitizer does).
-still designed but **not yet implemented**: AD-2 (the `hello` render-token
-handshake), session-bound CSRF (`AuthenticatedSession.csrfSeed` is stored but
-unused), per-session state containers, AD-4 (secret persistence + rotation),
-a framework-level teardown fan-out `SessionManager`, the sweep `Service`, and
-the audit trail (milestones M1–M2 of `Documentation/IMPLEMENTATION_PLAN.md`).
+every response, a client side fragment sanitizer that parses each patch into
+a detached DOM subtree before insertion (entity- and whitespace-obfuscated
+`javascript:` schemes are neutralized on the client side exactly as the
+server-side sanitizer does), and — from the 2026-09 hardening + small-host
+passes — **per-message render-token ws binding** (Decision 2: every
+`event`/`ping` carries the page's render token; no `hello` message),
+fail-loud entropy everywhere, awaited terminal-write responses, an
+accept-time connection gate, a 60-second maintenance sweep, argon2 on a
+dedicated thread pool, and the pre-minified sheet hoisted to a startup
+constant.
+still designed but **not yet implemented**: session-bound CSRF
+(`AuthenticatedSession.csrfSeed` is stored but unused), per-session state
+containers, AD-4 (secret persistence + rotation), a framework-level teardown
+fan-out `SessionManager`, and the audit trail. the plan's `hello` handshake
+and runtime reconnect-cap/queue-scrub were **deliberately superseded**: the
+render token rides every message instead (no handshake ordering, no queue
+scrub — a stale queue's events carry a token the current session rejects).
 line numbers cited below reflect the tree at the time of the last adversarial
 pass and may drift.
 
@@ -220,9 +228,10 @@ Single `webui_sessions` env, one persistent environment, one writer:
 | `user:<identityID>` | DupSort of `<sessionID>` | logout-everywhere + per-user session caps (default max 10; oldest evicted on create) |
 | `audit:<seq>` | auth event record | optional audit trail (append-only) |
 
-- expiry is computed from `createdAt`/`expiresAt`; a sweep `Service` in the
-  `ServiceGroup` purges expired rows on a 5-minute cadence and evicts stale
-  validation-cache cells.
+- expiry is computed from `createdAt`/`expiresAt`; the reference auth server
+  runs a 60-second maintenance task that purges expired sessions + their
+  router entries and prunes throttle windows + the single-use token store. a
+  persistent backend store should schedule the equivalent sweep.
 - the LMDB-backed store that shipped in earlier trees was removed from the
   package (2026-09) to keep QuickLMDB out of the core dependency graph; the
   store protocol keeps the backend free to provide any persistent store (LMDB
@@ -278,12 +287,14 @@ Single `webui_sessions` env, one persistent environment, one writer:
   `IdleStateHandler` read timeout (120s) so a silent authenticated socket is
   reaped, and the ping path runs the same per-event liveness check as events
   (a revoked session's socket cannot ping forever).
-- **hello handshake:** first message carries the render token; the server binds
-  `connection → (session, render) → router` (Decision 2).
-- **per-event:** `AuthenticatedRouter` wraps dispatch: liveness backstop via the
-  validation cache, `AuthContext` set via `@TaskLocal` around `handle()`.
-  Constraints for handler authors: no `Task.detached` inside handlers; audit
-  and logging read the bound session, not the TaskLocal.
+- **render token:** every `event`/`ping` carries the page's render token; the
+  server resolves each message against the session's `token → router` map
+  (Decision 2) and closes sockets presenting unknown/missing tokens.
+- **per-event:** `dispatch` enforces session liveness (store lookup) and the
+  render-token gate before every event and ping; `AuthContext` is set via
+  `@TaskLocal` around authenticated renders and dispatches. handler authors
+  should keep heavy work off the connection's event loop (handlers are
+  `@Sendable async` and may hop — the argon2 pool is the canonical example).
 - **server-initiated invalidation:** `invalidate()` closes all of the session's
   connections — server sends `{type:"redirect", url:"/login"}` then closes, and
   the runtime follows the redirect. This is the primary enforcement path; the
@@ -292,12 +303,13 @@ Single `webui_sessions` env, one persistent environment, one writer:
 - **server pushes:** any future server-initiated push (broadcast, admin->member)
   must check session liveness and happen strictly **after** teardown ordering —
   never push to a socket whose session was invalidated in the same logical step.
-- **terminal failure path (runtime):** for the residual case where the upgrade
-  fails without a server message (proxy, expired cookie mid-session), the
-  runtime caps reconnect attempts (default 5) and then `location.replace('/login')`.
-  On `redirect`, the runtime clears the offline message queue (up to 1000
-  queued events must never replay across a session boundary — verified
-  queue-flush behavior in `webui-runtime.js:54–62,129–139`).
+- **terminal failure path (runtime):** reconnect is unbounded exponential
+  backoff (no cap, no `location.replace('/login')` terminal step) and the
+  offline queue is **not** scrubbed on redirect — by design. cross-session
+  replay of queued events is impossible server-side: every queued
+  `event`/`ping` carries the render token of the page that created it, and
+  the current session rejects tokens it never minted (see the Stale client
+  replay hardening row).
 
 ## CSRF
 
@@ -330,7 +342,7 @@ Single `webui_sessions` env, one persistent environment, one writer:
 |---|---|
 | Clickjacking | `X-Frame-Options: SAMEORIGIN` on every response (the `frame-ancestors` CSP directive is inert in a `<meta>` element). implemented. `form-action 'self'` + `base-uri 'self'` on the login page CSP |
 | Timing side channels | `constantTimeEquals` on all MAC/token compares |
-| Token theft at rest | tokens hashed in LMDB; raw token never logged |
+| Token theft at rest | sessions are stored as their token's SHA-256 hash only — the raw token never reaches the store or the logs (the in-memory store follows this; a persistent backend store must too) |
 | Entropy weakness | `SecureRandom.bytes` only, everywhere — since 2026-09 no path in the framework falls back to a PRNG: `CSRFProtection` secret/token minting and the demo's session id/seed throw (`CSRFError.entropyUnavailable` / `SessionToken.TokenError`) instead |
 | Open redirect | server-fixed redirect targets in the example (login → `/`, logout → `/login`); runtime redirect already blocks `javascript:`/`data:` |
 | Brute force / stuffing | per-account + per-IP **fixed-window throttle** (`LoginThrottle`, `429` + `Retry-After`) + **global Argon2 concurrency cap** (`AsyncSemaphore`, default 4) + **single-use login CSRF** (`SingleUseTokenStore`) — all implemented in the example. the mint page is throttled separately (60/min/ip) and the store budgets outstanding tokens per ip (default 5), so one caller cannot stockpile login tokens and flood it. LMDB-backed attempt log still future |
@@ -350,16 +362,16 @@ Single `webui_sessions` env, one persistent environment, one writer:
 | Cache / bfcache leak | `Cache-Control: no-store` + `X-Content-Type-Options: nosniff` on every response (keeps the authenticated dashboard out of the http cache and out of the back-forward cache after logout) |
 | Client fragment XSS | the fragment sanitizer parses each patch into a detached DOM subtree (target element as context) and strips `<script>` elements, `on*` handlers, and unsafe `href`/`src`/`action`/`formaction`/`xlink:href` values on the real nodes — the parser resolves character references and quoting, so entity-obfuscated (`java&Tab;script:`), whitespace-obfuscated (`java&#x09;script:`), unquoted, and space-less-handler payloads are all neutralized client-side, mirroring the server sanitizer |
 | Secret loss on restart | persisted HMAC secret + documented rotation (Decision 4) — **not yet implemented** |
-| Credential database loss | LMDB backup/restore runbook (§operational surface) |
+| Credential database loss | the backend-provided store owns backup/restore; the demo keeps sessions in memory (lost on restart by design) |
 
 ## JS runtime changes (comment-free, string-pinned)
 
-- `hello` message with the render token (one-time, on connect).
-- queue scrub on `redirect` (server-initiated) and on terminal failure.
-- capped reconnect attempts with `location.replace('/login')` terminal path.
-- nothing else. No new server→client messages; `redirect`/`reload`/`error`
-  already cover the session lifecycle. All changes pin-tested via the existing
-  substring-probe tests, which stay byte-exact for the untouched runtime.
+- an optional `token` is attached to every `event`/`ping` when the page was
+  served with a `renderToken` (the per-render ws binding id). nothing else:
+  no `hello` message, no reconnect cap, no queue scrub — the server-side
+  render-token gate is the cross-session replay defense.
+- no new server→client messages; `redirect`/`reload`/`error` already cover the
+  session lifecycle. byte-exact for pages served without a render token.
 
 ## Authorization
 
@@ -380,17 +392,17 @@ Single `webui_sessions` env, one persistent environment, one writer:
   out-of-band channel — SMTP implementation is a named, isolated dependency
   decision (no SMTP code in the framework core).
 - audit: `AuthEventAudit` logs login success/failure, logout, revocation,
-  reset issuance/consumption via swift-log; optional LMDB `audit:` table for
-  durable trails.
+  reset issuance/consumption via swift-log; durable audit rows are a
+  backend-store concern.
 - backups: member hashes and session state are catastrophic-loss data — the
-  LMDB env is a documented backup/restore artifact.
+  backend-provided store owns backup/restore.
 - concurrent-session cap (default 10/user, oldest evicted) and per-user
   logout-everywhere via the `user:` secondary index.
 
 ## WebAuthn roadmap (v2, framed honestly)
 
 - passkeys replace the **password**, never the session — revocation semantics
-  stay identical, riding the LMDB session row. The "heir" claim is scoped to
+  stay identical, riding the session store row. The "heir" claim is scoped to
   authentication with no shared secret (no password DB, phishing-resistant
   device binding).
 - real constraints recorded: RP ID is the hostname (proxy host changes and LAN
@@ -415,15 +427,18 @@ Single `webui_sessions` env, one persistent environment, one writer:
 - Swift Testing: cookie round-trips, session lifecycle, constant-time compare,
   Argon2 verify vectors
 
-### Phase 1 — Server + wire
-- `WebUIAuthServer` `Service` (ServiceGroup): single-route urlencoded parser,
-  `Set-Cookie` emission, `303` flow, upgrade auth + `Origin` check
-- `hello`/render-token handshake in protocol + runtime; string pins updated
-- `SessionManager` actor: `session → [connections]`, `connection → (render) → router`
-- `AuthenticatedRouter` (liveness backstop + `AuthContext` TaskLocal)
-- CSP delta: `form-action`, `base-uri`, `frame-ancestors`
-- runtime: queue scrub, capped reconnect → `/login`
+### Phase 1 — Server + wire (shipped 2026-09)
 - `WebUIAuthExample` executable demonstrating login → dashboard → logout
+- per-message render token on every `event`/`ping` (no `hello` message; the
+  original one-shot handshake was superseded — see Decision 2); runtime +
+  string pins updated
+- connection gate at accept time, awaited-write responses, argon2 on a
+  dedicated thread pool, a 60-second maintenance sweep
+- session-gated ws upgrade + `Origin` check, per-session connection registry
+  with logout teardown, per-event + ping liveness
+- CSP delta: `form-action` on auth pages (`base-uri` on the login page)
+- runtime: token-on-every-message; no queue scrub / reconnect cap
+  (superseded — the server-side render-token gate is the replay defense)
 
 ### Phase 2 — UX + hardening
 - `LoginView`/`RequiresLogin`/`RequiresRole`, `next` allowlist
