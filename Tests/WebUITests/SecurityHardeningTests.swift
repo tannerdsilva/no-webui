@@ -224,6 +224,16 @@ struct CSSMinificationTests {
 		#expect(page.contains("grid-area: 1 / 1"))
 	}
 
+	@Test("the hoisted pre-minified style block matches a fresh manual minify")
+	func hoistedStyleBlockMatchesManualMinify() {
+		// byte-identity pin: WebUIDocument must render the startup-hoisted
+		// sheet exactly as a fresh minify would — a divergence here means the
+		// hoist path and the canonical minify path have drifted.
+		let page = WebUIDocument(title: "t", body: "<p>hi</p>").render()
+		let expected = minifyCSS(CSSStylesheet(LayoutStyles.complete).render() + "\n\n" + WebUIAssets.css)
+		#expect(page.contains("<style>\n\(expected)\n</style>"))
+	}
+
 	@Test("embedded asset constant still matches the source bytes")
 	func embeddedConstantUnchanged() throws {
 		let source = [UInt8]((try String(contentsOf: packageRootURL().appendingPathComponent("designer/assets/design-system.css"), encoding: .utf8)).utf8)

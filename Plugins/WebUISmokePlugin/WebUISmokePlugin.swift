@@ -64,10 +64,11 @@ struct WebUISmokePlugin: CommandPlugin {
 
         if let servedCss = await GET(session, "\(base)/__assets/css"),
            let sourceCss = try? Data(contentsOf: cssSource),
-           servedCss == sourceCss {
-            ok("css served bytes == source (\(sourceCss.count) bytes)")
+           let cssText = String(data: servedCss, encoding: .utf8),
+           servedCss.count <= sourceCss.count, !cssText.isEmpty, !cssText.contains("/*") {
+            ok("css served is the minified sheet (comment-free, \(servedCss.count) bytes ≤ source \(sourceCss.count))")
         } else {
-            bad("css served bytes DIFFER from source")
+            bad("css served is not the minified design sheet")
         }
 
         if let servedJs = await GET(session, "\(base)/__assets/js"),

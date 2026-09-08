@@ -335,6 +335,8 @@ struct WebUIAuthExample {
 	let sessionStore: InMemoryAuthSessionStore
 	let csrfSecret: String
 	let adminPasswordRecord: PasswordRecord
+	let argonPool: NIOThreadPool
+	let connectionGate: ConnectionGate
 	let routers = RouterRegistry()
 	let connections = AuthConnectionRegistry()
 	let argon2Limiter = AsyncSemaphore(permits: 4)
@@ -451,6 +453,16 @@ struct WebUIAuthExample {
 
 	// MARK: server
 
+	/// parse a positive-integer flag (`--name N`) with a fallback.
+	static func intFlag(named name: String, default fallback: Int) -> Int {
+		if let i = CommandLine.arguments.firstIndex(of: name),
+		   i + 1 < CommandLine.arguments.count,
+		   let v = Int(CommandLine.arguments[i + 1]), v > 0 {
+			return v
+		}
+		return fallback
+	}
+
 	static func main() async throws {
 		// port is a flag so the ceremony tests can boot on an ephemeral port
 		// without contending with a running demo on :9091.
@@ -462,6 +474,10 @@ struct WebUIAuthExample {
 		} else {
 			port = 9091
 		}
+		// resource budget for small hosts (a 2 gb linux box): event loops size
+		// the nio group, argon2 workers size the kdf thread pool, and the
+		// connection cap is a hard memory ceiling — each open connection can
+		// hold a page-sized response while an awaited write drains.
 		let csrfSecret = try CSRFProtection.generateSecret()
 		let passwordRecord = PasswordRecord(
 			salt: try PasswordVerifier.makeSalt(),
@@ -475,17 +491,22 @@ struct WebUIAuthExample {
 		)
 		let record = PasswordRecord(salt: passwordRecord.salt, hash: hash, parameters: .interactive)
 
+		let argonPool = NIOThreadPool(numberOfThreads: Self.intFlag(named: "--argon2-workers", default: 2))
+		argonPool.start()
+		let connectionGate = ConnectionGate(maximum: Self.intFlag(named: "--max-connections", default: 256))
 		let example = WebUIAuthExample(
 			state: AuthDemoState(),
 			sessionStore: InMemoryAuthSessionStore(),
 			csrfSecret: csrfSecret,
-			adminPasswordRecord: record
+			adminPasswordRecord: record,
+			argonPool: argonPool,
+			connectionGate: connectionGate
 		)
 
 		let logger = Logger(label: "webui.auth.example")
 		logger.info("auth demo ready — sign in with '\(demoUsername)' / '\(demoPassword)'")
 
-		let group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
+		let group = MultiThreadedEventLoopGroup(numberOfThreads: Self.intFlag(named: "--event-loops", default: System.coreCount))
 		let bootstrap = ServerBootstrap(group: group)
 			.serverChannelOption(ChannelOptions.backlog, value: 128)
 			.serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
@@ -494,6 +515,11 @@ struct WebUIAuthExample {
 			host: "0.0.0.0", port: port
 		) { channel in
 			channel.eventLoop.makeCompletedFuture {
+				// a single idle reaper guards every channel — plain http (an idle
+				// keep-alive or a slow reader that never drains) and upgraded
+				// websockets alike — so no silent connection outlives the window.
+				try channel.pipeline.syncOperations.addHandler(IdleStateHandler(readTimeout: .seconds(120)))
+				try channel.pipeline.syncOperations.addHandler(AuthIdleCloseHandler())
 				let upgrader = NIOTypedWebSocketServerUpgrader<AuthUpgradeResult>(
 					shouldUpgrade: { channel, head in
 						// the demo binds the socket to the page's per-session
@@ -527,11 +553,9 @@ struct WebUIAuthExample {
 					},
 						upgradePipelineHandler: { channel, head in
 						channel.eventLoop.makeCompletedFuture {
-							// an authenticated socket that stops sending (no
-							// pings, no events) is reaped after the read-idle
-							// window instead of pinning resources forever.
-							try channel.pipeline.syncOperations.addHandler(IdleStateHandler(readTimeout: .seconds(120)))
-							try channel.pipeline.syncOperations.addHandler(AuthIdleCloseHandler())
+							// the top-level IdleStateHandler already reaps
+							// silent sockets (read-idle, incl. missing ws
+							// pings) — no per-upgrade reaper needed.
 							let ws = try NIOAsyncChannel<WebSocketFrame, WebSocketFrame>(wrappingChannelSynchronously: channel)
 							let tokenHash = example.tokenHash(for: head)
 							// the router is NOT resolved at upgrade: the first
@@ -571,9 +595,17 @@ struct WebUIAuthExample {
 		}
 
 		try await group.shutdownGracefully()
+		argonPool.shutdownGracefully { _ in }
 	}
 
 	func handle(_ negotiationFuture: EventLoopFuture<AuthUpgradeResult>) async {
+		// admission gate: the connection cap is a hard memory ceiling on small
+		// hosts. acquired once per negotiated channel, released when the
+		// connection ends (including the idle reaper closing it).
+		guard connectionGate.tryAcquire() else {
+			await rejectOverCapacity(negotiationFuture)
+			return
+		}
 		do {
 			switch try await negotiationFuture.get() {
 			case .websocket(let ws, let tokenHash):
@@ -583,6 +615,20 @@ struct WebUIAuthExample {
 			}
 		} catch {
 			// connection error; ignore
+		}
+		connectionGate.release()
+	}
+
+	/// capacity is exhausted: close the negotiated channel (post-handshake for
+	/// websockets, pre-response for http). a dropped connection under overload
+	/// is the backpressure signal.
+	private func rejectOverCapacity(_ negotiationFuture: EventLoopFuture<AuthUpgradeResult>) async {
+		guard let result = try? await negotiationFuture.get() else { return }
+		switch result {
+		case .websocket(let ws, _):
+			_ = ws.channel.close(promise: nil)
+		case .http(let http):
+			_ = http.channel.close(promise: nil)
 		}
 	}
 
@@ -749,7 +795,9 @@ struct WebUIAuthExample {
 		// assets are public (the design system css + js runtime)
 		switch (head.method, head.uri) {
 		case (.GET, "/__assets/css"):
-			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/css; charset=utf-8")], body: WebUIAssets.css)
+			// the minified sheet — the raw working file carries designer
+			// comments (the first law) and ~6% more bytes on the wire.
+			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/css; charset=utf-8")], body: DesignSystemAssets.minifiedCss)
 			return
 		case (.GET, "/__assets/js"):
 			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/javascript; charset=utf-8")], body: WebUIAssets.js)
@@ -838,19 +886,25 @@ struct WebUIAuthExample {
 		// username + password verification: constant-time username compare and
 		// Argon2id verification against the precomputed demo record. the KDF is
 		// the one-box DoS amplifier on a public endpoint, so it runs under a
-		// global concurrency cap.
+		// global concurrency cap AND on a dedicated thread pool — a ~100-300 ms
+		// synchronous hash must never stall the event loop every connection on
+		// it shares (worst on a 4-core pi).
 		let userMatches = constantTimeEquals([UInt8](username.utf8), [UInt8](Self.demoUsername.utf8))
 		let passwordValid: Bool
 		if userMatches {
 			await argon2Limiter.wait()
 			defer { argon2Limiter.signal() }
-			passwordValid = try PasswordVerifier.verify(password: [UInt8](password.utf8), record: adminPasswordRecord)
+			passwordValid = try await argonPool.runIfActive {
+				try PasswordVerifier.verify(password: [UInt8](password.utf8), record: adminPasswordRecord)
+			}
 		} else {
 			// dummy-hash discipline: burn the same cost as a real verify so the
 			// timing of "unknown user" equals "wrong password".
 			await argon2Limiter.wait()
 			defer { argon2Limiter.signal() }
-			_ = try PasswordVerifier.verify(password: [UInt8](password.utf8), record: adminPasswordRecord)
+			_ = try await argonPool.runIfActive {
+				try PasswordVerifier.verify(password: [UInt8](password.utf8), record: adminPasswordRecord)
+			}
 			passwordValid = false
 		}
 		guard userMatches, passwordValid else {

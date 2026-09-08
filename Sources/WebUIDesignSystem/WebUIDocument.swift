@@ -37,12 +37,20 @@ public struct WebUIDocument: View {
         self.contentSecurityPolicy = contentSecurityPolicy
     }
 
+    /// the design-system sheet (layout rules + embedded css), minified once
+    /// and embedded verbatim on every render. previously every page build
+    /// re-minified the full ~300 kb asset (~10 ms in release, per request).
+    public static let minifiedDesignStyles: String = {
+        let combined = CSSStylesheet(LayoutStyles.complete).render() + "\n\n" + WebUIAssets.css
+        return minifyCSS(combined)
+    }()
+
     public func render() -> String {
         let doc = HTMLDocument(
             title: title,
             body: body,
-            styles: CSSStylesheet(LayoutStyles.complete),
-            rawStyles: [WebUIAssets.css],
+            styles: CSSStylesheet([]),
+            rawStyles: [Self.minifiedDesignStyles],
             scripts: scripts,
             head: head,
             bodyAttributes: bodyAttributes,
@@ -50,7 +58,8 @@ public struct WebUIDocument: View {
             lang: lang,
             includeRuntime: includeRuntime,
             runtimeConfig: runtimeConfig,
-            contentSecurityPolicy: contentSecurityPolicy
+            contentSecurityPolicy: contentSecurityPolicy,
+            preMinifiedStyles: true
         )
         return doc.render()
     }

@@ -15,6 +15,12 @@ public struct HTMLDocument: Sendable {
     public let runtimeConfig: RuntimeConfig?
     public let contentSecurityPolicy: String?
     public let nonce: String
+    /// when `true`, the combined `styles` + `rawStyles` string is embedded
+    /// verbatim instead of passed through `minifyCSS`. used by documents that
+    /// pre-minify their (deterministic) stylesheet once at startup — hoisting
+    /// the 300 kb design-system sheet out of every render removes the
+    /// dominant per-request cost (measured ~10 ms in release).
+    public let preMinifiedStyles: Bool
     private static func generateNonce() -> String {
         guard let bytes = SecureRandom.bytes(16) else {
             // fail loud: silently falling back to a weaker nonce source would
@@ -45,7 +51,8 @@ public struct HTMLDocument: Sendable {
         lang: String = "en",
         includeRuntime: Bool = true,
         runtimeConfig: RuntimeConfig? = nil,
-        contentSecurityPolicy: String? = nil
+        contentSecurityPolicy: String? = nil,
+        preMinifiedStyles: Bool = false
     ) {
         self.title = title
         self.body = body
@@ -59,6 +66,7 @@ public struct HTMLDocument: Sendable {
         self.includeRuntime = includeRuntime
         self.runtimeConfig = runtimeConfig
         self.contentSecurityPolicy = contentSecurityPolicy
+        self.preMinifiedStyles = preMinifiedStyles
         self.nonce = Self.generateNonce()
     }
     public func render() -> String {
@@ -76,7 +84,8 @@ public struct HTMLDocument: Sendable {
             let cssContent = styles.render()
             if !cssContent.isEmpty { cssParts.append(cssContent) }
             cssParts.append(contentsOf: rawStyles)
-            let allCSS = minifyCSS(cssParts.joined(separator: "\n\n"))
+            let combinedCSS = cssParts.joined(separator: "\n\n")
+            let allCSS = preMinifiedStyles ? combinedCSS : minifyCSS(combinedCSS)
             styleTag = allCSS.isEmpty ? "" : "<style>\n\(allCSS)\n</style>"
 
             var jsParts: [String] = []

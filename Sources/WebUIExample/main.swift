@@ -95,6 +95,19 @@ extension RenderContext {
 
 // MARK: - HTTP / WebSocket server
 
+/// close the channel when the read-idle window elapses (guards plain http
+/// keep-alive, slow readers, and websockets alike).
+final class IdleCloseHandler: ChannelInboundHandler {
+	typealias InboundIn = IOData
+	func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
+		if event is IdleStateHandler.IdleStateEvent {
+			context.close(promise: nil)
+		} else {
+			context.fireUserInboundEventTriggered(event)
+		}
+	}
+}
+
 final class HTTPByteBufferResponsePartHandler: ChannelOutboundHandler {
 	typealias OutboundIn = HTTPPart<HTTPResponseHead, ByteBuffer>
 	typealias OutboundOut = HTTPServerResponsePart
@@ -121,16 +134,18 @@ struct WebUIExample {
 	let state: ExampleState
 	let router: EventRouter
 	let pageHTML: String
+	let connectionGate: ConnectionGate
 
 	static func main() async throws {
 		let state = ExampleState()
 		let router = EventRouter()
 		let page = renderExamplePage(state: state, router: router)
-		let app = WebUIExample(state: state, router: router, pageHTML: page)
+		let connectionGate = ConnectionGate(maximum: intFlag(named: "--max-connections", default: 256))
+		let app = WebUIExample(state: state, router: router, pageHTML: page, connectionGate: connectionGate)
 		let logger = Logger(label: "webui.example")
 		logger.info("example page rendered (\(page.utf8.count) bytes)")
 
-		let group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
+		let group = MultiThreadedEventLoopGroup(numberOfThreads: intFlag(named: "--event-loops", default: System.coreCount))
 		let bootstrap = ServerBootstrap(group: group)
 			.serverChannelOption(ChannelOptions.backlog, value: 128)
 			.serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
@@ -139,6 +154,10 @@ struct WebUIExample {
 			host: "0.0.0.0", port: 9090
 		) { channel in
 			channel.eventLoop.makeCompletedFuture {
+				// a single idle reaper guards every channel — plain http
+				// (idle keep-alive, slow readers) and websockets alike.
+				try channel.pipeline.syncOperations.addHandler(IdleStateHandler(readTimeout: .seconds(120)))
+				try channel.pipeline.syncOperations.addHandler(IdleCloseHandler())
 				let upgrader = NIOTypedWebSocketServerUpgrader<ExampleUpgradeResult>(
 					shouldUpgrade: { channel, head in
 						let ok = head.method == .GET && head.uri == "/ws"
@@ -183,6 +202,10 @@ struct WebUIExample {
 	}
 
 	func handle(_ negotiationFuture: EventLoopFuture<ExampleUpgradeResult>) async {
+		guard connectionGate.tryAcquire() else {
+			await rejectOverCapacity(negotiationFuture)
+			return
+		}
 		do {
 			switch try await negotiationFuture.get() {
 			case .websocket(let ws):
@@ -193,6 +216,27 @@ struct WebUIExample {
 		} catch {
 			// connection error; ignore
 		}
+		connectionGate.release()
+	}
+
+	private func rejectOverCapacity(_ negotiationFuture: EventLoopFuture<ExampleUpgradeResult>) async {
+		guard let result = try? await negotiationFuture.get() else { return }
+		switch result {
+		case .websocket(let ws):
+			_ = ws.channel.close(promise: nil)
+		case .http(let http):
+			_ = http.channel.close(promise: nil)
+		}
+	}
+
+	/// parse a positive-integer flag (`--name N`) with a fallback.
+	static func intFlag(named name: String, default fallback: Int) -> Int {
+		if let i = CommandLine.arguments.firstIndex(of: name),
+		   i + 1 < CommandLine.arguments.count,
+		   let v = Int(CommandLine.arguments[i + 1]), v > 0 {
+			return v
+		}
+		return fallback
 	}
 
 	private func handleWebsocket(_ channel: NIOAsyncChannel<WebSocketFrame, WebSocketFrame>) async throws {
@@ -265,7 +309,7 @@ struct WebUIExample {
 				let (text, contentType): (String, String)
 				switch head.uri {
 				case "/__assets/css":
-					text = WebUIAssets.css; contentType = "text/css; charset=utf-8"
+					text = DesignSystemAssets.minifiedCss; contentType = "text/css; charset=utf-8"
 				case "/__assets/js":
 					text = WebUIAssets.js; contentType = "text/javascript; charset=utf-8"
 				case "/", "/index.html":
