@@ -351,6 +351,11 @@ extension SmokeApp {
 		let bootstrap = ServerBootstrap(group: group)
 			.serverChannelOption(ChannelOptions.backlog, value: 128)
 			.serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
+			// explicit send buffer: responses close the connection immediately
+			// after writing, and the NIOAsyncChannel write is not promise-awaited
+			// — anything the kernel could not accept in the first send would be
+			// dropped at close (probe-verified silent tail truncation).
+			.childChannelOption(ChannelOptions.socketOption(.so_sndbuf), value: 8 * 1024 * 1024)
 
 		let channel: NIOAsyncChannel<EventLoopFuture<SmokeUpgradeResult>, Never> = try await bootstrap.bind(
 			host: "127.0.0.1", port: 9123
@@ -446,7 +451,7 @@ extension SmokeApp {
 		do {
 			let msg = try WSIncoming(jsonText: payload)
 			switch msg {
-			case .event(let component, let event, let data):
+			case .event(let component, let event, let data, _):
 				if component == "redirect-test" {
 					try await writeJSON(WSOutgoing.redirect(url: "/", replace: true), outbound: outbound)
 					return
@@ -456,7 +461,7 @@ extension SmokeApp {
 				guard !updates.isEmpty else { return }
 				let out = WSOutgoing.update(fragments: updates)
 				try await writeJSON(out, outbound: outbound)
-			case .ping:
+			case .ping(_):
 				try await writeJSON(WSOutgoing.pong, outbound: outbound)
 			case .navigate:
 				break

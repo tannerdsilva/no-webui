@@ -672,6 +672,16 @@ func capture(_ regex: String, in haystack: String) -> String? {
 		// escaped value cannot terminate the attribute early
 	}
 
+	@Test func emptyStateEscapesAccessibilityLabel() {
+		// probe-verified: the empty-state figure previously interpolated a
+		// caller aria-label raw into `aria-label="..."`, emitting
+		// `<figure ... aria-label="x" onload="alert(1)">`.
+		let payload = "x\" onload=\"alert(1)"
+		let out = Chart([]).chartAccessibilityLabel(payload).render()
+		#expect(!out.contains("onload=\"alert(1)\""))
+		#expect(out.contains("aria-label=\"x&quot; onload=&quot;alert(1)\""))
+	}
+
 	@Test func explicitColorEmitsInlineVar() {
 		let c = Chart {
 			ForEach([("A", 1.0)]) { d in

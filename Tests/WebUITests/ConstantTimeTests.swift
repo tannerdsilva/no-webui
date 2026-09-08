@@ -41,26 +41,26 @@ struct ConstantTimeEqualsTests {
 struct CSRFRegressionTests {
 
 	@Test("valid tokens still validate end-to-end after the constant-time swap")
-	func validToken() {
-		let secret = CSRFProtection.generateSecret()
-		let token = CSRFProtection.token(for: "login-form", secret: secret)
+	func validToken() throws {
+		let secret = try CSRFProtection.generateSecret()
+		let token = try CSRFProtection.token(for: "login-form", secret: secret)
 		#expect(CSRFProtection.validate(token, for: "login-form", secret: secret))
 	}
 
 	@Test("tampered signatures are rejected")
-	func tampered() {
-		let secret = CSRFProtection.generateSecret()
-		let token = CSRFProtection.token(for: "login-form", secret: secret)
+	func tampered() throws {
+		let secret = try CSRFProtection.generateSecret()
+		let token = try CSRFProtection.token(for: "login-form", secret: secret)
 		#expect(CSRFProtection.validate(token + "x", for: "login-form", secret: secret) == false)
 		#expect(CSRFProtection.validate(token, for: "other-form", secret: secret) == false)
 		#expect(CSRFProtection.validate(token, for: "login-form", secret: "different") == false)
 	}
 
 	@Test("expiry(of:) reads the embedded timestamp of a valid token")
-	func expiryAccessor() {
-		let secret = CSRFProtection.generateSecret()
+	func expiryAccessor() throws {
+		let secret = try CSRFProtection.generateSecret()
 		let before = Date().timeIntervalSince1970
-		let token = CSRFProtection.token(for: "login", secret: secret, maxAge: 1800)
+		let token = try CSRFProtection.token(for: "login", secret: secret, maxAge: 1800)
 		let expiry = CSRFProtection.expiry(of: token)
 		#expect(expiry != nil)
 		#expect(expiry! > before)
@@ -72,14 +72,25 @@ struct CSRFRegressionTests {
 	}
 
 	@Test("tokens minted in the same wall-clock second are unique")
-	func sameSecondUniqueness() {
-		let secret = CSRFProtection.generateSecret()
+	func sameSecondUniqueness() throws {
+		let secret = try CSRFProtection.generateSecret()
 		// the expiry payload is second-truncated; without the per-token nonce
 		// these would be byte-identical, which would break single-use stores.
-		let first = CSRFProtection.token(for: "login", secret: secret)
-		let second = CSRFProtection.token(for: "login", secret: secret)
+		let first = try CSRFProtection.token(for: "login", secret: secret)
+		let second = try CSRFProtection.token(for: "login", secret: secret)
 		#expect(first != second)
 		#expect(CSRFProtection.validate(first, for: "login", secret: secret))
 		#expect(CSRFProtection.validate(second, for: "login", secret: secret))
+	}
+
+	@Test("empty-signature tokens never validate")
+	func emptySignatureRejected() throws {
+		let secret = try CSRFProtection.generateSecret()
+		// `formID:<future-expiry>:<nonce>:` with an empty signature — the shape
+		// the old `try?`/"" hmac fallback would have accepted if the hmac ever
+		// threw (both sides compared equal as ""). it must always be rejected.
+		let future = Int(Date().timeIntervalSince1970) + 600
+		let forged = Base64.encode([UInt8]("login:\(future):deadbeef:".utf8))
+		#expect(CSRFProtection.validate(forged, for: "login", secret: secret) == false)
 	}
 }

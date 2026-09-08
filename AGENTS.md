@@ -222,9 +222,15 @@ these must never be weakened:
    `constructor`, `prototype` keys.
 5. **Attribute escaping** — `htmlEscape()` on all attribute keys and values
    the framework emits: modifier attributes and primitive `id`/`class`/`name`/
-   `for`/`data-status`/`method` parameters alike. icon `aria-label`/`class`/
+   `for`/`data-status`/`method` parameters and every `aria-*`/`role` emission
+   (the chart empty-state figure included) alike. icon `aria-label`/`class`/
    `data-icon` included.
-6. **CSRF tokens** — `CSRFProtection` with HMAC-SHA256 stateless tokens.
+6. **CSRF tokens** — `CSRFProtection` with HMAC-SHA256 stateless tokens. secret
+   and token minting fail loudly (`throws`) on entropy or hmac failure — no prng
+   fallback, and `validate` returns `false` on signing failure (never co-signs an
+   empty signature). pre-auth login tokens are single-use via `SingleUseTokenStore`,
+   which budgets unsubmitted tokens per issuer key (`maxOutstandingPerKey`,
+   default 5) so one caller cannot stockpile tokens and flood the store.
 7. **Thread safety** — `Mutex` (Swift `Synchronization`) on all EventRouter.State
    and ObserverList mutations.
 8. **Growth caps** — EventRouter.maxHandlers (10K) and ObserverList.maxObservers
@@ -232,6 +238,10 @@ these must never be weakened:
 9. **SVG icon sanitization** — `IconSanitizer.sanitize()` strips `<script>`
    tags, `on*` event handlers, `foreignObject`, and `javascript:`/`data:`/
    `vbscript:` hrefs from every `WebUIIconCustom` body before emission.
+10. **Bounded wire parsing** — `JSONValue.parse` caps container nesting at 128
+    (`JSONError.nestingTooDeep`). an adversarial websocket frame — probe-verified
+    to stack-overflow the parser at ~5k depth inside NIO's 16 kb frame budget —
+    throws, never crashes.
 
 ## common workflows
 

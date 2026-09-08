@@ -142,7 +142,9 @@ window.WebUIRuntime = (function () {
       stopPing();
       pingTimer = setInterval(function () {
         if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify({ type: 'ping' }));
+          var pingMsg = { type: 'ping' };
+          if (config.renderToken) pingMsg.token = config.renderToken;
+          ws.send(JSON.stringify(pingMsg));
 
           if (pongTimer) clearTimeout(pongTimer);
           pongTimer = setTimeout(function () {
@@ -273,12 +275,14 @@ window.WebUIRuntime = (function () {
         applyPrediction(componentEl, componentId);
       }
 
-      send({
+      var eventMsg = {
         type: 'event',
         component: componentId,
         event: declaredEvent || event.type,
         data: eventData,
-      });
+      };
+      if (config.renderToken) eventMsg.token = config.renderToken;
+      send(eventMsg);
     }
 
 

@@ -1023,13 +1023,26 @@ func wsIncomingEvent() throws {
     let json = "{\"type\":\"event\",\"component\":\"btn-1\",\"event\":\"click\",\"data\":{\"key\":\"val\"}}"
     let data = json.data(using: .utf8)!
     let msg = try JSONDecoder().decode(WSIncoming.self, from: data)
-    guard case .event(let component, let event, let data) = msg else {
+    guard case .event(let component, let event, let data, let token) = msg else {
         Issue.record("Expected .event")
         return
     }
     #expect(component == "btn-1")
     #expect(event == "click")
     #expect(data["key"] == "val")
+    #expect(token == nil)
+}
+
+@Test("WSIncoming.event decodes an optional render token")
+func wsIncomingEventToken() throws {
+    let json = "{\"type\":\"event\",\"component\":\"btn-1\",\"event\":\"click\",\"data\":{},\"token\":\"tok-abc\"}"
+    let data = json.data(using: .utf8)!
+    let msg = try JSONDecoder().decode(WSIncoming.self, from: data)
+    guard case .event(_, _, _, let token) = msg else {
+        Issue.record("Expected .event")
+        return
+    }
+    #expect(token == "tok-abc")
 }
 
 @Test("WSIncoming.ping decodes correctly")
@@ -1037,10 +1050,11 @@ func wsIncomingPing() throws {
     let json = "{\"type\":\"ping\"}"
     let data = json.data(using: .utf8)!
     let msg = try JSONDecoder().decode(WSIncoming.self, from: data)
-    guard case .ping = msg else {
+    guard case .ping(let token) = msg else {
         Issue.record("Expected .ping")
         return
     }
+    #expect(token == nil)
 }
 
 @Test("WSIncoming.navigate decodes correctly")

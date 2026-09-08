@@ -272,8 +272,11 @@ See `Documentation/JS_RUNTIME.md` for detailed documentation of each module.
 | Prototype pollution | `State.set()` rejects keys `__proto__`, `constructor`, `prototype` |
 | `javascript:` URLs | `sanitizeURL()` blocks `javascript:`, `data:`, `vbscript:` in Link, Image, Form, and the js Router — c0 controls and ascii whitespace are stripped before the scheme check, matching the browser's parser so padded/obfuscated schemes are caught |
 | Attribute injection | `htmlEscape()` on every attribute key and value the framework emits — primitive `id`/`class`/`name`/`for`/`data-status`/`method` parameters included, not just modifiers |
+| Accessibility-label injection | every `aria-*`/`role` emission escapes via `htmlEscape()`, including the chart empty-state figure — the one prior raw site, probe-verified fixed (2026-09) |
 | SVG icon injection | `IconSanitizer.sanitize()` (applied to every `WebUIIconCustom` body) strips `<script>`, `on*` event handlers, `foreignObject`, and `javascript:`/`data:`/`vbscript:` hrefs before emission; icon `aria-label`/`class`/`data-icon` are `htmlEscape()`d, so a hostile title cannot break out of the attribute (see `Documentation/ICONS.md`) |
 | CSP bypass | Auto-generated nonce per document, default CSP with `script-src 'nonce-...'` |
-| CSRF | `CSRFProtection` enum with HMAC-SHA256 stateless tokens, optional `Form.csrfToken` parameter |
+| CSRF | `CSRFProtection` enum with HMAC-SHA256 stateless tokens, optional `Form.csrfToken` parameter — secret/token minting throws on entropy or hmac failure (no prng fallback) and `validate` rejects on signing failure, never accepting an empty signature |
+| Stack overflow via deeply nested json | `JSONValue.parse` caps container nesting at 128 (`JSONError.nestingTooDeep`); a nested-bracket frame inside NIO's 16 kb frame budget was probe-verified to segfault the process before the cap (2026-09) |
+| Login-token exhaustion | `SingleUseTokenStore` budgets outstanding (reserved, unsubmitted) tokens per issuer key (`maxOutstandingPerKey`, default 5), and the auth demo throttles both the mint page (60/min/ip) and submit attempts (20/min/ip) — one caller cannot stockpile login tokens and flood the store past capacity |
 | Data race | `Mutex` (Swift `Synchronization`) on all `EventRouter.State` and `ObserverList` mutations |
 | Unbounded growth | Caps on `EventRouter.maxHandlers` (10K) and `ObserverList.maxObservers` (100) |

@@ -111,7 +111,7 @@ struct ChartRenderer {
 	// MARK: Figure / empty state
 
 	private var emptyState: String {
-		let label = ariaLabel ?? htmlEscape(config.accessLabel ?? "Chart")
+		let label = htmlEscape(ariaLabel ?? config.accessLabel ?? "Chart")
 		var html = "<figure class=\"chart chart--empty\""
 		if let safeId { html += " id=\"\(htmlEscape(safeId))\"" }
 		html += " role=\"img\" aria-label=\"\(label)\">"

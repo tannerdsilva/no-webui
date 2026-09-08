@@ -85,13 +85,23 @@ public enum JSONError: Error, Equatable, Sendable {
     case invalidEscape
     case invalidNumber
     case trailingCharacters
+    /// container nesting exceeded `JSONParser.maxNestingDepth`. thrown instead
+    /// of overflowing the stack: a wire message of nested brackets/objects is
+    /// probe-verified to segfault a 16 kb-bounded frame at depth ~5000.
+    case nestingTooDeep
 }
 
 // MARK: - Parser
 
 private struct JSONParser {
+    /// maximum container nesting accepted by `parse`. bounds the recursion
+    /// depth of `parseValue`/`parseObject`/`parseArray` so a pathological wire
+    /// message throws `nestingTooDeep` instead of overflowing the stack.
+    static let maxNestingDepth = 128
+
     private let chars: [Character]
     private var index = 0
+    private var depth = 0
 
     init(_ text: String) {
         self.chars = Array(text)
@@ -136,6 +146,9 @@ private struct JSONParser {
 
     mutating func parseObject() throws -> JSONValue {
         advance() // '{'
+        depth += 1
+        defer { depth -= 1 }
+        guard depth <= Self.maxNestingDepth else { throw JSONError.nestingTooDeep }
         var object: [String: JSONValue] = [:]
         skipWhitespace()
         if peek() == "}" { advance(); return .object(object) }
@@ -157,6 +170,9 @@ private struct JSONParser {
 
     mutating func parseArray() throws -> JSONValue {
         advance() // '['
+        depth += 1
+        defer { depth -= 1 }
+        guard depth <= Self.maxNestingDepth else { throw JSONError.nestingTooDeep }
         var elements: [JSONValue] = []
         skipWhitespace()
         if peek() == "]" { advance(); return .array(elements) }

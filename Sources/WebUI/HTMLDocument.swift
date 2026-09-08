@@ -17,7 +17,10 @@ public struct HTMLDocument: Sendable {
     public let nonce: String
     private static func generateNonce() -> String {
         guard let bytes = SecureRandom.bytes(16) else {
-            return UUID().uuidString.replacingOccurrences(of: "-", with: "")
+            // fail loud: silently falling back to a weaker nonce source would
+            // ship a page whose csp nonce is not fully random. entropy failure
+            // is a fatal system condition, not a fallback case.
+            preconditionFailure("SecureRandom.bytes failed — cannot mint a csp nonce")
         }
         return Base64.encodeURL(bytes)
     }

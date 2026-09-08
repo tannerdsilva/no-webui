@@ -13,6 +13,12 @@ public struct RuntimeConfig: Sendable, Encodable {
 	public var debounceMaxWaitMs: Int?
 	public var optimisticSettleMs: Int?
 	public var logLevel: String?
+	/// a per-render token minted by the server and echoed back with every
+	/// `event`/`ping` over the websocket. the server routes only messages
+	/// carrying a token it minted for the current session — a stale page whose
+	/// socket reconnects after a different user logs in cannot replay queued
+	/// events into that user's router (cross-session replay).
+	public var renderToken: String?
 
 	public init(
 		wsUrl: String? = nil,
@@ -24,7 +30,8 @@ public struct RuntimeConfig: Sendable, Encodable {
 		debounceInputMs: Int? = nil,
 		debounceMaxWaitMs: Int? = nil,
 		optimisticSettleMs: Int? = nil,
-		logLevel: String? = nil
+		logLevel: String? = nil,
+		renderToken: String? = nil
 	) {
 		self.wsUrl = wsUrl
 		self.wsReconnect = wsReconnect
@@ -36,13 +43,14 @@ public struct RuntimeConfig: Sendable, Encodable {
 		self.debounceMaxWaitMs = debounceMaxWaitMs
 		self.optimisticSettleMs = optimisticSettleMs
 		self.logLevel = logLevel
+		self.renderToken = renderToken
 	}
 
 	public var isEmpty: Bool {
 		wsUrl == nil && wsReconnect == nil && wsMaxReconnectDelayMs == nil
 			&& wsPingIntervalMs == nil && wsPongTimeoutMs == nil && maxQueueSize == nil
 			&& debounceInputMs == nil && debounceMaxWaitMs == nil
-			&& optimisticSettleMs == nil && logLevel == nil
+			&& optimisticSettleMs == nil && logLevel == nil && renderToken == nil
 	}
 
 	public func encodedJSON() -> String {
@@ -57,6 +65,7 @@ public struct RuntimeConfig: Sendable, Encodable {
 		if let v = debounceMaxWaitMs { entries.append("\"debounceMaxWaitMs\":\(v)") }
 		if let v = optimisticSettleMs { entries.append("\"optimisticSettleMs\":\(v)") }
 		if let v = logLevel { entries.append("\"logLevel\":\(jsonStringLiteral(v))") }
+		if let v = renderToken { entries.append("\"renderToken\":\(jsonStringLiteral(v))") }
 		return "{\(entries.joined(separator: ","))}"
 	}
 

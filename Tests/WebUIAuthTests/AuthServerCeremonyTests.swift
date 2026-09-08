@@ -72,6 +72,61 @@ struct AuthServerCeremonyTests {
 		}
 	}
 
+	@Test("a single ip cannot stockpile login tokens")
+	func loginTokenStockpileCapped() async throws {
+		try await withServer { server in
+			// each page load mints and reserves a token under the caller's ip;
+			// the outstanding budget (default 5) must start rejecting new page
+			// loads once a caller holds its budget of unsubmitted tokens —
+			// before the 60/min page throttle, and while other callers are
+			// unaffected.
+			var sawLimit = false
+			var served = 0
+			for _ in 0..<8 {
+				let page = try httpRequest(port: server.port, path: "/login")
+				if page.status == 429 {
+					#expect(page.header("retry-after") == "60")
+					sawLimit = true
+					break
+				}
+				#expect(page.status == 200)
+				#expect(page.csrfToken() != nil)
+				served += 1
+			}
+			#expect(sawLimit)
+			#expect(served == 5) // the default outstanding budget
+		}
+	}
+
+	@Test("a stale or foreign render token cannot drive a session's socket")
+	func renderTokenGatesWs() async throws {
+		try await withServer { server in
+			// login and pull the dashboard's render token + a routed component.
+			let cookie = try #require(try logIn(server: server))
+			let cookieHeader = "auth=\(cookie)"
+			let dashboard = try httpRequest(port: server.port, path: "/", headers: [("cookie", cookieHeader)])
+			#expect(dashboard.status == 200)
+			let renderToken = try #require(extractRenderToken(dashboard.body))
+			let componentID = try #require(extractComponentID(dashboard.body))
+
+			let upgraded = try wsUpgrade(port: server.port, cookie: cookieHeader)
+			let socket = try #require(upgraded.socket)
+
+			// a click carrying the page's own render token round-trips to an
+			// update fragment: the session's router is selected by the token.
+			let click = #"{"type":"event","component":"\#(componentID)","event":"click","data":{},"token":"\#(renderToken)"}"#
+			try wsSendText(socket, click)
+			#expect(try readUpdateFrame(socket, timeout: 3))
+
+			// a replayed message carrying a token this session never minted —
+			// exactly what a stale page from a *different* login would send —
+			// is answered with a redirect and the socket closed. no update.
+			let bogus = #"{"type":"event","component":"\#(componentID)","event":"click","data":{},"token":"stale-render-token"}"#
+			try wsSendText(socket, bogus)
+			#expect(try socketRejected(socket, timeout: 3))
+		}
+	}
+
 	@Test("login issues a session cookie and logout closes the live socket")
 	func fullCeremony() async throws {
 		try await withServer { server in
@@ -284,6 +339,119 @@ private func wsUpgrade(port: Int, cookie: String?) throws -> UpgradeResult {
 	return UpgradeResult(code: code, socket: nil)
 }
 
+// MARK: - WebSocket framing probes (masked client frames + frame reader)
+
+private struct WSFrame {
+	let opcode: UInt8
+	let payload: [UInt8]
+}
+
+/// a masked client→server text frame (the browser never sends unmasked frames).
+private func wsSendText(_ socket: RawSocket, _ text: String) throws {
+	let payload = Array(text.utf8)
+	var frame: [UInt8] = [0x81] // fin + text opcode
+	let len = payload.count
+	if len < 126 {
+		frame.append(0x80 | UInt8(len))
+	} else if len < 65536 {
+		frame.append(0x80 | 126)
+		frame.append(UInt8((len >> 8) & 0xff))
+		frame.append(UInt8(len & 0xff))
+	} else {
+		frame.append(0x80 | 127)
+		let n = UInt64(len)
+		for shift in stride(from: 56, through: 0, by: -8) {
+			frame.append(UInt8((n >> UInt64(shift)) & 0xff))
+		}
+	}
+	let mask = (0..<4).map { _ in UInt8.random(in: 0...255) }
+	frame.append(contentsOf: mask)
+	for (index, byte) in payload.enumerated() {
+		frame.append(byte ^ mask[index % 4])
+	}
+	try socket.writeBytes(frame)
+}
+
+/// one server→client frame, or nil on clean EOF before a complete header.
+private func wsReadFrame(_ socket: RawSocket) throws -> WSFrame? {
+	var header = try socket.readExactly(2)
+	guard header.count == 2 else { return nil }
+	let opcode = header[0] & 0x0f
+	var length = UInt64(header[1] & 0x7f)
+	let masked = (header[1] & 0x80) != 0
+	if length == 126 {
+		let ext = try socket.readExactly(2)
+		guard ext.count == 2 else { return nil }
+		length = UInt64(ext[0]) << 8 | UInt64(ext[1])
+	} else if length == 127 {
+		let ext = try socket.readExactly(8)
+		guard ext.count == 8 else { return nil }
+		length = 0
+		for byte in ext { length = (length << 8) | UInt64(byte) }
+	}
+	let maskKey: [UInt8]
+	if masked {
+		maskKey = try socket.readExactly(4)
+		guard maskKey.count == 4 else { return nil }
+	} else {
+		maskKey = []
+	}
+	var payload = try socket.readExactly(Int(length))
+	guard payload.count == length else { return nil }
+	if masked {
+		for index in payload.indices { payload[index] ^= maskKey[index % 4] }
+	}
+	return WSFrame(opcode: opcode, payload: payload)
+}
+
+/// true when the server answers an accepted event with an `update` frame.
+private func readUpdateFrame(_ socket: RawSocket, timeout: TimeInterval) throws -> Bool {
+	for _ in 0..<Int(timeout * 4) {
+		guard let frame = try wsReadFrame(socket) else { return false }
+		if frame.opcode == 1,
+		   let text = String(bytes: frame.payload, encoding: .utf8),
+		   text.contains("\"update\"") {
+			return true
+		}
+	}
+	return false
+}
+
+/// true when the server rejects a message: a redirect text frame followed by
+/// a close frame (opcode 8) or a tcp teardown.
+private func socketRejected(_ socket: RawSocket, timeout: TimeInterval) throws -> Bool {
+	var sawRedirect = false
+	for _ in 0..<Int(timeout * 4) {
+		guard let frame = try wsReadFrame(socket) else {
+			// eof is a teardown — a rejection only when a redirect already landed.
+			return sawRedirect
+		}
+		if frame.opcode == 8 { return true }
+		if frame.opcode == 1,
+		   let text = String(bytes: frame.payload, encoding: .utf8),
+		   text.contains("\"redirect\"") {
+			sawRedirect = true
+		}
+	}
+	return sawRedirect
+}
+
+// MARK: - Dashboard page extraction
+
+/// the per-render websocket token embedded in the bootstrap config.
+private func extractRenderToken(_ body: String) -> String? {
+	let pattern = /"renderToken":"([^"]+)"/
+	guard let match = body.firstMatch(of: pattern) else { return nil }
+	return String(match.1)
+}
+
+/// the first routed component id on the dashboard (`data-component-id`).
+private func extractComponentID(_ body: String) -> String? {
+	let pattern = /data-component-id="([^"]+)"/
+	guard let match = body.firstMatch(of: pattern) else { return nil }
+	return String(match.1)
+}
+
 // MARK: - Raw POSIX socket
 
 enum CeremonyError: Error, CustomStringConvertible {
@@ -376,11 +544,15 @@ final class RawSocket {
 	}
 
 	func write(_ string: String) throws {
+		try writeBytes(Array(string.utf8))
+	}
+
+	/// raw byte write (used for masked websocket frames, which are not utf-8).
+	func writeBytes(_ bytes: [UInt8]) throws {
 		// send takes a pointer into the array's contiguous storage —
 		// `&bytes[offset]` would pass a one-element copy and put garbage on
 		// the wire (verified: the first byte followed by stack noise → the
 		// server replies 400).
-		let bytes = Array(string.utf8)
 		var offset = 0
 		while offset < bytes.count {
 			let written = bytes.withUnsafeBytes { raw -> Int in

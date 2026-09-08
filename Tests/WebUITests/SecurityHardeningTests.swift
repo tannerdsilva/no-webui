@@ -255,6 +255,18 @@ struct RuntimeConfigTests {
 		#expect(page.contains("WebUIRuntime.init();"))
 	}
 
+	@Test("runtime config emits the render token for ws replay binding")
+	func renderTokenEmitted() {
+		let config = RuntimeConfig(renderToken: "tok-123")
+		let json = config.encodedJSON()
+		#expect(json.contains("\"renderToken\":\"tok-123\""))
+		let page = HTMLDocument(title: "t", body: "", runtimeConfig: config).render()
+		#expect(page.contains("\"renderToken\":\"tok-123\""))
+		// a token-only config is still non-empty (must emit the init object).
+		#expect(!config.isEmpty)
+		#expect(!page.contains("WebUIRuntime.init();\n    WebUIRuntime.init("))
+	}
+
 	@Test("WebUIDocument passes runtime config through")
 	func webuiDocumentPassesConfig() {
 		let page = WebUIDocument(title: "t", body: "", runtimeConfig: RuntimeConfig(optimisticSettleMs: 1234)).render()

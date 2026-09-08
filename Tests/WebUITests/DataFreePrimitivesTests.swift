@@ -96,6 +96,28 @@ struct JSONValueTests {
 		#expect(throws: JSONError.invalidEscape) { try JSONValue.parse("\"\\q\"") }
 	}
 
+	@Test("deep nesting is capped instead of overflowing the stack")
+	func nestingDepthCapped() throws {
+		// the boundary: 128 containers still parse...
+		let depth128 = String(repeating: "[", count: 128) + String(repeating: "]", count: 128)
+		_ = try JSONValue.parse(depth128)
+		// ...and 129 is rejected cleanly.
+		let depth129 = String(repeating: "[", count: 129) + String(repeating: "]", count: 129)
+		#expect(throws: JSONError.nestingTooDeep) { try JSONValue.parse(depth129) }
+		// objects count against the same budget.
+		let objTooDeep = String(repeating: "{\"a\":", count: 129) + String(repeating: "}", count: 129)
+		#expect(throws: JSONError.nestingTooDeep) { try JSONValue.parse(objTooDeep) }
+	}
+
+	@Test("a wire-sized attack payload throws instead of crashing")
+	func wireSizedNestingRejected() {
+		// probe-verified: depth 5000 within NIO's 16 kb default frame budget
+		// previously segfaulted the process (stack overflow). it must now
+		// surface as a parse error in bounded time.
+		let attack = String(repeating: "[", count: 5000) + String(repeating: "]", count: 5000)
+		#expect(throws: JSONError.nestingTooDeep) { try JSONValue.parse(attack) }
+	}
+
 	@Test("lone surrogates are rejected")
 	func loneSurrogatesRejected() {
 		#expect(throws: JSONError.invalidEscape) { try JSONValue.parse("\"\\ud800\"") }
@@ -118,15 +140,25 @@ struct JSONValueTests {
 struct WSJSONCodecTests {
 	@Test("WSIncoming decodes every wire shape")
 	func incoming() throws {
-		#expect(try WSIncoming(jsonText: #"{"type":"ping"}"#) == .ping)
+		#expect(try WSIncoming(jsonText: #"{"type":"ping"}"#) == .ping(token: nil))
+		#expect(try WSIncoming(jsonText: #"{"type":"ping","token":"t1"}"#) == .ping(token: "t1"))
 		#expect(try WSIncoming(jsonText: #"{"type":"navigate","url":"/about"}"#) == .navigate(url: "/about"))
 		let event = try WSIncoming(jsonText: #"{"type":"event","component":"c0","event":"click","data":{"targetId":"x"}}"#)
-		guard case .event(let component, let event2, let data) = event else {
+		guard case .event(let component, let event2, let data, let token) = event else {
 			Issue.record("expected .event"); return
 		}
 		#expect(component == "c0")
 		#expect(event2 == "click")
 		#expect(data == ["targetId": "x"])
+		#expect(token == nil)
+		// a render token rides along when the page configured one.
+		let tokenized = try WSIncoming(jsonText: #"{"type":"event","component":"c0","event":"click","token":"tok-9"}"#)
+		guard case .event(_, _, _, let withToken) = tokenized else {
+			Issue.record("expected .event"); return
+		}
+		#expect(withToken == "tok-9")
+		// a non-string token is malformed, both shapes.
+		#expect(throws: WSMessageError.self) { try WSIncoming(jsonText: #"{"type":"event","component":"c0","event":"click","token":42}"#) }
 	}
 
 	@Test("WSIncoming emits the same errors as the old decoder path")

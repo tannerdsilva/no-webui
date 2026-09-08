@@ -218,7 +218,7 @@ struct ShowcasePage {
                                 action: "/submit",
                                 method: "post",
                                 id: "demo-form",
-                                csrfToken: CSRFProtection.token(for: "demo-form", secret: "showcase-secret")
+                                csrfToken: (try? CSRFProtection.token(for: "demo-form", secret: "showcase-secret")) ?? ""
                             ) {
                                 VStack(spacing: 12) {
                                     Label("Name:").class("demo-label")

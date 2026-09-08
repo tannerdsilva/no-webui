@@ -170,9 +170,9 @@ default `WebUIRuntime.init();` is emitted byte-for-byte.
 
 | Method | Description |
 |---|---|
-| `CSRFProtection.generateSecret() -> String` | 32-byte random server secret |
-| `CSRFProtection.token(for:secret:maxAge:) -> String` | HMAC-SHA256 stateless token |
-| `CSRFProtection.validate(_:for:secret:) -> Bool` | validate token (signature + expiration) |
+| `CSRFProtection.generateSecret() throws -> String` | 32-byte random server secret; throws on entropy failure (no prng fallback) |
+| `CSRFProtection.token(for:secret:maxAge:) throws -> String` | HMAC-SHA256 stateless token; throws on signing failure |
+| `CSRFProtection.validate(_:for:secret:) -> Bool` | validate token (signature + expiration); false on any failure, including signing errors |
 
 ## WebUIDesignSystem
 
@@ -353,7 +353,7 @@ in `Documentation/IMPLEMENTATION_PLAN.md`.
 |---|---|
 | `AsyncSemaphore` | async counting semaphore for expensive verifications (the Argon2 concurrency cap). `wait()` suspends, never blocks a thread; `signal()` releases. `Mutex` (Swift `Synchronization`) guarded; waiters resume outside the lock |
 | `LoginThrottle` | fixed-window attempt limiter keyed by caller strings (`"ip:…"`, `"user:…"`). `record(_:now:)` returns whether the attempt is within the window budget; `reset(_:)` clears on success; `prune(before:)` bounds memory |
-| `SingleUseTokenStore` | bounded, expiring set of consumed stateless tokens; makes pre-auth CSRF tokens single-use. `consume(_:expiresAt:)` records the token and fails closed at capacity |
+| `SingleUseTokenStore` | bounded, expiring set of reserved + consumed stateless tokens; makes pre-auth CSRF tokens single-use. `reserve(_:expiresAt:key:)` budgets unsubmitted issuance per key (`maxOutstandingPerKey`, default 5) so one issuer cannot stockpile tokens and flood the store past capacity; `consume(_:expiresAt:key:)` records the token (releasing the issuer's budget) and fails closed at capacity |
 
 ## WebUIAuthExample
 

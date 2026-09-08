@@ -12,14 +12,14 @@ public struct FragmentUpdate: Sendable, Codable, Equatable, Hashable {
 
 // MARK: - Incoming Messages (Client → Server)
 public enum WSIncoming: Sendable, Equatable {
-    case event(component: String, event: String, data: [String: String])
-    case ping
+    case event(component: String, event: String, data: [String: String], token: String?)
+    case ping(token: String?)
     case navigate(url: String)
 }
 
 extension WSIncoming: Decodable {
     private enum CodingKeys: String, CodingKey {
-        case type, component, event, data, url
+        case type, component, event, data, url, token
     }
 
     public init(from decoder: any Decoder) throws {
@@ -30,9 +30,11 @@ extension WSIncoming: Decodable {
             let component = try container.decode(String.self, forKey: .component)
             let event = try container.decode(String.self, forKey: .event)
             let data = try container.decodeIfPresent([String: String].self, forKey: .data) ?? [:]
-            self = .event(component: component, event: event, data: data)
+            let token = try container.decodeIfPresent(String.self, forKey: .token)
+            self = .event(component: component, event: event, data: data, token: token)
         case "ping":
-            self = .ping
+            let token = try container.decodeIfPresent(String.self, forKey: .token)
+            self = .ping(token: token)
         case "navigate":
             let url = try container.decode(String.self, forKey: .url)
             self = .navigate(url: url)
@@ -128,9 +130,27 @@ extension WSIncoming {
                     data[key] = stringValue
                 }
             }
-            self = .event(component: component, event: event, data: data)
+            let token: String?
+            if let rawToken = object["token"] {
+                guard case .string(let tokenValue) = rawToken else {
+                    throw WSMessageError.malformed("event 'token' must be a string")
+                }
+                token = tokenValue
+            } else {
+                token = nil
+            }
+            self = .event(component: component, event: event, data: data, token: token)
         case "ping":
-            self = .ping
+            let token: String?
+            if let rawToken = object["token"] {
+                guard case .string(let tokenValue) = rawToken else {
+                    throw WSMessageError.malformed("ping 'token' must be a string")
+                }
+                token = tokenValue
+            } else {
+                token = nil
+            }
+            self = .ping(token: token)
         case "navigate":
             guard case .string(let url) = object["url"] else {
                 throw WSMessageError.malformed("navigate requires a 'url' string")

@@ -134,6 +134,11 @@ struct WebUIExample {
 		let bootstrap = ServerBootstrap(group: group)
 			.serverChannelOption(ChannelOptions.backlog, value: 128)
 			.serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
+			// explicit send buffer: responses close the connection immediately
+			// after writing, and the NIOAsyncChannel write is not promise-awaited
+			// — anything the kernel could not accept in the first send would be
+			// dropped at close (probe-verified silent tail truncation).
+			.childChannelOption(ChannelOptions.socketOption(.so_sndbuf), value: 8 * 1024 * 1024)
 
 		let channel: NIOAsyncChannel<EventLoopFuture<ExampleUpgradeResult>, Never> = try await bootstrap.bind(
 			host: "0.0.0.0", port: 9090
@@ -229,13 +234,13 @@ struct WebUIExample {
 		do {
 			let msg = try WSIncoming(jsonText: payload)
 			switch msg {
-			case .event(let component, let event, let data):
+			case .event(let component, let event, let data, _):
 				let eventData = EventData(component: ComponentID(component), event: event, data: data)
 				let updates = await self.router.handle(eventData)
 				guard !updates.isEmpty else { return }
 				let out = WSOutgoing.update(fragments: updates)
 				try await writeJSON(out, outbound: outbound)
-			case .ping:
+			case .ping(_):
 				try await writeJSON(WSOutgoing.pong, outbound: outbound)
 			case .navigate:
 				break

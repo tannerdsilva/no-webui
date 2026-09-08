@@ -1,6 +1,15 @@
 {
-  "originHash" : "dad8975d7c66ca9efcb8c9a6a3420486dd7e4a86b308933518872525dbde0672",
+  "originHash" : "bf861d43aa3aea93c2a2224d24740c333173d329b6a9a5eaea3f4ebed7124f51",
   "pins" : [
+    {
+      "identity" : "rawdog",
+      "kind" : "remoteSourceControl",
+      "location" : "https://github.com/tannerdsilva/rawdog.git",
+      "state" : {
+        "revision" : "378e87e49d2cf95c92882b1bcbe21252c5c1d0a6",
+        "version" : "21.0.0"
+      }
+    },
     {
       "identity" : "swift-atomics",
       "kind" : "remoteSourceControl",

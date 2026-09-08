@@ -120,11 +120,11 @@ struct SecureRandomTests {
 	}
 
 	@Test("CSRF secrets and nonces remain valid base64-url strings")
-	func csrfSurface() {
-		let secret = CSRFProtection.generateSecret()
+	func csrfSurface() throws {
+		let secret = try CSRFProtection.generateSecret()
 		#expect(!secret.isEmpty)
 		#expect(Base64.decode(secret)?.count == 32)
-		let token = CSRFProtection.token(for: "form-1", secret: secret)
+		let token = try CSRFProtection.token(for: "form-1", secret: secret)
 		#expect(CSRFProtection.validate(token, for: "form-1", secret: secret))
 		#expect(!CSRFProtection.validate(token, for: "form-2", secret: secret))
 	}

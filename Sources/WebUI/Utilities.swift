@@ -271,17 +271,24 @@ public func sanitizeURL(_ url: String) -> String? {
 }
 
 // MARK: - CSRF Protection
+public enum CSRFError: Error, Equatable, Sendable {
+    /// the os entropy source failed — no fallback was attempted. the signing
+    /// key must fail loudly rather than degrade to a prng (mirrors
+    /// `SessionToken.generate`).
+    case entropyUnavailable
+    /// hmac failure while signing a token.
+    case signingFailed
+}
+
 public enum CSRFProtection {
     public static let defaultMaxAge: TimeInterval = 1800
-    public static func generateSecret() -> String {
-        let bytes = SecureRandom.bytes(32) ?? fallbackEntropy(count: 32)
+    public static func generateSecret() throws -> String {
+        guard let bytes = SecureRandom.bytes(32) else {
+            throw CSRFError.entropyUnavailable
+        }
         return Base64.encode(bytes)
     }
-    private static func fallbackEntropy(count: Int) -> [UInt8] {
-        var generator = SystemRandomNumberGenerator()
-        return (0..<count).map { _ in UInt8(truncatingIfNeeded: generator.next()) }
-    }
-    public static func token(for formID: String, secret: String, maxAge: TimeInterval = defaultMaxAge) -> String {
+    public static func token(for formID: String, secret: String, maxAge: TimeInterval = defaultMaxAge) throws -> String {
         let expires = Date().timeIntervalSince1970 + maxAge
         // a per-token random nonce is required: the embedded expiry is
         // second-quantized (`Int` truncation), so without a nonce two tokens
@@ -290,7 +297,7 @@ public enum CSRFProtection {
         // login-token store, which would reject the second one as consumed.
         let nonce = UUID().uuidString.replacingOccurrences(of: "-", with: "")
         let payload = "\(formID):\(Int(expires)):\(nonce)"
-        let signature = hmacSHA256(key: secret, message: payload)
+        let signature = try hmacSHA256(key: secret, message: payload)
         return Base64.encode([UInt8]("\(payload):\(signature)".utf8))
     }
     public static func validate(_ token: String, for formID: String, secret: String) -> Bool {
@@ -311,7 +318,15 @@ public enum CSRFProtection {
             return false
         }
 
-        let expectedSignature = hmacSHA256(key: secret, message: "\(formID):\(expiresStr):\(nonce)")
+        let expectedSignature: String
+        do {
+            expectedSignature = try hmacSHA256(key: secret, message: "\(formID):\(expiresStr):\(nonce)")
+        } catch {
+            // an hmac failure must reject, never accept. the old `try?` + ""
+            // fallback compared attacker-supplied "" against expected "" when
+            // the hmac threw — an empty-signature token would validate.
+            return false
+        }
         // constant-time compare — the caller's signature is attacker-controlled,
         // and a short-circuiting == would leak prefix bytes of the MAC.
         return constantTimeEquals(Array(signature.utf8), Array(expectedSignature.utf8))
@@ -328,8 +343,8 @@ public enum CSRFProtection {
         guard parts.count == 3 else { return nil }
         return TimeInterval(parts[1])
     }
-    private static func hmacSHA256(key: String, message: String) -> String {
-        (try? HMACSHA256.hex(message: [UInt8](message.utf8), key: [UInt8](key.utf8))) ?? ""
+    private static func hmacSHA256(key: String, message: String) throws -> String {
+        try HMACSHA256.hex(message: [UInt8](message.utf8), key: [UInt8](key.utf8))
     }
 }
 

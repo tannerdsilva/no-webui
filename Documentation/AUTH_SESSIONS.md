@@ -148,9 +148,10 @@ max-age 1800s) are invalidated on rotation — documented, accepted behavior.
 
 **Rationale:** an in-memory-only secret silently invalidates every outstanding
 token on process restart; a persisted secret needs a storage location anyway and
-LMDB is the house choice. Session tokens never use the `SystemRandomNumberGenerator`
-fallback path in `CSRFProtection.generateSecret` (`Utilities.swift:280–283`);
-token material comes from `SecureRandom.bytes` exclusively.
+LMDB is the house choice. Session tokens never use a `SystemRandomNumberGenerator`
+fallback — and since 2026-09 no path in the framework does: `CSRFProtection`
+secret/token minting throws (`CSRFError.entropyUnavailable`/`.signingFailed`)
+instead. all token material comes from `SecureRandom.bytes` exclusively.
 
 ## Core protocols
 
@@ -305,7 +306,11 @@ Single `webui_sessions` env, one persistent environment, one writer:
   exists yet, and `SameSite=Lax` is the second layer). in the example these
   are additionally **single-use** via the `SingleUseTokenStore`: recorded as
   consumed before any KDF work, so a replayed or scraped token is rejected
-  once.
+  once. issuance is **budgeted**: `reserve(_:expiresAt:key:)` records each
+  minted token under the caller's ip, capped at `maxOutstandingPerKey`
+  (default 5) unsubmitted tokens, and `consume` releases the slot — a single
+  ip cannot stockpile login tokens and flood the store past capacity
+  (availability DoS).
 - authenticated forms: session-bound tokens — HMAC payload becomes
   `sessionID:formID:expiration` so a token minted for one session cannot be
   replayed against another. `Form(csrfToken:)` renders them unchanged.
@@ -321,9 +326,9 @@ Single `webui_sessions` env, one persistent environment, one writer:
 | Clickjacking | `X-Frame-Options: SAMEORIGIN` on every response (the `frame-ancestors` CSP directive is inert in a `<meta>` element). implemented. `form-action 'self'` + `base-uri 'self'` on the login page CSP |
 | Timing side channels | `constantTimeEquals` on all MAC/token compares |
 | Token theft at rest | tokens hashed in LMDB; raw token never logged |
-| Entropy weakness | `SecureRandom.bytes` only — the `SystemRandomNumberGenerator` fallback (`Utilities.swift`) is unreachable for session/token material (it remains the CSRF-secret fallback; noted as a future fail-loud change) |
+| Entropy weakness | `SecureRandom.bytes` only, everywhere — since 2026-09 no path in the framework falls back to a PRNG: `CSRFProtection` secret/token minting and the demo's session id/seed throw (`CSRFError.entropyUnavailable` / `SessionToken.TokenError`) instead |
 | Open redirect | server-fixed redirect targets in the example (login → `/`, logout → `/login`); runtime redirect already blocks `javascript:`/`data:` |
-| Brute force / stuffing | per-account + per-IP **fixed-window throttle** (`LoginThrottle`, `429` + `Retry-After`) + **global Argon2 concurrency cap** (`AsyncSemaphore`, default 4) + **single-use login CSRF** (`SingleUseTokenStore`) — all implemented in the example. LMDB-backed attempt log still future |
+| Brute force / stuffing | per-account + per-IP **fixed-window throttle** (`LoginThrottle`, `429` + `Retry-After`) + **global Argon2 concurrency cap** (`AsyncSemaphore`, default 4) + **single-use login CSRF** (`SingleUseTokenStore`) — all implemented in the example. the mint page is throttled separately (60/min/ip) and the store budgets outstanding tokens per ip (default 5), so one caller cannot stockpile login tokens and flood it. LMDB-backed attempt log still future |
 | Account enumeration | dummy-hash discipline equalizes timing |
 | Proxy spoofing | trusted-proxy configuration for `X-Forwarded-For`; unconfigured ⇒ per-IP throttles key on the socket peer (the example keys on the NIO peer address) |
 | Session fixation | fresh session token + id on every login; logout-everywhere |

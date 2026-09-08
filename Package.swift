@@ -43,10 +43,9 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-log.git", "1.0.0"..<"2.0.0"),
         .package(url: "https://github.com/apple/swift-nio.git", "2.0.0"..<"3.0.0"),
-        // TEMP local path while the rawdog21 tag is unpublished; flip to
-        // `.package(url: "https://github.com/tannerdsilva/rawdog.git", from: "21.0.0")`
-        // once pushed.
-        .package(name: "rawdog", path: "../rawdog-v21"),
+        // published and tagged 21.0.0 (2026-09); resolves by the pinned
+        // revision in Package.resolved.
+        .package(url: "https://github.com/tannerdsilva/rawdog.git", from: "21.0.0"),
     ],
     targets: [
 

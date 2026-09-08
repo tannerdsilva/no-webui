@@ -11,25 +11,48 @@ import WebUIAuth
 
 // MARK: - Session registry (per-session interactive routers)
 
-// maps a session's token hash to the EventRouter of the last full render of
-// its dashboard page. replaced on every GET / re-render (one router per render
-// pass). reference-backed so the demo struct stays immutable across the async
-// server loop while the map mutates safely.
+// maps a session's token hash to the EventRouters of its recent full renders,
+// keyed by the per-render websocket token minted into each page. replaced as
+// pages re-render (one router per render pass). keeping the recent N render
+// tokens per session lets several tabs of the same session route events while
+// a stale page from a *different* session can never present a valid token for
+// this one (cross-session replay); logout removes the whole session entry.
 final class RouterRegistry: Sendable {
 	private struct Values {
-		var routers: [[UInt8]: EventRouter] = [:]
+		var routers: [[UInt8]: [String: EventRouter]] = [:]
+		var order: [[UInt8]: [String]] = [:]
 	}
 	private let values = Mutex(Values())
+	private let maxRendersPerSession: Int
 
-	func router(forTokenHash hash: [UInt8]) -> EventRouter? {
-		values.withLock { $0.routers[hash] }
+	init(maxRendersPerSession: Int = 8) {
+		self.maxRendersPerSession = maxRendersPerSession
 	}
-	func set(_ router: EventRouter, forTokenHash hash: [UInt8]) {
-		values.withLock { $0.routers[hash] = router }
+
+	func router(forTokenHash hash: [UInt8], renderToken: String) -> EventRouter? {
+		values.withLock { $0.routers[hash]?[renderToken] }
+	}
+	func set(_ router: EventRouter, forTokenHash hash: [UInt8], renderToken: String) {
+		values.withLock { values in
+			if values.routers[hash] == nil {
+				values.routers[hash] = [:]
+				values.order[hash] = []
+			}
+			if let seen = values.order[hash]!.firstIndex(of: renderToken) {
+				values.order[hash]!.remove(at: seen)
+			}
+			values.routers[hash]![renderToken] = router
+			values.order[hash]!.append(renderToken)
+			while values.order[hash]!.count > maxRendersPerSession {
+				let evicted = values.order[hash]!.removeFirst()
+				values.routers[hash]!.removeValue(forKey: evicted)
+			}
+		}
 	}
 	func remove(forTokenHash hash: [UInt8]) {
 		values.withLock { values in
-			_ = values.routers.removeValue(forKey: hash)
+			values.routers.removeValue(forKey: hash)
+			values.order.removeValue(forKey: hash)
 		}
 	}
 }
@@ -133,7 +156,7 @@ func echoOutHTML(_ text: String) -> String {
 /// a full re-render with a *fresh* `EventRouter` per render pass (house rule),
 /// registered under the session's token hash so the WebSocket can dispatch to
 /// it. `AuthContext` flows into the tree so views can branch on the identity.
-func renderDashboard(state: AuthDemoState, auth: AuthContext, logoutToken: String) -> (html: String, router: EventRouter) {
+func renderDashboard(state: AuthDemoState, auth: AuthContext, logoutToken: String, renderToken: String) -> (html: String, router: EventRouter) {
 	let router = EventRouter()
 	let html = AuthContext.$current.withValue(auth) {
 		RenderContext.$current.withValue(RenderContext(router: router)) {
@@ -205,7 +228,14 @@ func renderDashboard(state: AuthDemoState, auth: AuthContext, logoutToken: Strin
 			.render()
 		}
 	}
-	let document = WebUIDocument(title: "Member Dashboard", body: html).render()
+	let document = WebUIDocument(
+		title: "Member Dashboard",
+		body: html,
+		// the per-render websocket token: the runtime echoes it with every
+		// event/ping, and the server only routes messages carrying a token it
+		// minted for this session (cross-session replay protection).
+		runtimeConfig: RuntimeConfig(renderToken: renderToken)
+	).render()
 	return (html: document, router: router)
 }
 
@@ -309,6 +339,10 @@ struct WebUIAuthExample {
 	let connections = AuthConnectionRegistry()
 	let argon2Limiter = AsyncSemaphore(permits: 4)
 	let loginThrottle = LoginThrottle(windowSeconds: 60, maxAttempts: 20)
+	// the mint page gets its own, more generous budget — separate from submit
+	// attempts so a user can refresh the login page without burning their
+	// attempt budget, but still bounds how fast one ip can load it.
+	let loginPageThrottle = LoginThrottle(windowSeconds: 60, maxAttempts: 60)
 	let loginTokenStore = SingleUseTokenStore()
 
 	// uploads beyond this are rejected with 413 — the demo accepts only tiny
@@ -415,7 +449,7 @@ struct WebUIAuthExample {
 		} else {
 			port = 9091
 		}
-		let csrfSecret = CSRFProtection.generateSecret()
+		let csrfSecret = try CSRFProtection.generateSecret()
 		let passwordRecord = PasswordRecord(
 			salt: try PasswordVerifier.makeSalt(),
 			hash: [],
@@ -442,6 +476,13 @@ struct WebUIAuthExample {
 		let bootstrap = ServerBootstrap(group: group)
 			.serverChannelOption(ChannelOptions.backlog, value: 128)
 			.serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
+			// a large explicit send buffer: the response is written and the
+			// socket closed immediately (Connection: close); anything the
+			// kernel could not accept in the first send would sit in NIO's
+			// pending-writes and be silently dropped at close. probe-verified:
+			// with the default loopback buffer a ~327 kb page lost its tail
+			// (the NIOAsyncChannel writer does not await the write promise).
+			.childChannelOption(ChannelOptions.socketOption(.so_sndbuf), value: 8 * 1024 * 1024)
 
 		let channel: NIOAsyncChannel<EventLoopFuture<AuthUpgradeResult>, Never> = try await bootstrap.bind(
 			host: "0.0.0.0", port: port
@@ -487,8 +528,11 @@ struct WebUIAuthExample {
 							try channel.pipeline.syncOperations.addHandler(AuthIdleCloseHandler())
 							let ws = try NIOAsyncChannel<WebSocketFrame, WebSocketFrame>(wrappingChannelSynchronously: channel)
 							let tokenHash = example.tokenHash(for: head)
-							let router = tokenHash.flatMap { example.routers.router(forTokenHash: $0) }
-							return AuthUpgradeResult.websocket(ws, router: router, tokenHash: tokenHash)
+							// the router is NOT resolved at upgrade: the first
+							// event/ping carries the page's render token, which
+							// selects the router (and proves the page belongs to
+							// this session). see `boundRouter`.
+							return AuthUpgradeResult.websocket(ws, tokenHash: tokenHash)
 						}
 					}
 				)
@@ -526,8 +570,8 @@ struct WebUIAuthExample {
 	func handle(_ negotiationFuture: EventLoopFuture<AuthUpgradeResult>) async {
 		do {
 			switch try await negotiationFuture.get() {
-			case .websocket(let ws, let router, let tokenHash):
-				try await handleWebsocket(ws, router: router, tokenHash: tokenHash)
+			case .websocket(let ws, let tokenHash):
+				try await handleWebsocket(ws, tokenHash: tokenHash)
 			case .http(let http):
 				try await handleHTTP(http)
 			}
@@ -536,7 +580,7 @@ struct WebUIAuthExample {
 		}
 	}
 
-	private func handleWebsocket(_ channel: NIOAsyncChannel<WebSocketFrame, WebSocketFrame>, router: EventRouter?, tokenHash: [UInt8]?) async throws {
+	private func handleWebsocket(_ channel: NIOAsyncChannel<WebSocketFrame, WebSocketFrame>, tokenHash: [UInt8]?) async throws {
 		// register before reading so logout teardown can close this socket;
 		// unregister when the connection ends (normal close or idle reap).
 		var connectionID: Int?
@@ -551,7 +595,7 @@ struct WebUIAuthExample {
 							switch frame.opcode {
 							case .text:
 								let payload = String(buffer: frame.unmaskedData)
-								await self.dispatch(eventText: payload, router: router, tokenHash: tokenHash, outbound: outbound)
+								await self.dispatch(eventText: payload, tokenHash: tokenHash, outbound: outbound)
 							case .ping:
 								let buf = ByteBuffer()
 								let pong = WebSocketFrame(fin: true, opcode: .pong, data: buf)
@@ -579,29 +623,31 @@ struct WebUIAuthExample {
 		}
 	}
 
-	// the socket carries no identity in its messages — the per-session router
-	// bound at upgrade is the dispatch target (per-render router for the last
-	// full page render of that session). revocation (logout) and expiry are
-	// enforced **per event**: the session must still exist and be unexpired in
-	// the store, or the client is redirected to /login and the socket closed —
-	// an already-open socket has no residual power after logout.
-	private func dispatch(eventText payload: String, router: EventRouter?, tokenHash: [UInt8]?, outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>) async {
+	// the socket carries no identity in its messages — each `event`/`ping`
+	// carries the page's render token, which selects the router (a token this
+	// session never minted means a stale or foreign page, and is rejected).
+	// revocation (logout) and expiry are enforced per event too: the session
+	// must still exist and be unexpired in the store, or the client is
+	// redirected to /login and the socket closed — an already-open socket has
+	// no residual power after logout.
+	private func dispatch(eventText payload: String, tokenHash: [UInt8]?, outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>) async {
 		do {
 			let msg = try WSIncoming(jsonText: payload)
 			switch msg {
-			case .event(let component, let event, let data):
+			case .event(let component, let event, let data, let token):
 				guard await sessionIsAlive(tokenHash: tokenHash, outbound: outbound) else { return }
-				guard let router else { return }
+				guard let router = await boundRouter(token: token, tokenHash: tokenHash, outbound: outbound) else { return }
 				let eventData = EventData(component: ComponentID(component), event: event, data: data)
 				let updates = await router.handle(eventData)
 				guard !updates.isEmpty else { return }
 				let out = WSOutgoing.update(fragments: updates)
 				try await writeJSON(out, outbound: outbound)
-			case .ping:
+			case .ping(let token):
 				// pings keep an idle socket alive — session liveness is
 				// enforced here too, so an expired or revoked session's
 				// socket cannot ping forever.
 				guard await sessionIsAlive(tokenHash: tokenHash, outbound: outbound) else { return }
+				guard await boundRouter(token: token, tokenHash: tokenHash, outbound: outbound) != nil else { return }
 				try await writeJSON(WSOutgoing.pong, outbound: outbound)
 			case .navigate:
 				break
@@ -610,6 +656,21 @@ struct WebUIAuthExample {
 			let err = WSOutgoing.error(code: "decode", message: "bad event: \(error)")
 			try? await writeJSON(err, outbound: outbound)
 		}
+	}
+
+	/// the router for a message presenting `token` on a session's socket, or
+	/// `nil` when the token is absent or unknown to this session — answered
+	/// with a redirect to /login and the socket closed. this is the
+	/// cross-session replay gate: a stale page from another (or a former)
+	/// session's render can never present a token this session minted.
+	private func boundRouter(token: String?, tokenHash: [UInt8]?, outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>) async -> EventRouter? {
+		guard let tokenHash, let token,
+		      let router = routers.router(forTokenHash: tokenHash, renderToken: token) else {
+			try? await writeJSON(WSOutgoing.redirect(url: "/login", replace: true), outbound: outbound)
+			try? await writeClose(outbound: outbound)
+			return nil
+		}
+		return router
 	}
 
 	/// `true` when the session behind `tokenHash` still exists and is
@@ -693,7 +754,18 @@ struct WebUIAuthExample {
 
 		switch (head.method, head.uri) {
 		case (.GET, "/login"):
-			let token = CSRFProtection.token(for: "login", secret: csrfSecret)
+			// the mint page is throttled (separate, more generous budget) and
+			// every issued token is reserved under the caller's outstanding
+			// budget, so one ip cannot stockpile tokens and later flood the
+			// single-use store past capacity, locking out other logins.
+			let ipKey = "ip:\(peerIP)"
+			guard loginPageThrottle.record(ipKey) else {
+				return try await loginResponse(outbound: outbound, status: .tooManyRequests, headers: [("Retry-After", "60")], body: "too many login pages — try again later")
+			}
+			let token = try CSRFProtection.token(for: "login", secret: csrfSecret)
+			guard await loginTokenStore.reserve(token, expiresAt: CSRFProtection.expiry(of: token) ?? Date().timeIntervalSince1970, key: ipKey) else {
+				return try await loginResponse(outbound: outbound, status: .tooManyRequests, headers: [("Retry-After", "60")], body: "too many outstanding login forms — submit one first")
+			}
 			try await loginResponse(outbound: outbound, status: .ok, headers: [("Content-Type", "text/html; charset=utf-8")], body: renderLoginPage(error: nil, csrfToken: token))
 		case (.POST, "/login"):
 			try await handleLogin(head: head, body: body, peerIP: peerIP, outbound: outbound)
@@ -715,7 +787,7 @@ struct WebUIAuthExample {
 
 	private func handleLogin(head: HTTPRequestHead, body: [UInt8], peerIP: String, outbound: NIOAsyncChannelOutboundWriter<HTTPPart<HTTPResponseHead, ByteBuffer>>) async throws {
 		func failure(_ message: String) async throws {
-			let token = CSRFProtection.token(for: "login", secret: csrfSecret)
+			let token = try CSRFProtection.token(for: "login", secret: csrfSecret)
 			try await loginResponse(outbound: outbound, status: .ok, headers: [("Content-Type", "text/html; charset=utf-8")], body: renderLoginPage(error: message, csrfToken: token))
 		}
 		func tooMany(_ message: String) async throws {
@@ -740,14 +812,15 @@ struct WebUIAuthExample {
 
 		// single-use login tokens: the stateless HMAC token may only be
 		// submitted once. a replayed or scraped token is rejected here, before
-		// any KDF work is spent.
-		guard await loginTokenStore.consume(csrf, expiresAt: CSRFProtection.expiry(of: csrf) ?? Date().timeIntervalSince1970) else {
+		// any KDF work is spent. consume also releases the issuer's outstanding
+		// budget (keyed by the ip the token was reserved under).
+		let ipKey = "ip:\(peerIP)"
+		guard await loginTokenStore.consume(csrf, expiresAt: CSRFProtection.expiry(of: csrf) ?? Date().timeIntervalSince1970, key: ipKey) else {
 			return try await failure("invalid or expired form token — try again")
 		}
 
 		// per-IP + per-account throttles key on the socket peer (no trusted
 		// proxy is configured, so X-Forwarded-For is never honored here).
-		let ipKey = "ip:\(peerIP)"
 		guard loginThrottle.record(ipKey) else {
 			return try await tooMany("too many attempts — try again later")
 		}
@@ -781,11 +854,17 @@ struct WebUIAuthExample {
 
 		// establish the session: fresh token, hash-at-rest, in-memory store.
 		let token = try SessionToken.generate()
+		// the session id and csrf seed are entropy-minted like the token: a
+		// silent `?? []` fallback would let two sessions collide on an empty id.
+		guard let sessionID = SecureRandom.bytes(16),
+		      let sessionSeed = SecureRandom.bytes(16) else {
+			throw SessionToken.TokenError.entropyUnavailable
+		}
 		let session = AuthenticatedSession(
-			id: SecureRandom.bytes(16) ?? [],
+			id: sessionID,
 			tokenHash: try SessionToken.hash(token),
 			identityID: Self.demoUsername,
-			csrfSeed: SecureRandom.bytes(16) ?? [],
+			csrfSeed: sessionSeed,
 			createdAt: Date(),
 			expiresAt: Date().addingTimeInterval(TimeInterval(DemoSession.maxAgeSeconds)),
 			lastSeenAt: Date()
@@ -843,14 +922,20 @@ struct WebUIAuthExample {
 		}
 		let identity = Identity(id: session.identityID, roles: [Role.member, Role.admin])
 		let auth = AuthContext(session: session, identity: identity)
-		let logoutToken = CSRFProtection.token(for: "logout", secret: csrfSecret)
-		let (html, router) = renderDashboard(state: state, auth: auth, logoutToken: logoutToken)
-		routers.set(router, forTokenHash: try SessionToken.hash(token))
+		let logoutToken = try CSRFProtection.token(for: "logout", secret: csrfSecret)
+		// a fresh render token per full page render: only pages minted for this
+		// session can drive its sockets. entropy failure is fatal (fail loud).
+		guard let renderTokenBytes = SecureRandom.bytes(16) else {
+			throw SessionToken.TokenError.entropyUnavailable
+		}
+		let renderToken = Base64.encodeURL(renderTokenBytes)
+		let (html, router) = renderDashboard(state: state, auth: auth, logoutToken: logoutToken, renderToken: renderToken)
+		routers.set(router, forTokenHash: try SessionToken.hash(token), renderToken: renderToken)
 		try await loginResponse(outbound: outbound, status: .ok, headers: [("Content-Type", "text/html; charset=utf-8")], body: html)
 	}
 }
 
 enum AuthUpgradeResult: Sendable {
-	case websocket(NIOAsyncChannel<WebSocketFrame, WebSocketFrame>, router: EventRouter?, tokenHash: [UInt8]?)
+	case websocket(NIOAsyncChannel<WebSocketFrame, WebSocketFrame>, tokenHash: [UInt8]?)
 	case http(NIOAsyncChannel<HTTPServerRequestPart, HTTPPart<HTTPResponseHead, ByteBuffer>>)
 }
