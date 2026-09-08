@@ -17,7 +17,7 @@ import Security
 // vectors in Tests/WebUITests/CryptoTests.swift.
 public enum HMACSHA256 {
 	public static func authenticate(message: [UInt8], with key: [UInt8]) throws -> [UInt8] {
-		var hmac = try RAW_hmac.HMAC<RAW_sha256.Hasher<RAW_sha256.Hash>>(key: key)
+		var hmac = try RAW_hmac.HMAC<RAW_sha256.Hasher>(key: key)
 		try hmac.update(message: message)
 		var digest = [UInt8](repeating: 0, count: 32)
 		try digest.withUnsafeMutableBytes { buffer in

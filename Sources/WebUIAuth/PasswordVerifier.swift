@@ -110,7 +110,7 @@ public enum PasswordVerifier {
 			parallelism: parameters.parallelism,
 			as: RAW_sha256.Hash.self
 		)
-		return output.RAW_access { buffer in
+		return output.RAW_access_immutable { buffer in
 			[UInt8](buffer)
 		}
 	}

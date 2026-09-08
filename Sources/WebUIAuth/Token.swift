@@ -32,7 +32,7 @@ public enum SessionToken {
 		guard token.count == byteCount else {
 			throw TokenError.invalidLength
 		}
-		var hasher = RAW_sha256.Hasher<RAW_sha256.Hash>()
+		var hasher = RAW_sha256.Hasher()
 		token.withUnsafeBytes { buffer in
 			hasher.update(buffer)
 		}
