@@ -394,7 +394,20 @@ struct WebUIAuthExample {
 		return authority == host
 	}
 
-	func loginResponse(outbound: NIOAsyncChannelOutboundWriter<HTTPPart<HTTPResponseHead, ByteBuffer>>, status: HTTPResponseStatus, headers: [(String, String)], body: String) async throws {
+	/// write a full http response and await the terminal write's promise. the
+	/// `NIOAsyncChannel` outbound writer does not await write promises, so a
+	/// response larger than the socket send buffer could be truncated when the
+	/// connection closes right after writing (probe-verified: ~327 kb pages
+	/// lost their tail). writing through the raw channel and awaiting the
+	/// terminal flush guarantees every byte reached the kernel before the
+	/// connection closes — no send-buffer sizing required.
+	func writeResponse(channel: Channel, head: HTTPResponseHead, body: ByteBuffer) async throws {
+		_ = channel.write(NIOAny(HTTPPart<HTTPResponseHead, ByteBuffer>.head(head)))
+		_ = channel.write(NIOAny(HTTPPart<HTTPResponseHead, ByteBuffer>.body(body)))
+		try await channel.writeAndFlush(NIOAny(HTTPPart<HTTPResponseHead, ByteBuffer>.end(nil))).get()
+	}
+
+	func loginResponse(channel: Channel, status: HTTPResponseStatus, headers: [(String, String)], body: String) async throws {
 		var head = HTTPResponseHead(version: .http1_1, status: status)
 		// clickjacking control — X-Frame-Options is header-only (the
 		// frame-ancestors CSP directive is inert in a <meta> element).
@@ -411,13 +424,13 @@ struct WebUIAuthExample {
 		head.headers.replaceOrAdd(name: "Connection", value: "close")
 		var buf = ByteBuffer()
 		buf.writeString(body)
-		try await outbound.write(contentsOf: [.head(head), .body(buf), .end(nil)])
+		try await writeResponse(channel: channel, head: head, body: buf)
 	}
 
-	func redirect(outbound: NIOAsyncChannelOutboundWriter<HTTPPart<HTTPResponseHead, ByteBuffer>>, to target: String, setCookies: [(String, String)] = []) async throws {
+	func redirect(channel: Channel, to target: String, setCookies: [(String, String)] = []) async throws {
 		var setCookieHeaders = setCookies
 		setCookieHeaders.insert(("Location", target), at: 0)
-		try await loginResponse(outbound: outbound, status: .seeOther, headers: setCookieHeaders, body: "")
+		try await loginResponse(channel: channel, status: .seeOther, headers: setCookieHeaders, body: "")
 	}
 
 	/// refused upgrade response: write the rejection and close, then return
@@ -476,13 +489,6 @@ struct WebUIAuthExample {
 		let bootstrap = ServerBootstrap(group: group)
 			.serverChannelOption(ChannelOptions.backlog, value: 128)
 			.serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
-			// a large explicit send buffer: the response is written and the
-			// socket closed immediately (Connection: close); anything the
-			// kernel could not accept in the first send would sit in NIO's
-			// pending-writes and be silently dropped at close. probe-verified:
-			// with the default loopback buffer a ~327 kb page lost its tail
-			// (the NIOAsyncChannel writer does not await the write promise).
-			.childChannelOption(ChannelOptions.socketOption(.so_sndbuf), value: 8 * 1024 * 1024)
 
 		let channel: NIOAsyncChannel<EventLoopFuture<AuthUpgradeResult>, Never> = try await bootstrap.bind(
 			host: "0.0.0.0", port: port
@@ -728,10 +734,10 @@ struct WebUIAuthExample {
 				case .end:
 					guard let head = requestHead else { return }
 					if bodyTooLarge {
-						try await loginResponse(outbound: outbound, status: .payloadTooLarge, headers: [], body: "request body too large")
+						try await loginResponse(channel: channel.channel, status: .payloadTooLarge, headers: [], body: "request body too large")
 					} else {
 						let peerIP = channel.channel.remoteAddress?.ipAddress ?? "unknown"
-						try await self.route(head: head, body: bodyBytes, peerIP: peerIP, outbound: outbound)
+						try await self.route(head: head, body: bodyBytes, peerIP: peerIP, channel: channel.channel)
 					}
 					return
 				}
@@ -739,14 +745,14 @@ struct WebUIAuthExample {
 		}
 	}
 
-	private func route(head: HTTPRequestHead, body: [UInt8], peerIP: String, outbound: NIOAsyncChannelOutboundWriter<HTTPPart<HTTPResponseHead, ByteBuffer>>) async throws {
+	private func route(head: HTTPRequestHead, body: [UInt8], peerIP: String, channel: Channel) async throws {
 		// assets are public (the design system css + js runtime)
 		switch (head.method, head.uri) {
 		case (.GET, "/__assets/css"):
-			try await loginResponse(outbound: outbound, status: .ok, headers: [("Content-Type", "text/css; charset=utf-8")], body: WebUIAssets.css)
+			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/css; charset=utf-8")], body: WebUIAssets.css)
 			return
 		case (.GET, "/__assets/js"):
-			try await loginResponse(outbound: outbound, status: .ok, headers: [("Content-Type", "text/javascript; charset=utf-8")], body: WebUIAssets.js)
+			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/javascript; charset=utf-8")], body: WebUIAssets.js)
 			return
 		default:
 			break
@@ -760,44 +766,44 @@ struct WebUIAuthExample {
 			// single-use store past capacity, locking out other logins.
 			let ipKey = "ip:\(peerIP)"
 			guard loginPageThrottle.record(ipKey) else {
-				return try await loginResponse(outbound: outbound, status: .tooManyRequests, headers: [("Retry-After", "60")], body: "too many login pages — try again later")
+				return try await loginResponse(channel: channel, status: .tooManyRequests, headers: [("Retry-After", "60")], body: "too many login pages — try again later")
 			}
 			let token = try CSRFProtection.token(for: "login", secret: csrfSecret)
 			guard await loginTokenStore.reserve(token, expiresAt: CSRFProtection.expiry(of: token) ?? Date().timeIntervalSince1970, key: ipKey) else {
-				return try await loginResponse(outbound: outbound, status: .tooManyRequests, headers: [("Retry-After", "60")], body: "too many outstanding login forms — submit one first")
+				return try await loginResponse(channel: channel, status: .tooManyRequests, headers: [("Retry-After", "60")], body: "too many outstanding login forms — submit one first")
 			}
-			try await loginResponse(outbound: outbound, status: .ok, headers: [("Content-Type", "text/html; charset=utf-8")], body: renderLoginPage(error: nil, csrfToken: token))
+			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/html; charset=utf-8")], body: renderLoginPage(error: nil, csrfToken: token))
 		case (.POST, "/login"):
-			try await handleLogin(head: head, body: body, peerIP: peerIP, outbound: outbound)
+			try await handleLogin(head: head, body: body, peerIP: peerIP, channel: channel)
 		case (.POST, "/logout"):
-			try await handleLogout(head: head, body: body, outbound: outbound)
+			try await handleLogout(head: head, body: body, channel: channel)
 		case (.GET, "/logout"):
 			// logout is POST-only (CSRF-protected); a plain GET is a CSRF
 			// vector, so it gets no treatment.
-			try await loginResponse(outbound: outbound, status: .methodNotAllowed, headers: [], body: "")
+			try await loginResponse(channel: channel, status: .methodNotAllowed, headers: [], body: "")
 		case (.GET, "/"):
-			try await handleIndex(head: head, outbound: outbound)
+			try await handleIndex(head: head, channel: channel)
 		case (_, "/ws"):
 			// the upgrade path handles this; reaching here means no upgrade.
-			try await loginResponse(outbound: outbound, status: .notFound, headers: [], body: "not found")
+			try await loginResponse(channel: channel, status: .notFound, headers: [], body: "not found")
 		default:
-			try await loginResponse(outbound: outbound, status: .notFound, headers: [], body: "not found")
+			try await loginResponse(channel: channel, status: .notFound, headers: [], body: "not found")
 		}
 	}
 
-	private func handleLogin(head: HTTPRequestHead, body: [UInt8], peerIP: String, outbound: NIOAsyncChannelOutboundWriter<HTTPPart<HTTPResponseHead, ByteBuffer>>) async throws {
+	private func handleLogin(head: HTTPRequestHead, body: [UInt8], peerIP: String, channel: Channel) async throws {
 		func failure(_ message: String) async throws {
 			let token = try CSRFProtection.token(for: "login", secret: csrfSecret)
-			try await loginResponse(outbound: outbound, status: .ok, headers: [("Content-Type", "text/html; charset=utf-8")], body: renderLoginPage(error: message, csrfToken: token))
+			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/html; charset=utf-8")], body: renderLoginPage(error: message, csrfToken: token))
 		}
 		func tooMany(_ message: String) async throws {
-			try await loginResponse(outbound: outbound, status: .tooManyRequests, headers: [("Retry-After", "60")], body: message)
+			try await loginResponse(channel: channel, status: .tooManyRequests, headers: [("Retry-After", "60")], body: message)
 		}
 
 		// the only accepted encoding is the browser's urlencoded form POST.
 		guard let contentType = head.headers.first(name: "content-type")?.lowercased(),
 		      contentType.hasPrefix("application/x-www-form-urlencoded") else {
-			try await loginResponse(outbound: outbound, status: .unsupportedMediaType, headers: [], body: "expected application/x-www-form-urlencoded")
+			try await loginResponse(channel: channel, status: .unsupportedMediaType, headers: [], body: "expected application/x-www-form-urlencoded")
 			return
 		}
 
@@ -876,17 +882,17 @@ struct WebUIAuthExample {
 			value: Base64.encode(token),
 			attributes: .init(maxAge: DemoSession.maxAgeSeconds, path: "/", httpOnly: true, sameSite: .lax)
 		).setCookieHeaderValue()
-		try await redirect(outbound: outbound, to: "/", setCookies: [("Set-Cookie", cookie)])
+		try await redirect(channel: channel, to: "/", setCookies: [("Set-Cookie", cookie)])
 	}
 
-	private func handleLogout(head: HTTPRequestHead, body: [UInt8], outbound: NIOAsyncChannelOutboundWriter<HTTPPart<HTTPResponseHead, ByteBuffer>>) async throws {
+	private func handleLogout(head: HTTPRequestHead, body: [UInt8], channel: Channel) async throws {
 		// CSRF-protected POST logout: the token comes from the per-render
 		// logout form on the dashboard (plan M2-T4 spirit).
 		let bodyText = String(decoding: body, as: UTF8.self)
 		guard let fields = try? URLEncodedForm.parse(bodyText),
 		      let csrf = fields["_csrf"],
 		      CSRFProtection.validate(csrf, for: "logout", secret: csrfSecret) else {
-			try await loginResponse(outbound: outbound, status: .forbidden, headers: [], body: "invalid or expired form token")
+			try await loginResponse(channel: channel, status: .forbidden, headers: [], body: "invalid or expired form token")
 			return
 		}
 
@@ -912,12 +918,12 @@ struct WebUIAuthExample {
 		if let clearCookie {
 			cookies.append(("Set-Cookie", clearCookie))
 		}
-		try await redirect(outbound: outbound, to: "/login", setCookies: cookies)
+		try await redirect(channel: channel, to: "/login", setCookies: cookies)
 	}
 
-	private func handleIndex(head: HTTPRequestHead, outbound: NIOAsyncChannelOutboundWriter<HTTPPart<HTTPResponseHead, ByteBuffer>>) async throws {
+	private func handleIndex(head: HTTPRequestHead, channel: Channel) async throws {
 		guard let (session, token) = await sessionDescription(for: head) else {
-			try await redirect(outbound: outbound, to: "/login")
+			try await redirect(channel: channel, to: "/login")
 			return
 		}
 		let identity = Identity(id: session.identityID, roles: [Role.member, Role.admin])
@@ -931,7 +937,7 @@ struct WebUIAuthExample {
 		let renderToken = Base64.encodeURL(renderTokenBytes)
 		let (html, router) = renderDashboard(state: state, auth: auth, logoutToken: logoutToken, renderToken: renderToken)
 		routers.set(router, forTokenHash: try SessionToken.hash(token), renderToken: renderToken)
-		try await loginResponse(outbound: outbound, status: .ok, headers: [("Content-Type", "text/html; charset=utf-8")], body: html)
+		try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/html; charset=utf-8")], body: html)
 	}
 }
 

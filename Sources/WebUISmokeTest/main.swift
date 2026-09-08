@@ -351,11 +351,6 @@ extension SmokeApp {
 		let bootstrap = ServerBootstrap(group: group)
 			.serverChannelOption(ChannelOptions.backlog, value: 128)
 			.serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
-			// explicit send buffer: responses close the connection immediately
-			// after writing, and the NIOAsyncChannel write is not promise-awaited
-			// — anything the kernel could not accept in the first send would be
-			// dropped at close (probe-verified silent tail truncation).
-			.childChannelOption(ChannelOptions.socketOption(.so_sndbuf), value: 8 * 1024 * 1024)
 
 		let channel: NIOAsyncChannel<EventLoopFuture<SmokeUpgradeResult>, Never> = try await bootstrap.bind(
 			host: "127.0.0.1", port: 9123
@@ -485,7 +480,7 @@ extension SmokeApp {
 			for try await part in inbound {
 				guard case .head(let head) = part else { continue }
 				guard head.method == .GET else {
-					try await respond405(outbound: outbound)
+					try await respond405(channel: channel.channel)
 					return
 				}
 				let (text, contentType): (String, String)
@@ -497,38 +492,40 @@ extension SmokeApp {
 				case "/", "/index.html":
 					text = self.pageHTML; contentType = "text/html; charset=utf-8"
 				default:
-					try await respond404(outbound: outbound)
+					try await respond404(channel: channel.channel)
 					return
 				}
-				try await respond(outbound: outbound, body: text, contentType: contentType)
+				try await respond(channel: channel.channel, body: text, contentType: contentType)
 			}
 		}
 	}
 
-	private func respond(outbound: NIOAsyncChannelOutboundWriter<HTTPPart<HTTPResponseHead, ByteBuffer>>, body: String, contentType: String) async throws {
+	private func respond(channel: Channel, body: String, contentType: String) async throws {
 		var head = HTTPResponseHead(version: .http1_1, status: .ok)
 		head.headers.replaceOrAdd(name: "Content-Type", value: contentType)
 		head.headers.replaceOrAdd(name: "Content-Length", value: "\(body.utf8.count)")
 		head.headers.replaceOrAdd(name: "Connection", value: "close")
 		var buf = ByteBuffer()
 		buf.writeString(body)
-		try await outbound.write(contentsOf: [.head(head), .body(buf), .end(nil)])
+		// await the terminal write promise: the async channel writer does not
+		// await write promises, and a response larger than the socket send
+		// buffer would otherwise lose its tail when the connection closes
+		// right after writing (probe-verified truncation).
+		_ = channel.write(NIOAny(HTTPPart<HTTPResponseHead, ByteBuffer>.head(head)))
+		_ = channel.write(NIOAny(HTTPPart<HTTPResponseHead, ByteBuffer>.body(buf)))
+		try await channel.writeAndFlush(NIOAny(HTTPPart<HTTPResponseHead, ByteBuffer>.end(nil))).get()
 	}
 
-	private func respond404(outbound: NIOAsyncChannelOutboundWriter<HTTPPart<HTTPResponseHead, ByteBuffer>>) async throws {
-		var head = HTTPResponseHead(version: .http1_1, status: .notFound)
-		head.headers.replaceOrAdd(name: "Content-Length", value: "9")
-		head.headers.replaceOrAdd(name: "Connection", value: "close")
-		var buf = ByteBuffer()
-		buf.writeString("not found")
-		try await outbound.write(contentsOf: [.head(head), .body(buf), .end(nil)])
+	private func respond404(channel: Channel) async throws {
+		try await respond(channel: channel, body: "not found", contentType: "text/plain; charset=utf-8")
 	}
 
-	private func respond405(outbound: NIOAsyncChannelOutboundWriter<HTTPPart<HTTPResponseHead, ByteBuffer>>) async throws {
+	private func respond405(channel: Channel) async throws {
 		var head = HTTPResponseHead(version: .http1_1, status: .methodNotAllowed)
 		head.headers.replaceOrAdd(name: "Content-Length", value: "0")
 		head.headers.replaceOrAdd(name: "Connection", value: "close")
-		try await outbound.write(contentsOf: [.head(head), .end(nil)])
+		_ = channel.write(NIOAny(HTTPPart<HTTPResponseHead, ByteBuffer>.head(head)))
+		try await channel.writeAndFlush(NIOAny(HTTPPart<HTTPResponseHead, ByteBuffer>.end(nil))).get()
 	}
 }
 

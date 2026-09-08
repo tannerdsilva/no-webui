@@ -164,6 +164,24 @@ struct AuthServerCeremonyTests {
 		}
 	}
 
+	@Test("dashboard page is delivered byte-complete with the default send buffer")
+	func dashboardByteComplete() async throws {
+		try await withServer { server in
+			let cookie = try #require(try logIn(server: server))
+			let dashboard = try httpRequest(port: server.port, path: "/", headers: [("cookie", "auth=\(cookie)")])
+			#expect(dashboard.status == 200)
+			// regression: the response is written with an awaited terminal
+			// write promise. before that fix, a page larger than the socket
+			// send buffer lost its tail when the connection closed right
+			// after writing (probe-verified silent truncation) — content-length
+			// would exceed the delivered body and the closing tags would be
+			// missing.
+			#expect(dashboard.body.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("</html>"))
+			#expect(dashboard.body.contains("WebUIRuntime.init({\"renderToken\""))
+			#expect(dashboard.header("content-length") == "\(dashboard.body.utf8.count)")
+		}
+	}
+
 	// MARK: harness plumbing
 
 	private func withServer(_ body: (AuthServer) async throws -> Void) async throws {
