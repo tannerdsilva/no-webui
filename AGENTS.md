@@ -235,13 +235,22 @@ these must never be weakened:
    and ObserverList mutations.
 8. **Growth caps** — EventRouter.maxHandlers (10K) and ObserverList.maxObservers
    (100).
-9. **SVG icon sanitization** — `IconSanitizer.sanitize()` strips `<script>`
-   tags, `on*` event handlers, `foreignObject`, and `javascript:`/`data:`/
-   `vbscript:` hrefs from every `WebUIIconCustom` body before emission.
+9. **SVG icon sanitization** — `IconSanitizer.sanitize()` is a parse-and-reemit
+   allowlist, not a regex denylist: only geometry elements (`path`/`line`/
+   `circle`/`rect`/`polyline`/`polygon`/`ellipse`) and geometry/stroke/fill
+   presentation attributes re-emit, self-closing and html-escaped — `script`,
+   `foreignObject`, url-bearing attributes, and `on*` handlers are absent from
+   the allowlist by construction, so whitespace- and entity-obfuscated
+   `javascript:`/`data:` schemes cannot ride into any `WebUIIconCustom` body.
 10. **Bounded wire parsing** — `JSONValue.parse` caps container nesting at 128
     (`JSONError.nestingTooDeep`). an adversarial websocket frame — probe-verified
     to stack-overflow the parser at ~5k depth inside NIO's 16 kb frame budget —
     throws, never crashes.
+11. **Websocket render binding** — pages mint a per-render token
+    (`RuntimeConfig.renderToken`) and every `event`/`ping` echoes it; a server
+    that mints tokens routes each message against the session's current render
+    tokens and closes the socket on unknown/missing ones. a stale page from a
+    different (or former) session can never drive another user's router.
 
 ## common workflows
 

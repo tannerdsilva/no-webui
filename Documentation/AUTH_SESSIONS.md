@@ -96,26 +96,31 @@ never strand the login form. Alternative (WS-ride login with a guest session)
 rejected: it drags in session rotation across a live connection, cookie issuance
 on a 101 handshake (unreliable across browsers), and a reload race.
 
-### Decision 2 — Per-render identity: one `hello` handshake message
+### Decision 2 — Per-render identity: a render token on every ws message
 
 Two tabs in one browser share one session cookie but render two independent
 pages with independent `c0, c1, …` component ID sets. A reconnecting socket is
-indistinguishable from a second tab. The server therefore cannot map a
+indistinguishable from a second tab (worse: after logout, another user's login
+reuses the same cookie jar, and a stale page's queued events would replay
+against the *new* session's router). The server therefore cannot map a
 connection to the correct router without per-render identity on the wire.
 
-**Decision:** the WS protocol gains exactly one new client→server message —
-`hello` carrying a per-render token embedded in the page on the `body`
-element (`data-webui-render="<uuid>"`). On connect the runtime sends it once;
-the server maintains `connection → (session, render) → router`. A reconnect
-carrying the same render token rebinds the existing page's router; a new render
-token (fresh page load or new tab) creates a new router. All other messages
-stay anonymous.
+**Decision:** every full render mints a per-render token (16 random bytes,
+base64url) embedded in the bootstrap (`RuntimeConfig.renderToken`). The
+runtime echoes it with **every** `event`/`ping`; the server keys
+`session → [renderToken: router]` (LRU-bounded per session) and resolves the
+router **per message**. A message without a token, or with a token this
+session never minted, is a stale/foreign page — answered with a
+`redirect:/login` and the socket closed. Logout removes the session's whole
+token set, so a stale page cannot present a valid token again.
 
-**Rationale:** alternative (re-render on every reconnect) causes visible
-full-page reloads on flaky networks and a full render per reconnect — rejected.
-The `hello` message is a structural WireGuard-adjacent property: identity is
-established *before* application messages flow. The "anonymous message set"
-claim is revised to "anonymous except for one-time connection establishment."
+**Rationale:** a one-shot `hello` handshake (the earlier plan) leaves the
+offline-queue flush racing the handshake and requires new message types and
+queue-gating in the runtime. A per-message token is stateless on the
+connection, needs no handshake ordering, closes the stale-queue replay for
+reconnects *and* long-lived stale pages alike, and keeps the wire additive
+(an optional `token` field on `event`/`ping`; servers that do not mint tokens
+simply ignore it).
 
 ### Decision 3 — Session write policy: absolute expiry, throttled touch, read cache
 
@@ -334,9 +339,12 @@ Single `webui_sessions` env, one persistent environment, one writer:
 | Session fixation | fresh session token + id on every login; logout-everywhere |
 | Cross-site WS hijacking | `Origin == Host` **and** a valid session cookie at accept-time; refused upgrades answer `403` and close |
 | Revoked-session push | **implemented in the example**: per-session connection registry — logout closes every live socket immediately; per-event + ping liveness checks remain the backstop |
+| Stale client replay | **implemented**: every `event`/`ping` carries a per-render token minted into the page (`RuntimeConfig.renderToken`); the server resolves each message against the session's current render tokens and answers unknown/missing tokens with `redirect:/login` + close. a stale page from a former — or a different — session, including its offline queue rebinding after a new user logs in, can never drive the new session's router |
+| Large-response truncation | explicit 8 MB `SO_SNDBUF` on all three reference servers: a `Connection: close` response whose tail did not fit the default loopback send buffer was silently truncated (probe-verified: ~327 kb pages dropped their last bytes because the `NIOAsyncChannel` write is not promise-awaited and the socket closes immediately) |
+| Expired-session reaping | a 5-minute maintenance loop purges expired sessions from the store, their render-token routers, and their sockets — no unbounded growth on a long-lived server |
+| Demo-server parity | `WebUIExample` and `WebUISmokeTest` share the auth server's ws posture — `Origin == Host`, session-gated upgrade, 120 s read-idle reaper, per-event liveness — so no reference server can be driven cross-origin |
 | Cache / bfcache leak | `Cache-Control: no-store` + `X-Content-Type-Options: nosniff` on every response (keeps the authenticated dashboard out of the http cache and out of the back-forward cache after logout) |
 | Client fragment XSS | the fragment sanitizer parses each patch into a detached DOM subtree (target element as context) and strips `<script>` elements, `on*` handlers, and unsafe `href`/`src`/`action`/`formaction`/`xlink:href` values on the real nodes — the parser resolves character references and quoting, so entity-obfuscated (`java&Tab;script:`), whitespace-obfuscated (`java&#x09;script:`), unquoted, and space-less-handler payloads are all neutralized client-side, mirroring the server sanitizer |
-| Stale client replay | queue scrub on redirect/terminal failure (above) |
 | Secret loss on restart | persisted HMAC secret + documented rotation (Decision 4) — **not yet implemented** |
 | Credential database loss | LMDB backup/restore runbook (§operational surface) |
 

@@ -68,9 +68,15 @@ value on the wire stays a string (the server's `EventData.data` is
     "type": "event",
     "component": "c0",
     "event": "click",
-    "data": { "targetId": "btn-inc", "targetClass": "button button--primary button--md" }
+    "data": { "targetId": "btn-inc", "targetClass": "button button--primary button--md" },
+    "token": "…"
 }
 ```
+
+when the page was served with a `renderToken` in the runtime config, that
+token is attached to every `event` and `ping` so the server can bind each
+message to the page's render (missing/unknown tokens are rejected by servers
+that mint them).
 
 `click` sends `targetId` and `targetClass` for the clicked element, so a
 single container `.onClick` handler can tell *what* was clicked (for example
@@ -174,7 +180,8 @@ attempt, capped at `wsMaxReconnectDelay`. a jitter multiplier of 0.5–1.5× is
 applied to the computed delay so simultaneous clients do not reconnect in
 lockstep.
 
-**Ping/pong:** sends `{ type: "ping" }` at `wsPingInterval`. if no
+**Ping/pong:** sends `{ type: "ping" }` (plus the `renderToken` when the page
+is configured with one) at `wsPingInterval`. if no
 `{ type: "pong" }` response arrives within `wsPongTimeout`, the connection is
 considered dead and reconnected. when a pong does arrive, the pending
 reconnect timer is cleared, so a healthy connection never triggers a spurious

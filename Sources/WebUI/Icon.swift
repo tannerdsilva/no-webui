@@ -73,9 +73,10 @@ func iconClass(for size: IconSize) -> String {
 // MARK: - WebUIIconCustom
 
 /// An icon supplied by the caller (your own path data) rather than the
-/// catalog. The body is sanitized before emission: `<script>` tags, `on*`
-/// event-handler attributes, `foreignObject`, and `javascript:`/`data:` hrefs
-/// are stripped, so free-form geometry can never become a script vector.
+/// catalog. The body is allowlist-sanitized before emission (`IconSanitizer`):
+/// only geometry elements and stroke/fill presentation attributes re-emit —
+/// script, event handlers, url-bearing attributes, and embedded documents are
+/// dropped by construction, so free-form geometry can never become a vector.
 public struct WebUIIconCustom: View {
 	public let name: String
 	public let body: String
@@ -110,32 +111,154 @@ public struct WebUIIconCustom: View {
 
 // MARK: - IconSanitizer
 
-/// Strips script-bearing constructs from caller-supplied SVG geometry.
-/// Catalog icons are generated and trusted; only `WebUIIconCustom` funnels
-/// user input through here.
+/// Parse-and-reemit sanitizer for caller-supplied SVG geometry. Catalog icons
+/// are generated and trusted; only `WebUIIconCustom` funnels user input here.
+///
+/// the previous implementation was a string-regex denylist — the same class
+/// the fragment sanitizer was rebuilt to eliminate (a regex pass runs before
+/// the browser's tokenizer decodes entities and quoting, so whitespace- and
+/// entity-obfuscated `javascript:`/`data:` schemes slip through). this pass
+/// is a real by-construction allowlist:
+///
+/// - only geometry elements re-emit (`path`, `line`, `circle`, ...); every
+///   other element — `script`, `a`, `use`, `image`, `foreignObject`, ... — is
+///   dropped along with its text content;
+/// - only geometry/stroke/fill presentation attributes survive, so `href`/
+///   `src`/`xlink:href`/`formaction`/`style` and every `on*` handler are
+///   absent from the allowlist rather than merely scrubbed;
+/// - attribute values are html-escaped on emission (entities cannot smuggle
+///   scheme obfuscation through), and any value containing `url(` (external
+///   paint-server / filter references) is dropped;
+/// - output is always well-formed self-closing tags.
 public enum IconSanitizer {
+	/// elements allowed through the tokenizer.
+	private static let allowedElements: Set<String> = [
+		"path", "line", "circle", "rect", "polyline", "polygon", "ellipse",
+	]
+
+	/// attributes allowed on allowed elements. geometry + stroke/fill
+	/// presentation only — no url-bearing or handler attributes exist in the
+	/// allowlist at all.
+	private static let allowedAttributes: Set<String> = [
+		"d", "cx", "cy", "r", "x", "y", "x1", "y1", "x2", "y2",
+		"width", "height", "rx", "ry", "points",
+		"stroke", "stroke-width", "stroke-linecap", "stroke-linejoin",
+		"stroke-dasharray", "stroke-dashoffset", "stroke-miterlimit",
+		"stroke-opacity", "fill", "fill-opacity", "fill-rule",
+		"opacity", "transform", "vector-effect", "color",
+	]
+
 	public static func sanitize(_ body: String) -> String {
-		var s = body
-		// <script ...>...</script>
-		if let re = try? NSRegularExpression(pattern: "<script\\b[^>]*>.*?</script>", options: [.caseInsensitive, .dotMatchesLineSeparators]) {
-			s = re.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: "")
+		var out = ""
+		var pos = body.startIndex
+
+		func atEnd() -> Bool { pos >= body.endIndex }
+		func peek() -> Character? { pos < body.endIndex ? body[pos] : nil }
+		func consume() { if pos < body.endIndex { pos = body.index(after: pos) } }
+		func starts(with prefix: String) -> Bool { body[pos...].hasPrefix(prefix) }
+
+		while !atEnd() {
+			guard peek() == "<" else {
+				// text between tags — icons carry no text; dropping it also
+				// buries any script body whose start tag was stripped.
+				consume()
+				continue
+			}
+
+			// comments, CDATA, processing instructions, doctype: drop.
+			if starts(with: "<!--") {
+				while !atEnd(), !starts(with: "-->") { consume() }
+				for _ in 0..<3 where !atEnd() { consume() }
+				continue
+			}
+			if starts(with: "<![CDATA[") {
+				while !atEnd(), !starts(with: "]]>") { consume() }
+				for _ in 0..<3 where !atEnd() { consume() }
+				continue
+			}
+			if starts(with: "<?") {
+				while !atEnd(), !starts(with: "?>") { consume() }
+				for _ in 0..<2 where !atEnd() { consume() }
+				continue
+			}
+			if starts(with: "<!") {
+				while !atEnd(), peek() != ">" { consume() }
+				if !atEnd() { consume() }
+				continue
+			}
+
+			consume() // the `<`; pos now at the tag content
+			var isClosing = false
+			if peek() == "/" { isClosing = true; consume() }
+
+			// tag name
+			var name = ""
+			while let c = peek(), c.isLetter || c.isNumber || c == "-" || c == ":" || c == "_" || c == "." {
+				name.append(c)
+				consume()
+			}
+			let lowerName = name.lowercased()
+
+			// attributes
+			var attrs: [(name: String, value: String)] = []
+			var malformed = false
+			while !atEnd() {
+				while let c = peek(), c == " " || c == "\t" || c == "\n" || c == "\r" { consume() }
+				guard let c = peek() else { break }
+				if c == ">" { consume(); break }
+				if c == "/" {
+					consume()
+					if peek() == ">" {
+						consume()
+					} else {
+						malformed = true
+					}
+					break
+				}
+				// attribute name
+				var attrName = ""
+				while let ac = peek(),
+				      ac != "=" && ac != " " && ac != "\t" && ac != "\n" && ac != "\r" && ac != ">" && ac != "/" {
+					attrName.append(ac)
+					consume()
+				}
+				while let c = peek(), c == " " || c == "\t" || c == "\n" || c == "\r" { consume() }
+				var value = ""
+				if peek() == "=" {
+					consume()
+					while let c = peek(), c == " " || c == "\t" || c == "\n" || c == "\r" { consume() }
+					if let quote = peek(), quote == "\"" || quote == "'" {
+						consume()
+						while let vc = peek(), vc != quote {
+							value.append(vc)
+							consume()
+						}
+						if peek() == quote { consume() }
+					} else {
+						while let vc = peek(),
+						      vc != " " && vc != "\t" && vc != "\n" && vc != "\r" && vc != ">" && vc != "/" {
+							value.append(vc)
+							consume()
+						}
+					}
+					attrs.append((attrName.lowercased(), value))
+				}
+				// a bare attribute (no `=`): dropped by continuing the loop.
+			}
+
+			guard !isClosing, !malformed, allowedElements.contains(lowerName) else {
+				continue
+			}
+			out += "<\(lowerName)"
+			for (name, value) in attrs {
+				guard allowedAttributes.contains(name), !value.localizedCaseInsensitiveContains("url(") else {
+					continue
+				}
+				out += " \(name)=\"\(htmlEscape(value))\""
+			}
+			out += "/>"
 		}
-		// stray <script> or </script>
-		s = s.replacingOccurrences(of: "</script>", with: "", options: .caseInsensitive)
-		s = s.replacingOccurrences(of: "<script", with: "<scr ipt", options: .caseInsensitive)
-		// on*="..." / on*='...' / on* (event handlers)
-		if let re = try? NSRegularExpression(pattern: "\\bon\\w+\\s*=", options: .caseInsensitive) {
-			s = re.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: "on-disabled=")
-		}
-		// foreignObject (arbitrary HTML host)
-		if let re = try? NSRegularExpression(pattern: "<\\s*foreignObject", options: .caseInsensitive) {
-			s = re.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: "<disabled-foreign-object")
-		}
-		// javascript: / data: inside href/src/xlink:href
-		if let re = try? NSRegularExpression(pattern: "(\\bhref|\\bsrc|\\bxlink:href)\\s*=\\s*[\"']\\s*(?:javascript|data|vbscript):", options: .caseInsensitive) {
-			s = re.stringByReplacingMatches(in: s, range: NSRange(s.startIndex..., in: s), withTemplate: "$1=\"#\"")
-		}
-		return s
+		return out
 	}
 }
 

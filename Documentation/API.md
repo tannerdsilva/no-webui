@@ -138,6 +138,15 @@ every attribute parameter (`id`, `class`, `name`, `for`, `data-status`,
 non-empty config the page emits `WebUIRuntime.init({...})`; with no config the
 default `WebUIRuntime.init();` is emitted byte-for-byte.
 
+`RuntimeConfig` keys: `wsUrl`, `wsReconnect`, `wsMaxReconnectDelay`,
+`wsPingInterval`, `wsPongTimeout`, `maxQueueSize`, `debounceInputMs`,
+`debounceMaxWaitMs`, `optimisticSettleMs`, `logLevel`, and `renderToken`. the
+`renderToken` (a per-render id minted by the server) is echoed back with every
+websocket `event`/`ping` so a server that mints tokens can route each message
+to the page's router and reject stale pages from other sessions — see
+`WebSocketProtocol` and the auth docs. only keys that are set are emitted;
+string values are hand-escaped into safe json string literals.
+
 ### CSS
 
 | Type | Description |
@@ -154,8 +163,11 @@ default `WebUIRuntime.init();` is emitted byte-for-byte.
 |---|---|
 | `htmlEscape(_ string: String) -> String` | escape HTML special characters (&, <, >, ", ') |
 | `Base64` | data-free rfc 4648 base64/base64url over `[UInt8]`: `encode`/`decode` (standard, `=` padding), `encodeURL`/`decodeURL` (url alphabet, no padding; decode tolerates missing padding, rejects invalid bytes) — replaces `Foundation.Data` base64 |
-| `JSONValue` | data-free rfc 8259 json value: `parse(_ text:)` (strict; rejects trailing tokens, unescaped control chars, malformed numbers, lone surrogates), `serialize()` (compact, integral numbers without `.0`), `escapeString(_:)` — replaces `JSONEncoder`/`JSONDecoder`/`JSONSerialization` on `Data` |
-| `WSIncoming(jsonText:)` / `WSIncoming(jsonBytes:)` | data-free decode of a `{"type":...}` client message (throws `WSMessageError.malformed`) |
+| `JSONValue` | data-free rfc 8259 json value: `parse(_ text:)` (strict; rejects trailing tokens, unescaped control chars, malformed numbers, lone surrogates, and container nesting beyond 128 via `JSONError.nestingTooDeep` — bounds the recursion depth of a wire frame), `serialize()` (compact, integral numbers without `.0`), `escapeString(_:)` — replaces `JSONEncoder`/`JSONDecoder`/`JSONSerialization` on `Data` |
+| `WSIncoming(jsonText:)` / `WSIncoming(jsonBytes:)` | data-free decode of a `{"type":...}` client message (throws `WSMessageError.malformed`). `event` messages carry
+`component`, `event`, `data`, and an optional `token`; `ping` carries an
+optional `token` — the per-render ws binding id servers may mint and check
+(absent for servers that do not use it) |
 | `WSOutgoing.jsonText` / `jsonBytes` | compact data-free emission of a server message |
 | `constantTimeEquals(_ lhs:, _ rhs:)` | constant-time equality over byte sequences (any `Sequence` of `UInt8`, e.g. `[UInt8]`) — no early exit on an equal-length input; used for MAC and token compares |
 | `injectAttributes(into html: String, _ attributes: String) -> String` | inject attributes into the first HTML tag |

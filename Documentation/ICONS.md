@@ -125,9 +125,14 @@ one.
 ### `WebUIIconCustom`
 
 an escape hatch for caller-supplied geometry (your own path data) that is not in
-the catalog. the body is **sanitized before emission**: `<script>` tags, `on*`
-event-handler attributes, `foreignObject`, and `javascript:`/`data:` hrefs are
-stripped, so free-form geometry can never become a script vector.
+the catalog. the body is **allowlist-sanitized before emission**
+(`IconSanitizer`, a parse-and-reemit tokenizer, not a regex denylist): only
+geometry elements (`path`/`line`/`circle`/`rect`/`polyline`/`polygon`/
+`ellipse`) and geometry/stroke/fill presentation attributes re-emit, self-
+closing and html-escaped — `script`, `foreignObject`, url-bearing attributes,
+and `on*` handlers are absent from the allowlist by construction, so
+whitespace- and entity-obfuscated schemes cannot ride in and free-form
+geometry can never become a script vector.
 
 ```swift
 WebUIIconCustom(
@@ -222,8 +227,13 @@ framework:
 - **attribute/text escaping** — `htmlEscape()` on the icon `class`, `aria-label`,
   and `data-icon` values. a `title` containing `"` or an `on*` payload is
   neutralized (covered by a dedicated test).
-- **custom-geometry sanitization** — `WebUIIconCustom` strips `<script>`, `on*`
-  handlers, `foreignObject`, and `javascript:`/`data:` hrefs before emission.
+- **custom-geometry sanitization** — `WebUIIconCustom` allowlist-sanitizes via
+  `IconSanitizer` (parse-and-reemit tokenizer): only geometry elements and
+  geometry/stroke/fill presentation attributes re-emit, self-closing and
+  html-escaped; `script`, `on*` handlers, `foreignObject`, and url-bearing
+  attributes are absent from the allowlist by construction. a test runs every
+  catalog glyph through the sanitizer unchanged, and the bypass payload table
+  (whitespace-/entity-obfuscated schemes) is regression-pinned.
 - **no-emoji guardrail** — a test asserts no shipped icon slot emits an emoji
   code point, so the migration cannot silently regress.
 - **first law** — a test asserts the *minified* shipped css is comment-free.

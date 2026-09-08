@@ -185,6 +185,115 @@ struct WebUIIconCustomTests {
 	}
 }
 
+@Suite("IconSanitizer allowlist")
+struct IconSanitizerAllowlistTests {
+
+	@Test("whitespace-obfuscated javascript: schemes cannot ride in on any element")
+	func obfuscatedSchemes() {
+		// the probe-verified regex bypass class: `java\tscript:` survives a
+		// literal `javascript:` denylist, so the element carrying it must be
+		// dropped entirely — `<a>` is not in the element allowlist.
+		let body = "<a href=\"java\tscript:alert(1)\">x</a>"
+		let cleaned = IconSanitizer.sanitize(body)
+		#expect(!cleaned.contains("<a"))
+		#expect(!cleaned.contains("script"))
+		#expect(cleaned.isEmpty)
+	}
+
+	@Test("entity-obfuscated url attributes are dropped with the attribute")
+	func entityObfuscatedAttr() {
+		// `href` is not in the attribute allowlist, so no form of it — plain,
+		// whitespace-padded, or entity-obfuscated — is emitted.
+		let body = "<path d=\"M1 1h10\" href=\"java&#x09;script:alert(1)\"/>"
+		let cleaned = IconSanitizer.sanitize(body)
+		#expect(cleaned == "<path d=\"M1 1h10\"/>")
+	}
+
+	@Test("on* handlers are absent from the allowlist, not scrubbed")
+	func handlersAbsent() {
+		let body = "<rect onload=\"x\" ONMOUSEOVER='y' x=\"1\" width=\"4\" height=\"4\"/>"
+		let cleaned = IconSanitizer.sanitize(body)
+		#expect(!cleaned.contains("on"))
+		#expect(cleaned == "<rect x=\"1\" width=\"4\" height=\"4\"/>")
+	}
+
+	@Test("script-bearing and embedded-document elements are dropped with their text")
+	func embeddedDocumentsDropped() {
+		let body = "<script>alert(1)</script><foreignObject><img src=\"x\" onload=\"pwn()\"/></foreignObject><path d=\"M1 1\"/>"
+		let cleaned = IconSanitizer.sanitize(body)
+		#expect(cleaned == "<path d=\"M1 1\"/>")
+	}
+
+	@Test("use/image/a/svg wrappers are dropped")
+	func wrapperElementsDropped() {
+		let body = "<svg onload=\"x\"><use href=\"#a\"/><image src=\"data:image/png;base64,x\"/><a href=\"https://evil.example\"><path d=\"M1 1\"/></a></svg>"
+		let cleaned = IconSanitizer.sanitize(body)
+		#expect(cleaned == "<path d=\"M1 1\"/>")
+	}
+
+	@Test("style attributes never survive")
+	func styleDropped() {
+		let body = "<path d=\"M1 1\" style=\"background:url(https://evil/x)\"/>"
+		let cleaned = IconSanitizer.sanitize(body)
+		#expect(!cleaned.contains("style"))
+		#expect(cleaned == "<path d=\"M1 1\"/>")
+	}
+
+	@Test("url() paint and filter values are dropped")
+	func urlValuesDropped() {
+		#expect(IconSanitizer.sanitize("<path d=\"M1 1\" fill=\"url(#grad)\"/>") == "<path d=\"M1 1\"/>")
+		#expect(IconSanitizer.sanitize("<path d=\"M1 1\" fill=\"url(https://evil/x)\"/>") == "<path d=\"M1 1\"/>")
+		#expect(IconSanitizer.sanitize("<path d=\"M1 1\" filter=\"url(#b)\"/>") == "<path d=\"M1 1\"/>")
+	}
+
+	@Test("attribute values are html-escaped; entities cannot smuggle input")
+	func valueEscaping() {
+		let body = "<path d=\"M1 1\" fill=\"x&quot; onload=&quot;y&quot;\"/>"
+		let cleaned = IconSanitizer.sanitize(body)
+		// the attacker's entity text is escaped again on emission: `&quot;`
+		// becomes `&amp;quot;`, so nothing decodes to a quote in the browser
+		// and no `" onload` boundary can form.
+		#expect(!cleaned.contains("\" onload"))
+		#expect(cleaned.contains("&amp;quot;"))
+		// the value's `&` is escaped so `&Tab;` can never decode in the browser.
+		let entity = IconSanitizer.sanitize("<path d=\"M1 1\" fill=\"java&Tab;script:1\"/>")
+		#expect(entity.contains("&amp;Tab;"))
+	}
+
+	@Test("bare attributes, comments, and quoting variants are handled")
+	func lexicalVariants() {
+		#expect(IconSanitizer.sanitize("<path disabled d=\"M1 1\"/>") == "<path d=\"M1 1\"/>")
+		#expect(IconSanitizer.sanitize("<path d='M1 1'/>") == "<path d=\"M1 1\"/>")
+		#expect(IconSanitizer.sanitize("<path d=M1-1h10/>") == "<path d=\"M1-1h10\"/>")
+		#expect(IconSanitizer.sanitize("<!-- <script>alert(1)</script> --><path d=\"M1 1\"/>") == "<path d=\"M1 1\"/>")
+		#expect(IconSanitizer.sanitize("<?xml version=\"1.0\"?><path d=\"M1 1\"/>") == "<path d=\"M1 1\"/>")
+	}
+
+	@Test("open/close tag pairs collapse to one self-closing element")
+	func openCloseCollapses() {
+		let body = "<path d=\"M1 1\"></path>"
+		#expect(IconSanitizer.sanitize(body) == "<path d=\"M1 1\"/>")
+	}
+
+	@Test("allowlisted presentation attributes survive; others are dropped")
+	func presentationSurvives() {
+		let body = "<line x1=\"1\" y1=\"2\" x2=\"3\" y2=\"4\" stroke=\"#fff\" stroke-width=\"2\" stroke-linecap=\"round\" opacity=\"0.5\" fill=\"none\" transform=\"rotate(45)\"/>"
+		let cleaned = IconSanitizer.sanitize(body)
+		#expect(cleaned == body)
+	}
+
+	@Test("every catalog glyph passes through the allowlist unchanged")
+	func catalogRoundTrip() {
+		let icons = IconName.allCases
+		#expect(icons.count >= 600)
+		for icon in icons {
+			let body = icon.body
+			let cleaned = IconSanitizer.sanitize(body)
+			#expect(cleaned == body, "catalog glyph \(icon.rawValue) was altered by the sanitizer")
+		}
+	}
+}
+
 // MARK: - Emoji migration bridge
 
 @Suite("IconName emoji bridge")
