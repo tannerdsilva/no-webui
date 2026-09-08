@@ -55,6 +55,13 @@ final class RouterRegistry: Sendable {
 			values.order.removeValue(forKey: hash)
 		}
 	}
+
+	/// snapshot of every session token hash that has live router entries —
+	/// used by the maintenance sweep to drop entries whose session has expired
+	/// or been purged.
+	func allTokenHashes() -> [[UInt8]] {
+		values.withLock { Array($0.routers.keys) }
+	}
 }
 
 // MARK: - Authenticated connection registry (logout teardown)
@@ -95,6 +102,23 @@ actor AuthConnectionRegistry {
 }
 
 // MARK: - Idle socket reaping
+
+/// signal a refused admission: `--max-connections` reached.
+enum ConnectionGateError: Error { case atCapacity }
+
+/// release a `ConnectionGate` slot when the channel closes. the gate is
+/// acquired in the child channel initializer — BEFORE any request or upgrade
+/// negotiation — so bare connect-only sockets count toward the cap and a
+/// connect-flood cannot sidestep it through negotiation that never completes.
+final class ConnectionGateReleaser: ChannelInboundHandler {
+	typealias InboundIn = IOData
+	private let gate: ConnectionGate
+	init(gate: ConnectionGate) { self.gate = gate }
+	func channelInactive(context: ChannelHandlerContext) {
+		gate.release()
+		context.fireChannelInactive()
+	}
+}
 
 // an authenticated socket that stops sending (no pings, no events) is closed
 // after the read-idle window — a silent zombie never outlives its timeout.
@@ -505,6 +529,9 @@ struct WebUIAuthExample {
 
 		let logger = Logger(label: "webui.auth.example")
 		logger.info("auth demo ready — sign in with '\(demoUsername)' / '\(demoPassword)'")
+		// prewarm the hoisted minified sheets so the one-time ~10 ms minify
+		// never lands inside the first request handler.
+		DesignSystemAssets.prewarm()
 
 		let group = MultiThreadedEventLoopGroup(numberOfThreads: Self.intFlag(named: "--event-loops", default: System.coreCount))
 		let bootstrap = ServerBootstrap(group: group)
@@ -514,12 +541,23 @@ struct WebUIAuthExample {
 		let channel: NIOAsyncChannel<EventLoopFuture<AuthUpgradeResult>, Never> = try await bootstrap.bind(
 			host: "0.0.0.0", port: port
 		) { channel in
-			channel.eventLoop.makeCompletedFuture {
+			channel.eventLoop.makeCompletedFuture { () -> EventLoopFuture<AuthUpgradeResult> in
+				// admission: every connection — request-bearing or a bare connect —
+				// counts toward the cap (acquired before any negotiation), so a
+				// connect-flood cannot sidestep the gate through channels whose
+				// negotiation never completes. at capacity the channel is closed
+				// before any parsing happens.
+				guard example.connectionGate.tryAcquire() else {
+					channel.close(promise: nil)
+					return channel.eventLoop.makeFailedFuture(ConnectionGateError.atCapacity)
+				}
 				// a single idle reaper guards every channel — plain http (an idle
 				// keep-alive or a slow reader that never drains) and upgraded
 				// websockets alike — so no silent connection outlives the window.
 				try channel.pipeline.syncOperations.addHandler(IdleStateHandler(readTimeout: .seconds(120)))
 				try channel.pipeline.syncOperations.addHandler(AuthIdleCloseHandler())
+				// release the gate slot when this channel finally closes.
+				try channel.pipeline.syncOperations.addHandler(ConnectionGateReleaser(gate: example.connectionGate))
 				let upgrader = NIOTypedWebSocketServerUpgrader<AuthUpgradeResult>(
 					shouldUpgrade: { channel, head in
 						// the demo binds the socket to the page's per-session
@@ -585,6 +623,14 @@ struct WebUIAuthExample {
 		logger.info("auth demo on http://localhost:\(port) (ws://localhost:\(port)/ws)")
 
 		try await withThrowingDiscardingTaskGroup { group in
+			group.addTask {
+				// maintenance: keep the session store, router registry, and
+				// throttle windows bounded for the life of the process.
+				while !Task.isCancelled {
+					do { try await Task.sleep(for: .seconds(60)) } catch { break }
+					await example.runMaintenance()
+				}
+			}
 			try await channel.executeThenClose { inbound in
 				for try await negotiationFuture in inbound {
 					group.addTask {
@@ -599,13 +645,6 @@ struct WebUIAuthExample {
 	}
 
 	func handle(_ negotiationFuture: EventLoopFuture<AuthUpgradeResult>) async {
-		// admission gate: the connection cap is a hard memory ceiling on small
-		// hosts. acquired once per negotiated channel, released when the
-		// connection ends (including the idle reaper closing it).
-		guard connectionGate.tryAcquire() else {
-			await rejectOverCapacity(negotiationFuture)
-			return
-		}
 		do {
 			switch try await negotiationFuture.get() {
 			case .websocket(let ws, let tokenHash):
@@ -614,22 +653,30 @@ struct WebUIAuthExample {
 				try await handleHTTP(http)
 			}
 		} catch {
-			// connection error; ignore
+			// connection error or a refused admission (gate failure); ignore.
 		}
-		connectionGate.release()
 	}
 
-	/// capacity is exhausted: close the negotiated channel (post-handshake for
-	/// websockets, pre-response for http). a dropped connection under overload
-	/// is the backpressure signal.
-	private func rejectOverCapacity(_ negotiationFuture: EventLoopFuture<AuthUpgradeResult>) async {
-		guard let result = try? await negotiationFuture.get() else { return }
-		switch result {
-		case .websocket(let ws, _):
-			_ = ws.channel.close(promise: nil)
-		case .http(let http):
-			_ = http.channel.close(promise: nil)
+	/// bounded housekeeping sweep (every 60 s on the maintenance task): expired
+	/// sessions are purged from the store, their router entries removed, and
+	/// throttle + token-store bookkeeping pruned. a long-lived server must
+	/// never accumulate dead sessions or attacker-rotated throttle keys.
+	func runMaintenance() async {
+		let now = Date()
+		_ = (try? await sessionStore.purgeExpired(before: now)) ?? 0
+		loginThrottle.prune(before: now)
+		loginPageThrottle.prune(before: now)
+		await loginTokenStore.prune(now: now.timeIntervalSince1970)
+		for hash in routers.allTokenHashes() {
+			if !(await sessionExists(hash)) {
+				routers.remove(forTokenHash: hash)
+			}
 		}
+	}
+
+	private func sessionExists(_ tokenHash: [UInt8]) async -> Bool {
+		guard let session = try? await sessionStore.find(tokenHash: tokenHash) else { return false }
+		return !session.isExpired()
 	}
 
 	private func handleWebsocket(_ channel: NIOAsyncChannel<WebSocketFrame, WebSocketFrame>, tokenHash: [UInt8]?) async throws {

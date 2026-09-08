@@ -167,7 +167,10 @@ string values are hand-escaped into safe json string literals.
 | `WSIncoming(jsonText:)` / `WSIncoming(jsonBytes:)` | data-free decode of a `{"type":...}` client message (throws `WSMessageError.malformed`). `event` messages carry
 `component`, `event`, `data`, and an optional `token`; `ping` carries an
 optional `token` — the per-render ws binding id servers may mint and check
-(absent for servers that do not use it) |
+(absent for servers that do not use it). the 128-container nesting cap
+(`JSONError.nestingTooDeep`) applies to this wire path; the Codable
+conformance decodes through the underlying decoder's own bounds (the shipped
+servers use the capped path) |
 | `WSOutgoing.jsonText` / `jsonBytes` | compact data-free emission of a server message |
 | `constantTimeEquals(_ lhs:, _ rhs:)` | constant-time equality over byte sequences (any `Sequence` of `UInt8`, e.g. `[UInt8]`) — no early exit on an equal-length input; used for MAC and token compares |
 | `injectAttributes(into html: String, _ attributes: String) -> String` | inject attributes into the first HTML tag |

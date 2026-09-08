@@ -164,6 +164,30 @@ struct AuthServerCeremonyTests {
 		}
 	}
 
+	@Test("the connection cap covers bare connects (accept-time admission)")
+	func connectionCapCoversBareConnects() async throws {
+		try await withServer(arguments: ["--max-connections", "2"]) { server in
+			// settle: the harness's readiness probe opens and closes one
+			// connection; its gate slot is released asynchronously on the
+			// server, so wait for that teardown before asserting the
+			// deterministic ordering below.
+			try await Task.sleep(for: .milliseconds(300))
+			// regression: the gate is acquired in the child channel initializer,
+			// so even sockets that never send a request hold a slot and are
+			// capped — a connect-flood cannot sidestep the memory ceiling.
+			let a = try RawSocket(host: "127.0.0.1", port: server.port)
+			let b = try RawSocket(host: "127.0.0.1", port: server.port)
+			defer { a.closeSocket(); b.closeSocket() }
+			let c = try RawSocket(host: "127.0.0.1", port: server.port)
+			defer { c.closeSocket() }
+			// the third connection is refused (closed by the server) while a
+			// and b still hold their slots.
+			#expect(c.waitForClose(timeout: 5))
+			#expect(!a.waitForClose(timeout: 1))
+			#expect(!b.waitForClose(timeout: 1))
+		}
+	}
+
 	@Test("dashboard page is delivered byte-complete with the default send buffer")
 	func dashboardByteComplete() async throws {
 		try await withServer { server in
@@ -184,8 +208,8 @@ struct AuthServerCeremonyTests {
 
 	// MARK: harness plumbing
 
-	private func withServer(_ body: (AuthServer) async throws -> Void) async throws {
-		let server = try AuthServer.launch()
+	private func withServer(arguments: [String] = [], _ body: (AuthServer) async throws -> Void) async throws {
+		let server = try AuthServer.launch(extraArguments: arguments)
 		defer { server.stop() }
 		try await server.waitUntilReady()
 		try await body(server)
@@ -692,12 +716,12 @@ final class AuthServer {
 		self.port = port
 	}
 
-	static func launch() throws -> AuthServer {
+	static func launch(extraArguments: [String] = []) throws -> AuthServer {
 		let binary = try locateBinary()
 		let port = try selectFreePort()
 		let process = Process()
 		process.executableURL = binary
-		process.arguments = ["--port", "\(port)"]
+		process.arguments = ["--port", "\(port)"] + extraArguments
 		process.standardOutput = FileHandle.nullDevice
 		process.standardError = FileHandle.nullDevice
 		try process.run()

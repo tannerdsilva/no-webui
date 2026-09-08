@@ -108,6 +108,22 @@ final class IdleCloseHandler: ChannelInboundHandler {
 	}
 }
 
+/// refused admission: `--max-connections` reached.
+enum ConnectionGateError: Error { case atCapacity }
+
+/// release a `ConnectionGate` slot when the channel closes. the gate is
+/// acquired in the child channel initializer — before any request or upgrade
+/// negotiation — so bare connect-only sockets count toward the cap.
+final class ConnectionGateReleaser: ChannelInboundHandler {
+	typealias InboundIn = IOData
+	private let gate: ConnectionGate
+	init(gate: ConnectionGate) { self.gate = gate }
+	func channelInactive(context: ChannelHandlerContext) {
+		gate.release()
+		context.fireChannelInactive()
+	}
+}
+
 final class HTTPByteBufferResponsePartHandler: ChannelOutboundHandler {
 	typealias OutboundIn = HTTPPart<HTTPResponseHead, ByteBuffer>
 	typealias OutboundOut = HTTPServerResponsePart
@@ -144,6 +160,9 @@ struct WebUIExample {
 		let app = WebUIExample(state: state, router: router, pageHTML: page, connectionGate: connectionGate)
 		let logger = Logger(label: "webui.example")
 		logger.info("example page rendered (\(page.utf8.count) bytes)")
+		// prewarm the hoisted minified sheets so the one-time minify never
+		// lands inside the first request handler.
+		DesignSystemAssets.prewarm()
 
 		let group = MultiThreadedEventLoopGroup(numberOfThreads: intFlag(named: "--event-loops", default: System.coreCount))
 		let bootstrap = ServerBootstrap(group: group)
@@ -153,11 +172,20 @@ struct WebUIExample {
 		let channel: NIOAsyncChannel<EventLoopFuture<ExampleUpgradeResult>, Never> = try await bootstrap.bind(
 			host: "0.0.0.0", port: 9090
 		) { channel in
-			channel.eventLoop.makeCompletedFuture {
+			channel.eventLoop.makeCompletedFuture { () -> EventLoopFuture<ExampleUpgradeResult> in
+				// admission: every connection — request-bearing or a bare
+				// connect — counts toward the cap (acquired before any
+				// negotiation); at capacity the channel is closed up front.
+				guard app.connectionGate.tryAcquire() else {
+					channel.close(promise: nil)
+					return channel.eventLoop.makeFailedFuture(ConnectionGateError.atCapacity)
+				}
 				// a single idle reaper guards every channel — plain http
 				// (idle keep-alive, slow readers) and websockets alike.
 				try channel.pipeline.syncOperations.addHandler(IdleStateHandler(readTimeout: .seconds(120)))
 				try channel.pipeline.syncOperations.addHandler(IdleCloseHandler())
+				// release the gate slot when this channel finally closes.
+				try channel.pipeline.syncOperations.addHandler(ConnectionGateReleaser(gate: app.connectionGate))
 				let upgrader = NIOTypedWebSocketServerUpgrader<ExampleUpgradeResult>(
 					shouldUpgrade: { channel, head in
 						let ok = head.method == .GET && head.uri == "/ws"
@@ -202,10 +230,6 @@ struct WebUIExample {
 	}
 
 	func handle(_ negotiationFuture: EventLoopFuture<ExampleUpgradeResult>) async {
-		guard connectionGate.tryAcquire() else {
-			await rejectOverCapacity(negotiationFuture)
-			return
-		}
 		do {
 			switch try await negotiationFuture.get() {
 			case .websocket(let ws):
@@ -214,18 +238,7 @@ struct WebUIExample {
 				try await handleHTTP(http)
 			}
 		} catch {
-			// connection error; ignore
-		}
-		connectionGate.release()
-	}
-
-	private func rejectOverCapacity(_ negotiationFuture: EventLoopFuture<ExampleUpgradeResult>) async {
-		guard let result = try? await negotiationFuture.get() else { return }
-		switch result {
-		case .websocket(let ws):
-			_ = ws.channel.close(promise: nil)
-		case .http(let http):
-			_ = http.channel.close(promise: nil)
+			// connection error or a refused admission (gate failure); ignore.
 		}
 	}
 
@@ -328,6 +341,10 @@ struct WebUIExample {
 		head.headers.replaceOrAdd(name: "Content-Type", value: contentType)
 		head.headers.replaceOrAdd(name: "Content-Length", value: "\(body.utf8.count)")
 		head.headers.replaceOrAdd(name: "Connection", value: "close")
+		// security headers — parity with the auth server.
+		head.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
+		head.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
+		head.headers.replaceOrAdd(name: "Cache-Control", value: "no-store")
 		var buf = ByteBuffer()
 		buf.writeString(body)
 		// await the terminal write promise: the async channel writer does not
@@ -347,6 +364,9 @@ struct WebUIExample {
 		var head = HTTPResponseHead(version: .http1_1, status: .methodNotAllowed)
 		head.headers.replaceOrAdd(name: "Content-Length", value: "0")
 		head.headers.replaceOrAdd(name: "Connection", value: "close")
+		head.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
+		head.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
+		head.headers.replaceOrAdd(name: "Cache-Control", value: "no-store")
 		_ = channel.write(NIOAny(HTTPPart<HTTPResponseHead, ByteBuffer>.head(head)))
 		try await channel.writeAndFlush(NIOAny(HTTPPart<HTTPResponseHead, ByteBuffer>.end(nil))).get()
 	}
