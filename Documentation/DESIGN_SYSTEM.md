@@ -117,7 +117,7 @@ all-sans type. `--font-sans` and `--font-display` share the `-apple-system`
 stack (the display serif was retired in the nexus redesign); `--font-mono` is
 `ui-monospace`.
 
-- sizes: `--font-size-xs`(0.75rem) … `--font-size-5xl`(3rem), with --text-*
+- sizes: `--font-size-2xs`(0.625rem) … `--font-size-5xl`(3rem), with --text-*
   aliases (`--text-sm`, `--text-lg`, …) on the same scale and `--fs-hero` for
   hero headings.
 - weights: 400/500/600/700 (`--font-weight-normal/-medium/-semibold/-bold`).
