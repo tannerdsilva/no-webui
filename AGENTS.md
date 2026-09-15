@@ -39,7 +39,7 @@ inline comments explain code, markdown files explain architecture and APIs.
 
 ```bash
 swift build             # includes the WebUIAssetPlugin + WebUIIconPlugin (auto-generates Assets+Generated.swift + IconLibrary.swift)
-swift test              # 567 tests, 62 suites
+swift test              # 598 tests, 69 suites
 swift run WebUIExample  # example server on :9090
 ```
 

@@ -55,8 +55,18 @@ let package = Package(
 
         // ── Web UI Framework ─────────────────────────────────────
         .target(
+            name: "WebUICore",
+            dependencies: [
+                .product(name: "Logging", package: "swift-log"),
+            ],
+            plugins: [
+                "WebUIIconPlugin",
+            ]
+        ),
+        .target(
             name: "WebUI",
             dependencies: [
+                "WebUICore",
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "RAW", package: "rawdog"),
                 .product(name: "RAW_sha256", package: "rawdog"),
@@ -64,7 +74,6 @@ let package = Package(
             ],
             plugins: [
                 "WebUIAssetPlugin",
-                "WebUIIconPlugin",
             ]
         ),
         .target(

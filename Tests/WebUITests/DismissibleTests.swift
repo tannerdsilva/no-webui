@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 @testable import WebUI
+@testable import WebUICore
 @testable import WebUIDesignSystem
 
 // MARK: - Dismissible wiring
