@@ -8,6 +8,7 @@ import Synchronization
 import WebUI
 import WebUIDesignSystem
 import WebUIChart
+import WebUISmokeShared
 
 // MARK: - Shared state
 
@@ -595,4 +596,10 @@ extension SmokeApp {
 
 // MARK: - Entry point
 
-try await SmokeApp.main()
+// hydration byte-identity mode: print the shared hydration view's SSR bytes
+// and stop (the wasm client's --verify-render must produce the same bytes).
+if CommandLine.arguments.contains("--print-hydration-ssr") {
+	print(HydrationView().render())
+} else {
+	try await SmokeApp.main()
+}

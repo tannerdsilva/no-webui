@@ -1,5 +1,6 @@
 import Testing
 import WebUICore
+import WebUISmokeShared
 
 // pure-logic specs for the client render core. these run in the host suite;
 // the wasm side of the cross-host gate is `WebUIClient --verify-render` under
@@ -17,5 +18,15 @@ struct SmokeTests {
 		#expect(html.contains("<div class=\"box\">"))
 		#expect(html.contains("x"))
 		#expect(html.hasSuffix("</div>"))
+	}
+
+	@Test("the hydration view renders its baseline markup")
+	func hydrationViewBaseline() {
+		let html = HydrationView().render()
+		#expect(html.contains("id=\"counter-value\""))
+		#expect(html.contains(">3<"))
+		#expect(html.contains("<svg"))
+		#expect(html.contains("<table>"))
+		#expect(html.contains("type=\"text\""))
 	}
 }

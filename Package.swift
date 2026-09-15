@@ -86,6 +86,13 @@ let package = Package(
             name: "WebUIClient",
             dependencies: [
                 "WebUIClientRuntime",
+                "WebUISmokeShared",
+            ]
+        ),
+        .target(
+            name: "WebUISmokeShared",
+            dependencies: [
+                "WebUICore",
             ]
         ),
         .target(
@@ -181,6 +188,7 @@ let package = Package(
                 "WebUI",
                 "WebUIDesignSystem",
                 "WebUIChart",
+                "WebUISmokeShared",
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOHTTP1", package: "swift-nio"),
@@ -284,6 +292,7 @@ let package = Package(
             dependencies: [
                 "WebUIClientRuntime",
                 "WebUICore",
+                "WebUISmokeShared",
             ]
         ),
         .testTarget(
