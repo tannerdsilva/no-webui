@@ -572,9 +572,9 @@ extension SmokeApp {
 		// await write promises, and a response larger than the socket send
 		// buffer would otherwise lose its tail when the connection closes
 		// right after writing (probe-verified truncation).
-		_ = channel.write(NIOAny(HTTPPart<HTTPResponseHead, ByteBuffer>.head(head)))
-		_ = channel.write(NIOAny(HTTPPart<HTTPResponseHead, ByteBuffer>.body(buf)))
-		try await channel.writeAndFlush(NIOAny(HTTPPart<HTTPResponseHead, ByteBuffer>.end(nil))).get()
+		_ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.head(head))
+		_ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.body(buf))
+		try await channel.writeAndFlush(HTTPPart<HTTPResponseHead, ByteBuffer>.end(nil)).get()
 	}
 
 	private func respond404(channel: Channel) async throws {
@@ -588,8 +588,8 @@ extension SmokeApp {
 		head.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
 		head.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
 		head.headers.replaceOrAdd(name: "Cache-Control", value: "no-store")
-		_ = channel.write(NIOAny(HTTPPart<HTTPResponseHead, ByteBuffer>.head(head)))
-		try await channel.writeAndFlush(NIOAny(HTTPPart<HTTPResponseHead, ByteBuffer>.end(nil))).get()
+		_ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.head(head))
+		try await channel.writeAndFlush(HTTPPart<HTTPResponseHead, ByteBuffer>.end(nil)).get()
 	}
 }
 

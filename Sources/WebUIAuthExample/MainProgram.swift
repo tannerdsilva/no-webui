@@ -428,9 +428,9 @@ struct WebUIAuthExample {
 	/// terminal flush guarantees every byte reached the kernel before the
 	/// connection closes — no send-buffer sizing required.
 	func writeResponse(channel: Channel, head: HTTPResponseHead, body: ByteBuffer) async throws {
-		_ = channel.write(NIOAny(HTTPPart<HTTPResponseHead, ByteBuffer>.head(head)))
-		_ = channel.write(NIOAny(HTTPPart<HTTPResponseHead, ByteBuffer>.body(body)))
-		try await channel.writeAndFlush(NIOAny(HTTPPart<HTTPResponseHead, ByteBuffer>.end(nil))).get()
+		_ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.head(head))
+		_ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.body(body))
+		try await channel.writeAndFlush(HTTPPart<HTTPResponseHead, ByteBuffer>.end(nil)).get()
 	}
 
 	func loginResponse(channel: Channel, status: HTTPResponseStatus, headers: [(String, String)], body: String) async throws {

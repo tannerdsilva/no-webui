@@ -416,7 +416,7 @@ private func wsSendText(_ socket: RawSocket, _ text: String) throws {
 
 /// one server→client frame, or nil on clean EOF before a complete header.
 private func wsReadFrame(_ socket: RawSocket) throws -> WSFrame? {
-	var header = try socket.readExactly(2)
+	let header = try socket.readExactly(2)
 	guard header.count == 2 else { return nil }
 	let opcode = header[0] & 0x0f
 	var length = UInt64(header[1] & 0x7f)
