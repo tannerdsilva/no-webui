@@ -196,10 +196,53 @@ servers use the capped path) |
 ### WebUIDocument
 
 `HTMLDocument` variant that ships `LayoutStyles.complete` plus the full
-`WebUIAssets.css` (the nexus design system, 225 CSS custom properties). the
-css is minified at render time, so served pages carry no comments and no blank
-lines. see `Documentation/DESIGN_SYSTEM.md` for the complete token and
+`WebUIAssets.css` (the nexus design system, 169 `:root` CSS custom properties).
+the css is minified at render time, so served pages carry no comments and no
+blank lines. see `Documentation/DESIGN_SYSTEM.md` for the complete token and
 component catalog.
+
+accepts `theme: WebUITheme = .standard` — a themed document appends the
+theme's css (`:root` overrides + app rules) after the design sheet, so later
+source order wins the cascade for every token the components resolve through
+`var(--…)`. `.standard` (the default) contributes nothing and renders
+byte-identical to the unthemed document.
+
+### Theme
+
+per-page custom aesthetics on top of the shipped design system, without a
+fork of the framework css.
+
+| Type | Role |
+|---|---|
+| `DesignToken` | generated enum of the 169 `:root`-scoped tokens from `design-system.css` (the only custom properties a later `:root` override can restyle). case name = camelCased css name (`color-primary-solid` → `.colorPrimarySolid`), `rawValue` = the exact kebab name, `cssVariable` = `--<rawValue>`. component-scoped custom properties (`.btn { --btn-bg: … }`) are excluded by construction — restyle those via theme `rules`. |
+| `ColorScheme` | `.automatic` / `.light` / `.dark`. a fixed scheme declares `color-scheme:` on `:root`; `.dark` is the dark-first choice. |
+| `WebUITheme` | value type: `tokens: [DesignToken: String]`, `customTokens: [String: String]` (app-invented `--name` keys), `scheme: ColorScheme`, `rules: [CSSRule]`. `.standard` is the empty theme; `.overlaying(_:)` layers a partial theme (dynamic accent) over a static one; `stylesheet()` renders deterministically (color-scheme, then tokens sorted by css name, then rules). |
+| `WebUIThemeProvider` | protocol with `static var theme: WebUITheme`. the default yields `.standard`, so hand-written conformers compile for free. |
+| `@Theme` | attached macro: turns a struct of `static let` members into a `WebUIThemeProvider`. reserved members `scheme`, `rules`, `customTokens` map to the three non-token axes; every other `static let <name> = <value>` is a token override whose member name must be a `DesignToken` case (compiler-validated at the expansion site). |
+
+```swift
+import WebUIDesignSystem
+
+@Theme
+struct NexusDark {
+    static let scheme = ColorScheme.dark
+    static let colorPrimarySolid = "#6c8cff"
+    static let colorBg = "#101014"
+    static let customTokens = ["--chat-user-bubble": "#2a2a2e"]
+    static let rules: [CSSRule] = [.chatBubble, .streamDots]
+}
+
+let page = WebUIDocument(body: body, theme: NexusDark.theme)
+```
+
+a dynamic overlay rides on top of a static theme:
+
+```swift
+let doc = WebUIDocument(
+    body: body,
+    theme: NexusDark.theme.overlaying(WebUITheme(tokens: [.colorPrimarySolid: userAccent]))
+)
+```
 
 ### Components
 

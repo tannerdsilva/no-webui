@@ -13,6 +13,7 @@ public struct WebUIDocument: View {
     public let includeRuntime: Bool
     public let runtimeConfig: RuntimeConfig?
     public let contentSecurityPolicy: String?
+    public let theme: WebUITheme
     public init(
         title: String = "WebUI UI",
         body: String,
@@ -23,7 +24,8 @@ public struct WebUIDocument: View {
         lang: String = "en",
         includeRuntime: Bool = true,
         runtimeConfig: RuntimeConfig? = nil,
-        contentSecurityPolicy: String? = nil
+        contentSecurityPolicy: String? = nil,
+        theme: WebUITheme = .standard
     ) {
         self.title = title
         self.body = body
@@ -35,6 +37,7 @@ public struct WebUIDocument: View {
         self.includeRuntime = includeRuntime
         self.runtimeConfig = runtimeConfig
         self.contentSecurityPolicy = contentSecurityPolicy
+        self.theme = theme
     }
 
     /// the design-system sheet (layout rules + embedded css), minified once
@@ -46,11 +49,19 @@ public struct WebUIDocument: View {
     }()
 
     public func render() -> String {
+        // the theme block lands after the base sheet, so its `:root`
+        // overrides win the cascade. `.standard` contributes nothing and the
+        // document stays byte-identical to the unthemed one.
+        let themeCSS = theme.stylesheet()
+        var rawStyles = [Self.minifiedDesignStyles]
+        if !themeCSS.isEmpty {
+            rawStyles.append(themeCSS)
+        }
         let doc = HTMLDocument(
             title: title,
             body: body,
             styles: CSSStylesheet([]),
-            rawStyles: [Self.minifiedDesignStyles],
+            rawStyles: rawStyles,
             scripts: scripts,
             head: head,
             bodyAttributes: bodyAttributes,

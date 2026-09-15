@@ -1,5 +1,6 @@
 // swift-tools-version: 6.0
 import PackageDescription
+import CompilerPluginSupport
 
 let package = Package(
     name: "no-webui",
@@ -46,6 +47,9 @@ let package = Package(
         // published and tagged 22.0.0 (2026-09); resolves by the pinned
         // revision in Package.resolved.
         .package(url: "https://github.com/tannerdsilva/rawdog.git", "22.0.0"..<"23.0.0"),
+        // swift-syntax for the @Theme macro implementation (603.x matches the
+        // 6.3 toolchain line).
+        .package(url: "https://github.com/apple/swift-syntax.git", "603.0.0"..<"604.0.0"),
     ],
     targets: [
 
@@ -67,6 +71,7 @@ let package = Package(
             name: "WebUIDesignSystem",
             dependencies: [
                 "WebUI",
+                "WebUIDesignSystemMacros",
                 .product(name: "Logging", package: "swift-log"),
             ]
         ),
@@ -95,6 +100,16 @@ let package = Package(
         // ── Icon Tool (svg iconography generator + linter) ───────
         .executableTarget(
             name: "WebUIIconTool"
+        ),
+
+        // ── @Theme Macro ────────────────────────────────────────
+        .macro(
+            name: "WebUIDesignSystemMacros",
+            dependencies: [
+                .product(name: "SwiftSyntax", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
+                .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
+            ]
         ),
 
         // ── Example ──────────────────────────────────────────────
@@ -248,6 +263,18 @@ let package = Package(
             dependencies: [
                 "WebUIAuth",
                 "WebUI",
+            ]
+        ),
+        .testTarget(
+            name: "WebUIDesignSystemMacroTests",
+            dependencies: [
+                "WebUIDesignSystem",
+                "WebUIDesignSystemMacros",
+                .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxMacroExpansion", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxMacrosGenericTestSupport", package: "swift-syntax"),
+                .product(name: "SwiftParser", package: "swift-syntax"),
+                .product(name: "SwiftDiagnostics", package: "swift-syntax"),
             ]
         ),
     ]
