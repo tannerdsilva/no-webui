@@ -51,7 +51,7 @@ Owner decisions already locked (see §0.1 for the full log, including the
 |---|---|---|---|
 | D1 | Official Swift Wasm SDK only; hand-rolled narrow bridge. JavaScriptKit / npm WASI shims are out (they are dependencies). | user | locked |
 | D2 | The render brain moves into wasm (same Swift); JS stays mechanical; server is authority + SSR first paint. | user | locked |
-| D3 | `@TaskLocal` (RenderContext) and swift-log (`Logger`) are keep-if-they-survive. If they do not compile under the wasm/embedded subset, throw them out — breaking changes accepted. No hostage design. | user | locked (contingency specified in §3.3 / §4 Phase 0) |
+| D3 | `@TaskLocal` (RenderContext) and swift-log (`Logger`) are keep-if-they-survive. If they do not compile under the wasm/embedded subset, throw them out — breaking changes accepted. No hostage design. | user | locked — verdicts resolved 2026-09-15 (see `WASM_SUBSET_AUDIT.md`): `@TaskLocal` keeps on full; swift-log keeps on full / `LogFunnel` for the embedded tier |
 | D4 | Credential verification, Argon2, throttling, and session authority never move to the client. Client wasm is advisory UI-gating only. | user | locked |
 | D5 | The WS wire protocol (`WSIncoming`/`WSOutgoing`) stays byte-compatible; `FragmentUpdate` becomes the universal patch envelope in both directions; no transmitted-code message type is ever reintroduced. | design | locked |
 

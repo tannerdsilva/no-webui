@@ -77,6 +77,18 @@ let package = Package(
             ]
         ),
         .target(
+            name: "WebUIClientRuntime",
+            dependencies: [
+                "WebUICore",
+            ]
+        ),
+        .executableTarget(
+            name: "WebUIClient",
+            dependencies: [
+                "WebUIClientRuntime",
+            ]
+        ),
+        .target(
             name: "WebUIDesignSystem",
             dependencies: [
                 "WebUI",
@@ -265,6 +277,13 @@ let package = Package(
                 "WebUI",
                 "WebUIDesignSystem",
                 "WebUIChart",
+            ]
+        ),
+        .testTarget(
+            name: "WebUIClientTests",
+            dependencies: [
+                "WebUIClientRuntime",
+                "WebUICore",
             ]
         ),
         .testTarget(
