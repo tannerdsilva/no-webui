@@ -312,6 +312,19 @@ if (wasmBuilt) {
     else bad("table sort did not reorder rows client-side");
     if (sortState.wsSent === result.wsSent) ok("table sort kept the websocket silent");
     else bad(`websocket sends after sort: ${sortState.wsSent}`);
+    // boundary: a click outside any [data-component-id] must not dispatch.
+    const evBefore = await s.evaluate(() => window.WebUIClient._getInstance().eventCount);
+    await s.evaluate(() => {
+      const d = document.createElement("div");
+      d.id = "noop-target";
+      document.body.appendChild(d);
+      d.click();
+      d.remove();
+    });
+    await s.waitForTimeout(150);
+    const evAfter = await s.evaluate(() => window.WebUIClient._getInstance().eventCount);
+    if (evAfter === evBefore) ok("non-component clicks are ignored (no dispatch)");
+    else bad(`non-component click dispatched: ${evBefore} -> ${evAfter}`);
     const de = sErrors.filter((t) => !/favicon/i.test(t));
     if (de.length === 0) ok("local-search probe has no console errors");
     else bad(`local-search console errors: ${JSON.stringify(de)}`);

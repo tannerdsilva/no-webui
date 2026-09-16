@@ -1,6 +1,6 @@
   window.WebUIClient = (function () {
     'use strict';
-    var holder = { exports: null, memory: null, wsSent: 0, eventCount: 0 };
+    var holder = { exports: null, memory: null, wsSent: 0, eventCount: 0, config: null, transport: null };
   function decoder(bytes) { return new TextDecoder().decode(bytes); }
   function noop() { return 0; }
   function errno() { return 8; }
@@ -54,7 +54,9 @@
         var msg = readStr(bytesPtr, len);
         if (msg) {
           holder.wsSent += 1;
-          if (holder.ws && holder.ws.readyState === 1) { holder.ws.send(msg); }
+          if (holder.transport && typeof holder.transport.send === 'function') {
+            holder.transport.send(msg);
+          }
         }
       },
       now: function () { return performance.now(); },
@@ -137,6 +139,13 @@
     }
     return null;
   }
+  function readConfig() {
+    var meta = document.querySelector('meta[name="webui-config"]');
+    if (!meta) { return null; }
+    var raw = meta.getAttribute('content');
+    if (!raw) { return null; }
+    try { return JSON.parse(raw); } catch (e) { return null; }
+  }
   function dispatch(e, compEl, type) {
     var component = compEl.getAttribute('data-component-id');
     var event = compEl.getAttribute('data-event') || type;
@@ -145,7 +154,11 @@
       var v = (compEl.value != null) ? compEl.value : (e.target && e.target.value);
       if (v != null) { data = { value: String(v) }; }
     }
-    var json = JSON.stringify({ component: component, event: event, data: data });
+    var env = { component: component, event: event, data: data };
+    if (holder.config && holder.config.renderToken && holder.transport) {
+      env.token = holder.config.renderToken;
+    }
+    var json = JSON.stringify(env);
     var enc = new TextEncoder().encode(json);
     var ptr = holder.exports.webui_input_ptr();
     new Uint8Array(holder.memory.buffer, ptr, enc.length).set(enc);
@@ -170,6 +183,7 @@
       .then(function (r) {
         holder.exports = r.instance.exports;
         holder.memory = r.instance.exports.memory;
+        holder.config = readConfig();
         if (typeof holder.exports._start === 'function') { holder.exports._start(); }
         if (opts.mode === 'search') {
           holder.exports.webui_init(0, 0);
