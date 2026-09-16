@@ -1,6 +1,8 @@
 (function () {
   if (!window.WebUIClient) { return; }
-  WebUIClient.boot({ wasmUrl: '/__assets/app.wasm', target: 'app' }).then(function (html) {
+  var meta = document.querySelector('meta[name="webui-wasm"]');
+  var wasmUrl = (meta && meta.getAttribute('content')) || '/__assets/app.wasm';
+  WebUIClient.boot({ wasmUrl: wasmUrl, target: 'app' }).then(function (html) {
     document.dispatchEvent(new CustomEvent('webui:client-ready', { detail: { bytes: html.length } }));
   }).catch(function (err) {
     window.__webuiClientError = String(err);

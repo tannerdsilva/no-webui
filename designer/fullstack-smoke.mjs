@@ -197,6 +197,19 @@ if (
 ) ok("search-demo page carries client csp + search boot script");
 else bad("search-demo page missing client-mode markers");
 
+// content-addressed wasm distribution: the page meta points at the immutable
+// route; it must serve the same bytes as the alias, with an immutable cache.
+const demoHtml = await (await fetch(BASE + "/__assets/client-demo")).text();
+const metaMatch = demoHtml.match(/<meta name="webui-wasm" content="([^"]+)"/);
+if (metaMatch && metaMatch[1]) {
+  const hashedResp = await fetch(BASE + metaMatch[1]);
+  const hashed = await hashedResp.arrayBuffer();
+  const alias = await (await fetch(BASE + "/__assets/app.wasm")).arrayBuffer();
+  const cc = (hashedResp.headers.get("cache-control") || "").toLowerCase();
+  if (hashed.byteLength === alias.byteLength && cc.includes("immutable")) ok(`content-addressed wasm route serves identical bytes with immutable cache (${metaMatch[1]})`);
+  else bad(`content-addressed wasm route broken (immutable=${cc.includes("immutable")}, bytes=${hashed.byteLength}/${alias.byteLength})`);
+} else bad("webui-wasm meta missing from client-demo page");
+
 console.log(`\n=== summary: ${pass} passed, ${fail} failed ===`);
 console.log(fail === 0 ? "FULL-STACK SMOKE PASS" : "FULL-STACK SMOKE FAIL");
 process.exit(fail === 0 ? 0 : 1);

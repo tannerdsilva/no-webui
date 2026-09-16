@@ -194,6 +194,8 @@ let package = Package(
                 "WebUIChart",
                 "WebUISmokeShared",
                 .product(name: "Logging", package: "swift-log"),
+                .product(name: "RAW", package: "rawdog"),
+                .product(name: "RAW_sha256", package: "rawdog"),
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOHTTP1", package: "swift-nio"),
                 .product(name: "NIOCore", package: "swift-nio"),

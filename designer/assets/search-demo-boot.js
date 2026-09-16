@@ -1,6 +1,8 @@
 (function () {
   if (!window.WebUIClient) { return; }
-  WebUIClient.boot({ wasmUrl: '/__assets/app.wasm', mode: 'search', target: 'search-app' }).then(function (page) {
+  var meta = document.querySelector('meta[name="webui-wasm"]');
+  var wasmUrl = (meta && meta.getAttribute('content')) || '/__assets/app.wasm';
+  WebUIClient.boot({ wasmUrl: wasmUrl, mode: 'search', target: 'search-app' }).then(function (page) {
     document.dispatchEvent(new CustomEvent('webui:search-ready', { detail: { bytes: page.length } }));
   }).catch(function (err) {
     window.__webuiSearchError = String(err);

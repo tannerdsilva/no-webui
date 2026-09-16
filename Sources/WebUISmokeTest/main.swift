@@ -10,6 +10,8 @@ import NIOHTTP1
 import NIOPosix
 import NIOWebSocket
 import Synchronization
+import RAW
+import RAW_sha256
 import WebUI
 import WebUIDesignSystem
 import WebUIChart
@@ -368,8 +370,26 @@ struct SmokeApp {
 	let pageHTML: String
 	let connectionGate: ConnectionGate
 	let clientWasm: [UInt8]
+	let clientWasmHash: String
 	let clientDemoPage: String
 	let searchDemoPage: String
+}
+
+/// sha-256 over a byte string, lowercase hex. used to content-address the wasm
+/// artifact so the immutable-cache route is automatically cache-busted when
+/// the binary changes. an empty string signals "no artifact".
+func wasmContentHashHex(_ bytes: [UInt8]) -> String {
+	var hasher = RAW_sha256.Hasher()
+	bytes.withUnsafeBytes { hasher.update($0) }
+	var digest = [UInt8](repeating: 0, count: 32)
+	do {
+		try digest.withUnsafeMutableBytes { buffer in
+			try hasher.finish(into: buffer.baseAddress!)
+		}
+		return bytesToHex(digest)
+	} catch {
+		return ""
+	}
 }
 
 /// read the release `WebUIClient.wasm` product (built separately with the wasm
@@ -396,11 +416,18 @@ func readClientWasmArtifact() -> [UInt8] {
 /// in script-src (trajectory w§3.7).
 private let clientCSP = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:;"
 
+/// the content-addressed wasm url (immutable-cached) or the no-store alias
+/// when the artifact is absent.
+func clientWasmURL(_ hash: String) -> String {
+	hash.isEmpty ? "/__assets/app.wasm" : "/__assets/app.\(hash).wasm"
+}
+
 /// the client-mode probe page: SSR bytes in `#app`, chamber + boot scripts
-/// via head, and the client CSP (nonce-free `'self'` + `'wasm-unsafe-eval'`).
-func makeClientDemoPage() -> String {
+/// via head, the client CSP, and a `webui-wasm` meta the boot script reads to
+/// fetch the immutable-cached artifact.
+func makeClientDemoPage(wasmHash: String) -> String {
 	let body = HydrationView().render()
-	let head = "<script src=\"/__assets/webui-client.js\"></script>\n<script src=\"/__assets/client-demo-boot.js\"></script>"
+	let head = "<meta name=\"webui-wasm\" content=\"\(clientWasmURL(wasmHash))\">\n<script src=\"/__assets/webui-client.js\"></script>\n<script src=\"/__assets/client-demo-boot.js\"></script>"
 	return HTMLDocument(
 		title: "WebUI Client Render — Hydration Probe",
 		body: "<div id=\"app\" class=\"smoke\">\(body)</div>",
@@ -413,8 +440,8 @@ func makeClientDemoPage() -> String {
 /// the local-search vertical page: the wasm boots the search page (webui_init),
 /// mounts it into `#search-app`, and dispatches delegated events entirely in
 /// wasm — the websocket stays silent on the hot path.
-func makeSearchDemoPage() -> String {
-	let head = "<script src=\"/__assets/webui-client.js\"></script>\n<script src=\"/__assets/search-demo-boot.js\"></script>"
+func makeSearchDemoPage(wasmHash: String) -> String {
+	let head = "<meta name=\"webui-wasm\" content=\"\(clientWasmURL(wasmHash))\">\n<script src=\"/__assets/webui-client.js\"></script>\n<script src=\"/__assets/search-demo-boot.js\"></script>"
 	return HTMLDocument(
 		title: "WebUI Client Render — Local Search",
 		body: "<div id=\"search-app\" class=\"search\"></div>",
@@ -445,14 +472,17 @@ extension SmokeApp {
 		let router = EventRouter()
 		let page = renderSmokePage(state: state, router: router)
 		let connectionGate = ConnectionGate(maximum: intFlag(named: "--max-connections", default: 256))
+		let clientWasm = readClientWasmArtifact()
+		let wasmHash = wasmContentHashHex(clientWasm)
 		let app = SmokeApp(
 			state: state,
 			router: router,
 			pageHTML: page,
 			connectionGate: connectionGate,
-			clientWasm: readClientWasmArtifact(),
-			clientDemoPage: makeClientDemoPage(),
-			searchDemoPage: makeSearchDemoPage()
+			clientWasm: clientWasm,
+			clientWasmHash: wasmHash,
+			clientDemoPage: makeClientDemoPage(wasmHash: wasmHash),
+			searchDemoPage: makeSearchDemoPage(wasmHash: wasmHash)
 		)
 		let logger = Logger(label: "webui.smoketest")
 		logger.info("full-stack smoke page rendered (\(page.utf8.count) bytes)")
@@ -614,7 +644,20 @@ extension SmokeApp {
 						try await respond404(channel: channel.channel)
 						return
 					}
+					// the fixed-name alias stays no-store (gates + probes fetch by
+					// name and must never see a stale binary).
 					try await respond(channel: channel.channel, bytes: self.clientWasm, contentType: "application/wasm")
+					return
+				}
+				if !self.clientWasmHash.isEmpty, head.uri == "/__assets/app.\(self.clientWasmHash).wasm" {
+					// the content-addressed timer: immutable cache for a year; the
+					// hash changes with the binary, so this route can never go stale.
+					try await respond(
+						channel: channel.channel,
+						bytes: self.clientWasm,
+						contentType: "application/wasm",
+						cacheControl: "public, max-age=31536000, immutable"
+					)
 					return
 				}
 				let (text, contentType): (String, String)
@@ -664,14 +707,14 @@ extension SmokeApp {
 		try await channel.writeAndFlush(HTTPPart<HTTPResponseHead, ByteBuffer>.end(nil)).get()
 	}
 
-	private func respond(channel: Channel, bytes: [UInt8], contentType: String) async throws {
+	private func respond(channel: Channel, bytes: [UInt8], contentType: String, cacheControl: String = "no-store") async throws {
 		var head = HTTPResponseHead(version: .http1_1, status: .ok)
 		head.headers.replaceOrAdd(name: "Content-Type", value: contentType)
 		head.headers.replaceOrAdd(name: "Content-Length", value: "\(bytes.count)")
 		head.headers.replaceOrAdd(name: "Connection", value: "close")
 		head.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
 		head.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
-		head.headers.replaceOrAdd(name: "Cache-Control", value: "no-store")
+		head.headers.replaceOrAdd(name: "Cache-Control", value: cacheControl)
 		var buf = ByteBuffer()
 		buf.writeBytes(bytes)
 		_ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.head(head))

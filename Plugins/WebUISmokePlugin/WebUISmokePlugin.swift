@@ -180,6 +180,27 @@ struct WebUISmokePlugin: CommandPlugin {
             bad("search demo boot script missing or malformed")
         }
 
+        // content-addressed wasm distribution: the page meta points at the
+        // immutable route; it must serve the same bytes as the alias, with a
+        // year-long immutable cache (the alias stays no-store for gates).
+        if let demo = await GET(session, base + "/__assets/client-demo"),
+           let demoText = String(data: demo, encoding: .utf8),
+           let metaOpen = demoText.range(of: "<meta name=\"webui-wasm\" content=\"") {
+            let hashPath = String(demoText[metaOpen.upperBound...].prefix(while: { $0 != "\"" }))
+            if !hashPath.isEmpty,
+               let (hashed, hashedHeaders) = await GETWithHeaders(session, base + hashPath),
+               let (alias, aliasHeaders) = await GETWithHeaders(session, base + "/__assets/app.wasm"),
+               hashed == alias,
+               (hashedHeaders["Cache-Control"] ?? "").contains("immutable"),
+               (aliasHeaders["Cache-Control"] ?? "").contains("no-store") {
+                ok("content-addressed wasm route serves identical bytes with immutable cache")
+            } else {
+                bad("content-addressed wasm route missing or misconfigured")
+            }
+        } else {
+            bad("webui-wasm meta missing from client-demo page")
+        }
+
         print("")
         print("=== summary: \(pass) passed, \(fail) failed ===")
         if fail == 0 {
@@ -197,5 +218,16 @@ struct WebUISmokePlugin: CommandPlugin {
     private func GET(_ session: URLSession, _ urlString: String) async -> Data? {
         guard let url = URL(string: urlString) else { return nil }
         return try? await session.data(from: url).0
+    }
+
+    private func GETWithHeaders(_ session: URLSession, _ urlString: String) async -> (Data, [String: String])? {
+        guard let url = URL(string: urlString) else { return nil }
+        guard let (data, response) = try? await session.data(from: url),
+              let http = response as? HTTPURLResponse else { return nil }
+        var headers: [String: String] = [:]
+        for (key, value) in http.allHeaderFields {
+            headers["\(key)"] = "\(value)"
+        }
+        return (data, headers)
     }
 }

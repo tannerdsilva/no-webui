@@ -46,6 +46,22 @@ experimental `Extern` frontend feature, enabled on the `WebUIClientRuntime`
 target; `@_used` does **not** keep import symbols dead-stripped — imports must
 be referenced from a reachable root (webui_init → WebUIBridge.install).
 
+## distribution & caching (p4-flavored, shipped on the smoke server)
+
+- `GET /__assets/app.wasm` — the fixed-name **alias**, `Cache-Control: no-store`
+  (gates and probes fetch by name and must never see a stale binary).
+- `GET /__assets/app.<sha256>.wasm` — the **content-addressed route**,
+  `Cache-Control: public, max-age=31536000, immutable`; the landscape hash is
+  computed over the artifact with rawdog's `RAW_sha256` at server startup, so
+  a new binary automatically emits new URLs and can never be served stale.
+- client pages carry `<meta name="webui-wasm" content="/__assets/app.<hash>.wasm">`;
+  the boot scripts read it (fallback to the alias). verified by the smoke /
+  fullstack gates (byte parity + immutable header) and by the browser probes
+  (they fetch the hashed URL end to end).
+- benchmark note: on loopback the cached reload saves little (both ~85 ms) —
+  the dominant wasm boot cost is compile/instantiate of the full-stdlib
+  module, which is the P6 size-diet target, not transfer.
+
 ## size
 
 - release `WebUIClient.wasm`: 62,353,046 bytes (~59 MiB) — full static stdlib +

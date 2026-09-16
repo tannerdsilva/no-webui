@@ -234,12 +234,15 @@ try {
     await page.close();
     const t1 = Date.now();
     const page2 = await browser.newPage();
-    const t2 = Date.now();
     await page2.goto(BASE + "/__assets/search-demo", { waitUntil: "domcontentloaded" });
     const bootT0 = Date.now();
     await page2.waitForSelector("#search-app input", { timeout: 60000 });
     const clientBootMs = Date.now() - bootT0; // domcontentloaded -> input present (wasm fetch+instantiate+boot)
-    results.bootClient = { afterDomContentLoadedMs: clientBootMs };
+    await page2.reload({ waitUntil: "domcontentloaded" });
+    const bootT1 = Date.now();
+    await page2.waitForSelector("#search-app input", { timeout: 60000 });
+    const clientBootReloadMs = Date.now() - bootT1; // now served from the immutable cache
+    results.bootClient = { afterDomContentLoadedMs: clientBootMs, afterDomContentLoadedReloadMs: clientBootReloadMs };
     await page2.close();
   }
 
@@ -259,7 +262,7 @@ try {
   lines.push(`- server counter: ${results.serverCounter ? SAMPLES : 0} samples; ws sent ${results.serverCounter?.ws.sentBytes ?? 0} bytes / ${results.serverCounter?.ws.sentMsgs ?? 0} msgs, recv ${results.serverCounter?.ws.recvBytes ?? 0} bytes / ${results.serverCounter?.ws.recvMsgs ?? 0} msgs (after warmup)`)
   if (results.clientSearch) lines.push(`- client search: ${results.clientSearch.observed.n} samples; in-turn dispatch ${results.clientSearch.inTurn.p50.toFixed(3)} ms p50; webSocket sends: ${results.clientSearch.wsSent} (hot path silent)`);
   if (results.bootServer) lines.push(`- boot (SSR /): ttfb ${(results.bootServer.ttfbMs ?? 0).toFixed(1)} ms, domcontentloaded at ${(results.bootServer.toDomContentLoaded ?? 0).toFixed(1)} ms`);
-  if (results.bootClient) lines.push(`- boot (client-mode search-demo): wasm fetch+instantiate+boot after domcontentloaded: ${results.bootClient.afterDomContentLoadedMs.toFixed(0)} ms`);
+  if (results.bootClient) lines.push(`- boot (client-mode search-demo): wasm fetch+instantiate+boot after domcontentloaded: ${results.bootClient.afterDomContentLoadedMs.toFixed(0)} ms (reload/cached: ${results.bootClient.afterDomContentLoadedReloadMs.toFixed(0)} ms)`);
   for (const note of notes) lines.push(`- ${note}`);
   const table = lines.join("\n");
   console.log("");
