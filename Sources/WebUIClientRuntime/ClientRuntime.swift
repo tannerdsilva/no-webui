@@ -18,9 +18,10 @@ public enum ClientRuntime {
 	nonisolated(unsafe) public private(set) static var router = EventRouter()
 	nonisolated(unsafe) public private(set) static var bootPageHTML = ""
 
-	/// the client state store (in-memory backend shipped; a persistence
-	/// backend conforms behind the bridge without changing the contract).
-	public static let state: any ClientStateStore = InMemoryClientStateStore()
+	/// the client state store (in-memory backend shipped; the wasm build
+	/// swaps a localStorage backend in when the boot envelope requests
+	/// persistence — the contract stays the same).
+	nonisolated(unsafe) public static var state: any ClientStateStore = InMemoryClientStateStore()
 
 	/// the read-only session-presence mirror (advisory ui gating only, d4).
 	public static var authMirror: AuthStateMirror {
@@ -96,6 +97,11 @@ public enum ClientRuntime {
 		queryBox.withLock { $0 = "" }
 		sortBox.withLock { $0 = (column: 0, ascending: true) }
 		router.reset()
+		// the persistence self-proof: with a localStorage backend wired by the
+		// boot envelope, this count survives page reloads (each fresh wasm
+		// instance reads the previous count through the bridge and increments
+		// it). with the in-memory backend it always reads 1.
+		let bootCount = Self.persistBootCount()
 		let context = RenderContext(router: router)
 		bootPageHTML = RenderContext.$current.withValue(context) {
 			Div(class: "search") {
@@ -108,9 +114,25 @@ public enum ClientRuntime {
 						}
 				}
 				Raw(Self.searchRowsHTML(query: queryBox.withLock { $0 }))
+				if bootCount > 1 {
+					// only rendered when persistence is actually working
+					Raw("<div id=\"boot-count\" class=\"search__meta\">boot \(bootCount)</div>")
+				}
 			}
 			.render()
 		}
+	}
+
+	private static func persistBootCount() -> Int {
+		let current: Int
+		if case .number(let value)? = state.get("boot.count") {
+			current = Int(value)
+		} else {
+			current = 1
+		}
+		let next = max(1, current + 1)
+		try? state.set("boot.count", .number(Double(next)))
+		return next
 	}
 
 	/// filter + sort the client-resident dataset into a `WebUITable` render. the

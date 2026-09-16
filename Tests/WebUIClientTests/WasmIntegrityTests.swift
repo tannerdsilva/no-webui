@@ -57,6 +57,7 @@ struct WasmIntegrityTests {
 			"wasi_snapshot_preview1.proc_exit", "wasi_snapshot_preview1.random_get",
 			"env.setInnerHTML", "env.removeElement", "env.getElementValue",
 			"env.setElementValue", "env.setCustomValidity", "env.wsSend", "env.now", "env.log",
+			"env.storageGet", "env.storageSet",
 		]
 		return set
 	}()

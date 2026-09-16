@@ -59,6 +59,21 @@
           }
         }
       },
+      storageSet: function (keyPtr, keyLen, valPtr, valLen) {
+        var key = readStr(keyPtr, keyLen);
+        var val = readStr(valPtr, valLen);
+        try { localStorage.setItem(key, val); } catch (e) {}
+      },
+      storageGet: function (keyPtr, keyLen, outPtr, outLen) {
+        if (!outPtr || outLen <= 0) { return 0; }
+        var raw = null;
+        try { raw = localStorage.getItem(readStr(keyPtr, keyLen)); } catch (e) { return 0; }
+        if (!raw) { return 0; }
+        var bytes = new TextEncoder().encode(raw);
+        var n = Math.min(bytes.length, outLen);
+        new Uint8Array(holder.memory.buffer, outPtr, n).set(bytes.subarray(0, n));
+        return n;
+      },
       now: function () { return performance.now(); },
       log: function (level, msgPtr, msgLen) {
         var msg = readStr(msgPtr, msgLen);

@@ -26,60 +26,7 @@ public protocol ClientStateStore: Sendable {
 /// is checked against the prototype-pollution denylist (mirroring the js
 /// runtime's `StateStore`).
 public struct InMemoryClientStateStore: ClientStateStore {
-	private static let deniedSegments: Set<Substring> = ["__proto__", "constructor", "prototype"]
-
-	private final class Box: @unchecked Sendable {
-		private struct Values {
-			var values: [String: JSONValue] = [:]
-			var subscriptions: [UUID: (path: String, handler: @Sendable (JSONValue?) -> Void)] = [:]
-		}
-		private let mutex = Mutex(Values())
-
-		func get(_ path: String) -> JSONValue? {
-			mutex.withLock { $0.values[path] }
-		}
-
-		func set(_ path: String, _ value: JSONValue) {
-			let previous = mutex.withLock { box -> JSONValue? in
-				let old = box.values[path]
-				box.values[path] = value
-				return old
-			}
-			fanOut(path: path, previous: previous, value: value)
-		}
-
-		func remove(_ path: String) {
-			let previous = mutex.withLock { box -> JSONValue? in
-				box.values.removeValue(forKey: path)
-			}
-			fanOut(path: path, previous: previous, value: nil)
-		}
-
-		func subscribe(_ path: String, _ handler: @escaping @Sendable (JSONValue?) -> Void) -> UUID {
-			let id = UUID()
-			mutex.withLock { $0.subscriptions[id] = (path, handler) }
-			return id
-		}
-
-		func unsubscribe(_ id: UUID) {
-			mutex.withLock { _ = $0.subscriptions.removeValue(forKey: id) }
-		}
-
-		/// notify exact-path and prefix subscribers (a subscriber to `table`
-		/// hears `table.sort`, not `html`).
-		private func fanOut(path: String, previous: JSONValue?, value: JSONValue?) {
-			let matches = mutex.withLock { box -> [(String, @Sendable (JSONValue?) -> Void)] in
-				box.subscriptions.values
-					.filter { entry in entry.path == path || path.hasPrefix(entry.path + ".") }
-					.map { ($0.path, $0.handler) }
-			}
-			for (_, handler) in matches where !(previous == value) {
-				handler(value)
-			}
-		}
-	}
-
-	private let box = Box()
+	private let box = ClientStateBox()
 
 	public init() {}
 
@@ -90,7 +37,7 @@ public struct InMemoryClientStateStore: ClientStateStore {
 	}
 
 	public func set(_ path: String, _ value: JSONValue) throws {
-		try Self.validate(path)
+		try ClientStatePaths.validate(path)
 		box.set(path, value)
 	}
 
@@ -105,10 +52,68 @@ public struct InMemoryClientStateStore: ClientStateStore {
 	public func unsubscribe(_ id: UUID) {
 		box.unsubscribe(id)
 	}
+}
 
-	private static func validate(_ path: String) throws {
-		for segment in path.split(separator: ".") where deniedSegments.contains(segment) {
+/// shared path validation for every backend (prototype-pollution denylist).
+enum ClientStatePaths {
+	static let denied: Set<Substring> = ["__proto__", "constructor", "prototype"]
+
+	static func validate(_ path: String) throws {
+		for segment in path.split(separator: ".") where denied.contains(segment) {
 			throw ClientStateError.invalidPath(String(segment))
+		}
+	}
+}
+
+/// the in-memory backend's shared state box (flat keys + prefix subscriptions).
+final class ClientStateBox: @unchecked Sendable {
+	private struct Values {
+		var values: [String: JSONValue] = [:]
+		var subscriptions: [UUID: (path: String, handler: @Sendable (JSONValue?) -> Void)] = [:]
+	}
+	private let mutex = Mutex(Values())
+
+	init() {}
+
+	func get(_ path: String) -> JSONValue? {
+		mutex.withLock { $0.values[path] }
+	}
+
+	func set(_ path: String, _ value: JSONValue) {
+		let previous = mutex.withLock { box -> JSONValue? in
+			let old = box.values[path]
+			box.values[path] = value
+			return old
+		}
+		fanOut(path: path, previous: previous, value: value)
+	}
+
+	func remove(_ path: String) {
+		let previous = mutex.withLock { box -> JSONValue? in
+			box.values.removeValue(forKey: path)
+		}
+		fanOut(path: path, previous: previous, value: nil)
+	}
+
+	func subscribe(_ path: String, _ handler: @escaping @Sendable (JSONValue?) -> Void) -> UUID {
+		let id = UUID()
+		mutex.withLock { $0.subscriptions[id] = (path, handler) }
+		return id
+	}
+
+	func unsubscribe(_ id: UUID) {
+		mutex.withLock { _ = $0.subscriptions.removeValue(forKey: id) }
+	}
+
+	/// notify exact-path and prefix subscribers.
+	private func fanOut(path: String, previous: JSONValue?, value: JSONValue?) {
+		let matches = mutex.withLock { box -> [(String, @Sendable (JSONValue?) -> Void)] in
+			box.subscriptions.values
+				.filter { entry in entry.path == path || path.hasPrefix(entry.path + ".") }
+				.map { ($0.path, $0.handler) }
+		}
+		for (_, handler) in matches where !(previous == value) {
+			handler(value)
 		}
 	}
 }

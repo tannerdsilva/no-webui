@@ -26,6 +26,12 @@ private func setCustomValidity(_ idPtr: UnsafeRawPointer?, _ idLen: Int, _ msgPt
 @_extern(wasm, module: "env", name: "wsSend")
 private func wsSend(_ bytesPtr: UnsafeRawPointer?, _ len: Int)
 
+@_extern(wasm, module: "env", name: "storageGet")
+func storageGet(_ keyPtr: UnsafeRawPointer?, _ keyLen: Int, _ outPtr: UnsafeMutableRawPointer?, _ outLen: Int) -> Int
+
+@_extern(wasm, module: "env", name: "storageSet")
+func storageSet(_ keyPtr: UnsafeRawPointer?, _ keyLen: Int, _ valPtr: UnsafeRawPointer?, _ valLen: Int)
+
 @_extern(wasm, module: "env", name: "now")
 private func now() -> Double
 
@@ -49,6 +55,8 @@ public enum WebUIBridge {
 		setElementValue(nil, 0, nil, 0)
 		setCustomValidity(nil, 0, nil, 0)
 		wsSend(nil, 0)
+		_ = storageGet(nil, 0, scratch, 256)
+		storageSet(nil, 0, nil, 0)
 		_ = now()
 		let message = [UInt8]("webui ready".utf8)
 		message.withUnsafeBytes { raw in

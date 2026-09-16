@@ -23,14 +23,21 @@ func webuiPump() -> Bool {
 @_expose(wasm, "webui_init")
 func webuiInit(_ configPtr: UnsafeRawPointer?, _ len: Int) {
 	// the boot envelope may carry an `authState` object (non-secret session
-	// presence + roles); boot the resident router + the local-search vertical's
+	// presence + roles) and a `persistence` flag (swap the localStorage
+	// backend in). boot the resident router + the local-search vertical's
 	// handlers, and publish the boot page markup through the frame.
 	if let configPtr, len > 0 {
 		let text = String(decoding: UnsafeRawBufferPointer(start: configPtr, count: len), as: UTF8.self)
 		if let root = try? JSONValue.parse(text),
-		   case .object(let dict) = root,
-		   let authRaw = dict["authState"] {
-			ClientRuntime.applyAuthState(authRaw.serialize())
+		   case .object(let dict) = root {
+			if dict["persistence"] == .bool(true) {
+				#if os(WASI)
+				ClientRuntime.state = LocalStorageClientStateStore()
+				#endif
+			}
+			if let authRaw = dict["authState"] {
+				ClientRuntime.applyAuthState(authRaw.serialize())
+			}
 		}
 	}
 	WebUIBridge.install()
