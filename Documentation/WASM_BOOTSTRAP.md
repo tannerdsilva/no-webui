@@ -51,7 +51,7 @@ be referenced from a reachable root (webui_init → WebUIBridge.install).
 - `GET /__assets/app.wasm` — the fixed-name **alias**, `Cache-Control: no-store`
   (gates and probes fetch by name and must never see a stale binary).
 - `GET /__assets/app.<sha256>.wasm` — the **content-addressed route**,
-  `Cache-Control: public, max-age=31536000, immutable`; the landscape hash is
+  `Cache-Control: public, max-age=31536000, immutable`; the content hash is
   computed over the artifact with rawdog's `RAW_sha256` at server startup, so
   a new binary automatically emits new URLs and can never be served stale.
 - client pages carry `<meta name="webui-wasm" content="/__assets/app.<hash>.wasm">`;
