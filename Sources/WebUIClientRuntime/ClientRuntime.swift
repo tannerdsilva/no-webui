@@ -1,6 +1,7 @@
 import Foundation
 import WebUICore
 import WebUIDesignSystemCore
+import WebUIChart
 import Synchronization
 
 /// the client-mode resident runtime: one `EventRouter` per page load (house
@@ -16,6 +17,7 @@ public enum ClientRuntime {
 	nonisolated(unsafe) private static let sortBox = Mutex((column: 0, ascending: true))
 	nonisolated(unsafe) private static let selectedBox = Mutex(Set<String>())
 	nonisolated(unsafe) private static let expandedBox = Mutex(Set<String>())
+	nonisolated(unsafe) private static let selectedCategoryBox = Mutex<String?>(nil)
 	nonisolated(unsafe) private static let authBox = Mutex(AuthStateMirror.anonymous)
 	nonisolated(unsafe) public private(set) static var router = EventRouter()
 	nonisolated(unsafe) public private(set) static var bootPageHTML = ""
@@ -119,6 +121,7 @@ public enum ClientRuntime {
 		sortBox.withLock { $0 = (column: 0, ascending: true) }
 		selectedBox.withLock { $0 = [] }
 		expandedBox.withLock { $0 = [] }
+		selectedCategoryBox.withLock { $0 = nil }
 		router.reset()
 		nameIndex = buildNameIndex()
 		// the persistence self-proof: with a localStorage backend wired by the
@@ -142,9 +145,34 @@ public enum ClientRuntime {
 					// only rendered when persistence is actually working
 					Raw("<div id=\"boot-count\" class=\"search__meta\">boot \(bootCount)</div>")
 				}
+				Div(class: "search__chart") {
+					Self.makeChart(selected: selectedCategoryBox.withLock { $0 })
+						.onSelectMark { me, category in
+							selectedCategoryBox.withLock { $0 = category }
+							return [me.replace(with: Self.chartHTML())]
+						}
+				}
 			}
 			.render()
 		}
+	}
+
+	/// the client chart (p5-t6): identical marks, client-computed selection.
+	/// page-build calls register the mark handler; fragment re-renders
+	/// (`chartHTML`) re-emit the same stable control ids without registering.
+	private static func makeChart(selected: String?) -> Chart {
+		Chart {
+			BarMark(x: .value("month", "jan"), y: .value("ms", 12))
+			BarMark(x: .value("month", "feb"), y: .value("ms", 9))
+			BarMark(x: .value("month", "mar"), y: .value("ms", 15))
+		}
+		.chartID("client-chart")
+		.chartSelection(axis: .x, value: selected.map { Plottable.category($0) })
+	}
+
+	/// standalone fragment render (no context → ids re-emit, no re-register).
+	private static func chartHTML() -> String {
+		Self.makeChart(selected: selectedCategoryBox.withLock { $0 }).render()
 	}
 
 	private static func persistBootCount() -> Int {

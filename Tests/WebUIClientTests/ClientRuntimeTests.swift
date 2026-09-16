@@ -101,4 +101,33 @@ struct ClientRuntimeTests {
 		let collapsed = try #require(collapse.first)
 		#expect(!collapsed.html.contains("web tier"))
 	}
+
+	// p5-t6: chart selection routes through the CLIENT router — the mark
+	// click re-renders the chart fragment with a wasm-computed selection line.
+	@Test("chart mark selection routes through the client router")
+	func clientChartSelects() async throws {
+		ClientRuntime.bootSearch()
+		#expect(ClientRuntime.bootPageHTML.contains("client-chart"))
+		guard let markControl = Self.markControlID(in: ClientRuntime.bootPageHTML) else {
+			Issue.record("no chart mark control in boot markup")
+			return
+		}
+		let updates = await ClientRuntime.router.handle(
+			EventData(component: ComponentID(markControl), event: "click", data: [:])
+		)
+		let fragment = try #require(updates.first)
+		#expect(fragment.html.contains("chart__selection"), "a mark click must render the selection line")
+	}
+
+	private static func markControlID(in html: String) -> String? {
+		let needle = "data-component-id=\""
+		var searchStart = html.startIndex
+		while let range = html[searchStart...].range(of: needle) {
+			let rest = html[range.upperBound...]
+			let id = String(rest.prefix(while: { $0 != "\"" }))
+			if id.hasPrefix("client-chart-") { return id }
+			searchStart = range.upperBound
+		}
+		return nil
+	}
 }

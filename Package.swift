@@ -81,6 +81,7 @@ let package = Package(
             dependencies: [
                 "WebUICore",
                 "WebUIDesignSystemCore",
+                "WebUIChart",
             ],
             swiftSettings: [
                 // the official sdk's wasm import primitive (@_extern(wasm, module:name:))
