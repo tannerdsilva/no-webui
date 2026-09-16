@@ -19,6 +19,22 @@ struct ClientRuntimeTests {
 		#expect(ClientRuntime.router.handlerCount == 1)
 	}
 
+	@Test("the search vertical builds the shared prefix index at boot")
+	func bootBuildsNameIndex() {
+		// this test intentionally shares the `ClientRuntime` statics with the
+		// other boot tests in this serialized suite. every suite that touches
+		// the resident router/name index must live here: a concurrent suite's
+		// `bootSearch()` registers a dozen handlers into the router, and when
+		// it lands between `boot()` and the `handlerCount` read above the count
+		// is wrong (a linux-exposed race — this suite is `.serialized` so the
+		// reads and writes can never interleave).
+		ClientRuntime.bootSearch()
+		#expect(!ClientRuntime.nameIndex.isEmpty)
+		let names = ClientRuntime.nameIndex.search(prefix: "w")
+		#expect(names.contains("web"))
+		#expect(!names.contains("search"))
+	}
+
 	@Test("the registered handler dispatches and produces the counter fragment")
 	func registeredHandlerDispatch() async {
 		ClientRuntime.boot()

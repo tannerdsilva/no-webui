@@ -12,6 +12,7 @@ enum WebUIAssetTool {
         var clientBootInput: String?
         var clientSearchBootInput: String?
         var outputPath: String?
+        var tokensOutputPath: String?
 
         var iterator = args.makeIterator()
         while let flag = iterator.next() {
@@ -28,13 +29,15 @@ enum WebUIAssetTool {
                 clientSearchBootInput = iterator.next()
             case "--output":
                 outputPath = iterator.next()
+            case "--tokens-output":
+                tokensOutputPath = iterator.next()
             default:
                 break
             }
         }
 
-        guard let outputPath else {
-            print("usage: WebUIAssetTool --css-input <path> --js-input <path> --client-input <path> --client-boot-input <path> --client-search-boot-input <path> --output <path>")
+        guard outputPath != nil || tokensOutputPath != nil else {
+            print("usage: WebUIAssetTool --css-input <path> --js-input <path> --client-input <path> --client-boot-input <path> --client-search-boot-input <path> --output <path> [--tokens-output <path>]")
             exit(1)
         }
 
@@ -63,22 +66,38 @@ enum WebUIAssetTool {
             clientSearchBootContent = try String(contentsOfFile: clientSearchBootInput, encoding: .utf8)
         }
 
-        let generated = try generateSwiftSource(
-            css: cssContent, js: jsContent, client: clientContent,
-            clientBoot: clientBootContent, clientSearchBoot: clientSearchBootContent
-        )
+        // the token vocabulary is written to its own output so the wasm-clean
+        // design-system core can embed it without the server-bound WebUI target
+        // (p5-t7: `DesignToken` is a client-reachable core surface).
+        if let tokensOutputPath {
+            guard cssInput != nil else {
+                print("usage: --tokens-output requires --css-input")
+                exit(1)
+            }
+            let tokenCount = try rootTokens(in: cssContent).count
+            let tokensSource = try designTokenSource(from: cssContent)
+            try tokensSource.write(toFile: tokensOutputPath, atomically: true, encoding: .utf8)
+            print("generated \(tokensOutputPath) (\(tokenCount) tokens)")
+        }
 
-        try generated.write(toFile: outputPath, atomically: true, encoding: .utf8)
+        if let outputPath {
+            let generated = try generateAssetsSource(
+                css: cssContent, js: jsContent, client: clientContent,
+                clientBoot: clientBootContent, clientSearchBoot: clientSearchBootContent
+            )
 
-        let cssBytes = cssContent.utf8.count
-        let jsBytes = jsContent.utf8.count
-        let clientBytes = clientContent.utf8.count
-        let bootBytes = clientBootContent.utf8.count
-        let searchBytes = clientSearchBootContent.utf8.count
-        print("generated \(outputPath) (\(cssBytes) bytes CSS, \(jsBytes) bytes JS, \(clientBytes) bytes client, \(bootBytes) bytes boot, \(searchBytes) bytes search boot)")
+            try generated.write(toFile: outputPath, atomically: true, encoding: .utf8)
+
+            let cssBytes = cssContent.utf8.count
+            let jsBytes = jsContent.utf8.count
+            let clientBytes = clientContent.utf8.count
+            let bootBytes = clientBootContent.utf8.count
+            let searchBytes = clientSearchBootContent.utf8.count
+            print("generated \(outputPath) (\(cssBytes) bytes CSS, \(jsBytes) bytes JS, \(clientBytes) bytes client, \(bootBytes) bytes boot, \(searchBytes) bytes search boot)")
+        }
     }
 
-    static func generateSwiftSource(css: String, js: String, client: String, clientBoot: String, clientSearchBoot: String) throws -> String {
+    static func generateAssetsSource(css: String, js: String, client: String, clientBoot: String, clientSearchBoot: String) throws -> String {
         let escapedCSS = css.replacingOccurrences(of: "\\", with: "\\\\")
         let escapedJS = js.replacingOccurrences(of: "\\", with: "\\\\")
         let escapedClient = client.replacingOccurrences(of: "\\", with: "\\\\")
@@ -131,7 +150,7 @@ enum WebUIAssetTool {
         }
         """
 
-        return assets + "\n\n" + (try designTokenSource(from: css))
+        return assets
     }
 
     // MARK: - DesignToken generation

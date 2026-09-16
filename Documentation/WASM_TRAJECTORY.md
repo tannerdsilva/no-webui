@@ -655,9 +655,12 @@ nothing → byte-identical document.
 **Redesign.** Unchanged — theme is pure CSS, byte-identical in client mode (same
 sheet, same cascade, same `DesignToken` generation). The `:root`-scoped-token
 invariant (later `:root` overrides restyle `var(--…)` component tokens; they do not
-touch selector-scoped vars) continues to hold for any client-computed style. Ensure
-`stylesheet()` determinism survives the shared-core move (it is pure — no risk).
-JS: none.
+touch selector-scoped vars) continues to hold for any client-computed style. The
+shared-core move landed (p5-t7): `DesignToken` generates into
+`WebUIDesignSystemCore` (`DesignTokens+Generated.swift`, wasm-clean) and
+`WebUITheme`/`ColorScheme`/`WebUIThemeProvider` live in that target; the `@Theme`
+macro stays in `WebUIDesignSystem`. `stylesheet()` determinism is pinned by the
+core-reachability suite and the existing theme tests. JS: none.
 
 #### 2.2.3 Components — the 22 styled families (incl. typed control handlers)
 

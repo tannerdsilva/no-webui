@@ -1,4 +1,4 @@
-import WebUI
+import WebUICore
 
 // MARK: - ColorScheme
 

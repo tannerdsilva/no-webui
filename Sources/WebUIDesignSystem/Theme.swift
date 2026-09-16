@@ -1,4 +1,4 @@
-import WebUI
+import WebUIDesignSystemCore
 
 // MARK: - @Theme macro
 

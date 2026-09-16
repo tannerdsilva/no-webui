@@ -33,10 +33,32 @@ struct WebUIAssetPlugin: BuildToolPlugin {
             return []
         }
 
+        let assetTool = try context.tool(named: "WebUIAssetTool")
+
+        // the wasm-clean design-system core embeds the generated token
+        // vocabulary (`DesignTokens+Generated.swift`); the server-bound WebUI
+        // target embeds the assets (`Assets+Generated.swift`). the split (p5-t7)
+        // keeps `DesignToken` reachable from the client build without rawdog.
+        if target.name == "WebUIDesignSystemCore" {
+            guard cssExists else {
+                Diagnostics.warning("designer/assets/design-system.css not found — DesignToken generation skipped")
+                return []
+            }
+            let tokensOutputURL = context.pluginWorkDirectoryURL
+                .appendingPathComponent("DesignTokens+Generated.swift")
+            return [
+                .buildCommand(
+                    displayName: "Generating DesignToken from designer/assets/",
+                    executable: assetTool.url,
+                    arguments: ["--css-input", cssFile.path, "--tokens-output", tokensOutputURL.path],
+                    inputFiles: [cssFile],
+                    outputFiles: [tokensOutputURL]
+                )
+            ]
+        }
+
         let outputURL = context.pluginWorkDirectoryURL
             .appendingPathComponent("Assets+Generated.swift")
-
-        let assetTool = try context.tool(named: "WebUIAssetTool")
 
         var args: [String] = []
         var inputs: [URL] = []

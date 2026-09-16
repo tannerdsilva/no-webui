@@ -38,14 +38,4 @@ struct ClientPrefixIndexTests {
 		#expect(index.search(prefix: "a", limit: 3).count == 3)
 		#expect(index.search(prefix: "a").count == 10)
 	}
-
-	@Test("the vertical answers from the built index")
-	func verticalIndex() throws {
-		ClientRuntime.bootSearch()
-		#expect(!ClientRuntime.nameIndex.isEmpty)
-		// "w" matches web (and the search row never matches).
-		let names = ClientRuntime.nameIndex.search(prefix: "w")
-		#expect(names.contains("web"))
-		#expect(!names.contains("search"))
-	}
 }

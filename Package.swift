@@ -108,6 +108,9 @@ let package = Package(
             dependencies: [
                 "WebUICore",
                 .product(name: "Logging", package: "swift-log"),
+            ],
+            plugins: [
+                "WebUIAssetPlugin",
             ]
         ),
         .target(
@@ -308,6 +311,7 @@ let package = Package(
             dependencies: [
                 "WebUIClientRuntime",
                 "WebUICore",
+                "WebUIDesignSystemCore",
                 "WebUISmokeShared",
             ]
         ),
