@@ -65,4 +65,40 @@ struct ClientRuntimeTests {
 		#expect(auth != nil && api != nil)
 		#expect(auth! < api!, "region sort must order auth before api: \(html)")
 	}
+
+	// p5-t4: selection + expand route through the CLIENT router — the
+	// websocket is silent; each toggle re-renders the table fragment in wasm.
+	@Test("select-all and row selection re-render the table client-side")
+	func clientTableSelects() async throws {
+		ClientRuntime.bootSearch()
+		// select all
+		var updates = await ClientRuntime.router.handle(
+			EventData(component: "client-table-select-all", event: "click", data: [:])
+		)
+		var table = try #require(updates.first)
+		#expect(table.html.contains("aria-checked=\"true\""))
+		#expect(table.html.components(separatedBy: "tr--selected").count - 1 == 4)
+		// deselect a single row: three rows stay selected
+		updates = await ClientRuntime.router.handle(
+			EventData(component: "client-table-select-web", event: "click", data: [:])
+		)
+		table = try #require(updates.first)
+		#expect(table.html.components(separatedBy: "tr--selected").count - 1 == 3)
+	}
+
+	@Test("expand toggle reveals the row detail client-side")
+	func clientTableExpands() async throws {
+		ClientRuntime.bootSearch()
+		let updates = await ClientRuntime.router.handle(
+			EventData(component: "client-table-expand-web", event: "click", data: [:])
+		)
+		let table = try #require(updates.first)
+		#expect(table.html.contains("web tier"))
+		// collapse again
+		let collapse = await ClientRuntime.router.handle(
+			EventData(component: "client-table-expand-web", event: "click", data: [:])
+		)
+		let collapsed = try #require(collapse.first)
+		#expect(!collapsed.html.contains("web tier"))
+	}
 }

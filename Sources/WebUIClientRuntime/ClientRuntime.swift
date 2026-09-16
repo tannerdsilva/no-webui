@@ -14,6 +14,8 @@ public enum ClientRuntime {
 	nonisolated(unsafe) private static let counterBox = Mutex(0)
 	nonisolated(unsafe) private static let queryBox = Mutex("")
 	nonisolated(unsafe) private static let sortBox = Mutex((column: 0, ascending: true))
+	nonisolated(unsafe) private static let selectedBox = Mutex(Set<String>())
+	nonisolated(unsafe) private static let expandedBox = Mutex(Set<String>())
 	nonisolated(unsafe) private static let authBox = Mutex(AuthStateMirror.anonymous)
 	nonisolated(unsafe) public private(set) static var router = EventRouter()
 	nonisolated(unsafe) public private(set) static var bootPageHTML = ""
@@ -115,6 +117,8 @@ public enum ClientRuntime {
 	public static func bootSearch() {
 		queryBox.withLock { $0 = "" }
 		sortBox.withLock { $0 = (column: 0, ascending: true) }
+		selectedBox.withLock { $0 = [] }
+		expandedBox.withLock { $0 = [] }
 		router.reset()
 		nameIndex = buildNameIndex()
 		// the persistence self-proof: with a localStorage backend wired by the
@@ -180,7 +184,8 @@ public enum ClientRuntime {
 			}
 			return ascending ? less : !less
 		}
-		let rows = records.map { record -> [any View] in
+		let sorted = records
+		let rows = sorted.map { record -> [any View] in
 			[Text(record.name), Text(record.region), Text("\(record.ms) ms")]
 		}
 		return WebUITable(
@@ -188,13 +193,53 @@ public enum ClientRuntime {
 			rows: rows,
 			id: "client-table",
 			sortableColumns: [0, 1, 2],
-			sort: (column, ascending ? .ascending : .descending)
+			sort: (column, ascending ? .ascending : .descending),
+			selectable: true,
+			rowIds: sorted.map { $0.name },
+			selectedRows: selectedBox.withLock { $0 },
+			expandedRows: expandedBox.withLock { $0 },
+			rowDetails: [
+				"web": Text("us-east-1 web tier (42 ms p95)"),
+				"auth": Text("ap-south-1 auth stack (9 ms p95)"),
+			]
 		)
 		.onSort { me, column in
 			if sortBox.withLock({ $0.column }) == column {
 				sortBox.withLock { $0.ascending.toggle() }
 			} else {
 				sortBox.withLock { $0 = (column: column, ascending: true) }
+			}
+			return [me.replace(with: Self.tableHTML(query: queryBox.withLock { $0 }))]
+		}
+		.onSelectAll { me in
+			var selected = selectedBox.withLock { $0 }
+			let all = sorted.map { $0.name }
+			let allSelected = all.allSatisfy(selected.contains)
+			if allSelected {
+				selected.subtract(all)
+			} else {
+				selected.formUnion(all)
+			}
+			selectedBox.withLock { $0 = selected }
+			return [me.replace(with: Self.tableHTML(query: queryBox.withLock { $0 }))]
+		}
+		.onSelect { me, rowID in
+			selectedBox.withLock { state in
+				if state.contains(rowID) {
+					state.remove(rowID)
+				} else {
+					state.insert(rowID)
+				}
+			}
+			return [me.replace(with: Self.tableHTML(query: queryBox.withLock { $0 }))]
+		}
+		.onToggleExpand { me, rowID in
+			expandedBox.withLock { state in
+				if state.contains(rowID) {
+					state.remove(rowID)
+				} else {
+					state.insert(rowID)
+				}
 			}
 			return [me.replace(with: Self.tableHTML(query: queryBox.withLock { $0 }))]
 		}
