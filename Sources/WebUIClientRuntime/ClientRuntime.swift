@@ -18,6 +18,8 @@ public enum ClientRuntime {
 	nonisolated(unsafe) private static let selectedBox = Mutex(Set<String>())
 	nonisolated(unsafe) private static let expandedBox = Mutex(Set<String>())
 	nonisolated(unsafe) private static let selectedCategoryBox = Mutex<String?>(nil)
+	nonisolated(unsafe) private static let emailBox = Mutex("")
+	nonisolated(unsafe) private static let emailValidityBox = Mutex<String?>(nil)
 	nonisolated(unsafe) private static let authBox = Mutex(AuthStateMirror.anonymous)
 	nonisolated(unsafe) public private(set) static var router = EventRouter()
 	nonisolated(unsafe) public private(set) static var bootPageHTML = ""
@@ -31,8 +33,15 @@ public enum ClientRuntime {
 	/// boot envelope binds it to the page.
 	nonisolated(unsafe) public static var sync = ClientSyncCoordinator(renderToken: "")
 
-	/// the observability ring (p3-t5); drained by the transport owner.
+	/// the observability ring (p5-t5); drained by the transport owner.
 	nonisolated(unsafe) public static let telemetry = ClientTelemetry()
+
+	/// the optimistic-patch ledger (p5-t1): local patches are sequenced
+	/// through `sync` and tracked here until the authority confirms.
+	nonisolated(unsafe) public static let ledger = ClientPatchLedger()
+
+	/// email validation rules for the vertical's form field (p5-t2).
+	nonisolated(unsafe) public static let emailValidator = ClientFieldValidator(rules: [.required, .email])
 
 	/// the read-only session-presence mirror (advisory ui gating only, d4).
 	public static var authMirror: AuthStateMirror {
@@ -152,6 +161,17 @@ public enum ClientRuntime {
 							return [me.replace(with: Self.chartHTML())]
 						}
 				}
+				Div(class: "search__form") {
+					Input(id: "client-email", placeholder: "email", type: .text, value: emailBox.withLock { $0 })
+						.onInput { event in
+							let value = event.string("value") ?? ""
+							emailBox.withLock { $0 = value }
+							let message = Self.emailValidator.validate(value)
+							emailValidityBox.withLock { $0 = message }
+							return [FragmentUpdate(id: "client-validity", html: Self.validityHTML())]
+						}
+					Raw(Self.validityHTML())
+				}
 			}
 			.render()
 		}
@@ -173,6 +193,15 @@ public enum ClientRuntime {
 	/// standalone fragment render (no context → ids re-emit, no re-register).
 	private static func chartHTML() -> String {
 		Self.makeChart(selected: selectedCategoryBox.withLock { $0 }).render()
+	}
+
+	// p5-t2: field-level validation feedback rendered in the fragment — the
+	// same rules run in wasm (zero-latency) and will re-run on the server.
+	private static func validityHTML() -> String {
+		if let message = emailValidityBox.withLock({ $0 }) {
+			return "<div id=\"client-validity\" class=\"search__error\">\(htmlEscape(message))</div>"
+		}
+		return "<div id=\"client-validity\" class=\"search__valid\"></div>"
 	}
 
 	private static func persistBootCount() -> Int {

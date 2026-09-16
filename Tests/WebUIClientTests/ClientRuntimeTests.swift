@@ -130,4 +130,40 @@ struct ClientRuntimeTests {
 		}
 		return nil
 	}
+
+	// p5-t2: the email field's handler registers under an auto-minted id; find
+	// the data-component-id attached to the element carrying `id="client-email"`
+	// (the event modifier places it on the element itself).
+	@Test("the email field validates client-side with zero-latency feedback")
+	func clientEmailValidates() async throws {
+		ClientRuntime.bootSearch()
+		guard let emailControl = Self.componentID(for: "client-email", in: ClientRuntime.bootPageHTML) else {
+			Issue.record("no email component in boot markup")
+			return
+		}
+		var updates = await ClientRuntime.router.handle(
+			EventData(component: ComponentID(emailControl), event: "input", data: ["value": "not-an-email"])
+		)
+		var fragment = try #require(updates.first)
+		#expect(fragment.html.contains("search__error"))
+		#expect(fragment.html.contains("valid email"))
+
+		updates = await ClientRuntime.router.handle(
+			EventData(component: ComponentID(emailControl), event: "input", data: ["value": "user@example.com"])
+		)
+		fragment = try #require(updates.first)
+		#expect(fragment.html.contains("search__valid"))
+		#expect(!fragment.html.contains("search__error"))
+	}
+
+	private static func componentID(for elementID: String, in html: String) -> String? {
+		let idAttr = "id=\"\(elementID)\""
+		guard let idRange = html.range(of: idAttr) else { return nil }
+		let windowStart = html.index(idRange.lowerBound, offsetBy: -200, limitedBy: html.startIndex) ?? html.startIndex
+		let windowEnd = html.index(idRange.upperBound, offsetBy: 100, limitedBy: html.endIndex) ?? html.endIndex
+		let window = html[windowStart..<windowEnd]
+		guard let attrRange = window.range(of: "data-component-id=\"") else { return nil }
+		let rest = html[attrRange.upperBound...]
+		return String(rest.prefix(while: { $0 != "\"" }))
+	}
 }
