@@ -489,7 +489,7 @@ struct BEMTests {
                 Text("hi")
             }
             .onClick(id: "stable-table") { event in
-                #expect(event.data["targetId"] == "inner")
+                #expect(event.string("targetId") == "inner")
                 return []
             }
             .render()

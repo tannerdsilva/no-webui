@@ -12,7 +12,7 @@ public struct FragmentUpdate: Sendable, Codable, Equatable, Hashable {
 
 // MARK: - Incoming Messages (Client → Server)
 public enum WSIncoming: Sendable, Equatable {
-    case event(component: String, event: String, data: [String: String], token: String?)
+    case event(component: String, event: String, data: [String: JSONValue], token: String?)
     case ping(token: String?)
     case navigate(url: String)
 }
@@ -29,7 +29,7 @@ extension WSIncoming: Decodable {
         case "event":
             let component = try container.decode(String.self, forKey: .component)
             let event = try container.decode(String.self, forKey: .event)
-            let data = try container.decodeIfPresent([String: String].self, forKey: .data) ?? [:]
+            let data = try container.decodeIfPresent([String: JSONValue].self, forKey: .data) ?? [:]
             let token = try container.decodeIfPresent(String.self, forKey: .token)
             self = .event(component: component, event: event, data: data, token: token)
         case "ping":
@@ -118,17 +118,14 @@ extension WSIncoming {
                   case .string(let event) = object["event"] else {
                 throw WSMessageError.malformed("event requires 'component' and 'event' strings")
             }
-            var data: [String: String] = [:]
+            var data: [String: JSONValue] = [:]
             if let rawData = object["data"] {
                 guard case .object(let dataObject) = rawData else {
                     throw WSMessageError.malformed("event 'data' must be an object")
                 }
-                for (key, value) in dataObject {
-                    guard case .string(let stringValue) = value else {
-                        throw WSMessageError.malformed("event data values must be strings")
-                    }
-                    data[key] = stringValue
-                }
+                // widened (p3): values ride through as typed JSONValue —
+                // strings, numbers, booleans, nested structures.
+                data = dataObject
             }
             let token: String?
             if let rawToken = object["token"] {

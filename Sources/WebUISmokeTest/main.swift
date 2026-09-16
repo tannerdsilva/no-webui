@@ -264,7 +264,7 @@ func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
 					Heading("Echo (input → server → DOM)", level: .h3)
 					WebUIInput(placeholder: "Type something…", id: "echo-input", label: "Input", helpText: "Round-trips over the WebSocket.")
 						.onInput { event in
-							state.echo = event.data["value"] ?? ""
+							state.echo = event.string("value") ?? ""
 							return [FragmentUpdate(id: "echo-out", html: echoOutHTML(state.echo))]
 						}
 					Raw(echoOutHTML(state.echo))

@@ -242,7 +242,7 @@ func renderDashboard(state: AuthDemoState, auth: AuthContext, logoutToken: Strin
 						Heading("Echo", level: .h3)
 						WebUIInput(placeholder: "Type something…", id: "echo-input", label: "Input")
 							.onInput { event in
-								state.echo = event.data["value"] ?? ""
+								state.echo = event.string("value") ?? ""
 								return [FragmentUpdate(id: "echo-out", html: echoOutHTML(state.echo))]
 							}
 						Raw(echoOutHTML(state.echo))

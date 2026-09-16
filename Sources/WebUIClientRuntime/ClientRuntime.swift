@@ -75,7 +75,7 @@ public enum ClientRuntime {
 				Div(class: "search__field") {
 					Input(id: "search-input", placeholder: "filter…", type: .text, value: queryBox.withLock { $0 })
 						.onInput { event in
-							let query = event.data["value"] ?? ""
+							let query = event.string("value") ?? ""
 							queryBox.withLock { $0 = query }
 							return [FragmentUpdate(id: "search-rows", html: Self.searchRowsHTML(query: query))]
 						}
@@ -145,15 +145,9 @@ public enum ClientRuntime {
 		      let event = stringField(dict, "event") else {
 			return []
 		}
-		var data: [String: String] = [:]
+		var data: [String: JSONValue] = [:]
 		if case .object(let dataObj)? = dict["data"] {
-			for (key, value) in dataObj {
-				switch value {
-				case .string(let s): data[key] = s
-				case .number, .bool: data[key] = value.serialize()
-				default: break
-				}
-			}
+			data = dataObj
 		}
 		let eventData = EventData(component: ComponentID(comp), event: event, data: data)
 		let result = Mutex<[FragmentUpdate]>([])

@@ -1254,7 +1254,7 @@ public struct WebUIPagination: View {
             if wired, let onRowsPerPageChange {
                 let h: @Sendable (ElementRef, Int) async -> [FragmentUpdate] = onRowsPerPageChange
                 rowsHandler = { event in
-                    let raw = event.data["value"] ?? ""
+                    let raw = event.string("value") ?? ""
                     let size = Int(raw) ?? rowsPerPage
                     return await h(me, size)
                 }

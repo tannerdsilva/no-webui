@@ -9,14 +9,30 @@ public struct ComponentID: Sendable, Hashable, Codable, ExpressibleByStringLiter
 }
 
 // MARK: - EventData
+
 public struct EventData: Sendable, Codable {
     public let component: ComponentID
     public let event: String
-    public let data: [String: String]
-    public init(component: ComponentID, event: String, data: [String: String]) {
+    /// widened (p3): typed payload values — flat string fields are read with
+    /// `string(_:)`; structured values (search terms, row ids, numeric
+    /// filters) flow through the hand-rolled `JSONValue` object unchanged.
+    public let data: [String: JSONValue]
+    public init(component: ComponentID, event: String, data: [String: JSONValue] = [:]) {
         self.component = component
         self.event = event
         self.data = data
+    }
+
+    /// a flat string field (most event payloads: `value`, `targetId`, `key`, …).
+    public func string(_ key: String) -> String? {
+        guard case .string(let value)? = data[key] else { return nil }
+        return value
+    }
+
+    /// a numeric field.
+    public func number(_ key: String) -> Double? {
+        guard case .number(let value)? = data[key] else { return nil }
+        return value
     }
 }
 
