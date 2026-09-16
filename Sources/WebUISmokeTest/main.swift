@@ -1,4 +1,9 @@
 import Foundation
+#if canImport(Darwin)
+import Darwin
+#else
+import Glibc
+#endif
 import Logging
 import NIOCore
 import NIOHTTP1
@@ -362,6 +367,43 @@ struct SmokeApp {
 	let router: EventRouter
 	let pageHTML: String
 	let connectionGate: ConnectionGate
+	let clientWasm: [UInt8]
+	let clientDemoPage: String
+}
+
+/// read the release `WebUIClient.wasm` product (built separately with the wasm
+/// sdk) so the smoke server can serve it as a first-class static asset. an
+/// absent artifact yields empty bytes and the wasm route 404s (gates build it
+/// first).
+func readClientWasmArtifact() -> [UInt8] {
+	let path = ".build/out/Products/Release-webassembly-wasm32/WebUIClient.wasm"
+	let fd = open(path, O_RDONLY)
+	guard fd >= 0 else { return [] }
+	defer { close(fd) }
+	var st = stat()
+	guard fstat(fd, &st) == 0, st.st_size > 0 else { return [] }
+	let size = Int(st.st_size)
+	var bytes = [UInt8](repeating: 0, count: size)
+	let n = bytes.withUnsafeMutableBytes { buf in
+		read(fd, buf.baseAddress, size)
+	}
+	guard n == size else { return [] }
+	return bytes
+}
+
+/// the client-mode probe page: SSR bytes in `#app`, chamber + boot scripts
+/// via head, and the client CSP (nonce-free `'self'` + `'wasm-unsafe-eval'`).
+func makeClientDemoPage() -> String {
+	let body = HydrationView().render()
+	let csp = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:;"
+	let head = "<script src=\"/__assets/webui-client.js\"></script>\n<script src=\"/__assets/client-demo-boot.js\"></script>"
+	return HTMLDocument(
+		title: "WebUI Client Render — Hydration Probe",
+		body: "<div id=\"app\" class=\"smoke\">\(body)</div>",
+		head: head,
+		includeRuntime: false,
+		contentSecurityPolicy: csp
+	).render()
 }
 
 enum SmokeUpgradeResult: Sendable {
@@ -385,7 +427,14 @@ extension SmokeApp {
 		let router = EventRouter()
 		let page = renderSmokePage(state: state, router: router)
 		let connectionGate = ConnectionGate(maximum: intFlag(named: "--max-connections", default: 256))
-		let app = SmokeApp(state: state, router: router, pageHTML: page, connectionGate: connectionGate)
+		let app = SmokeApp(
+			state: state,
+			router: router,
+			pageHTML: page,
+			connectionGate: connectionGate,
+			clientWasm: readClientWasmArtifact(),
+			clientDemoPage: makeClientDemoPage()
+		)
 		let logger = Logger(label: "webui.smoketest")
 		logger.info("full-stack smoke page rendered (\(page.utf8.count) bytes)")
 		// prewarm the hoisted minified sheets so the one-time minify never
@@ -541,12 +590,26 @@ extension SmokeApp {
 					try await respond405(channel: channel.channel)
 					return
 				}
+				if head.uri == "/__assets/app.wasm" {
+					guard !self.clientWasm.isEmpty else {
+						try await respond404(channel: channel.channel)
+						return
+					}
+					try await respond(channel: channel.channel, bytes: self.clientWasm, contentType: "application/wasm")
+					return
+				}
 				let (text, contentType): (String, String)
 				switch head.uri {
 				case "/__assets/css":
 					text = DesignSystemAssets.minifiedCss; contentType = "text/css; charset=utf-8"
 				case "/__assets/js":
 					text = WebUIAssets.js; contentType = "text/javascript; charset=utf-8"
+				case "/__assets/webui-client.js":
+					text = WebUIAssets.client; contentType = "text/javascript; charset=utf-8"
+				case "/__assets/client-demo-boot.js":
+					text = WebUIAssets.clientBoot; contentType = "text/javascript; charset=utf-8"
+				case "/__assets/client-demo":
+					text = self.clientDemoPage; contentType = "text/html; charset=utf-8"
 				case "/", "/index.html":
 					text = self.pageHTML; contentType = "text/html; charset=utf-8"
 				default:
@@ -573,6 +636,21 @@ extension SmokeApp {
 		// await write promises, and a response larger than the socket send
 		// buffer would otherwise lose its tail when the connection closes
 		// right after writing (probe-verified truncation).
+		_ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.head(head))
+		_ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.body(buf))
+		try await channel.writeAndFlush(HTTPPart<HTTPResponseHead, ByteBuffer>.end(nil)).get()
+	}
+
+	private func respond(channel: Channel, bytes: [UInt8], contentType: String) async throws {
+		var head = HTTPResponseHead(version: .http1_1, status: .ok)
+		head.headers.replaceOrAdd(name: "Content-Type", value: contentType)
+		head.headers.replaceOrAdd(name: "Content-Length", value: "\(bytes.count)")
+		head.headers.replaceOrAdd(name: "Connection", value: "close")
+		head.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
+		head.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
+		head.headers.replaceOrAdd(name: "Cache-Control", value: "no-store")
+		var buf = ByteBuffer()
+		buf.writeBytes(bytes)
 		_ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.head(head))
 		_ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.body(buf))
 		try await channel.writeAndFlush(HTTPPart<HTTPResponseHead, ByteBuffer>.end(nil)).get()

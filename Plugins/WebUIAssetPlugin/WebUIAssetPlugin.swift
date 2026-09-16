@@ -19,8 +19,12 @@ struct WebUIAssetPlugin: BuildToolPlugin {
 
         let cssFile = assetsDir.appendingPathComponent("design-system.css")
         let jsFile = assetsDir.appendingPathComponent("webui-runtime.js")
+        let clientFile = assetsDir.appendingPathComponent("webui-client.js")
+        let clientBootFile = assetsDir.appendingPathComponent("client-demo-boot.js")
         let cssExists = FileManager.default.fileExists(atPath: cssFile.path)
         let jsExists = FileManager.default.fileExists(atPath: jsFile.path)
+        let clientExists = FileManager.default.fileExists(atPath: clientFile.path)
+        let clientBootExists = FileManager.default.fileExists(atPath: clientBootFile.path)
 
         guard cssExists || jsExists else {
             Diagnostics.warning("No CSS or JS files found in designer/assets/")
@@ -41,6 +45,14 @@ struct WebUIAssetPlugin: BuildToolPlugin {
         if jsExists {
             args += ["--js-input", jsFile.path]
             inputs.append(jsFile)
+        }
+        if clientExists {
+            args += ["--client-input", clientFile.path]
+            inputs.append(clientFile)
+        }
+        if clientBootExists {
+            args += ["--client-boot-input", clientBootFile.path]
+            inputs.append(clientBootFile)
         }
         args += ["--output", outputURL.path]
 

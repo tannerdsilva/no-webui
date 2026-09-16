@@ -8,6 +8,8 @@ enum WebUIAssetTool {
 
         var cssInput: String?
         var jsInput: String?
+        var clientInput: String?
+        var clientBootInput: String?
         var outputPath: String?
 
         var iterator = args.makeIterator()
@@ -17,6 +19,10 @@ enum WebUIAssetTool {
                 cssInput = iterator.next()
             case "--js-input":
                 jsInput = iterator.next()
+            case "--client-input":
+                clientInput = iterator.next()
+            case "--client-boot-input":
+                clientBootInput = iterator.next()
             case "--output":
                 outputPath = iterator.next()
             default:
@@ -25,7 +31,7 @@ enum WebUIAssetTool {
         }
 
         guard let outputPath else {
-            print("usage: WebUIAssetTool --css-input <path> --js-input <path> --output <path>")
+            print("usage: WebUIAssetTool --css-input <path> --js-input <path> --client-input <path> --client-boot-input <path> --output <path>")
             exit(1)
         }
 
@@ -39,18 +45,34 @@ enum WebUIAssetTool {
             jsContent = try String(contentsOfFile: jsInput, encoding: .utf8)
         }
 
-        let generated = try generateSwiftSource(css: cssContent, js: jsContent)
+        var clientContent = ""
+        if let clientInput {
+            clientContent = try String(contentsOfFile: clientInput, encoding: .utf8)
+        }
+
+        var clientBootContent = ""
+        if let clientBootInput {
+            clientBootContent = try String(contentsOfFile: clientBootInput, encoding: .utf8)
+        }
+
+        let generated = try generateSwiftSource(
+            css: cssContent, js: jsContent, client: clientContent, clientBoot: clientBootContent
+        )
 
         try generated.write(toFile: outputPath, atomically: true, encoding: .utf8)
 
         let cssBytes = cssContent.utf8.count
         let jsBytes = jsContent.utf8.count
-        print("generated \(outputPath) (\(cssBytes) bytes CSS, \(jsBytes) bytes JS)")
+        let clientBytes = clientContent.utf8.count
+        let bootBytes = clientBootContent.utf8.count
+        print("generated \(outputPath) (\(cssBytes) bytes CSS, \(jsBytes) bytes JS, \(clientBytes) bytes client, \(bootBytes) bytes boot)")
     }
 
-    static func generateSwiftSource(css: String, js: String) throws -> String {
+    static func generateSwiftSource(css: String, js: String, client: String, clientBoot: String) throws -> String {
         let escapedCSS = css.replacingOccurrences(of: "\\", with: "\\\\")
         let escapedJS = js.replacingOccurrences(of: "\\", with: "\\\\")
+        let escapedClient = client.replacingOccurrences(of: "\\", with: "\\\\")
+        let escapedBoot = clientBoot.replacingOccurrences(of: "\\", with: "\\\\")
 
         let indentedCSS = escapedCSS
             .split(separator: "\n", omittingEmptySubsequences: false)
@@ -58,6 +80,16 @@ enum WebUIAssetTool {
             .joined(separator: "\n")
 
         let indentedJS = escapedJS
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map { "    \($0)" }
+            .joined(separator: "\n")
+
+        let indentedClient = escapedClient
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map { "    \($0)" }
+            .joined(separator: "\n")
+
+        let indentedBoot = escapedBoot
             .split(separator: "\n", omittingEmptySubsequences: false)
             .map { "    \($0)" }
             .joined(separator: "\n")
@@ -70,6 +102,12 @@ enum WebUIAssetTool {
             \"\"\"
             public static let js: String = \"\"\"
         \(indentedJS)
+            \"\"\"
+            public static let client: String = \"\"\"
+        \(indentedClient)
+            \"\"\"
+            public static let clientBoot: String = \"\"\"
+        \(indentedBoot)
             \"\"\"
         }
         """
