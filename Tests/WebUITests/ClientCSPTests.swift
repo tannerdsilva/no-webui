@@ -1,5 +1,6 @@
 import Testing
 import WebUI
+import WebUIDesignSystem
 
 // the csp delta sheet (trajectory w§3.7): client-mode pages add
 // `'wasm-unsafe-eval'` to a still-`'self'` policy; server-mode produces the
@@ -57,5 +58,40 @@ struct ClientCSPTests {
 		#expect(html.contains("client-demo-boot.js"))
 		#expect(!html.contains("WebUIRuntime.init"))
 		#expect(Self.scriptSrc(html).contains("'wasm-unsafe-eval'"))
+	}
+
+	@Test("clientMode emits the webui-wasm meta, boot scripts, and client csp")
+	func clientModeEmitsBootContract() {
+		let boot = ClientBoot(
+			wasmURL: "/__assets/app.acd8b242.wasm",
+			mode: .app,
+			scriptURLs: ["/__assets/webui-client.js", "/__assets/app-boot.js"]
+		)
+		let html = HTMLDocument(title: "t", body: "<div id=\"search-app\"></div>", clientMode: boot).render()
+		#expect(html.contains("<meta name=\"webui-wasm\" content=\"/__assets/app.acd8b242.wasm\">"))
+		#expect(html.contains("webui-client.js"))
+		#expect(html.contains("app-boot.js"))
+		#expect(Self.scriptSrc(html).contains("'wasm-unsafe-eval'"))
+		#expect(!Self.scriptSrc(html).contains("'unsafe-inline'"))
+		#expect(!html.contains("WebUIRuntime.init"))
+		// explicit csp still wins over the client default.
+		let explicit = HTMLDocument(
+			title: "t", body: "x", clientMode: boot,
+			contentSecurityPolicy: "default-src 'self'; script-src 'self' 'nonce-test';"
+		).render()
+		#expect(explicit.contains("script-src 'self' 'nonce-test'"))
+		#expect(!explicit.contains("'wasm-unsafe-eval'"))
+	}
+
+	@Test("WebUIDocument carries clientMode through (standard theme)")
+	func webUIDocumentPassesClientMode() {
+		let boot = ClientBoot(wasmURL: "/ui/app.wasm", mode: .app)
+		let full = WebUIDocument(title: "t", body: "<p>x</p>", clientMode: boot, includeRuntime: false).render()
+		let plain = WebUIDocument(title: "t", body: "<p>x</p>", includeRuntime: false).render()
+		#expect(full.contains("<meta name=\"webui-wasm\" content=\"/ui/app.wasm\">"))
+		#expect(full.contains("'wasm-unsafe-eval'"))
+		#expect(!full.contains("WebUIRuntime.init"))
+		#expect(plain.contains("script-src 'nonce-"))
+		#expect(!plain.contains("'wasm-unsafe-eval'"))
 	}
 }

@@ -14,12 +14,14 @@ public struct WebUIDocument: View {
     public let runtimeConfig: RuntimeConfig?
     public let contentSecurityPolicy: String?
     public let theme: WebUITheme
+    public let clientMode: ClientBoot?
     public init(
         title: String = "WebUI UI",
         body: String,
         scripts: String = "",
         head: String = "",
         bodyAttributes: String = "",
+        clientMode: ClientBoot? = nil,
         devMode: Bool = false,
         lang: String = "en",
         includeRuntime: Bool = true,
@@ -32,6 +34,7 @@ public struct WebUIDocument: View {
         self.scripts = scripts
         self.head = head
         self.bodyAttributes = bodyAttributes
+        self.clientMode = clientMode
         self.devMode = devMode
         self.lang = lang
         self.includeRuntime = includeRuntime
@@ -65,6 +68,7 @@ public struct WebUIDocument: View {
             scripts: scripts,
             head: head,
             bodyAttributes: bodyAttributes,
+            clientMode: clientMode,
             devMode: devMode,
             lang: lang,
             includeRuntime: includeRuntime,

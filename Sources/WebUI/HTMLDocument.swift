@@ -9,6 +9,11 @@ public struct HTMLDocument: Sendable {
     public let scripts: String
     public let head: String
     public let bodyAttributes: String
+    /// the client-mode boot: when set, the document emits the `webui-wasm`
+    /// contract + external chamber/boot scripts and substitutes the client csp
+    /// (`'wasm-unsafe-eval'`) for the default nonce policy; the inline server
+    /// runtime is suppressed (the wasm chamber replaces it).
+    public let clientMode: ClientBoot?
     public let devMode: Bool
     public let lang: String
     public let includeRuntime: Bool
@@ -34,6 +39,11 @@ public struct HTMLDocument: Sendable {
         if let csp = contentSecurityPolicy {
             return csp.isEmpty ? nil : csp
         }
+        if clientMode != nil {
+            // client-mode pages must permit wasm compilation; still `'self'`,
+            // still no `'unsafe-inline'` in script-src (trajectory w§3.7).
+            return ClientBoot.defaultCSP
+        }
         if devMode {
             return "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:;"
         }
@@ -47,6 +57,7 @@ public struct HTMLDocument: Sendable {
         scripts: String = "",
         head: String = "",
         bodyAttributes: String = "",
+        clientMode: ClientBoot? = nil,
         devMode: Bool = false,
         lang: String = "en",
         includeRuntime: Bool = true,
@@ -61,6 +72,7 @@ public struct HTMLDocument: Sendable {
         self.scripts = scripts
         self.head = head
         self.bodyAttributes = bodyAttributes
+        self.clientMode = clientMode
         self.devMode = devMode
         self.lang = lang
         self.includeRuntime = includeRuntime
@@ -73,10 +85,13 @@ public struct HTMLDocument: Sendable {
         let styleTag: String
         let scriptTag: String
         let cspValue = effectiveCSP(nonce: nonce)
+        // client-mode pages replace the inline server runtime with the wasm
+        // chamber (the boot head is appended to the caller's head slot).
+        let resolvedHead = head + (clientMode.map { "\n" + $0.headMarkup() } ?? "")
 
         if devMode {
             styleTag = "<link rel=\"stylesheet\" href=\"/ui/styles.css\">"
-            let runtimeSrc = includeRuntime ? "<script src=\"/ui/scripts.js\"></script>" : ""
+            let runtimeSrc = (includeRuntime && clientMode == nil) ? "<script src=\"/ui/scripts.js\"></script>" : ""
             let appSrc = scripts.isEmpty ? "" : "<script src=\"/ui/app.js\"></script>"
             scriptTag = [runtimeSrc, appSrc].filter { !$0.isEmpty }.joined(separator: "\n          ")
         } else {
@@ -89,7 +104,7 @@ public struct HTMLDocument: Sendable {
             styleTag = allCSS.isEmpty ? "" : "<style>\n\(allCSS)\n</style>"
 
             var jsParts: [String] = []
-            if includeRuntime {
+            if includeRuntime, clientMode == nil {
                 jsParts.append(WebUIRuntime.source)
                 jsParts.append(WebUIRuntime.bootstrap(config: runtimeConfig))
             }
@@ -115,7 +130,7 @@ public struct HTMLDocument: Sendable {
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">\(cspTag)
           <title>\(htmlEscape(title))</title>
-          \(head)
+          \(resolvedHead)
           \(styleTag)
         </head>
         <body\(bodyAttr)>

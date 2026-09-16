@@ -10,8 +10,6 @@ import NIOHTTP1
 import NIOPosix
 import NIOWebSocket
 import Synchronization
-import RAW
-import RAW_sha256
 import WebUI
 import WebUIDesignSystem
 import WebUIChart
@@ -375,23 +373,6 @@ struct SmokeApp {
 	let searchDemoPage: String
 }
 
-/// sha-256 over a byte string, lowercase hex. used to content-address the wasm
-/// artifact so the immutable-cache route is automatically cache-busted when
-/// the binary changes. an empty string signals "no artifact".
-func wasmContentHashHex(_ bytes: [UInt8]) -> String {
-	var hasher = RAW_sha256.Hasher()
-	bytes.withUnsafeBytes { hasher.update($0) }
-	var digest = [UInt8](repeating: 0, count: 32)
-	do {
-		try digest.withUnsafeMutableBytes { buffer in
-			try hasher.finish(into: buffer.baseAddress!)
-		}
-		return bytesToHex(digest)
-	} catch {
-		return ""
-	}
-}
-
 /// read the release `WebUIClient.wasm` product (built separately with the wasm
 /// sdk) so the smoke server can serve it as a first-class static asset. an
 /// absent artifact yields empty bytes and the wasm route 404s (gates build it
@@ -412,42 +393,43 @@ func readClientWasmArtifact() -> [UInt8] {
 	return bytes
 }
 
-/// the client-mode csp: `'self'` + `'wasm-unsafe-eval'`, no `'unsafe-inline'`
-/// in script-src (trajectory w§3.7).
-private let clientCSP = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:;"
-
 /// the content-addressed wasm url (immutable-cached) or the no-store alias
 /// when the artifact is absent.
 func clientWasmURL(_ hash: String) -> String {
 	hash.isEmpty ? "/__assets/app.wasm" : "/__assets/app.\(hash).wasm"
 }
 
-/// the client-mode probe page: SSR bytes in `#app`, chamber + boot scripts
-/// via head, the client CSP, and a `webui-wasm` meta the boot script reads to
-/// fetch the immutable-cached artifact.
+/// the client-mode hydration probe page (clientMode contract emitted by the
+/// framework — the smoke server only supplies the artifact url + script urls).
 func makeClientDemoPage(wasmHash: String) -> String {
 	let body = HydrationView().render()
-	let head = "<meta name=\"webui-wasm\" content=\"\(clientWasmURL(wasmHash))\">\n<script src=\"/__assets/webui-client.js\"></script>\n<script src=\"/__assets/client-demo-boot.js\"></script>"
+	let boot = ClientBoot(
+		wasmURL: clientWasmURL(wasmHash),
+		mode: .hydrate,
+		scriptURLs: ["/__assets/webui-client.js", "/__assets/client-demo-boot.js"]
+	)
 	return HTMLDocument(
 		title: "WebUI Client Render — Hydration Probe",
 		body: "<div id=\"app\" class=\"smoke\">\(body)</div>",
-		head: head,
-		includeRuntime: false,
-		contentSecurityPolicy: clientCSP
+		clientMode: boot,
+		includeRuntime: false
 	).render()
 }
 
-/// the local-search vertical page: the wasm boots the search page (webui_init),
+/// the local-search vertical page. the wasm boots the search page (webui_init),
 /// mounts it into `#search-app`, and dispatches delegated events entirely in
 /// wasm — the websocket stays silent on the hot path.
 func makeSearchDemoPage(wasmHash: String) -> String {
-	let head = "<meta name=\"webui-wasm\" content=\"\(clientWasmURL(wasmHash))\">\n<script src=\"/__assets/webui-client.js\"></script>\n<script src=\"/__assets/search-demo-boot.js\"></script>"
+	let boot = ClientBoot(
+		wasmURL: clientWasmURL(wasmHash),
+		mode: .app,
+		scriptURLs: ["/__assets/webui-client.js", "/__assets/search-demo-boot.js"]
+	)
 	return HTMLDocument(
 		title: "WebUI Client Render — Local Search",
 		body: "<div id=\"search-app\" class=\"search\"></div>",
-		head: head,
-		includeRuntime: false,
-		contentSecurityPolicy: clientCSP
+		clientMode: boot,
+		includeRuntime: false
 	).render()
 }
 
@@ -473,7 +455,7 @@ extension SmokeApp {
 		let page = renderSmokePage(state: state, router: router)
 		let connectionGate = ConnectionGate(maximum: intFlag(named: "--max-connections", default: 256))
 		let clientWasm = readClientWasmArtifact()
-		let wasmHash = wasmContentHashHex(clientWasm)
+		let wasmHash = WebUIBoot.wasmHash(of: clientWasm)
 		let app = SmokeApp(
 			state: state,
 			router: router,
