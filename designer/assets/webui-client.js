@@ -18,11 +18,15 @@ window.WebUIClient = (function () {
     return 0;
   }
   function wasiImports() {
+    function setU32(ptr, value) {
+      if (ptr && ptr > 0) { new DataView(holder.memory.buffer).setUint32(ptr, value, true); }
+    }
     return {
+      wasi_snapshot_preview1: {
       args_get: noop,
-      args_sizes_get: noop,
+      args_sizes_get: function (argc, argvBufSize) { setU32(argc, 0); setU32(argvBufSize, 0); return 0; },
       environ_get: noop,
-      environ_sizes_get: noop,
+      environ_sizes_get: function (envc, envBufSize) { setU32(envc, 0); setU32(envBufSize, 0); return 0; },
       clock_res_get: noop,
       clock_time_get: function (id, prec, out) {
         var view = new DataView(holder.memory.buffer);
@@ -62,6 +66,7 @@ window.WebUIClient = (function () {
         new Uint8Array(holder.memory.buffer, ptr, len).set(tmp);
         return 0;
       }
+      }
     };
   }
   function readFrame() {
@@ -83,7 +88,7 @@ window.WebUIClient = (function () {
         if (target) {
           var prior = target.innerHTML;
           target.innerHTML = frame;
-          target.setAttribute('data-hydration', frame === prior ? 'match' : 'mismatch');
+          target.setAttribute('data-hydration', target.innerHTML === prior ? 'match' : 'mismatch');
         }
         if (opts.onLoaded) { opts.onLoaded(frame); }
         return frame;

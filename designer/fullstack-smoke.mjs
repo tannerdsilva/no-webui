@@ -172,6 +172,24 @@ if (t && !t.fragments[0].html.includes("table__detail-row")) ok("table: collapse
 else bad(`collapse wrong: ${t ? "detail row still present" : "no update"}`);
 
 ws.close();
+
+// 8. Client-mode wire probe (p1): the wasm artifact, the chamber, and the
+// client-demo page served with their client-mode markers.
+const wasm = await (await fetch(BASE + "/__assets/app.wasm")).arrayBuffer();
+const magic = new Uint8Array(wasm.slice(0, 4));
+const version = new Uint8Array(wasm.slice(4, 8));
+if (magic.join(",") === "0,97,115,109" && version[0] === 1) ok(`client wasm served with valid magic/version (${wasm.byteLength} bytes)`);
+else bad("client wasm missing or malformed");
+const chamber = await (await fetch(BASE + "/__assets/webui-client.js")).text();
+if (chamber.includes("WebUIClient") && !chamber.includes("/*")) ok("chamber served, comment-free");
+else bad("chamber not served or carries comments");
+const demo = await (await fetch(BASE + "/__assets/client-demo")).text();
+if (
+  demo.includes("'wasm-unsafe-eval'") && demo.includes('id="app"') &&
+  demo.includes("webui-client.js") && !demo.includes("WebUIRuntime.init")
+) ok("client-demo page carries client csp + external scripts");
+else bad("client-demo page missing client-mode markers");
+
 console.log(`\n=== summary: ${pass} passed, ${fail} failed ===`);
 console.log(fail === 0 ? "FULL-STACK SMOKE PASS" : "FULL-STACK SMOKE FAIL");
 process.exit(fail === 0 ? 0 : 1);

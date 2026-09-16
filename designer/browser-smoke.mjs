@@ -64,6 +64,18 @@ const binPath = await (async () => {
   return join(shown.out.trim(), "WebUISmokeTest");
 })();
 
+// Build the wasm client product when the wasm sdk is active, so the
+// client-mode hydration probe can run. without the sdk the probe is skipped.
+const hasWasmSdk = (await run("swift", ["sdk", "list"])).out.includes("swift-6.4.0-RELEASE_wasm");
+let wasmBuilt = false;
+if (hasWasmSdk) {
+  const wb = await run("swift", [
+    "build", "-c", "release", "--swift-sdk", "swift-6.4.0-RELEASE_wasm", "--product", "WebUIClient",
+  ]);
+  wasmBuilt = wb.code === 0;
+  if (!wasmBuilt) { console.log(wb.out.slice(-300)); }
+}
+
 console.log("=== browser smoke test ===");
 console.log("starting server ...");
 const server = spawn(binPath, {}, { cwd: ROOT, stdio: ["ignore", "ignore", "ignore"] });
@@ -228,6 +240,30 @@ if (chartBar) {
 	else bad("chart bar click did not produce a selection render");
 } else {
 	bad("chart bar #smoke-chart-mark-Jan-Atlas not found in DOM");
+}
+
+// 7. Client-mode hydration probe: the chamber fetches + instantiates
+// app.wasm under the client csp (`'wasm-unsafe-eval'`), calls
+// webui_render_page, patches #app, and reports byte-match vs the SSR it
+// replaced. real chromium proves the p1 gate end to end.
+if (wasmBuilt) {
+  const demo = await browser.newPage();
+  const demoErrors = [];
+  demo.on("console", (m) => { if (m.type() === "error") demoErrors.push(m.text()); });
+  await demo.goto(BASE + "/__assets/client-demo", { waitUntil: "domcontentloaded" });
+  await demo.waitForSelector("#app[data-hydration]", { timeout: 20000 }).catch(() => {});
+  const h = await demo.evaluate(() => {
+    const el = document.getElementById("app");
+    return { status: el?.getAttribute("data-hydration") ?? null, len: el?.innerHTML.length ?? 0 };
+  });
+  if (h.status === "match") ok(`client wasm hydrated the DOM, byte-identical to SSR (${h.len} chars)`);
+  else bad(`client hydration status = ${h.status ?? "none (chamber never reported)"}`);
+  const de = demoErrors.filter((t) => !/favicon/i.test(t));
+  if (de.length === 0) ok("client-mode probe page has no console errors");
+  else bad(`client-mode console errors: ${JSON.stringify(de)}`);
+  await demo.close();
+} else {
+  console.log("  SKIP client-mode hydration probe (wasm sdk not active for this run)");
 }
 
 await browser.close();

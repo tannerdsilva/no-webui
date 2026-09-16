@@ -128,6 +128,38 @@ struct WebUISmokePlugin: CommandPlugin {
             bad("CSP meta missing")
         }
 
+        // client-mode probe (p1): the wasm artifact, the chamber, and the
+        // client-demo page must all be served with the client-mode markers.
+        // the artifact is built by a separate wasm-sdk invocation before this
+        // gate; absence surfaces as FAIL here (gates build it first).
+        if let wasm = await GET(session, base + "/__assets/app.wasm"),
+           wasm.count > 8,
+           Array(wasm.prefix(4)) == [0x00, 0x61, 0x73, 0x6D],
+           wasm[4] == 0x01 {
+            ok("client wasm served with valid magic/version (\(wasm.count) bytes)")
+        } else {
+            bad("client wasm missing or malformed (run the wasm release build first)")
+        }
+
+        if let clientJs = await GET(session, base + "/__assets/webui-client.js"),
+           let clientText = String(data: clientJs, encoding: .utf8),
+           clientText.contains("WebUIClient"), !clientText.contains("/*") {
+            ok("chamber served, comment-free")
+        } else {
+            bad("chamber not served or carries comments")
+        }
+
+        if let demo = await GET(session, base + "/__assets/client-demo"),
+           let demoText = String(data: demo, encoding: .utf8),
+           demoText.contains("'wasm-unsafe-eval'"),
+           demoText.contains("id=\"app\""),
+           demoText.contains("webui-client.js"),
+           !demoText.contains("WebUIRuntime.init") {
+            ok("client-demo page carries client csp + external scripts")
+        } else {
+            bad("client-demo page missing client-mode markers")
+        }
+
         print("")
         print("=== summary: \(pass) passed, \(fail) failed ===")
         if fail == 0 {
