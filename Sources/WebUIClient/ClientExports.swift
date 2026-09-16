@@ -1,5 +1,6 @@
 import WebUICore
 import WebUISmokeShared
+import WebUIClientRuntime
 
 // the wasm export surface (P1 prove-out). the chamber calls
 // `webui_render_page`, then reads the frame via `webui_frame_ptr`/`len` and
@@ -8,6 +9,14 @@ import WebUISmokeShared
 // across the boundary. the p2 handle_event surface lands alongside.
 #if os(WASI)
 private let frameCapacity = 1 << 20
+
+@_expose(wasm, "webui_pump")
+func webuiPump() -> Bool {
+	// drains the runtime job queue to quiescence; returns true so the chamber
+	// reschedules a bounded number of times (trajectory w§3.3).
+	ClientExecutor.pump()
+	return true
+}
 
 private enum RenderFrame {
 	nonisolated(unsafe) static let buffer = UnsafeMutableRawPointer.allocate(byteCount: frameCapacity, alignment: 16)
