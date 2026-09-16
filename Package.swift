@@ -91,6 +91,8 @@ let package = Package(
             dependencies: [
                 "WebUIClientRuntime",
                 "WebUISmokeShared",
+                "WebUIDesignSystemCore",
+                "WebUIChart",
             ]
         ),
         .target(
@@ -100,8 +102,16 @@ let package = Package(
             ]
         ),
         .target(
+            name: "WebUIDesignSystemCore",
+            dependencies: [
+                "WebUICore",
+                .product(name: "Logging", package: "swift-log"),
+            ]
+        ),
+        .target(
             name: "WebUIDesignSystem",
             dependencies: [
+                "WebUIDesignSystemCore",
                 "WebUI",
                 "WebUIDesignSystemMacros",
                 .product(name: "Logging", package: "swift-log"),
@@ -110,7 +120,7 @@ let package = Package(
         .target(
             name: "WebUIChart",
             dependencies: [
-                "WebUI",
+                "WebUICore",
             ]
         ),
         .target(

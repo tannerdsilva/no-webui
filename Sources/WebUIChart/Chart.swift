@@ -1,5 +1,5 @@
 import Foundation
-import WebUI
+import WebUICore
 
 // MARK: - Chart
 

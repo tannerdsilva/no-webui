@@ -1,6 +1,6 @@
 import Foundation
 import Logging
-import WebUI
+import WebUICore
 
 // MARK: - WebUI Button
 public struct WebUIButton: View {
