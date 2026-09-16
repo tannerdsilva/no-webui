@@ -40,20 +40,28 @@ struct AsyncSemaphoreTests {
 	@Test("waiters are resumed in order")
 	func resumesWaiters() async {
 		let semaphore = AsyncSemaphore(permits: 1)
-		let first = await semaphore.waitThenHold() // hold the single permit
-		_ = first
+		_ = await semaphore.waitThenHold() // hold the single permit
 		let order = OrderRecorder()
+		// stage the parks deterministically: wait until `a` is provably
+		// parked (count == 1) before starting `b`, so enqueue order is
+		// guaranteed a-before-b and the fifo wakeup is predictable.
 		async let a: Void = {
 			await semaphore.wait()
 			await order.record("a")
 			semaphore.signal()
 		}()
+		while semaphore.waiterCount < 1 {
+			await Task.yield()
+		}
 		async let b: Void = {
 			await semaphore.wait()
 			await order.record("b")
 			semaphore.signal()
 		}()
-		semaphore.signal() // release the held permit; wakes a (FIFO)
+		while semaphore.waiterCount < 2 {
+			await Task.yield()
+		}
+		semaphore.signal() // releases a (fifo)
 		_ = await (a, b)
 		let recorded = await order.sequence
 		#expect(recorded == ["a", "b"])

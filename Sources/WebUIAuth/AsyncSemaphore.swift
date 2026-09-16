@@ -6,8 +6,9 @@ import Synchronization
 /// verifications (`argon2`). `wait()` suspends the calling task until a
 /// permit is available; `signal()` releases one. backed by a `Mutex`
 /// (Swift `Synchronization`) and task suspensions, so no thread is ever
-/// blocked (unlike a dispatch semaphore). not a fair queue by design — any
-/// ready waiter may be resumed.
+/// blocked (unlike a dispatch semaphore). the queue is fifo: `signal()`
+/// resumes the longest-parked waiter first; resumption itself is scheduled
+/// cooperatively by the executor.
 ///
 /// waiters are resumed *outside* the mutex so the resumed task never runs
 /// while the lock is held.
@@ -22,6 +23,12 @@ public final class AsyncSemaphore: Sendable {
     public init(permits: Int) {
         precondition(permits > 0, "AsyncSemaphore requires at least one permit")
         self.state = Mutex(State(permits: permits))
+    }
+
+    /// the number of waiters currently parked (allows tests to stage parks
+    /// deterministically and serves as an admission-pressure gauge).
+    public var waiterCount: Int {
+        state.withLock { $0.waiters.count }
     }
 
     /// acquire a permit, suspending until one is released.
