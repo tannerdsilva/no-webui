@@ -190,6 +190,13 @@ if (
 ) ok("client-demo page carries client csp + external scripts");
 else bad("client-demo page missing client-mode markers");
 
+const searchDemo = await (await fetch(BASE + "/__assets/search-demo")).text();
+if (
+  searchDemo.includes("'wasm-unsafe-eval'") && searchDemo.includes('id="search-app"') &&
+  searchDemo.includes("search-demo-boot.js") && !searchDemo.includes("WebUIRuntime.init")
+) ok("search-demo page carries client csp + search boot script");
+else bad("search-demo page missing client-mode markers");
+
 console.log(`\n=== summary: ${pass} passed, ${fail} failed ===`);
 console.log(fail === 0 ? "FULL-STACK SMOKE PASS" : "FULL-STACK SMOKE FAIL");
 process.exit(fail === 0 ? 0 : 1);

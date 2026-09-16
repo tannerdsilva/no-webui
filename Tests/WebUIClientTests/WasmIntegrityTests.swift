@@ -34,19 +34,32 @@ struct WasmIntegrityTests {
 		return false
 	}
 
-	// the documented p1 import surface (WASM_BOOTSTRAP.md) — the module's real
+	// the documented p2 import surface (WASM_BOOTSTRAP.md) — the module's real
 	// import list must match it exactly, so a new import is a deliberate change.
-	private static let documentedImports: Set<String> = [
-		"args_get", "args_sizes_get", "environ_get", "environ_sizes_get",
-		"clock_res_get", "clock_time_get", "fd_close", "fd_fdstat_get",
-		"fd_fdstat_set_flags", "fd_filestat_get", "fd_filestat_set_size",
-		"fd_filestat_set_times", "fd_pread", "fd_prestat_get",
-		"fd_prestat_dir_name", "fd_read", "fd_readdir", "fd_seek", "fd_sync",
-		"fd_tell", "fd_write", "path_create_directory", "path_filestat_get",
-		"path_filestat_set_times", "path_link", "path_open", "path_readlink",
-		"path_remove_directory", "path_rename", "path_symlink",
-		"path_unlink_file", "poll_oneoff", "proc_exit", "random_get",
-	]
+	private static let documentedImports: Set<String> = {
+		var set: Set<String> = [
+			"wasi_snapshot_preview1.args_get", "wasi_snapshot_preview1.args_sizes_get",
+			"wasi_snapshot_preview1.environ_get", "wasi_snapshot_preview1.environ_sizes_get",
+			"wasi_snapshot_preview1.clock_res_get", "wasi_snapshot_preview1.clock_time_get",
+			"wasi_snapshot_preview1.fd_close", "wasi_snapshot_preview1.fd_fdstat_get",
+			"wasi_snapshot_preview1.fd_fdstat_set_flags", "wasi_snapshot_preview1.fd_filestat_get",
+			"wasi_snapshot_preview1.fd_filestat_set_size", "wasi_snapshot_preview1.fd_filestat_set_times",
+			"wasi_snapshot_preview1.fd_pread", "wasi_snapshot_preview1.fd_prestat_get",
+			"wasi_snapshot_preview1.fd_prestat_dir_name", "wasi_snapshot_preview1.fd_read",
+			"wasi_snapshot_preview1.fd_readdir", "wasi_snapshot_preview1.fd_seek",
+			"wasi_snapshot_preview1.fd_sync", "wasi_snapshot_preview1.fd_tell",
+			"wasi_snapshot_preview1.fd_write", "wasi_snapshot_preview1.path_create_directory",
+			"wasi_snapshot_preview1.path_filestat_get", "wasi_snapshot_preview1.path_filestat_set_times",
+			"wasi_snapshot_preview1.path_link", "wasi_snapshot_preview1.path_open",
+			"wasi_snapshot_preview1.path_readlink", "wasi_snapshot_preview1.path_remove_directory",
+			"wasi_snapshot_preview1.path_rename", "wasi_snapshot_preview1.path_symlink",
+			"wasi_snapshot_preview1.path_unlink_file", "wasi_snapshot_preview1.poll_oneoff",
+			"wasi_snapshot_preview1.proc_exit", "wasi_snapshot_preview1.random_get",
+			"env.setInnerHTML", "env.removeElement", "env.getElementValue",
+			"env.setElementValue", "env.setCustomValidity", "env.wsSend", "env.now", "env.log",
+		]
+		return set
+	}()
 
 	@Test("wasm magic and version are present")
 	func magicAndVersion() throws {
@@ -108,9 +121,9 @@ struct WasmIntegrityTests {
 					sc += 7
 				}
 				for _ in 0 ..< count {
-					_ = name(bytes, &i)
+					let importModule = name(bytes, &i)
 					let importName = name(bytes, &i)
-					imports.append(importName)
+					imports.append(importModule + "." + importName)
 					i += 1  // kind byte
 					if bytes[i - 1] == 0 { _ = leb(bytes, &i) }        // func type index
 					else if bytes[i - 1] == 1 { i += 1 }               // table reftype

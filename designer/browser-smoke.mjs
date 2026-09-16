@@ -266,6 +266,42 @@ if (wasmBuilt) {
   console.log("  SKIP client-mode hydration probe (wasm sdk not active for this run)");
 }
 
+// 8. Local-search vertical in real chromium: the chamber boots the search page
+// in wasm (webui_init), then typing dispatches through webui_handle_event — the
+// rows update from the client-resident dataset with ZERO websocket sends.
+if (wasmBuilt) {
+  const s = await browser.newPage();
+  const sErrors = [];
+  s.on("console", (m) => { if (m.type() === "error") sErrors.push(m.text()); });
+  await s.goto(BASE + "/__assets/search-demo", { waitUntil: "domcontentloaded" });
+  await s.waitForSelector("#search-app input", { timeout: 20000 }).catch(() => {});
+  const booted = await s.evaluate(() => !!document.querySelector("#search-app input"));
+  if (booted) ok("search vertical mounted from wasm boot");
+  else bad("search vertical did not mount (chamber boot failed)");
+  if (booted) {
+    await s.fill("#search-app input", "a");
+    await s.waitForTimeout(300);
+    const result = await s.evaluate(() => {
+      const rows = document.getElementById("search-rows");
+      const inst = window.WebUIClient._getInstance();
+      return { text: rows ? rows.textContent : "", wsSent: inst.wsSent, events: inst.eventCount };
+    });
+    const hasAPI = result.text.includes("api");
+    const hasAuth = result.text.includes("auth");
+    const hasWeb = result.text.includes("web");
+    if (hasAPI && hasAuth && !hasWeb) ok(`local search filtered in wasm (api+auth, no web; ${result.events} events)`);
+    else bad(`local search wrong: ${JSON.stringify(result.text)}`);
+    if (result.wsSent === 0) ok("local search hot path reached zero websocket sends");
+    else bad(`websocket sends during search: ${result.wsSent}`);
+    const de = sErrors.filter((t) => !/favicon/i.test(t));
+    if (de.length === 0) ok("local-search probe has no console errors");
+    else bad(`local-search console errors: ${JSON.stringify(de)}`);
+  }
+  await s.close();
+} else {
+  console.log("  SKIP local-search vertical probe (wasm sdk not active)");
+}
+
 await browser.close();
 server.kill();
 

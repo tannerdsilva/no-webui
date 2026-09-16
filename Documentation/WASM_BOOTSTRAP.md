@@ -16,9 +16,9 @@ _date: 2026-09-15 · companion to `WASM_IMPLEMENTATION_PLAN.md` (P1-T0…T2)._
   `.build/out/Products/Release-webassembly-wasm32/WebUIClient.wasm`;
   debug at `Debug-webassembly-wasm32/`.
 
-## import surface — P1 baseline (parsed from the release binary, 2026-09-15)
+## import surface — P2 (parsed from the release binary, 2026-09-15)
 
-the module imports **only** `wasi_snapshot_preview1` — 34 functions:
+`wasi_snapshot_preview1` — 34 functions:
 
 args_get, args_sizes_get, environ_get, environ_sizes_get, clock_res_get,
 clock_time_get, fd_close, fd_fdstat_get, fd_fdstat_set_flags, fd_filestat_get,
@@ -28,25 +28,23 @@ path_create_directory, path_filestat_get, path_filestat_set_times, path_link,
 path_open, path_readlink, path_remove_directory, path_rename, path_symlink,
 path_unlink_file, poll_oneoff, proc_exit, random_get.
 
-no `env.*` / `swift_jobs` / `swift_tsan` hooks yet: the concurrency runtime was
-fully dead-stripped because the P1 reactor links nothing async. the chamber's
-own bridge imports do not appear until Swift declares them (P2-T4).
+`env` — the 8 chamber bridge imports (w§3.2):
 
-**the chamber must supply all 34 at instantiation** (WebAssembly.instantiate
-requires every import). the hand-rolled WASI adapter (~40 LOC, browser platform
-APIs — not an npm shim, D1 untouched) implements the few our code actually
-drives (`clock_time_get`, `fd_write`, `proc_exit`, `random_get`, `args_*`) and
-stubs the rest to a valid errno. documented pin = this list; the module's real
-import set must match it exactly (enforced by the import-surface pin at P1-T4).
+setInnerHTML, removeElement, getElementValue, setElementValue,
+setCustomValidity, wsSend, now, log.
 
-## import surface — expected growth
+## chamber-required note
 
-| stage | modules |
-|---|---|
-| P1 reactor (today) | `wasi_snapshot_preview1` (34) |
-| P2 executor + bridge | + `env.swift_task_enqueueGlobal_hook` (and friends the runtime needs) + the 8 chamber imports (`setInnerHTML`, `removeElement`, `getElementValue`, `setElementValue`, `setCustomValidity`, `wsSend`, `now`, `log`) |
-
-each growth is a deliberate, reviewed change — the pin fails loudly otherwise.
+once `env.*` imports are declared (p2-t4), the module **cannot be instantiated
+by a host that does not provide them** — verified: `wasmkit run` fails with
+`unknown import env.setInnerHTML`. the module is a browser product: only the
+chamber (which implements all 8) can host it. wasm-side behavior gates move to
+the browser (browser-smoke search probe); pure logic stays host-unit-tested;
+the `--verify-*` CLI modes remain for debug builds of a bridge-less variant.
+`@_extern(wasm, module:name:)` (the official import primitive) requires the
+experimental `Extern` frontend feature, enabled on the `WebUIClientRuntime`
+target; `@_used` does **not** keep import symbols dead-stripped — imports must
+be referenced from a reachable root (webui_init → WebUIBridge.install).
 
 ## size
 

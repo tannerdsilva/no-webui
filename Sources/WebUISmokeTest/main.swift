@@ -369,6 +369,7 @@ struct SmokeApp {
 	let connectionGate: ConnectionGate
 	let clientWasm: [UInt8]
 	let clientDemoPage: String
+	let searchDemoPage: String
 }
 
 /// read the release `WebUIClient.wasm` product (built separately with the wasm
@@ -391,18 +392,35 @@ func readClientWasmArtifact() -> [UInt8] {
 	return bytes
 }
 
+/// the client-mode csp: `'self'` + `'wasm-unsafe-eval'`, no `'unsafe-inline'`
+/// in script-src (trajectory w§3.7).
+private let clientCSP = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:;"
+
 /// the client-mode probe page: SSR bytes in `#app`, chamber + boot scripts
 /// via head, and the client CSP (nonce-free `'self'` + `'wasm-unsafe-eval'`).
 func makeClientDemoPage() -> String {
 	let body = HydrationView().render()
-	let csp = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:;"
 	let head = "<script src=\"/__assets/webui-client.js\"></script>\n<script src=\"/__assets/client-demo-boot.js\"></script>"
 	return HTMLDocument(
 		title: "WebUI Client Render — Hydration Probe",
 		body: "<div id=\"app\" class=\"smoke\">\(body)</div>",
 		head: head,
 		includeRuntime: false,
-		contentSecurityPolicy: csp
+		contentSecurityPolicy: clientCSP
+	).render()
+}
+
+/// the local-search vertical page: the wasm boots the search page (webui_init),
+/// mounts it into `#search-app`, and dispatches delegated events entirely in
+/// wasm — the websocket stays silent on the hot path.
+func makeSearchDemoPage() -> String {
+	let head = "<script src=\"/__assets/webui-client.js\"></script>\n<script src=\"/__assets/search-demo-boot.js\"></script>"
+	return HTMLDocument(
+		title: "WebUI Client Render — Local Search",
+		body: "<div id=\"search-app\" class=\"search\"></div>",
+		head: head,
+		includeRuntime: false,
+		contentSecurityPolicy: clientCSP
 	).render()
 }
 
@@ -433,7 +451,8 @@ extension SmokeApp {
 			pageHTML: page,
 			connectionGate: connectionGate,
 			clientWasm: readClientWasmArtifact(),
-			clientDemoPage: makeClientDemoPage()
+			clientDemoPage: makeClientDemoPage(),
+			searchDemoPage: makeSearchDemoPage()
 		)
 		let logger = Logger(label: "webui.smoketest")
 		logger.info("full-stack smoke page rendered (\(page.utf8.count) bytes)")
@@ -608,8 +627,12 @@ extension SmokeApp {
 					text = WebUIAssets.client; contentType = "text/javascript; charset=utf-8"
 				case "/__assets/client-demo-boot.js":
 					text = WebUIAssets.clientBoot; contentType = "text/javascript; charset=utf-8"
+				case "/__assets/search-demo-boot.js":
+					text = WebUIAssets.clientSearchBoot; contentType = "text/javascript; charset=utf-8"
 				case "/__assets/client-demo":
 					text = self.clientDemoPage; contentType = "text/html; charset=utf-8"
+				case "/__assets/search-demo":
+					text = self.searchDemoPage; contentType = "text/html; charset=utf-8"
 				case "/", "/index.html":
 					text = self.pageHTML; contentType = "text/html; charset=utf-8"
 				default:

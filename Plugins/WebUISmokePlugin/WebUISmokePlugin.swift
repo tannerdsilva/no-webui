@@ -160,6 +160,26 @@ struct WebUISmokePlugin: CommandPlugin {
             bad("client-demo page missing client-mode markers")
         }
 
+        // local-search vertical probe: the search-demo page serves the client
+        // csp + the search boot script.
+        if let searchDemo = await GET(session, base + "/__assets/search-demo"),
+           let searchText = String(data: searchDemo, encoding: .utf8),
+           searchText.contains("'wasm-unsafe-eval'"),
+           searchText.contains("search-app"),
+           searchText.contains("search-demo-boot.js"),
+           !searchText.contains("WebUIRuntime.init") {
+            ok("search-demo page carries client csp + search boot script")
+        } else {
+            bad("search-demo page missing client-mode markers")
+        }
+        if let searchBoot = await GET(session, base + "/__assets/search-demo-boot.js"),
+           let bootText = String(data: searchBoot, encoding: .utf8),
+           bootText.contains("WebUIClient"), bootText.contains("mode: 'search'") {
+            ok("search demo boot script targets the wasm search boot")
+        } else {
+            bad("search demo boot script missing or malformed")
+        }
+
         print("")
         print("=== summary: \(pass) passed, \(fail) failed ===")
         if fail == 0 {

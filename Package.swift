@@ -80,6 +80,10 @@ let package = Package(
             name: "WebUIClientRuntime",
             dependencies: [
                 "WebUICore",
+            ],
+            swiftSettings: [
+                // the official sdk's wasm import primitive (@_extern(wasm, module:name:))
+                .unsafeFlags(["-enable-experimental-feature", "Extern"]),
             ]
         ),
         .executableTarget(
