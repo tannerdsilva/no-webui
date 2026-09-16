@@ -22,12 +22,27 @@ func webuiPump() -> Bool {
 
 @_expose(wasm, "webui_init")
 func webuiInit(_ configPtr: UnsafeRawPointer?, _ len: Int) {
-	// config bytes (renderToken + authState envelope) arrive at p3; boot the
-	// resident router + the local-search vertical's handlers, and publish the
-	// boot page markup through the frame so the chamber can mount it.
+	// the boot envelope may carry an `authState` object (non-secret session
+	// presence + roles); boot the resident router + the local-search vertical's
+	// handlers, and publish the boot page markup through the frame.
+	if let configPtr, len > 0 {
+		let text = String(decoding: UnsafeRawBufferPointer(start: configPtr, count: len), as: UTF8.self)
+		if let root = try? JSONValue.parse(text),
+		   case .object(let dict) = root,
+		   let authRaw = dict["authState"] {
+			ClientRuntime.applyAuthState(authRaw.serialize())
+		}
+	}
 	WebUIBridge.install()
 	ClientRuntime.bootSearch()
 	writeFrame(ClientRuntime.bootPageHTML)
+}
+
+@_expose(wasm, "webui_demote_auth")
+func webuiDemoteAuth() {
+	// server-directed revocation: a redirect/close on the transport demotes
+	// the wasm authState mirror so ui gating flips immediately.
+	ClientRuntime.demoteAuth()
 }
 
 @_expose(wasm, "webui_handle_event")

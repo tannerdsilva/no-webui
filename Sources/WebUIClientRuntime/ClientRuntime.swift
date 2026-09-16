@@ -14,8 +14,35 @@ public enum ClientRuntime {
 	nonisolated(unsafe) private static let counterBox = Mutex(0)
 	nonisolated(unsafe) private static let queryBox = Mutex("")
 	nonisolated(unsafe) private static let sortBox = Mutex((column: 0, ascending: true))
+	nonisolated(unsafe) private static let authBox = Mutex(AuthStateMirror.anonymous)
 	nonisolated(unsafe) public private(set) static var router = EventRouter()
 	nonisolated(unsafe) public private(set) static var bootPageHTML = ""
+
+	/// the client state store (in-memory backend shipped; a persistence
+	/// backend conforms behind the bridge without changing the contract).
+	public static let state: any ClientStateStore = InMemoryClientStateStore()
+
+	/// the read-only session-presence mirror (advisory ui gating only, d4).
+	public static var authMirror: AuthStateMirror {
+		authBox.withLock { $0 }
+	}
+
+	/// apply the boot authState envelope (non-secret presence + roles).
+	public static func applyAuthState(_ envelope: String) {
+		if let mirror = AuthStateMirror(envelope: envelope) {
+			authBox.withLock { $0 = mirror }
+		}
+	}
+
+	/// server-directed revocation: flips the mirror to anonymous so ui gating
+	/// demotes immediately (the server remains the authority).
+	public static func demoteAuth() {
+		authBox.withLock { $0 = .anonymous }
+	}
+
+	public static func hasRole(_ role: String) -> Bool {
+		authBox.withLock { $0.hasRole(role) }
+	}
 
 	private struct SearchRecord: Sendable {
 		let name: String
