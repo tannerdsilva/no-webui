@@ -21,8 +21,8 @@ func webuiPump() -> Bool {
 @_expose(wasm, "webui_init")
 func webuiInit(_ configPtr: UnsafeRawPointer?, _ len: Int) {
 	// config bytes (renderToken + authState envelope) arrive at p3; boot the
-	// resident router + page handlers now.
-	ClientRuntime.boot()
+	// resident router + the local-search vertical's handlers now.
+	ClientRuntime.bootSearch()
 }
 
 @_expose(wasm, "webui_handle_event")

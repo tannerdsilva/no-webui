@@ -36,5 +36,21 @@ struct WebUIClient {
 			print(html == "<div id=\"client-counter\" class=\"proof__value\">1</div>" ? "EVENT OK" : "EVENT FAIL")
 			return
 		}
+		if args.contains("--verify-search") {
+			// local-search probe: boot the vertical, then an `input` event with
+			// value "a" must filter the client-resident dataset in wasm and
+			// return the rows fragment (matching api + auth, not web/search).
+			ClientRuntime.bootSearch()
+			let updates = ClientRuntime.handleEvent("{\"component\":\"c0\",\"event\":\"input\",\"data\":{\"value\":\"a\"}}")
+			let html = updates.first?.html ?? "?"
+			let trCount = html.components(separatedBy: "<tr>").count - 1
+			let hasAPI = html.contains(">api<")
+			let hasAuth = html.contains(">auth<")
+			let hasWeb = html.contains(">web<")
+			print("rows=\(trCount) api=\(hasAPI) auth=\(hasAuth) web=\(hasWeb)")
+			// 1 header row + 2 filtered data rows
+			print(trCount == 3 && hasAPI && hasAuth && !hasWeb ? "SEARCH OK" : "SEARCH FAIL")
+			return
+		}
 	}
 }

@@ -29,4 +29,21 @@ struct ClientRuntimeTests {
 		#expect(updates[0].id == "client-counter")
 		#expect(updates[0].html.contains(">1<"))
 	}
+
+	@Test("the local-search vertical filters the resident dataset in wasm")
+	func localSearchFiltersClientSide() async {
+		ClientRuntime.bootSearch()
+		let updates = await ClientRuntime.router.handle(
+			EventData(component: "c0", event: "input", data: ["value": "a"])
+		)
+		#expect(updates.count == 1)
+		let html = updates[0].html
+		#expect(html.contains(">api<"))
+		#expect(html.contains(">auth<"))
+		#expect(!html.contains(">web<"))
+		#expect(html.contains("search-rows"))
+		let rows = html.components(separatedBy: "<tr>").count - 1
+		// 1 header row + 2 filtered data rows
+		#expect(rows == 3)
+	}
 }
