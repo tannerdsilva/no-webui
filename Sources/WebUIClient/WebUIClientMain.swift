@@ -39,7 +39,8 @@ struct WebUIClient {
 		if args.contains("--verify-search") {
 			// local-search probe: boot the vertical, then an `input` event with
 			// value "a" must filter the client-resident dataset in wasm and
-			// return the rows fragment (matching api + auth, not web/search).
+			// return the rows fragment (matching api + auth, not web/search);
+			// a typed sort click must reorder them client-side.
 			ClientRuntime.bootSearch()
 			let updates = ClientRuntime.handleEvent("{\"component\":\"c0\",\"event\":\"input\",\"data\":{\"value\":\"a\"}}")
 			let html = updates.first?.html ?? "?"
@@ -50,6 +51,12 @@ struct WebUIClient {
 			print("rows=\(trCount) api=\(hasAPI) auth=\(hasAuth) web=\(hasWeb)")
 			// 1 header row + 2 filtered data rows
 			print(trCount == 3 && hasAPI && hasAuth && !hasWeb ? "SEARCH OK" : "SEARCH FAIL")
+			let sortUpdates = ClientRuntime.handleEvent("{\"component\":\"client-table-sort-2\",\"event\":\"click\",\"data\":{}}")
+			let sortHTML = sortUpdates.first?.html ?? "?"
+			let authPos = sortHTML.range(of: ">auth<")?.lowerBound
+			let apiPos = sortHTML.range(of: ">api<")?.lowerBound
+			// p95 ascending: auth 9 before api 18
+			print(authPos != nil && apiPos != nil && (authPos! < apiPos!) ? "SORT OK" : "SORT FAIL: \(sortHTML.prefix(120))")
 			return
 		}
 	}

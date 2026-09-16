@@ -1,4 +1,6 @@
+import Foundation
 import WebUICore
+import WebUIDesignSystemCore
 import Synchronization
 
 /// the client-mode resident runtime: one `EventRouter` per page load (house
@@ -11,6 +13,7 @@ import Synchronization
 public enum ClientRuntime {
 	nonisolated(unsafe) private static let counterBox = Mutex(0)
 	nonisolated(unsafe) private static let queryBox = Mutex("")
+	nonisolated(unsafe) private static let sortBox = Mutex((column: 0, ascending: true))
 	nonisolated(unsafe) public private(set) static var router = EventRouter()
 	nonisolated(unsafe) public private(set) static var bootPageHTML = ""
 
@@ -58,11 +61,13 @@ public enum ClientRuntime {
 	}
 
 	/// boot the local-search vertical: a search field whose `.onInput` handler
-	/// filters the client-resident dataset and re-renders `#search-rows`
-	/// entirely in wasm. `webui_init` boots this once per page load; ssr serves
-	/// the same markup through the shared view.
+	/// filters the client-resident dataset, and a `WebUITable` whose typed
+	/// `.onSort` handler re-sorts it — both re-rendered entirely in wasm, the
+	/// websocket silent on the hot path. `webui_init` boots this once per page
+	/// load.
 	public static func bootSearch() {
 		queryBox.withLock { $0 = "" }
+		sortBox.withLock { $0 = (column: 0, ascending: true) }
 		router.reset()
 		let context = RenderContext(router: router)
 		bootPageHTML = RenderContext.$current.withValue(context) {
@@ -81,21 +86,53 @@ public enum ClientRuntime {
 		}
 	}
 
-	/// filter the client-resident dataset and render the rows fragment. the
-	/// fragment carries the stable `search-rows` id so the patcher (server or
-	/// chamber) replaces the wrapper in place.
-	private static func searchRowsHTML(query: String) -> String {
+	/// filter + sort the client-resident dataset into a `WebUITable` render. the
+	/// fragment carries the table's own stable `client-table` id so a sort
+	/// click can replace the table in place (the input handler targets the
+	/// `#search-rows` wrapper instead).
+	private static func tableHTML(query: String) -> String {
 		let needle = query.lowercased()
 		let filtered = searchRecords.filter { record in
 			needle.isEmpty
 				|| record.name.lowercased().hasPrefix(needle)
 				|| record.region.lowercased().hasPrefix(needle)
 		}
-		let rows = filtered.map { record -> [any View] in
+		let (column, ascending) = sortBox.withLock { $0 }
+		var records = filtered
+		records.sort { a, b in
+			let less: Bool
+			switch column {
+			case 1: less = a.region.localizedCaseInsensitiveCompare(b.region) == .orderedAscending
+			case 2: less = a.ms < b.ms
+			default: less = a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
+			}
+			return ascending ? less : !less
+		}
+		let rows = records.map { record -> [any View] in
 			[Text(record.name), Text(record.region), Text("\(record.ms) ms")]
 		}
-		let table = Table(headers: ["name", "region", "p95"], rows: rows, class: "search__table").render()
-		return "<div id=\"search-rows\" class=\"search__rows\">\(table)</div>"
+		return WebUITable(
+			headers: ["name", "region", "p95"],
+			rows: rows,
+			id: "client-table",
+			sortableColumns: [0, 1, 2],
+			sort: (column, ascending ? .ascending : .descending)
+		)
+		.onSort { me, column in
+			if sortBox.withLock({ $0.column }) == column {
+				sortBox.withLock { $0.ascending.toggle() }
+			} else {
+				sortBox.withLock { $0 = (column: column, ascending: true) }
+			}
+			return [me.replace(with: Self.tableHTML(query: queryBox.withLock { $0 }))]
+		}
+		.render()
+	}
+
+	/// the `#search-rows` wrapper around the table (the input handler's patch
+	/// target).
+	private static func searchRowsHTML(query: String) -> String {
+		"<div id=\"search-rows\" class=\"search__rows\">\(tableHTML(query: query))</div>"
 	}
 
 	/// decode an event envelope (`{component, event, data}`), route it through

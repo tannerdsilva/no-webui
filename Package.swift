@@ -80,6 +80,7 @@ let package = Package(
             name: "WebUIClientRuntime",
             dependencies: [
                 "WebUICore",
+                "WebUIDesignSystemCore",
             ],
             swiftSettings: [
                 // the official sdk's wasm import primitive (@_extern(wasm, module:name:))

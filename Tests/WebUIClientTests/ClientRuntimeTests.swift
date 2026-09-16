@@ -46,4 +46,23 @@ struct ClientRuntimeTests {
 		// 1 header row + 2 filtered data rows
 		#expect(rows == 3)
 	}
+
+	@Test("the typed sort control reorders rows client-side")
+	func typedSortReorders() async {
+		ClientRuntime.bootSearch()
+		// default sort = column 0 ascending (name order). clicking column 1
+		// (region) through the typed control registers the re-sort.
+		let updates = await ClientRuntime.router.handle(
+			EventData(component: "client-table-sort-1", event: "click", data: [:])
+		)
+		#expect(updates.count == 1)
+		let html = updates[0].html
+		#expect(html.contains("client-table"))
+		#expect(html.contains("aria-sort"))
+		// region ascending: ap-south-1 (auth) before eu-west-2 (api)
+		let auth = html.range(of: ">auth<")?.lowerBound
+		let api = html.range(of: ">api<")?.lowerBound
+		#expect(auth != nil && api != nil)
+		#expect(auth! < api!, "region sort must order auth before api: \(html)")
+	}
 }

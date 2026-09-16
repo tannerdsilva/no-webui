@@ -293,6 +293,25 @@ if (wasmBuilt) {
     else bad(`local search wrong: ${JSON.stringify(result.text)}`);
     if (result.wsSent === 0) ok("local search hot path reached zero websocket sends");
     else bad(`websocket sends during search: ${result.wsSent}`);
+    // typed table sort: clicking the p95 header reorders rows client-side,
+    // still ws-silent.
+    const beforeSort = await s.evaluate(() => document.getElementById("client-table")?.textContent ?? "");
+    await s.click('[data-component-id="client-table-sort-2"]');
+    await s.waitForTimeout(300);
+    const sortState = await s.evaluate(() => {
+      const table = document.getElementById("client-table");
+      const head = document.querySelector('[data-component-id="client-table-sort-2"]');
+      const th = head && head.closest ? head.closest("th") : null;
+      const aria = (th || head)?.getAttribute("aria-sort") || null;
+      const inst = window.WebUIClient._getInstance();
+      return { text: table ? table.textContent : "", aria: aria, wsSent: inst.wsSent };
+    });
+    if (sortState.aria === "ascending") ok("typed table sort header carries aria-sort");
+    else bad(`sort aria-sort missing: ${JSON.stringify(sortState.aria)}`);
+    if (sortState.text && sortState.text !== beforeSort) ok("typed table sort reordered rows in wasm");
+    else bad("table sort did not reorder rows client-side");
+    if (sortState.wsSent === result.wsSent) ok("table sort kept the websocket silent");
+    else bad(`websocket sends after sort: ${sortState.wsSent}`);
     const de = sErrors.filter((t) => !/favicon/i.test(t));
     if (de.length === 0) ok("local-search probe has no console errors");
     else bad(`local-search console errors: ${JSON.stringify(de)}`);
