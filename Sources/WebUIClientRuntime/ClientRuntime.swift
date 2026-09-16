@@ -23,6 +23,13 @@ public enum ClientRuntime {
 	/// persistence — the contract stays the same).
 	nonisolated(unsafe) public static var state: any ClientStateStore = InMemoryClientStateStore()
 
+	/// the local/authority sync discipline (p3-t4); the renderToken from the
+	/// boot envelope binds it to the page.
+	nonisolated(unsafe) public static var sync = ClientSyncCoordinator(renderToken: "")
+
+	/// the observability ring (p3-t5); drained by the transport owner.
+	nonisolated(unsafe) public static let telemetry = ClientTelemetry()
+
 	/// the read-only session-presence mirror (advisory ui gating only, d4).
 	public static var authMirror: AuthStateMirror {
 		authBox.withLock { $0 }
@@ -202,6 +209,7 @@ public enum ClientRuntime {
 		let result = Mutex<[FragmentUpdate]>([])
 		Task {
 			let updates = await router.handle(eventData)
+			ClientRuntime.telemetry.emit(.eventHandled(component: comp, event: event, fragmentCount: updates.count))
 			result.withLock { $0 = updates }
 		}
 		ClientExecutor.pump()

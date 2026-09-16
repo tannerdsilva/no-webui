@@ -35,6 +35,9 @@ func webuiInit(_ configPtr: UnsafeRawPointer?, _ len: Int) {
 				ClientRuntime.state = LocalStorageClientStateStore()
 				#endif
 			}
+			if case .string(let token)? = dict["renderToken"] {
+				ClientRuntime.sync = ClientSyncCoordinator(renderToken: token)
+			}
 			if let authRaw = dict["authState"] {
 				ClientRuntime.applyAuthState(authRaw.serialize())
 			}

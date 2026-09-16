@@ -200,8 +200,16 @@
         holder.memory = r.instance.exports.memory;
         holder.config = readConfig();
         if (typeof holder.exports._start === 'function') { holder.exports._start(); }
+        var cfgPtr = 0; var cfgLen = 0;
+        if (holder.config) {
+          var cfgText = JSON.stringify(holder.config);
+          var cfgBytes = new TextEncoder().encode(cfgText);
+          cfgPtr = holder.exports.webui_input_ptr();
+          new Uint8Array(holder.memory.buffer, cfgPtr, cfgBytes.length).set(cfgBytes);
+          cfgLen = cfgBytes.length;
+        }
         if (opts.mode === 'search') {
-          holder.exports.webui_init(0, 0);
+          holder.exports.webui_init(cfgPtr, cfgLen);
           var page = readFrame();
           var app = document.getElementById(opts.target || 'search-app');
           if (app) { app.innerHTML = page; }
@@ -209,6 +217,7 @@
           if (opts.onLoaded) { opts.onLoaded(page); }
           return page;
         }
+        holder.exports.webui_init(cfgPtr, cfgLen);
         holder.exports.webui_render_page();
         var frame = readFrame();
         var target = document.getElementById(opts.target);
