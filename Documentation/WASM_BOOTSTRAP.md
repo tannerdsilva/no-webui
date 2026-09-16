@@ -58,6 +58,12 @@ be referenced from a reachable root (webui_init → WebUIBridge.install).
   the boot scripts read it (fallback to the alias). verified by the smoke /
   fullstack gates (byte parity + immutable header) and by the browser probes
   (they fetch the hashed URL end to end).
+- p4 formalizes the emission: `HTMLDocument(clientMode: ClientBoot(wasmURL:))`
+  (and `WebUIDocument`) emits the meta + external chamber/boot scripts + the
+  client csp; `WebUIBoot` hashes the artifact; a `webui-config` meta carries
+  only-set `RuntimeConfig` knobs (behavior knobs ride through; transport knobs
+  stay js-owned). the smoke demo pages render through this path (no
+  hand-assembled head/meta).
 - benchmark note: on loopback the cached reload saves little (both ~85 ms) —
   the dominant wasm boot cost is compile/instantiate of the full-stdlib
   module, which is the P6 size-diet target, not transfer.

@@ -8,6 +8,15 @@ the design-token sections below are pinned by the `Design Token Integrity`
 suite and by a deployment guard that every backticked `--` token documented
 here exists in the shipped css.
 
+## WebUIDesignSystemCore
+
+the styled components (`WebUIButton` … `WebUITable` …) live in the wasm-clean
+`WebUIDesignSystemCore` target (dependencies: `WebUICore`, `Logging`);
+`WebUIDesignSystem` re-exports them (`@_exported import`) and keeps the
+server-bound theme layer (`WebUITheme`, `@Theme`, `WebUIDocument`,
+`DesignSystemAssets` — `DesignToken` is a server-generated asset). components
+compile into the wasm client unchanged.
+
 ## Theming
 
 the theme surface is exactly the set of custom properties declared on `:root`

@@ -547,64 +547,54 @@ breaking seam shipped as exactly one commit with pins updated.
 
 ---
 
-### Phase 4 — graduated adoption (parallel with P3 where doc-only)
+### Phase 4 — graduated adoption (approved 2026-09-16 by tanner; executed with scope D included)
 
-_deliverable: `clientMode` boot on `HTMLDocument`/`WebUIDocument`, dev-mode asset
-routes, the real chamber (replacing the stub), the knob split, and the full
-documentation pass. records: updates to `AGENTS.md`, `ARCHITECTURE.md`, `API.md`,
-`JS_RUNTIME.md`, `DESIGN_SYSTEM.md` (unchanged content, mode notes where apt)._
+_deliverable: the `clientMode` adoption surface on `HTMLDocument`/`WebUIDocument`,
+framework-rendered client pages, the design-system/chart compiling into the client,
+the chamber transport seam, and the full documentation pass._
 
-**P4-T1 — `ClientBoot` + `clientMode:` boot option.**
+**approved decisions:** scope D in (WebUIDesignSystemCore split + chart wasm) —
+the assessment's #2 gap; `ClientBoot` is caller-supplied wasmURL + `WebUIBoot`
+helpers (framework emits, servers serve); the `.client` emission carries the
+`webui-wasm` meta contract (the ABI baked into emitted documents); docs incl.
+`AGENTS.md` in scope under this sign-off.
 
-* objective: a page flips modes with one argument; `.none` is bit-for-bit today.
-* files: `Sources/WebUI/ClientBoot.swift` (enum + emission), `HTMLDocument.swift`,
-  `Sources/WebUIDesignSystem/WebUIDocument.swift`.
-* verify: `.none` documents byte-identical against the current render (existing
-  byte pins); client-mode documents carry the chamber + wasm reference and the
-  client CSP; reversion is one line.
+**executed workstreams** (commits `1fb052d`, `107b454`, `4cdc302`, `d5e33de`):
 
-**P4-T2 — dev-mode asset routes.**
+- **A — ClientBoot + clientMode:** `Sources/WebUI/ClientBoot.swift`
+  (`wasmURL`/`mode`/`config`/`scriptURLs`; emits the `webui-wasm` meta +
+  external scripts + only-set `webui-config` meta); `HTMLDocument(clientMode:)`
+  and `WebUIDocument(clientMode:)` default `.none` byte-identical, `.client`
+  swaps in the client csp and suppresses the inline server runtime; explicit
+  csp still wins. knob split (w§2.1.11): transport knobs stay js-owned,
+  behavior knobs channel through `webui-config`.
+- **C — asset/route formalization:** `Sources/WebUI/WebUIBoot.swift` (wasm
+  product locator + `RAW_sha256` hash); the smoke demo pages now render through
+  the framework emission (no hand-assembled head/meta/csp); the hashed
+  immutable route stays.
+- **D — design system + chart in the client:** `WebUIDesignSystemCore`
+  (components over `WebUICore`; verified no server/token/macro refs);
+  `WebUIDesignSystem` re-exports via `@_exported` (surface byte-identical;
+  theme + `@Theme` + WebUIDocument stay server-side — the theme layer is a p5
+  refinement, `DesignToken` is a server-generated asset); `WebUIChart` depends
+  on `WebUICore` directly; the local-search vertical is upgraded to
+  `WebUITable` with a typed `.onSort` handler — sort+filters client-side,
+  websocket silent (browser-probe proven).
+- **B — chamber seam:** `wsSend` → `holder.transport.send` (transport wiring is
+  the app's job); boot glue reads `webui-config`; renderToken echoes on
+  forwarded events; boundary probe (non-component clicks no-op).
 
-* objective: dev documents link `/ui/app.wasm` + `/ui/webui-client.js`.
-* files: `HTMLDocument.swift` dev branch; `WebUISmokeTest` dev route (from
-  `WebUIAssets.wasm`/`.client`).
-* verify: curl the dev-mode page and both routes; content pinned.
+**P4 acceptance.** a page flips `clientMode` with one argument (`.none`
+bit-identical, `.client` one arg); design-system + chart compile into the wasm
+client; all server-mode pins/bytes gates green; gates: smoke 24/24, fullstack
+26/26, browser 22/22 (framework-rendered pages); host 613 tests / 73 suites.
+docs per `Documentation/` map; `AGENTS.md` updated (wasm build/gates, count
+613/73).
 
-**P4-T3 — `WebUIRuntime.bootstrap` client-mode glue + knob split.**
-
-* objective: the "(W)asm" variant emits `WebUIClient.boot({config})`; behavior
-  knobs move to wasm semantics, transport knobs stay JS; old keys accepted-ignored
-  (W§2.1.11).
-* files: `Sources/WebUI/WebUIRuntime.swift`, `RuntimeConfig.swift`,
-  `designer/assets/webui-client.js`.
-* verify: server-mode bootstrap bytes identical (string pins); a client-mode page
-  ships the wasm boot config with only-set keys.
-
-**P4-T4 — the final chamber (replaces the stub).**
-
-* objective: `designer/assets/webui-client.js` — ~150 LOC, comment-free, the
-  target shape of W§2.5.1 (import object incl. the hand-rolled WASI/runtime
-  adapter from P1-T2; `schedulePump` microtask loop; transport + DOM mechanics
-  byte-for-byte where possible).
-* verify: every garden gate's client probe passes; `webui-runtime.js` untouched;
-  the server-mode runtime byte pins stay green.
-
-**P4-T5 — gates + docs.**
-
-* objective: documentation discipline and the gate matrix extended for
-  client-mode pages (trajectory §4 Phase 4 acceptance).
-* files: `AGENTS.md` (asset pipeline wasm pass, gate run order, the
-  "build wasm before gates" rule), `ARCHITECTURE.md` (the three-mode matrix,
-  bridge ABI, pump), `API.md` (`ClientBoot`/`clientMode`/`renderFragment`/
-  `ClientStateStore`), `JS_RUNTIME.md` (runtime re-seat + chamber), new
-  `WASM_CLIENT.md` pivot doc.
-* verify: doc-token lint (every backticked `--token` in docs exists in the shipped
-  css, per house pitfall discipline) passes; `showcase` regenerated and committed
-  whole.
-
-**P4 acceptance.** a page flips `clientMode` with one argument; reversion is a
-one-line change; all server-mode string pins and byte gates stay green; docs are
-current.
+**out of scope (unchanged):** size diet (p6), client-first features (p5),
+offline/settle semantics (p3). the dev-mode `/ui/app.wasm` route is a stub note:
+the framework emits `ClientBoot.defaultScriptURLs` (`/ui/…`) but hosts serving
+under other prefixes pass their own (the demo servers use `/__assets/…`).
 
 ---
 

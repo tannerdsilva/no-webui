@@ -147,6 +147,33 @@ to the page's router and reject stale pages from other sessions — see
 `WebSocketProtocol` and the auth docs. only keys that are set are emitted;
 string values are hand-escaped into safe json string literals.
 
+### Client Mode (wasm)
+
+client-mode pages flip with one argument:
+
+- `ClientBoot(wasmURL:mode:config:scriptURLs:)` — the boot configuration.
+  `wasmURL` is the content-addressed artifact url the host serves; `mode`
+  selects `.hydrate` (ssr-compat render probe) or `.app` (full interactive
+  boot); `config` carries only-set `RuntimeConfig` knobs (transport knobs stay
+  js-owned; behavior knobs ride the emitted `webui-config` meta); `scriptURLs`
+  default to `ClientBoot.defaultScriptURLs` (`/ui/webui-client.js`,
+  `/ui/webui-app-boot.js`) — hosts under other prefixes pass their own.
+  `ClientBoot.defaultCSP` is the client policy (`'self'` + `'wasm-unsafe-eval'`,
+  never `'unsafe-inline'` in script-src).
+- `HTMLDocument(…, clientMode: ClientBoot?)` and
+  `WebUIDocument(…, clientMode: ClientBoot?)` — `.none` (default) is
+  byte-identical to legacy output; `.client` emits the `webui-wasm` meta
+  contract + external chamber/boot scripts, substitutes the client csp (an
+  explicit `contentSecurityPolicy` still wins), and suppresses the inline
+  server runtime.
+- `WebUIBoot.wasmProductURL()` / `WebUIBoot.wasmHash(of:)` — server-side
+  helpers: locate the release `WebUIClient.wasm` product and content-address
+  it (`sha256` hex) for the immutable-cache route. serving the artifact is the
+  host server's job; the framework only emits bytes.
+- the chamber is served by the host and hosted by the browser
+  (`designer/assets/webui-client.js`); the wasm client is built separately with
+  the wasm sdk (`swift build -c release --swift-sdk … --product WebUIClient`).
+
 ### CSS
 
 | Type | Description |

@@ -264,6 +264,30 @@ factories:
 
 See `Documentation/JS_RUNTIME.md` for detailed documentation of each module.
 
+## Layer 5: Client Mode (wasm)
+
+client mode compiles the same render core (`WebUICore`) plus the design-system
+components (`WebUIDesignSystemCore`) and charts (`WebUIChart`) with the official
+swift 6.4 wasm sdk into `WebUIClient.wasm` — a chamber-hosted browser product
+(`designer/assets/webui-client.js`). three modes coexist:
+
+| mode | rendering brain | event routing | ws |
+|---|---|---|---|
+| server (default) | NIO + `WebUI` | server `EventRouter` over ws | round trip per event |
+| **client** | wasm (same `render()`) | resident `EventRouter` in the page | silent on the hot path |
+| static | `includeRuntime: false` | none (warn-and-drop) | none |
+
+adoption is one argument: `HTMLDocument(…, clientMode: ClientBoot(wasmURL: …))`
+emits the `webui-wasm` meta contract + external chamber/boot scripts + the
+client csp; `WebUIBoot` hashes the release artifact for the immutable route.
+the bridge is a hand-rolled `[UInt8]` JSONValue ABI (trajectory w§3.2): wasm
+owns linear memory; the chamber writes event envelopes at `webui_input_ptr`,
+calls `webui_handle_event`, reads fragments from the frame, and patches by id.
+async handlers run through `swift_task_donateThreadToGlobalExecutorUntil` (the
+6.4 cooperative executor's blessed pump) — one call drains spawned tasks and
+their awaits to quiescence. full detail: `Documentation/WASM_BOOTSTRAP.md` +
+`Documentation/WASM_IMPLEMENTATION_PLAN.md`.
+
 ## Security Architecture
 
 | Threat | Mitigation |
@@ -279,6 +303,9 @@ See `Documentation/JS_RUNTIME.md` for detailed documentation of each module.
 | Stack overflow via deeply nested json | `JSONValue.parse` caps container nesting at 128 (`JSONError.nestingTooDeep`); a nested-bracket frame inside NIO's 16 kb frame budget was probe-verified to segfault the process before the cap (2026-09) |
 | Login-token exhaustion | `SingleUseTokenStore` budgets outstanding (reserved, unsubmitted) tokens per issuer key (`maxOutstandingPerKey`, default 5), and the auth demo throttles both the mint page (60/min/ip) and submit attempts (20/min/ip) — one caller cannot stockpile login tokens and flood the store past capacity |
 | Cross-session ws replay | pages mint a per-render token (`RuntimeConfig.renderToken`) that the runtime echoes with every `event`/`ping`; the server resolves each message against the session's current render tokens and answers unknown/missing ones with a redirect + close — a stale page from another user's (or a former) session cannot drive the current session's router |
+| wasm compilation under a strict csp | client-mode pages substitute `script-src 'self' 'wasm-unsafe-eval'` (still `'self'`, still no `'unsafe-inline'`); `'wasm-unsafe-eval'` only permits wasm compilation, narrowing the old blanket `'unsafe-eval'` risk |
+| transmitted code | structurally impossible in client mode: server→client updates are data into a fixed, pinned wasm (no script-message type, and wasm output bypasses the fragment sanitizer only because it originates in the pinned binary, never the wire) |
+| import surface | the shipped module imports exactly 34 `wasi_snapshot_preview1` + 8 `env` functions, pinned by `WasmIntegrityTests` — the chamber must implement all of them or instantiation fails |
 | Large-response truncation | http responses are written through the raw channel and the terminal write's promise is awaited before closing — the async channel writer does not await write promises, so a response larger than the socket send buffer silently lost its tail at close (probe-verified) |
 | Data race | `Mutex` (Swift `Synchronization`) on all `EventRouter.State` and `ObserverList` mutations |
 | Unbounded growth | Caps on `EventRouter.maxHandlers` (10K) and `ObserverList.maxObservers` (100) |

@@ -241,6 +241,24 @@ on `beforeunload`, which disconnects the WebSocket, unmounts event delegation,
 resets the fragment patcher, clears the state store, and removes the
 `popstate` listener it registered.
 
+## Chamber (webui-client.js)
+
+client mode replaces this runtime's *brain* with wasm; the chamber
+(`designer/assets/webui-client.js`, ~200 comment-free lines, embedded as
+`WebUIAssets.client`) stays mechanical:
+
+- **instantiate** the wasm with a hand-rolled WASI adapter (34 `wasi_snapshot_preview1`
+  functions) + the 8 `env` bridge imports (the chamber must implement all of
+  them or `WebAssembly.instantiate` fails — pinned by `WasmIntegrityTests`).
+- **boot**: call `_start`, then `webui_render_page` (hydrate probe) or
+  `webui_init` (interactive boot, mounts the returned page into the target);
+  reads `webui-config`/`webui-wasm` metas emitted by `ClientBoot`.
+- **dispatch**: delegated `input`/`click` on `[data-component-id]` → envelope
+  `{component,event,data}` (+ `renderToken` when a transport is wired) →
+  write to `webui_input_ptr` → `webui_handle_event` → patch by fragment id.
+- **transport seam**: `holder.transport.send` is the only way wasm talks to the
+  server; local-only pages leave it null and the websocket stays silent.
+
 ## Public API
 
 ```javascript

@@ -39,9 +39,27 @@ inline comments explain code, markdown files explain architecture and APIs.
 
 ```bash
 swift build             # includes the WebUIAssetPlugin + WebUIIconPlugin (auto-generates Assets+Generated.swift + IconLibrary.swift)
-swift test              # 598 tests, 69 suites
+swift test              # 613 tests, 73 suites
 swift run WebUIExample  # example server on :9090
 ```
+
+the wasm client is a separate product built with the official swift 6.4 wasm sdk
+(the swiftly-hosted `swift-6.4-RELEASE` toolchain — the Xcode frontend cannot
+read the sdk's prebuilt modules and lacks `swift-autolink-extract`; wasm commands
+need `source ~/.swiftly/env.sh` first):
+
+```bash
+swift build -c release --swift-sdk swift-6.4.0-RELEASE_wasm --product WebUIClient
+# verify modes (browser-hosted once env imports are linked; wasmkit can no
+# longer instantiate the shipped module — it is chamber-only by design)
+node designer/browser-smoke.mjs
+```
+
+client-mode pages flip with one argument: `HTMLDocument(…, clientMode:
+ClientBoot(wasmURL: …))` (and `WebUIDocument`). the emission carries the
+`webui-wasm` meta contract + external chamber/boot scripts + the client csp;
+serving those routes is the host's job (`WebUIBoot` hashes the artifact for the
+immutable route). gates that exercise client mode build the wasm product first.
 
 all project tooling is command plugins — there are no shell scripts. see
 `Documentation/ASSEMBLY.md` for the full stage map and `designer/README.md`
