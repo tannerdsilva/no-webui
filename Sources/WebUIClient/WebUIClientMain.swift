@@ -25,5 +25,16 @@ struct WebUIClient {
 			print(flag.withLock { $0 } ? "PUMP OK" : "PUMP FAIL")
 			return
 		}
+		if args.contains("--verify-event") {
+			// resident-router probe: boot registers proof-inc as c0; a
+			// synthesized click must dispatch through the pump and return the
+			// counter fragment (c0 first registered → "c0").
+			ClientRuntime.boot()
+			let updates = ClientRuntime.handleEvent("{\"component\":\"c0\",\"event\":\"click\",\"data\":{}}")
+			let html = updates.first?.html ?? "?"
+			print("updates=\(updates.count) fragment=\(html)")
+			print(html == "<div id=\"client-counter\" class=\"proof__value\">1</div>" ? "EVENT OK" : "EVENT FAIL")
+			return
+		}
 	}
 }

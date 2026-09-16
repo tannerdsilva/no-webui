@@ -18,6 +18,29 @@ func webuiPump() -> Bool {
 	return true
 }
 
+@_expose(wasm, "webui_init")
+func webuiInit(_ configPtr: UnsafeRawPointer?, _ len: Int) {
+	// config bytes (renderToken + authState envelope) arrive at p3; boot the
+	// resident router + page handlers now.
+	ClientRuntime.boot()
+}
+
+@_expose(wasm, "webui_handle_event")
+func webuiHandleEvent(_ eventPtr: UnsafeRawPointer?, _ len: Int) -> Int {
+	guard let eventPtr, len > 0 else { return Int(bitPattern: RenderFrame.buffer) }
+	let text = String(decoding: UnsafeRawBufferPointer(start: eventPtr, count: len), as: UTF8.self)
+	let updates = ClientRuntime.handleEvent(text)
+	let json = "[" + updates.map { update -> String in
+		"{\"id\":\"\(JSONValue.escapeString(update.id))\",\"html\":\"\(JSONValue.escapeString(update.html))\"}"
+	}.joined(separator: ",") + "]"
+	let n = min(json.utf8.count, frameCapacity)
+	json.withCString { c in
+		RenderFrame.buffer.copyMemory(from: UnsafeRawPointer(c), byteCount: n)
+	}
+	RenderFrame.length = n
+	return Int(bitPattern: RenderFrame.buffer)
+}
+
 private enum RenderFrame {
 	nonisolated(unsafe) static let buffer = UnsafeMutableRawPointer.allocate(byteCount: frameCapacity, alignment: 16)
 	nonisolated(unsafe) static var length = 0
