@@ -38,8 +38,8 @@ inline comments explain code, markdown files explain architecture and APIs.
 ## build and test
 
 ```bash
-swift build             # includes the WebUIAssetPlugin + WebUIIconPlugin (auto-generates Assets+Generated.swift + IconLibrary.swift)
-swift test              # 613 tests, 73 suites
+swift build             # includes the WebUIAssetPlugin + WebUIIconPlugin (auto-generates Assets+Generated.swift + DesignTokens+Generated.swift + IconLibrary.swift)
+swift test              # 648 tests, 83 suites
 swift run WebUIExample  # example server on :9090
 ```
 
@@ -96,12 +96,14 @@ node designer/browser-smoke.mjs   # self-contained: builds, serves, drives real 
 ```
 
 the `WebUIAssetPlugin` build tool plugin runs automatically during `swift build`.
-it reads `designer/assets/*.css` and `*.js` and generates
-`Assets+Generated.swift` with the content embedded as Swift string constants.
-no manual `swift run WebUIAssetTool` needed. these assets power every served
-page; at render time the css is minified (comments + blank lines stripped) so
-the client never receives the designer notes kept in the working file (see the
-first law).
+it reads `designer/assets/*.css` and `*.js` and generates two files: the
+`Assets+Generated.swift` embedded-assets enum for the `WebUI` target, and the
+`DesignTokens+Generated.swift` token vocabulary for the wasm-clean
+`WebUIDesignSystemCore` target (the two outputs are what keep `DesignToken`
+reachable from the client build without rawdog). no manual
+`swift run WebUIAssetTool` needed. these assets power every served page; at
+render time the css is minified (comments + blank lines stripped) so the client
+never receives the designer notes kept in the working file (see the first law).
 
 ### why serve/smoke/fullstack-smoke need `--disable-sandbox`
 
@@ -200,13 +202,21 @@ invocation. gates host their own server, check, and tear down in one call.
 - **ObserverList** — thread-safe collection of Observable conformers. max 100
   observers by default.
 - **CSRFProtection** — stateless HMAC-SHA256 tokens. no server-side storage.
+- **client-runtime test isolation** — every test that touches the
+  `ClientRuntime` statics (`boot()`/`bootSearch()`/`router`/`nameIndex`) must
+  live in the single `.serialized` `ClientRuntimeTests` suite. a concurrent
+  suite's `bootSearch()` registers a dozen handlers into the shared router,
+  and a read that lands between `boot()` and that registration fails
+  `handlerCount` — a linux-exposed flake, not a logic bug.
 
 ### asset embedding
 
 CSS and JS assets live in `designer/assets/` (the design system's working
 directory). the `WebUIAssetPlugin` build tool plugin reads them and generates
-`Assets+Generated.swift` during every build. the generated file lands under
-`.build/` (gitignored).
+`Assets+Generated.swift` during every build (embedded into the `WebUI`
+target), plus `DesignTokens+Generated.swift` (the generated `DesignToken`
+vocabulary, embedded into `WebUIDesignSystemCore`). the generated files land
+under `.build/` (gitignored).
 
 to update assets:
 1. edit the `.css` or `.js` file in `designer/assets/`
@@ -333,11 +343,13 @@ node designer/browser-smoke.mjs     # requires node + playwright (chromium)
 
 ## pitfalls
 
-- **Assets+Generated.swift** is auto-generated and lives under `.build/`
-  (gitignored). if you need to inspect it, run `swift build` first then look in
-  `.build/plugins/outputs/no-webui/WebUI/tools/WebUIAssetPlugin/Assets+Generated.swift`.
-  the same holds for **IconLibrary.swift** (the generated icon catalog) —
-  look in `.build/plugins/outputs/…/WebUIIconPlugin/`. neither is hand-edited.
+- **generated files** are auto-generated and live under `.build/` (gitignored):
+  `Assets+Generated.swift` (the `WebUI` target's embedded assets), `IconLibrary.swift`
+  (the `WebUICore` target's icon catalog), and `DesignTokens+Generated.swift`
+  (the `WebUIDesignSystemCore` target's token vocabulary). to inspect one, run
+  `swift build` first then look in
+  `.build/plugins/outputs/no-webui/<Target>/destination/<Plugin>/<file>`.
+  none is hand-edited.
 - **Plugin failures** — if `swift build` fails with a plugin error, check that
   `designer/assets/` exists and contains both `design-system.css`
   and `webui-runtime.js`. if those files are deleted/renamed the build still
