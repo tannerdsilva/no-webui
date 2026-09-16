@@ -67,6 +67,18 @@ public enum ClientRuntime {
 		SearchRecord(name: "auth", region: "ap-south-1", ms: 9),
 	]
 
+	/// prefix index over record names, rebuilt at boot (p5-t3): local-search
+	/// keystrokes answer from this trie, not from a linear scan.
+	nonisolated(unsafe) public private(set) static var nameIndex = ClientPrefixIndex()
+
+	private static func buildNameIndex() -> ClientPrefixIndex {
+		var index = ClientPrefixIndex()
+		for record in searchRecords {
+			index.insert(record.name)
+		}
+		return index
+	}
+
 	/// boot the interactive proof page: render under a `RenderContext` so the
 	/// `.onClick` handler registers into the resident router. called once per
 	/// page load via `webui_init`.
@@ -104,6 +116,7 @@ public enum ClientRuntime {
 		queryBox.withLock { $0 = "" }
 		sortBox.withLock { $0 = (column: 0, ascending: true) }
 		router.reset()
+		nameIndex = buildNameIndex()
 		// the persistence self-proof: with a localStorage backend wired by the
 		// boot envelope, this count survives page reloads (each fresh wasm
 		// instance reads the previous count through the bridge and increments
@@ -148,9 +161,12 @@ public enum ClientRuntime {
 	/// `#search-rows` wrapper instead).
 	private static func tableHTML(query: String) -> String {
 		let needle = query.lowercased()
+		// the name side of the filter answers from the prefix trie; regions
+		// stay a linear prefix check (small cardinality).
+		let nameMatches: Set<String> = needle.isEmpty ? [] : Set(nameIndex.search(prefix: needle))
 		let filtered = searchRecords.filter { record in
 			needle.isEmpty
-				|| record.name.lowercased().hasPrefix(needle)
+				|| nameMatches.contains(record.name.lowercased())
 				|| record.region.lowercased().hasPrefix(needle)
 		}
 		let (column, ascending) = sortBox.withLock { $0 }

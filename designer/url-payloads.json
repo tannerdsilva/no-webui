@@ -1,0 +1,22 @@
+[
+  { "payload": "https://example.com", "safe": true },
+  { "payload": "http://example.com/a?b=c#d", "safe": true },
+  { "payload": "mailto:someone@example.com", "safe": true },
+  { "payload": "/relative/path", "safe": true },
+  { "payload": "../up/one", "safe": true },
+  { "payload": "//protocol-relative.example/x", "safe": true },
+  { "payload": "ftp://files.example.com/x", "safe": true },
+  { "payload": "javascript:alert(1)", "safe": false },
+  { "payload": "JavaScript:alert(1)", "safe": false },
+  { "payload": " jAvAsCrIpT:alert(1)", "safe": false },
+  { "payload": "\tjavascript:alert(1)", "safe": false },
+  { "payload": "\njavascript:alert(1)", "safe": false },
+  { "payload": "java\tscript:alert(1)", "safe": false },
+  { "payload": "java\nscript:alert(1)", "safe": false },
+  { "payload": "java\rscript:alert(1)", "safe": false },
+  { "payload": "javascript:", "safe": false },
+  { "payload": "data:text/html,<script>x</script>", "safe": false },
+  { "payload": "DATA:text/html,x", "safe": false },
+  { "payload": "vbscript:msgbox(1)", "safe": false },
+  { "payload": "VBScript:msgbox(1)", "safe": false }
+]
