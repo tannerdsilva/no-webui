@@ -36,9 +36,18 @@ enum WebUIIconTool {
 		}
 	}
 
-	/// print to standard error without creating `Data` (fputs on the c stderr).
+	/// print to standard error without creating `Data`. posix write on fd 2
+	/// (glibc's `stderr` is a mutable global — a swift 6 strict concurrency
+	/// error on linux; `STDERR_FILENO` avoids it on both platforms).
 	private static func writeError(_ message: String) {
-		fputs(message + "\n", stderr)
+		let bytes = [UInt8]((message + "\n").utf8)
+		bytes.withUnsafeBytes { buffer in
+#if os(Linux)
+			_ = Glibc.write(STDERR_FILENO, buffer.baseAddress, buffer.count)
+#else
+			_ = Darwin.write(STDERR_FILENO, buffer.baseAddress, buffer.count)
+#endif
+		}
 	}
 
 	static func printSelf() {

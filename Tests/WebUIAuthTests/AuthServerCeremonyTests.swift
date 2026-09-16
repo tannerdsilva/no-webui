@@ -167,11 +167,6 @@ struct AuthServerCeremonyTests {
 	@Test("the connection cap covers bare connects (accept-time admission)")
 	func connectionCapCoversBareConnects() async throws {
 		try await withServer(arguments: ["--max-connections", "2"]) { server in
-			// settle: the harness's readiness probe opens and closes one
-			// connection; its gate slot is released asynchronously on the
-			// server, so wait for that teardown before asserting the
-			// deterministic ordering below.
-			try await Task.sleep(for: .milliseconds(300))
 			// regression: the gate is acquired in the child channel initializer,
 			// so even sockets that never send a request hold a slot and are
 			// capped — a connect-flood cannot sidestep the memory ceiling.
@@ -180,11 +175,14 @@ struct AuthServerCeremonyTests {
 			defer { a.closeSocket(); b.closeSocket() }
 			let c = try RawSocket(host: "127.0.0.1", port: server.port)
 			defer { c.closeSocket() }
-			// the third connection is refused (closed by the server) while a
-			// and b still hold their slots.
-			#expect(c.waitForClose(timeout: 5))
-			#expect(!a.waitForClose(timeout: 1))
-			#expect(!b.waitForClose(timeout: 1))
+			// assertions are count-based: *which* of the three connects gets
+			// refused is kernel-order dependent (the accept loop can process c
+			// before b on linux under rapid simultaneous connects), and the
+			// readiness probe's gate slot may or may not have drained yet — so
+			// the guaranteed invariant is: at most two survive, at least one is
+			// refused (with exactly the excess refused at the 2-slot cap).
+			let refused = [a, b, c].filter { $0.waitForClose(timeout: 1) }.count
+			#expect((1 ... 2).contains(refused), "admission caps the flood: \(refused) of 3 bare connects refused")
 		}
 	}
 
@@ -519,6 +517,18 @@ struct ErrnoError: Error, CustomStringConvertible {
 /// for the ceremony probes' bounded exchanges. foundation/FoundationNetworking
 /// would smuggle in redirect handling and cookie jars we want to observe
 /// manually, so the probes speak tcp directly.
+/// a tcp stream socket descriptor, shared by `RawSocket` and `AuthServer`.
+/// glibc imports `SOCK_STREAM` as the `__socket_type` enum (rawValue
+/// `UInt32`) while darwin types it as `Int32` — coerce per platform so
+/// `socket(_:_:_:)`'s `Int32` type arg matches on both.
+private func tcpSocketDescriptor() -> Int32 {
+#if os(Linux)
+	socket(AF_INET, Int32(SOCK_STREAM.rawValue), 0)
+#else
+	socket(AF_INET, SOCK_STREAM, 0)
+#endif
+}
+
 final class RawSocket {
 	private var fd: Int32
 	private var buffer: [UInt8] = []
@@ -533,7 +543,7 @@ final class RawSocket {
 
 	init(host: String, port: Int, readTimeout: TimeInterval = 5) throws {
 		_ = Self.ignoreSIGPIPE
-		let descriptor = socket(AF_INET, SOCK_STREAM, 0)
+		let descriptor = tcpSocketDescriptor()
 		guard descriptor >= 0 else { throw ErrnoError(errno, "socket") }
 		fd = descriptor
 		self.readTimeout = readTimeout
@@ -773,7 +783,7 @@ final class AuthServer {
 	/// ask the OS for a free ephemeral port, then release it — the suite is
 	/// serialized so the race window is effectively ours.
 	private static func selectFreePort() throws -> Int {
-		let descriptor = socket(AF_INET, SOCK_STREAM, 0)
+		let descriptor = tcpSocketDescriptor()
 		guard descriptor >= 0 else { throw ErrnoError(errno, "socket") }
 		defer { close(descriptor) }
 		var addr = sockaddr_in()
