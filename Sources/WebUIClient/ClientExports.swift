@@ -55,6 +55,19 @@ func webuiDemoteAuth() {
 	ClientRuntime.demoteAuth()
 }
 
+@_expose(wasm, "webui_apply_seq")
+func webuiApplySeq(_ seqPtr: UnsafeRawPointer?, _ len: Int) -> Int {
+	// an authoritative `update` arrived over the chamber's transport: advance
+	// the sync ledger's authority seq so superseded local predictions
+	// reconcile (the chamber applies the frame's fragments itself, sanitized,
+	// because it owns the dom). returns how many local patches the server
+	// state superseded — the chamber can use it for optimistic-cleanup math.
+	guard let seqPtr, len > 0 else { return 0 }
+	let text = String(decoding: UnsafeRawBufferPointer(start: seqPtr, count: len), as: UTF8.self)
+	guard let seq = Int(text.trimmingCharacters(in: .whitespacesAndNewlines)) else { return 0 }
+	return ClientRuntime.sync.applyAuthoritative(seq: seq)
+}
+
 @_expose(wasm, "webui_handle_event")
 func webuiHandleEvent(_ eventPtr: UnsafeRawPointer?, _ len: Int) -> Int {
 	guard let eventPtr, len > 0 else { return Int(bitPattern: RenderFrame.buffer) }

@@ -1,6 +1,6 @@
   window.WebUIClient = (function () {
     'use strict';
-    var holder = { exports: null, memory: null, wsSent: 0, eventCount: 0, config: null, transport: null };
+    var holder = { exports: null, memory: null, wsSent: 0, eventCount: 0, config: null, transport: null, warnedNoTransport: false };
   function decoder(bytes) { return new TextDecoder().decode(bytes); }
   function noop() { return 0; }
   function errno() { return 8; }
@@ -25,7 +25,7 @@
     return {
       setInnerHTML: function (idPtr, idLen, htmlPtr, htmlLen) {
         var el = document.getElementById(readStr(idPtr, idLen));
-        if (el) { el.innerHTML = readStr(htmlPtr, htmlLen); }
+        if (el) { el.innerHTML = serializeFragment(sanitizeFragment(readStr(htmlPtr, htmlLen), el)); }
       },
       removeElement: function (idPtr, idLen) {
         var el = document.getElementById(readStr(idPtr, idLen));
@@ -54,8 +54,11 @@
         var msg = readStr(bytesPtr, len);
         if (msg) {
           holder.wsSent += 1;
-          if (holder.transport && typeof holder.transport.send === 'function') {
+          if (holder.transport && holder.transport.readyState === WebSocket.OPEN) {
             holder.transport.send(msg);
+          } else if (!holder.warnedNoTransport) {
+            holder.warnedNoTransport = true;
+            console.warn('WebUIClient wsSend dropped: no open transport');
           }
         }
       },
@@ -134,6 +137,66 @@
       env: bridgeImports()
     };
   }
+  var URL_ATTRS = ['href', 'src', 'action', 'formaction', 'xlink:href'];
+  var UNSAFE_PROTOCOLS = /^(javascript|data|vbscript):/i;
+  function stripUrlControlChars(url) {
+    return String(url).replace(/[\u0000-\u0020\u007F]/g, '');
+  }
+  function isSafeUrl(url) {
+    return !UNSAFE_PROTOCOLS.test(stripUrlControlChars(url));
+  }
+  function sanitizeFragment(html, el) {
+    var anchor = (el && el.isConnected) ? el : document.body;
+    var range = document.createRange();
+    range.selectNode(anchor);
+    var frag = range.createContextualFragment(html);
+    var offenders = Array.prototype.slice.call(frag.querySelectorAll('*'));
+    var pendingTemplates = Array.prototype.slice.call(frag.querySelectorAll('template'));
+    while (pendingTemplates.length) {
+      var t = pendingTemplates.shift();
+      pendingTemplates = pendingTemplates.concat(Array.prototype.slice.call(t.content.querySelectorAll('template')));
+      offenders = offenders.concat(Array.prototype.slice.call(t.content.querySelectorAll('*')));
+    }
+    for (var i = 0; i < offenders.length; i++) {
+      var node = offenders[i];
+      if (node.tagName === 'SCRIPT') {
+        node.parentNode.removeChild(node);
+        continue;
+      }
+      var attrs = node.attributes;
+      for (var j = attrs.length - 1; j >= 0; j--) {
+        var name = attrs[j].name;
+        if (/^on/i.test(name)) {
+          node.removeAttribute(name);
+          continue;
+        }
+        var lower = name.toLowerCase();
+        if (URL_ATTRS.indexOf(lower) !== -1 && !isSafeUrl(node.getAttribute(name))) {
+          node.setAttribute(name, '');
+        }
+      }
+    }
+    return frag;
+  }
+  function serializeFragment(frag) {
+    if (!frag.firstChild) { return ""; }
+    var probe = document.createElement("div");
+    probe.appendChild(frag);
+    return probe.innerHTML;
+  }
+  function applyUpdates(updates) {
+    for (var i = 0; i < updates.length; i++) {
+      var u = updates[i];
+      var el = document.getElementById(u.id);
+      if (!el) { continue; }
+      var fragment = sanitizeFragment(u.html, el);
+      if (!fragment.firstChild) {
+        el.remove();
+        continue;
+      }
+      el.parentNode.replaceChild(fragment, el);
+    }
+  }
   function readFrame() {
     var ptr = holder.exports.webui_frame_ptr();
     var len = holder.exports.webui_frame_len();
@@ -141,11 +204,49 @@
   }
   function applyFrame() {
     var updates = JSON.parse(readFrame());
-    for (var i = 0; i < updates.length; i++) {
-      var u = updates[i];
-      var el = document.getElementById(u.id);
-      if (el) { el.outerHTML = u.html; }
+    applyUpdates(updates);
+  }
+  function handleServerMessage(msg) {
+    if (!msg || !msg.type) { return; }
+    if (msg.type === 'update') {
+      if (typeof msg.seq === 'number' && holder.exports && typeof holder.exports.webui_apply_seq === 'function') {
+        var bytes = new TextEncoder().encode(String(msg.seq));
+        var p = holder.exports.webui_input_ptr();
+        new Uint8Array(holder.memory.buffer, p, bytes.length).set(bytes);
+        holder.exports.webui_apply_seq(p, bytes.length);
+      }
+      if (Array.isArray(msg.fragments)) { applyUpdates(msg.fragments); }
+      return;
     }
+    if (msg.type === 'redirect') {
+      if (holder.exports && typeof holder.exports.webui_demote_auth === 'function') {
+        holder.exports.webui_demote_auth();
+      }
+      if (msg.url) {
+        if (msg.replace === true) { location.replace(msg.url); } else { location.href = msg.url; }
+      }
+      return;
+    }
+    if (msg.type === 'token') {
+      if (msg.token && holder.config) { holder.config.renderToken = msg.token; }
+      return;
+    }
+    if (msg.type === 'reload') { location.reload(); return; }
+  }
+  function openTransport() {
+    if (!holder.config || !holder.config.wsUrl) { return; }
+    if (holder.transport && holder.transport.readyState === WebSocket.OPEN) { return; }
+    var ws;
+    try { ws = new WebSocket(holder.config.wsUrl); } catch (e) { console.warn('WebUIClient ws connect failed: ' + e.message); return; }
+    holder.transport = ws;
+    ws.onmessage = function (e) {
+      var msg;
+      try { msg = JSON.parse(e.data); } catch (err) { return; }
+      handleServerMessage(msg);
+    };
+    ws.onclose = function () {
+      if (holder.transport === ws) { holder.transport = null; }
+    };
   }
   function findComponent(target) {
     var el = target;
@@ -215,6 +316,7 @@
           if (app) { app.innerHTML = page; }
           wireEvents();
           if (opts.onLoaded) { opts.onLoaded(page); }
+          openTransport();
           return page;
         }
         holder.exports.webui_init(cfgPtr, cfgLen);
@@ -227,8 +329,9 @@
           target.setAttribute('data-hydration', target.innerHTML === prior ? 'match' : 'mismatch');
         }
         if (opts.onLoaded) { opts.onLoaded(frame); }
+        openTransport();
         return frame;
       });
   }
-  return { boot: boot, _getInstance: function () { return holder; } };
+  return { boot: boot, _getInstance: function () { return holder; }, _sanitize: function (html) { var probe = document.createElement('div'); return serializeFragment(sanitizeFragment(html, probe)); } };
 })();
