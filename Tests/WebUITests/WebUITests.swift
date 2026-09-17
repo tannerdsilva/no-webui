@@ -504,6 +504,43 @@ func injectAttributesSkipsClosingTag() {
     #expect(result == "</div>")
 }
 
+@Test("injectAttributes merges a duplicate style attribute instead of emitting a dead one")
+func injectAttributesMergesDuplicateStyle() {
+    // browsers honor only the FIRST of duplicated attributes — a naive append
+    // of a second `style` ships dead bytes and silently drops the modifier.
+    // the merge appends declarations, so both halves survive in one attribute.
+    let result = injectAttributes(
+        into: "<div style=\"display: block;\">x</div>",
+        "style=\"padding: 12px;\""
+    )
+    #expect(result == "<div style=\"display: block; padding: 12px;\">x</div>")
+}
+
+@Test("injectAttributes merges style into a pre-existing inline style")
+func injectAttributesMergesExistingStyle() {
+    let result = injectAttributes(
+        into: "<span style=\"font-size: 16px;\">x</span>",
+        "style=\"color: red;\""
+    )
+    // the original declaration keeps its trailing `;` — no stray separator
+    #expect(result == "<span style=\"font-size: 16px; color: red;\">x</span>")
+}
+
+@Test("injectAttributes replaces a duplicate non-style attribute with the later value")
+func injectAttributesReplacesDuplicateAttribute() {
+    let result = injectAttributes(
+        into: "<a href=\"/old\">x</a>",
+        "href=\"/new\""
+    )
+    #expect(result == "<a href=\"/new\">x</a>")
+}
+
+@Test("injectAttributes appends an attribute that does not already exist")
+func injectAttributesAppendsNewAttribute() {
+    let result = injectAttributes(into: "<div class=\"a\">x</div>", "id=\"b\"")
+    #expect(result == "<div class=\"a\" id=\"b\">x</div>")
+}
+
 // MARK: - Design System Tests
 
 @Test("shipped css defines the nexus token set")

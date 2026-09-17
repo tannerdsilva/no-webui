@@ -22,52 +22,275 @@ public func htmlEscape(_ string: String) -> String {
 }
 
 // MARK: - Attribute Injection
+
+/// One attribute parsed from an opening tag. `value` is the raw text as
+/// written in the source (for quoted values: the text between the quotes,
+/// character references and all — it is re-emitted verbatim, never
+/// re-escaped, so a value the emitter already escaped cannot double-escape).
+/// `hadValue` records whether the source had a `=` at all (boolean attrs).
+/// `sourceQuote` is the quote char the source used, or nil for unquoted.
+private struct ParsedAttr {
+	let key: String
+	let keyLower: String
+	var value: String
+	let hadValue: Bool
+	let sourceQuote: Character?
+}
+
+/// Scans an opening tag (without its terminating `>` / `/>`) into its tag
+/// name and attribute occurrences. Quoted values are respected, so `=` and
+/// `>` inside an attribute value never terminate a token. Returns nil when
+/// the tag name is not recognizable (the caller falls back to the legacy
+/// append behaviour).
+private func parseOpeningTag(_ tag: String) -> (name: String, attrs: [ParsedAttr])? {
+	var i = tag.index(after: tag.startIndex)
+	let nameStart = i
+	guard i < tag.endIndex else { return nil }
+	while i < tag.endIndex {
+		let c = tag[i]
+		if c.isLetter || c.isNumber || c == "-" || c == "_" || c == ":" || c == "." {
+			i = tag.index(after: i)
+		} else {
+			break
+		}
+	}
+	let nameEnd = i
+	guard nameEnd > nameStart else { return nil }
+	let name = String(tag[nameStart..<nameEnd])
+
+	var attrs: [ParsedAttr] = []
+	while i < tag.endIndex {
+		while i < tag.endIndex, tag[i].isWhitespace { i = tag.index(after: i) }
+		if i >= tag.endIndex { break }
+		if tag[i] == ">" { break }
+		let attrStart = i
+		while i < tag.endIndex, !tag[i].isWhitespace, tag[i] != "=", tag[i] != ">" {
+			i = tag.index(after: i)
+		}
+		guard i > attrStart else {
+			// stray character (defensive — never emitted by this framework)
+			i = tag.index(after: i)
+			continue
+		}
+		let key = String(tag[attrStart..<i])
+		if i < tag.endIndex, tag[i] == "=" {
+			let eq = i
+			i = tag.index(after: i)
+			if i < tag.endIndex, tag[i] == "\"" || tag[i] == "'" {
+				let quote = tag[i]
+				i = tag.index(after: i)
+				let vStart = i
+				while i < tag.endIndex, tag[i] != quote {
+					i = tag.index(after: i)
+				}
+				let vEnd = i
+				if i < tag.endIndex { i = tag.index(after: i) } // closing quote
+				attrs.append(ParsedAttr(key: key, keyLower: key.lowercased(), value: String(tag[vStart..<vEnd]), hadValue: true, sourceQuote: quote))
+				_ = eq
+			} else if i < tag.endIndex, !tag[i].isWhitespace {
+				let vStart = i
+				while i < tag.endIndex, !tag[i].isWhitespace, tag[i] != ">" {
+					i = tag.index(after: i)
+				}
+				attrs.append(ParsedAttr(key: key, keyLower: key.lowercased(), value: String(tag[vStart..<i]), hadValue: true, sourceQuote: nil))
+			} else {
+				// `key=` with an empty value — keep as a quoted empty
+				attrs.append(ParsedAttr(key: key, keyLower: key.lowercased(), value: "", hadValue: true, sourceQuote: "\""))
+			}
+		} else {
+			attrs.append(ParsedAttr(key: key, keyLower: key.lowercased(), value: "", hadValue: false, sourceQuote: nil))
+		}
+	}
+	return (name, attrs)
+}
+
+/// Serializes one attribute. Quote choice never re-escapes: a value that
+/// already carries a literal `"` (possible only when the source used single
+/// quotes) either keeps single quotes or is `&quot;`-escaped into double
+/// quotes — both semantically identical in the DOM.
+private func serializeAttr(_ a: ParsedAttr) -> String {
+	guard a.hadValue else { return " \(a.key)" }
+	let v = a.value
+	if v.contains("\"") {
+		if !v.contains("'") {
+			return " \(a.key)='\(v)'"
+		}
+		return " \(a.key)=\"\(v.replacingOccurrences(of: "\"", with: "&quot;"))\""
+	}
+	if v.contains("'") {
+		return " \(a.key)=\"\(v)\""
+	}
+	if a.sourceQuote == "'" {
+		return " \(a.key)='\(v)'"
+	}
+	return " \(a.key)=\"\(v)\""
+}
+
+/// Parses an injected attribute string (whitespace-separated `key=value`
+/// tokens; values quoted or unquoted). Values are returned verbatim — the
+/// emitters escape them, and re-escaping would double-escape entities.
+private func parseAttributeString(_ attributes: String) -> [ParsedAttr] {
+	var attrs: [ParsedAttr] = []
+	var i = attributes.startIndex
+	while i < attributes.endIndex {
+		while i < attributes.endIndex, attributes[i].isWhitespace { i = attributes.index(after: i) }
+		if i >= attributes.endIndex { break }
+		let keyStart = i
+		while i < attributes.endIndex, !attributes[i].isWhitespace, attributes[i] != "=" {
+			i = attributes.index(after: i)
+		}
+		let keyEnd = i
+		guard keyEnd > keyStart else {
+			i = attributes.index(after: i)
+			continue
+		}
+		let key = String(attributes[keyStart..<keyEnd])
+		if i < attributes.endIndex, attributes[i] == "=" {
+			i = attributes.index(after: i)
+			if i < attributes.endIndex, attributes[i] == "\"" || attributes[i] == "'" {
+				let quote = attributes[i]
+				i = attributes.index(after: i)
+				let vStart = i
+				while i < attributes.endIndex, attributes[i] != quote { i = attributes.index(after: i) }
+				let vEnd = i
+				if i < attributes.endIndex { i = attributes.index(after: i) }
+				attrs.append(ParsedAttr(key: key, keyLower: key.lowercased(), value: String(attributes[vStart..<vEnd]), hadValue: true, sourceQuote: quote))
+			} else if i < attributes.endIndex, !attributes[i].isWhitespace {
+				let vStart = i
+				while i < attributes.endIndex, !attributes[i].isWhitespace { i = attributes.index(after: i) }
+				attrs.append(ParsedAttr(key: key, keyLower: key.lowercased(), value: String(attributes[vStart..<i]), hadValue: true, sourceQuote: nil))
+			} else {
+				attrs.append(ParsedAttr(key: key, keyLower: key.lowercased(), value: "", hadValue: true, sourceQuote: "\""))
+			}
+		} else {
+			attrs.append(ParsedAttr(key: key, keyLower: key.lowercased(), value: "", hadValue: false, sourceQuote: nil))
+		}
+	}
+	return attrs
+}
+
+/// Joins a new style declaration onto an existing style value, inserting the
+/// `; ` separator when the existing value is non-empty and lacks one.
+/// (CSS drops a declaration when two run together without a separator, so
+/// the join is what keeps both halves of a merged style alive.)
+private func appendStyleDeclaration(existing: String, declaration: String) -> String {
+	let e = existing.trimmingCharacters(in: .whitespaces)
+	let d = declaration.trimmingCharacters(in: .whitespaces)
+	if d.isEmpty { return existing }
+	if e.isEmpty { return d }
+	if e.hasSuffix(";") { return e + " " + d }
+	return e + "; " + d
+}
+
 public func injectAttributes(into html: String, _ attributes: String) -> String {
-    guard let firstLessThan = html.firstIndex(of: "<") else {
-        return "<span \(attributes)>\(html)</span>"
-    }
+	guard let firstLessThan = html.firstIndex(of: "<") else {
+		return "<span \(attributes)>\(html)</span>"
+	}
 
-    let afterLT = html.index(after: firstLessThan)
-    guard afterLT < html.endIndex else {
-        return "<span \(attributes)>\(html)</span>"
-    }
+	let afterLT = html.index(after: firstLessThan)
+	guard afterLT < html.endIndex else {
+		return "<span \(attributes)>\(html)</span>"
+	}
 
-    let peek = html[afterLT]
-    guard peek != "/" && peek != "!" && peek != "?" else {
-        return html
-    }
+	let peek = html[afterLT]
+	guard peek != "/" && peek != "!" && peek != "?" else {
+		return html
+	}
 
-    var inQuote = false
-    var quoteChar: Character = "\""
-    var tagEnd: String.Index?
+	var inQuote = false
+	var quoteChar: Character = "\""
+	var tagEnd: String.Index?
 
-    var i = html.index(after: firstLessThan)
-    while i < html.endIndex {
-        let c = html[i]
-        if inQuote {
-            if c == quoteChar {
-                inQuote = false
-            }
-        } else if c == "\"" || c == "'" {
-            inQuote = true
-            quoteChar = c
-        } else if c == ">" {
-            tagEnd = i
-            break
-        }
-        i = html.index(after: i)
-    }
+	var i = html.index(after: firstLessThan)
+	while i < html.endIndex {
+		let c = html[i]
+		if inQuote {
+			if c == quoteChar {
+				inQuote = false
+			}
+		} else if c == "\"" || c == "'" {
+			inQuote = true
+			quoteChar = c
+		} else if c == ">" {
+			tagEnd = i
+			break
+		}
+		i = html.index(after: i)
+	}
 
-    guard let end = tagEnd else {
-        return "<span \(attributes)>\(html)</span>"
-    }
+	guard let end = tagEnd else {
+		return "<span \(attributes)>\(html)</span>"
+	}
 
-    let beforeEnd = html.index(before: end)
-    if html[beforeEnd] == "/" {
-        return String(html[..<beforeEnd]) + " " + attributes + String(html[beforeEnd...])
-    } else {
-        return String(html[..<end]) + " " + attributes + String(html[end...])
-    }
+	// the opening tag is everything up to `>` (or up to the `/` of `/>`)
+	let beforeEnd = html.index(before: end)
+	let tagRangeEnd: String.Index = (html[beforeEnd] == "/" ? beforeEnd : end)
+	let tag = String(html[..<tagRangeEnd])
+
+	guard let parsed = parseOpeningTag(tag) else {
+		// unparseable tag — preserve the legacy append behaviour byte-for-byte
+		if html[beforeEnd] == "/" {
+			return String(html[..<beforeEnd]) + " " + attributes + String(html[beforeEnd...])
+		}
+		return String(html[..<end]) + " " + attributes + String(html[end...])
+	}
+
+	// HTML honors only the FIRST occurrence of a duplicated attribute — a
+	// second `style`/`class`/`data-*` is silently dropped by every browser.
+	// So a naive append of a key that already exists ships a dead attribute
+	// (the chained-style bug: `style="a" style="b"` rendered `a` only,
+	// losing every later modifier). Merge instead:
+	// - `style` — duplicate/incoming values APPEND their declarations to
+	//   the first occurrence (CSS cascade: last declaration wins), so
+	//   every chain survives;
+	// - any other key — the LATER value wins (an incoming value is the
+	//   newer intent; among source duplicates the first is kept, the
+	//   rest dropped as the browser already did).
+	var merged = parsed.attrs
+	var firstIndex: [String: Int] = [:]
+	for (idx, a) in parsed.attrs.enumerated() where firstIndex[a.keyLower] == nil {
+		firstIndex[a.keyLower] = idx
+	}
+
+	// fold pre-existing duplicate occurrences into their first sibling
+	for (idx, a) in parsed.attrs.enumerated() {
+		guard let first = firstIndex[a.keyLower], first != idx else { continue }
+		if a.hadValue, !a.value.isEmpty {
+			if a.keyLower == "style" {
+				merged[first].value = appendStyleDeclaration(existing: merged[first].value, declaration: a.value)
+			}
+			// non-style: keep the first value (document-order HTML semantics)
+		}
+		merged[idx] = ParsedAttr(key: "\0", keyLower: a.keyLower, value: "", hadValue: false, sourceQuote: nil) // tombstone
+	}
+	merged = merged.filter { $0.key != "\0" }
+
+	// apply incoming attributes: merge into an existing first-occurrence or append
+	for inc in parseAttributeString(attributes) {
+		if let first = firstIndex[inc.keyLower] {
+			if inc.hadValue, !inc.value.isEmpty {
+				if inc.keyLower == "style" {
+					merged[first].value = appendStyleDeclaration(existing: merged[first].value, declaration: inc.value)
+				} else {
+					merged[first] = inc // the newer value replaces the older
+				}
+			} else if inc.keyLower == "style" {
+				// empty incoming style: leave the existing value untouched
+			} else {
+				merged[first] = inc // explicit empty / boolean intent
+			}
+			_ = first
+		} else {
+			firstIndex[inc.keyLower] = merged.count
+			merged.append(inc)
+		}
+	}
+
+	var out = "<" + parsed.name
+	for a in merged {
+		out += serializeAttr(a)
+	}
+	return out + String(html[tagRangeEnd...])
 }
 
 // MARK: - Markdown Rendering

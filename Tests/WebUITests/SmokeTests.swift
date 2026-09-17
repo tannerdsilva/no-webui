@@ -828,14 +828,27 @@ struct ModifierChainTests {
         #expect(validateTagBalance(html))
     }
 
-    @Test("two modifiers nest spans")
+    @Test("two modifiers merge into one style attribute")
     func twoModifiers() {
         let html = Text("Hello")
             .foregroundColor("red")
             .backgroundColor("blue")
             .render()
-        #expect(html.contains("style=\"background-color: blue;\""))
-        #expect(html.contains("style=\"color: red;\""))
+        // a SINGLE `style` attribute carrying BOTH declarations — the old
+        // duplicate `style` attribute was dead bytes (browsers honor only
+        // the first occurrence), so the later modifier never applied
+        #expect(html == "<span style=\"color: red; background-color: blue;\">Hello</span>")
+        #expect(validateTagBalance(html))
+    }
+
+    @Test("three style modifiers merge in declaration order")
+    func threeStyleModifiers() {
+        let html = Text("Box")
+            .padding(8)
+            .cornerRadius("4px")
+            .backgroundColor("var(--color-surface-2)")
+            .render()
+        #expect(html == "<span style=\"padding: 8px; border-radius: 4px; background-color: var(--color-surface-2);\">Box</span>")
         #expect(validateTagBalance(html))
     }
 
