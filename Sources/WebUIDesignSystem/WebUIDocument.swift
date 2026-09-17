@@ -27,7 +27,8 @@ public struct WebUIDocument: View {
         includeRuntime: Bool = true,
         runtimeConfig: RuntimeConfig? = nil,
         contentSecurityPolicy: String? = nil,
-        theme: WebUITheme = .standard
+        theme: WebUITheme = .standard,
+        rawStyles: [String] = []
     ) {
         self.title = title
         self.body = body
@@ -41,6 +42,7 @@ public struct WebUIDocument: View {
         self.runtimeConfig = runtimeConfig
         self.contentSecurityPolicy = contentSecurityPolicy
         self.theme = theme
+        self.rawStyles = rawStyles
     }
 
     /// the design-system sheet (layout rules + embedded css), minified once
@@ -60,6 +62,9 @@ public struct WebUIDocument: View {
         if !themeCSS.isEmpty {
             rawStyles.append(themeCSS)
         }
+        // page-scoped styles (e.g. the login page's card layout) land after
+        // the sheet so they can extend it without being overridden.
+        rawStyles.append(contentsOf: self.rawStyles)
         let doc = HTMLDocument(
             title: title,
             body: body,

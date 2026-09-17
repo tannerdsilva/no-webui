@@ -21,6 +21,15 @@ final class RouterRegistry: Sendable {
 	private struct Values {
 		var routers: [[UInt8]: [String: EventRouter]] = [:]
 		var order: [[UInt8]: [String]] = [:]
+		// evicted-but-real render tokens forward to the token that replaced
+		// them. an active page whose token was LRU-evicted resolves through
+		// the chain and is handed the live token as a `token` refresh — never
+		// a reload, never a login kick. only tokens this session actually
+		// minted ever enter the chain, so a forged or foreign token still
+		// fails resolution (the cross-session gate stays intact).
+		var forward: [[UInt8]: [String: String]] = [:]
+		// lru of forward keys, so the chain stays bounded like the router map.
+		var forwardOrder: [[UInt8]: [String]] = [:]
 	}
 	private let values = Mutex(Values())
 	private let maxRendersPerSession: Int
@@ -29,14 +38,39 @@ final class RouterRegistry: Sendable {
 		self.maxRendersPerSession = maxRendersPerSession
 	}
 
-	func router(forTokenHash hash: [UInt8], renderToken: String) -> EventRouter? {
-		values.withLock { $0.routers[hash]?[renderToken] }
+	/// resolve a page's presented token to its router. direct hits return the
+	/// token unchanged; hits through the forward chain return the live token
+	/// the page should adopt (`needsRefresh` true) so it migrates in place.
+	/// `nil` for tokens this session never minted — forged/foreign stay gated.
+	func resolve(forTokenHash hash: [UInt8], renderToken: String) -> (router: EventRouter, liveToken: String, needsRefresh: Bool)? {
+		values.withLock { values in
+			var current = renderToken
+			var hops = 0
+			let bound = maxRendersPerSession + 1
+			while hops <= bound {
+				if let router = values.routers[hash]?[current] {
+					// touch: an actively-used token is re-promoted in the lru
+					// so frequent renderers do not evict a live page mid-flight.
+					if let idx = values.order[hash]?.firstIndex(of: current) {
+						values.order[hash]!.remove(at: idx)
+						values.order[hash]!.append(current)
+					}
+					return (router, current, current != renderToken)
+				}
+				guard let next = values.forward[hash]?[current] else { return nil }
+				current = next
+				hops += 1
+			}
+			return nil
+		}
 	}
 	func set(_ router: EventRouter, forTokenHash hash: [UInt8], renderToken: String) {
 		values.withLock { values in
 			if values.routers[hash] == nil {
 				values.routers[hash] = [:]
 				values.order[hash] = []
+				values.forward[hash] = [:]
+				values.forwardOrder[hash] = []
 			}
 			if let seen = values.order[hash]!.firstIndex(of: renderToken) {
 				values.order[hash]!.remove(at: seen)
@@ -46,6 +80,14 @@ final class RouterRegistry: Sendable {
 			while values.order[hash]!.count > maxRendersPerSession {
 				let evicted = values.order[hash]!.removeFirst()
 				values.routers[hash]!.removeValue(forKey: evicted)
+				// record the forward before the entry is gone, bounded by the
+				// same capacity as the router map.
+				values.forward[hash]![evicted] = renderToken
+				values.forwardOrder[hash]!.append(evicted)
+				while values.forwardOrder[hash]!.count > maxRendersPerSession {
+					let old = values.forwardOrder[hash]!.removeFirst()
+					values.forward[hash]!.removeValue(forKey: old)
+				}
 			}
 		}
 	}
@@ -53,6 +95,8 @@ final class RouterRegistry: Sendable {
 		values.withLock { values in
 			values.routers.removeValue(forKey: hash)
 			values.order.removeValue(forKey: hash)
+			values.forward.removeValue(forKey: hash)
+			values.forwardOrder.removeValue(forKey: hash)
 		}
 	}
 
