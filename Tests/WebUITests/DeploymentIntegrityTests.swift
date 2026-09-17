@@ -223,7 +223,8 @@ func documentedTokensExistInCss() throws {
 func runtimeRouterLoggerInScope() {
 	let js = WebUIAssets.js
 	#expect(js.contains("function createRouter(log)"), "router lost its logger param — redirect/navigate would reference an out-of-scope log")
-	#expect(js.contains("createMessageDispatcher(log, fragmentPatcher, stateStore, router)"), "dispatcher no longer receives the router — the client redirect path is dead")
+	#expect(js.contains("createMessageDispatcher(log, fragmentPatcher, stateStore, router, config)"), "dispatcher no longer receives the router and config — the client redirect/token-refresh paths are dead")
+	#expect(js.contains("if (msg.token) config.renderToken = msg.token"), "runtime lost the in-place render-token refresh handler")
 }
 
 @Test("runtime applies optimistic predictions before sending the event")

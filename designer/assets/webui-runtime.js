@@ -802,7 +802,7 @@ window.WebUIRuntime = (function () {
     return { get: get, set: set, subscribe: subscribe, clear: clear };
   }
 
-  function createMessageDispatcher(log, fragmentPatcher, stateStore, router) {
+  function createMessageDispatcher(log, fragmentPatcher, stateStore, router, config) {
     return function handleMessage(msg) {
       if (!msg || !msg.type) {
         log.warn('Received message without type');
@@ -832,6 +832,10 @@ window.WebUIRuntime = (function () {
 
         case 'pong':
 
+          break;
+
+        case 'token':
+          if (msg.token) config.renderToken = msg.token;
           break;
 
         default:
@@ -869,7 +873,7 @@ window.WebUIRuntime = (function () {
     var stateStore = createStateStore(log);
     var fragmentPatcher = createFragmentPatcher(log);
     var router = createRouter(log);
-    var handleMessage = createMessageDispatcher(log, fragmentPatcher, stateStore, router);
+    var handleMessage = createMessageDispatcher(log, fragmentPatcher, stateStore, router, config);
     var wsClient = createWSClient(log, handleMessage);
     var eventDelegator = createEventDelegator(log, wsClient.send, fragmentPatcher);
 

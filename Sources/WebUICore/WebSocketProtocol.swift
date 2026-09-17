@@ -56,11 +56,12 @@ public enum WSOutgoing: Sendable {
     case reload
     case error(code: String, message: String)
     case pong
+    case token(String)
 }
 
 extension WSOutgoing: Encodable {
     private enum CodingKeys: String, CodingKey {
-        case type, fragments, seq, url, replace, path, value, code, message
+        case type, fragments, seq, url, replace, path, value, code, message, token
     }
 
     public func encode(to encoder: any Encoder) throws {
@@ -86,6 +87,9 @@ extension WSOutgoing: Encodable {
             try container.encode(message, forKey: .message)
         case .pong:
             try container.encode("pong", forKey: .type)
+        case .token(let token):
+            try container.encode("token", forKey: .type)
+            try container.encode(token, forKey: .token)
         }
     }
 }
@@ -184,6 +188,8 @@ extension WSOutgoing {
             object["message"] = .string(message)
         case .pong:
             break
+        case .token(let token):
+            object["token"] = .string(token)
         }
         return JSONValue.object(object).serialize()
     }
@@ -201,6 +207,7 @@ extension WSOutgoing {
         case .reload: return "reload"
         case .error: return "error"
         case .pong: return "pong"
+        case .token: return "token"
         }
     }
 }

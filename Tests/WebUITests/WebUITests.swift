@@ -1047,6 +1047,18 @@ func wsOutgoingPong() throws {
     #expect(json == "{\"type\":\"pong\"}")
 }
 
+@Test("WSOutgoing.token encodes the refresh token")
+func wsOutgoingToken() throws {
+    let msg = WSOutgoing.token("tok-abc")
+    let data = try JSONEncoder().encode(msg)
+    let json = String(data: data, encoding: .utf8)!
+    #expect(json.contains("\"type\":\"token\""))
+    #expect(json.contains("\"token\":\"tok-abc\""))
+    // the data-free jsonText path agrees with the Codable emission.
+    #expect(msg.jsonText.contains("\"type\":\"token\""))
+    #expect(msg.jsonText.contains("\"token\":\"tok-abc\""))
+}
+
 @Test("WSOutgoing does not include script type")
 func wsOutgoingNoScriptType() throws {
     let mirror = Mirror(reflecting: WSOutgoing.pong)

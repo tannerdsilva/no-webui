@@ -127,6 +127,51 @@ struct AuthServerCeremonyTests {
 		}
 	}
 
+	@Test("an evicted render token refreshes in place over the live socket — no reload, no logout")
+	func evictedRenderTokenRefreshesInPlace() async throws {
+		try await withServer { server in
+			let cookie = try #require(try logIn(server: server))
+			let cookieHeader = "auth=\(cookie)"
+
+			// nine full renders fill the per-session registry (capacity 8) and
+			// evict the first render's token; the final render's token is the
+			// live one the forward chain points at.
+			let first = try httpRequest(port: server.port, path: "/", headers: [("cookie", cookieHeader)])
+			let evicted = try #require(extractRenderToken(first.body))
+			let componentID = try #require(extractComponentID(first.body))
+			var live: String?
+			for _ in 0..<8 {
+				let page = try httpRequest(port: server.port, path: "/", headers: [("cookie", cookieHeader)])
+				live = extractRenderToken(page.body) ?? live
+			}
+			let liveToken = try #require(live)
+			#expect(liveToken != evicted)
+
+			let upgraded = try wsUpgrade(port: server.port, cookie: cookieHeader)
+			let socket = try #require(upgraded.socket)
+
+			// an event carrying the evicted-but-real token resolves through the
+			// forward chain: the server pushes the live token as an in-place
+			// refresh and routes the event — no redirect, no close.
+			let stale = #"{"type":"event","component":"\#(componentID)","event":"click","data":{},"token":"\#(evicted)"}"#
+			try wsSendText(socket, stale)
+			let refreshed = try #require(try readToken(socket, timeout: 3))
+			#expect(refreshed == liveToken)
+			#expect(try readUpdateFrame(socket, timeout: 3))
+
+			// the page now presents its refreshed token: still routed directly.
+			let migrated = #"{"type":"event","component":"\#(componentID)","event":"click","data":{},"token":"\#(refreshed)"}"#
+			try wsSendText(socket, migrated)
+			#expect(try readUpdateFrame(socket, timeout: 3))
+
+			// a token this session never minted still fails resolution: the
+			// forward chain only ever holds tokens this session minted.
+			let forged = #"{"type":"event","component":"\#(componentID)","event":"click","data":{},"token":"forged-render-token"}"#
+			try wsSendText(socket, forged)
+			#expect(try socketRejected(socket, timeout: 3))
+		}
+	}
+
 	@Test("login issues a session cookie and logout closes the live socket")
 	func fullCeremony() async throws {
 		try await withServer { server in
@@ -474,6 +519,37 @@ private func socketRejected(_ socket: RawSocket, timeout: TimeInterval) throws -
 		}
 	}
 	return sawRedirect
+}
+
+/// the `url` value of the first redirect text frame, or nil when none.
+private func redirectURL(_ socket: RawSocket, timeout: TimeInterval) throws -> String? {
+	for _ in 0..<Int(timeout * 4) {
+		guard let frame = try wsReadFrame(socket) else { return nil }
+		if frame.opcode == 1,
+		   let text = String(bytes: frame.payload, encoding: .utf8),
+		   let open = text.range(of: "\"url\":\""),
+		   let close = text[open.upperBound...].range(of: "\"") {
+			return String(text[open.upperBound..<close.lowerBound])
+		}
+	}
+	return nil
+}
+
+/// the `token` value of the first token-refresh text frame, or nil (a server
+/// close frame ends the scan without an error).
+private func readToken(_ socket: RawSocket, timeout: TimeInterval) throws -> String? {
+	for _ in 0..<Int(timeout * 4) {
+		guard let frame = try wsReadFrame(socket) else { return nil }
+		if frame.opcode == 8 { return nil }
+		if frame.opcode == 1,
+		   let text = String(bytes: frame.payload, encoding: .utf8),
+		   text.contains("\"token\""),
+		   let open = text.range(of: "\"token\":\""),
+		   let close = text[open.upperBound...].range(of: "\"") {
+			return String(text[open.upperBound..<close.lowerBound])
+		}
+	}
+	return nil
 }
 
 // MARK: - Dashboard page extraction
