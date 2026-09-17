@@ -1,6 +1,14 @@
 import Foundation
 import PackagePlugin
 
+/// a missing asset file is a build failure, never a silent degrade — the
+/// generated embed is load-bearing (a stale or empty Assets+Generated.swift
+/// would ship wrong bytes or none at all).
+struct AssetError: Error, CustomStringConvertible {
+    let description: String
+    init(_ description: String) { self.description = description }
+}
+
 @main
 struct WebUIAssetPlugin: BuildToolPlugin {
 
@@ -13,8 +21,7 @@ struct WebUIAssetPlugin: BuildToolPlugin {
             .appendingPathComponent("designer")
             .appendingPathComponent("assets")
         guard FileManager.default.fileExists(atPath: assetsDir.path) else {
-            Diagnostics.warning("designer/assets/ directory not found at \(assetsDir.path)")
-            return []
+            throw AssetError("designer/assets/ directory not found at \(assetsDir.path) — required to embed the shipped css/js assets")
         }
 
         let cssFile = assetsDir.appendingPathComponent("design-system.css")
@@ -29,8 +36,7 @@ struct WebUIAssetPlugin: BuildToolPlugin {
         let clientSearchBootExists = FileManager.default.fileExists(atPath: clientSearchBootFile.path)
 
         guard cssExists || jsExists else {
-            Diagnostics.warning("No CSS or JS files found in designer/assets/")
-            return []
+            throw AssetError("no css or js files found in designer/assets/ at \(assetsDir.path) — required to embed the shipped assets")
         }
 
         let assetTool = try context.tool(named: "WebUIAssetTool")
@@ -41,8 +47,7 @@ struct WebUIAssetPlugin: BuildToolPlugin {
         // keeps `DesignToken` reachable from the client build without rawdog.
         if target.name == "WebUIDesignSystemCore" {
             guard cssExists else {
-                Diagnostics.warning("designer/assets/design-system.css not found — DesignToken generation skipped")
-                return []
+                throw AssetError("designer/assets/design-system.css not found — required to generate the DesignToken vocabulary")
             }
             let tokensOutputURL = context.pluginWorkDirectoryURL
                 .appendingPathComponent("DesignTokens+Generated.swift")

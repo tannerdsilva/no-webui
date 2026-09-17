@@ -15,8 +15,9 @@ public struct WebUIDocument: View {
     public let contentSecurityPolicy: String?
     public let theme: WebUITheme
     public let clientMode: ClientBoot?
+    public let rawStyles: [String]
     public init(
-        title: String = "WebUI UI",
+        title: String = "WebUI",
         body: String,
         scripts: String = "",
         head: String = "",

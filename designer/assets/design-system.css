@@ -6292,7 +6292,7 @@ code, .inline-code {
   .badge--primary { color: var(--color-primary-400); }
   .badge--neutral { color: var(--color-text-muted); }
 
-  .demo-highlight { color: var(--color-primary-300); background: var(--color-primary-soft); }
+  .demo-highlight { color: var(--color-primary-strong); background: var(--color-primary-soft); }
 
   ::selection {
     background: rgba(129, 140, 248, 0.35);
@@ -6311,23 +6311,37 @@ code, .inline-code {
   .json-tree { background: #0b0f1c; border-color: #1e2a44; }
 
 
-  .navbar__link--active { background: rgba(99, 102, 241, 0.14); }
+  .navbar__link--active { background: rgba(99, 102, 241, 0.14); color: var(--color-primary-strong); }
   .tabs__tab--active { color: var(--color-primary-400); }
   .tabs__tab--active::after { background: var(--color-primary-400); }
-  .sidebar__item--active { background: rgba(99, 102, 241, 0.14); color: var(--color-primary-300); }
-  .sidebar__item--active .sidebar__icon { color: var(--color-primary-300); }
+  .tabs--bordered .tabs__tab--active { color: var(--color-primary-strong); }
+  .sidebar__item--active { background: rgba(99, 102, 241, 0.14); color: var(--color-primary-strong); }
+  .sidebar__item--active .sidebar__icon { color: var(--color-primary-strong); }
+  .sidebar__item--active .sidebar__item-badge { background: var(--color-primary-100); color: var(--color-primary-strong); }
   .sidebar__item--active::before { background: var(--color-primary-400); }
-  .toc__link--active { color: var(--color-primary-300); }
-  .tree__row--selected { background: rgba(99, 102, 241, 0.14); color: var(--color-primary-300); }
+  .toc__link--active { color: var(--color-primary-strong); }
+  .tree__row--selected { background: rgba(99, 102, 241, 0.14); color: var(--color-primary-strong); }
+  .tree__row--selected .tree__icon { color: var(--color-primary-strong); }
+  .breadcrumb__item:hover { color: var(--color-primary-strong); }
+  .wizard__step--current .wizard__dot,
+  .wizard__step--current .wizard__label { color: var(--color-primary-strong); }
+  .bottom-nav__item--active { color: var(--color-primary-strong); }
+  .timeline__event--current { color: var(--color-primary-strong); }
+  .calendar__day--range { color: var(--color-primary-strong); }
+  .date-picker__day--range-start,
+  .date-picker__day--range-end,
+  .date-picker__day--in-range { color: var(--color-primary-strong); }
+  .tag--primary { color: var(--color-primary-strong); }
+  .avatar--initials { color: var(--color-primary-strong); }
   .table tbody tr.tr--selected { background: rgba(99, 102, 241, 0.14); }
   .table tbody tr.tr--selected td { color: var(--color-text); }
-  .combo__option--selected { background: rgba(99, 102, 241, 0.14); color: var(--color-primary-300); }
-  .transfer__item--selected { background: rgba(99, 102, 241, 0.14); color: var(--color-primary-300); }
-  .multi-select__option--selected { color: var(--color-primary-300); }
+  .combo__option--selected { background: rgba(99, 102, 241, 0.14); color: var(--color-primary-strong); }
+  .transfer__item--selected { background: rgba(99, 102, 241, 0.14); color: var(--color-primary-strong); }
+  .multi-select__option--selected { color: var(--color-primary-strong); }
   .country--selected { background: rgba(99, 102, 241, 0.14); }
   .tz--selected { background: rgba(99, 102, 241, 0.14); }
   .notif--unread { background: rgba(99, 102, 241, 0.08); }
-  .notif--unread .notif__icon { background: rgba(99, 102, 241, 0.15); color: var(--color-primary-300); }
+  .notif--unread .notif__icon { background: rgba(99, 102, 241, 0.15); color: var(--color-primary-strong); }
 
 
   .swatch--selected::before { border-color: #0b1220; }
@@ -6538,7 +6552,7 @@ code, .inline-code {
   font-variant-numeric: tabular-nums;
 }
 @media (prefers-color-scheme: dark) {
-  .toc-rail__item--active { background: rgba(99, 102, 241, 0.12); color: var(--color-primary-300); }
+  .toc-rail__item--active { background: rgba(99, 102, 241, 0.12); color: var(--color-primary-strong); }
 }
 
 .gallery-main {
@@ -8446,4 +8460,16 @@ h6 {
 	.chart__point path {
 		stroke: var(--color-bg-raised);
 	}
+}
+
+/* dark: accent text on tint surfaces stays legible via the self-inverting
+   -strong alias (bright lavender in dark, deep indigo in light). these rules
+   are defined after the earlier dark block because their base rules live
+   later in the file. */
+@media (prefers-color-scheme: dark) {
+	.showcase-badge { color: var(--color-primary-strong); }
+	.demo-highlight { color: var(--color-primary-strong); }
+	.toc-rail__group-label:hover,
+	.toc-rail__group--active > .toc-rail__group-label { color: var(--color-primary-strong); }
+	.state-label--active { color: var(--color-primary-strong); }
 }

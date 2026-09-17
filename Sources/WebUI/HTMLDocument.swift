@@ -19,6 +19,12 @@ public struct HTMLDocument: Sendable {
     public let includeRuntime: Bool
     public let runtimeConfig: RuntimeConfig?
     public let contentSecurityPolicy: String?
+    /// the tab icon: a data-uri (2×-supersampled 32 px png of the accent
+    /// rounded tile with the window glyph) so every host gets a branded tab
+    /// without a `/favicon.ico` route — no http request, no 404, and the
+    /// framework csp already permits `img-src data:`. pass an empty string to
+    /// suppress it, or a full `<link ...>` element to override.
+    public let icon: String
     public let nonce: String
     /// when `true`, the combined `styles` + `rawStyles` string is embedded
     /// verbatim instead of passed through `minifyCSS`. used by documents that
@@ -35,6 +41,12 @@ public struct HTMLDocument: Sendable {
         }
         return Base64.encodeURL(bytes)
     }
+    /// the default branded tab icon: a 2×-supersampled 32 px png of the accent
+    /// rounded tile with the window glyph, inlined as a data-uri. inlined (not
+    /// a route) so a bare host gets a branded tab with no `/favicon.ico` to
+    /// serve — the browser never issues the request that would otherwise 404,
+    /// and every framework csp already permits `img-src data:`.
+    public static let defaultIcon = "<link rel=\"icon\" type=\"image/png\" href=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAApklEQVR4nO2XwQ2AIAxF2ahDeWQZb07idkINCQejECgpfDSS/BvQ118C1JhZB1lmsuyVxNLAjiwfynJFkBhcO/BdaYhBwfMQnWzPlgOZ/dOFeFJHA/h3AWy7TKoAzG1SAQjZhM2Wtd7eMDesKTghA5DW+HsA0kOoDtCib5XgB4ADwC4iQl/FVydgj1EnzQWA/ZIZ9KcU4AK0N6jqjjCtWQJkfHM6epyUsxUEgyvS4gAAAABJRU5ErkJggg==\">"
     private func effectiveCSP(nonce: String) -> String? {
         if let csp = contentSecurityPolicy {
             return csp.isEmpty ? nil : csp
@@ -50,7 +62,7 @@ public struct HTMLDocument: Sendable {
         return "default-src 'self'; script-src 'nonce-\(nonce)'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:;"
     }
     public init(
-        title: String = "WebUI UI",
+        title: String = "WebUI",
         body: String,
         styles: CSSStylesheet = CSSStylesheet([]),
         rawStyles: [String] = [],
@@ -63,6 +75,7 @@ public struct HTMLDocument: Sendable {
         includeRuntime: Bool = true,
         runtimeConfig: RuntimeConfig? = nil,
         contentSecurityPolicy: String? = nil,
+        icon: String = Self.defaultIcon,
         preMinifiedStyles: Bool = false
     ) {
         self.title = title
@@ -78,6 +91,7 @@ public struct HTMLDocument: Sendable {
         self.includeRuntime = includeRuntime
         self.runtimeConfig = runtimeConfig
         self.contentSecurityPolicy = contentSecurityPolicy
+        self.icon = icon
         self.preMinifiedStyles = preMinifiedStyles
         self.nonce = Self.generateNonce()
     }
@@ -122,13 +136,16 @@ public struct HTMLDocument: Sendable {
         } else {
             cspTag = ""
         }
+        // the tab icon: a caller-supplied `<link>` wins (override); the
+        // default brand mark lands otherwise; an empty string suppresses it.
+        let iconTag = icon.isEmpty ? "" : "  \(icon)"
 
         return """
         <!DOCTYPE html>
         <html lang="\(lang)">
         <head>
           <meta charset="UTF-8">
-          <meta name="viewport" content="width=device-width, initial-scale=1.0">\(cspTag)
+          <meta name="viewport" content="width=device-width, initial-scale=1.0">\(cspTag)\(iconTag)
           <title>\(htmlEscape(title))</title>
           \(resolvedHead)
           \(styleTag)

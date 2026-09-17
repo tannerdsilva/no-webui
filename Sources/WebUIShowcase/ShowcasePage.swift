@@ -25,7 +25,7 @@ struct ShowcasePage {
     func topBar() -> some View {
         Header(class: "showcase-header") {
             HStack(alignment: .center, spacing: 16) {
-                Heading("WebUI UI Showcase", level: .h1).class("showcase-title")
+                Heading("WebUI Showcase", level: .h1).class("showcase-title")
                 Span(class: "showcase-badge") { Text("v1.0") }
                 Spacer()
                 Span(class: "showcase-status") { Text("connected").id("ws-status") }
@@ -505,8 +505,8 @@ struct ShowcasePage {
                         Heading("All modifier methods demonstrated", level: .h2)
                         demoCard("Background & Foreground") {
                             Text("Colored text")
-                                .backgroundColor("#f0f9ff")
-                                .foregroundColor("#1e40af")
+                                .backgroundColor("var(--color-info-soft)")
+                                .foregroundColor("var(--color-info-strong)")
                                 .padding(12)
                         }
                         demoCard("Typography Modifiers") {
@@ -525,13 +525,13 @@ struct ShowcasePage {
                             VStack(spacing: 8) {
                                 Text("Padding 20px all sides")
                                     .padding(20)
-                                    .backgroundColor("#f0fdf4")
+                                    .backgroundColor("var(--color-success-soft)")
                                 Text("Padding horizontal 32, vertical 16")
                                     .padding(horizontal: 32, vertical: 16)
-                                    .backgroundColor("#fefce8")
+                                    .backgroundColor("var(--color-warning-soft)")
                                 Text("Margin 24px")
                                     .margin(24)
-                                    .backgroundColor("#fef2f2")
+                                    .backgroundColor("var(--color-danger-soft)")
                             }
                         }
                         demoCard("Dimension Modifiers") {
@@ -539,10 +539,10 @@ struct ShowcasePage {
                                 Text("Width 300px, height 60px")
                                     .width("300px")
                                     .height("60px")
-                                    .backgroundColor("#f5f3ff")
+                                    .backgroundColor("var(--color-primary-soft)")
                                 Text("Max width 400px")
                                     .maxWidth("400px")
-                                    .backgroundColor("#ecfdf5")
+                                    .backgroundColor("var(--color-success-soft)")
                             }
                         }
                         demoCard("Border Modifiers") {
@@ -561,15 +561,15 @@ struct ShowcasePage {
                                 Text("Flex item")
                                     .display("flex")
                                     .flex("1")
-                                    .backgroundColor("#f0f9ff")
+                                    .backgroundColor("var(--color-info-soft)")
                                     .padding(12)
                             }
                         }
                         demoCard("Conditional Display (showIf)") {
                             HStack(spacing: 12) {
-                                Text("Always visible").padding(12).backgroundColor("#dcfce7")
-                                Text("Hidden").showIf(false).padding(12).backgroundColor("#fee2e2")
-                                Text("Visible").showIf(true).padding(12).backgroundColor("#dcfce7")
+                                Text("Always visible").padding(12).backgroundColor("var(--color-success-soft)")
+                                Text("Hidden").showIf(false).padding(12).backgroundColor("var(--color-danger-soft)")
+                                Text("Visible").showIf(true).padding(12).backgroundColor("var(--color-success-soft)")
                             }
                         }
                         demoCard("HTML Attributes (id, class)") {
@@ -577,14 +577,14 @@ struct ShowcasePage {
                                 .id("custom-element")
                                 .class("highlight-box")
                                 .padding(12)
-                                .backgroundColor("#fffbeb")
+                                .backgroundColor("var(--color-warning-soft)")
                         }
                         demoCard("Chained Modifiers") {
                             Text("Chained: font → padding → background → border → corner radius")
                                 .font(size: 18, weight: "600")
                                 .padding(16)
-                                .backgroundColor("#f0f9ff")
-                                .border("1px solid #93c5fd")
+                                .backgroundColor("var(--color-info-soft)")
+                                .border("1px solid var(--color-info-ring)")
                                 .cornerRadius("12px")
                                 .width("100%")
                                 .display("block")
@@ -947,8 +947,8 @@ struct ShowcasePage {
                         Heading("Design tokens and CSS custom properties", level: .h2)
                         demoCard("Color Palette") {
                             VStack(spacing: 8) {
-                                colorSwatch("Primary", "--color-primary-500", "#10b89f")
-                                colorSwatch("Success", "--color-success", "#16a34a")
+                                colorSwatch("Primary", "--color-primary-500", "#6366f1")
+                                colorSwatch("Success", "--color-success", "#10b981")
                                 colorSwatch("Warning", "--color-warning", "#d97706")
                                 colorSwatch("Danger", "--color-danger", "#dc2626")
                                 colorSwatch("Info", "--color-info", "#2563eb")
@@ -1149,7 +1149,7 @@ struct ShowcasePage {
 
     func spacingSample(_ token: String, _ value: String) -> some View {
         VStack(spacing: 4) {
-            Div(class: "spacing-sample") { Text("") }.width(value).height("24px").backgroundColor("#10b89f")
+            Div(class: "spacing-sample") { Text("") }.width(value).height("24px").backgroundColor("var(--color-primary-500)")
             Text(token).font(size: 10)
             Text(value).font(size: 10)
         }
@@ -1159,8 +1159,8 @@ struct ShowcasePage {
         VStack(spacing: 4) {
             Div(class: "radius-sample") { Text("") }
                 .width("40px").height("40px")
-                .backgroundColor("#e2e8f0")
-                .border("1px solid #94a3b8")
+                .backgroundColor("var(--color-bg-inset)")
+                .border("1px solid var(--color-border-strong)")
             Text(token).font(size: 10)
             Text(value).font(size: 10)
         }
@@ -1172,7 +1172,8 @@ struct ShowcasePage {
                 Text(label).font(size: 14, weight: "600")
                 Text(token).font(size: 12)
             }.padding(16)
-        }.padding(16).backgroundColor("#ffffff").cornerRadius("8px")
+        }.padding(16).backgroundColor("var(--color-bg-raised)").cornerRadius("8px")
+            .attribute("style", "box-shadow: var(\(token));")
     }
 
     func placeholderSVG() -> String {
@@ -1180,14 +1181,14 @@ struct ShowcasePage {
         <svg xmlns="http://www.w3.org/2000/svg" width="240" height="150" viewBox="0 0 240 150" role="img" aria-label="Sample image">
           <defs>
             <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
-              <stop offset="0" stop-color="#d1faf1"/>
-              <stop offset="1" stop-color="#ecfdf9"/>
+              <stop offset="0" stop-color="#eef2ff"/>
+              <stop offset="1" stop-color="#e0e7ff"/>
             </linearGradient>
           </defs>
           <rect width="240" height="150" rx="10" fill="url(#bg)"/>
-          <circle cx="58" cy="52" r="16" fill="#10b89f"/>
-          <path d="M24 118 L78 74 L112 104 L150 66 L216 118 Z" fill="#10b89f" opacity="0.85"/>
-          <text x="120" y="138" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="12" fill="#0d756c">240 × 150 — inline svg</text>
+          <circle cx="58" cy="52" r="16" fill="#6366f1"/>
+          <path d="M24 118 L78 74 L112 104 L150 66 L216 118 Z" fill="#6366f1" opacity="0.85"/>
+          <text x="120" y="138" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="12" fill="#3730a3">240 × 150 — inline svg</text>
         </svg>
         """
         return svg

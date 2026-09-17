@@ -336,8 +336,8 @@ struct WebUIExample {
 		}
 	}
 
-	private func respond(channel: Channel, body: String, contentType: String) async throws {
-		var head = HTTPResponseHead(version: .http1_1, status: .ok)
+	private func respond(channel: Channel, body: String, contentType: String, status: HTTPResponseStatus = .ok) async throws {
+		var head = HTTPResponseHead(version: .http1_1, status: status)
 		head.headers.replaceOrAdd(name: "Content-Type", value: contentType)
 		head.headers.replaceOrAdd(name: "Content-Length", value: "\(body.utf8.count)")
 		head.headers.replaceOrAdd(name: "Connection", value: "close")
@@ -357,7 +357,7 @@ struct WebUIExample {
 	}
 
 	private func respond404(channel: Channel) async throws {
-		try await respond(channel: channel, body: "not found", contentType: "text/plain; charset=utf-8")
+		try await respond(channel: channel, body: "not found", contentType: "text/plain; charset=utf-8", status: .notFound)
 	}
 
 	private func respond405(channel: Channel) async throws {

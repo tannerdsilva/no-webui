@@ -363,6 +363,7 @@ final class ConnectionGateReleaser: ChannelInboundHandler {
 }
 
 struct SmokeApp {
+	static let smokeNonce = ProcessInfo.processInfo.environment["WEBUI_SMOKE_NONCE"]
 	let state: SmokeState
 	let router: EventRouter
 	let pageHTML: String
@@ -669,8 +670,8 @@ extension SmokeApp {
 		}
 	}
 
-	private func respond(channel: Channel, body: String, contentType: String) async throws {
-		var head = HTTPResponseHead(version: .http1_1, status: .ok)
+	private func respond(channel: Channel, body: String, contentType: String, status: HTTPResponseStatus = .ok) async throws {
+		var head = HTTPResponseHead(version: .http1_1, status: status)
 		head.headers.replaceOrAdd(name: "Content-Type", value: contentType)
 		head.headers.replaceOrAdd(name: "Content-Length", value: "\(body.utf8.count)")
 		head.headers.replaceOrAdd(name: "Connection", value: "close")
@@ -678,6 +679,11 @@ extension SmokeApp {
 		head.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
 		head.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
 		head.headers.replaceOrAdd(name: "Cache-Control", value: "no-store")
+		// when a gate spawned this server it checks its own nonce so it can
+		// never mistake a stale/foreign process for its child.
+		if let nonce = Self.smokeNonce {
+			head.headers.replaceOrAdd(name: "X-WebUI-Smoke-Nonce", value: nonce)
+		}
 		var buf = ByteBuffer()
 		buf.writeString(body)
 		// await the terminal write promise: the async channel writer does not
@@ -697,6 +703,9 @@ extension SmokeApp {
 		head.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
 		head.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
 		head.headers.replaceOrAdd(name: "Cache-Control", value: cacheControl)
+		if let nonce = Self.smokeNonce {
+			head.headers.replaceOrAdd(name: "X-WebUI-Smoke-Nonce", value: nonce)
+		}
 		var buf = ByteBuffer()
 		buf.writeBytes(bytes)
 		_ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.head(head))
@@ -705,7 +714,7 @@ extension SmokeApp {
 	}
 
 	private func respond404(channel: Channel) async throws {
-		try await respond(channel: channel, body: "not found", contentType: "text/plain; charset=utf-8")
+		try await respond(channel: channel, body: "not found", contentType: "text/plain; charset=utf-8", status: .notFound)
 	}
 
 	private func respond405(channel: Channel) async throws {

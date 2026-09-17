@@ -19,9 +19,17 @@ struct WebUISmokePlugin: CommandPlugin {
         let port = extractor.extractOption(named: "port").first ?? "9123"
         let base = "http://127.0.0.1:\(port)"
 
+        // identity nonce: the gate proves the responding server is its own
+        // child — a stale/foreign process that grabbed the port (or a from
+        // an earlier run) must fail the readiness probe, not pass it.
+        let nonce = UUID().uuidString
+
         let server = try context.tool(named: "WebUISmokeTest")
         let process = Process()
         process.executableURL = server.url
+        var env = ProcessInfo.processInfo.environment
+        env["WEBUI_SMOKE_NONCE"] = nonce
+        process.environment = env
         process.standardOutput = FileHandle.standardOutput
         process.standardError = FileHandle.standardError
         try process.run()
@@ -45,17 +53,19 @@ struct WebUISmokePlugin: CommandPlugin {
 
         var ready = false
         for _ in 0..<40 {
-            if let body = await GETBody(session, "\(base)/"), !body.isEmpty {
+            if let (body, headers) = await GETWithHeaders(session, "\(base)/"),
+               !body.isEmpty,
+               headerValue(headers, "X-WebUI-Smoke-Nonce") == nonce {
                 ready = true
                 break
             }
             try await Task.sleep(for: .milliseconds(250))
         }
         guard ready else {
-            Diagnostics.error("server did not become ready on :\(port) — run with --disable-sandbox")
+            Diagnostics.error("server did not become ready on :\(port) with the gate's own identity (stale server holds the port, or --disable-sandbox was forgotten) — kill any WebUISmokeTest and re-run")
             return
         }
-        ok("server ready on :\(port)")
+        ok("server ready on :\(port) (identity verified)")
 
         let cssSource = context.package.directoryURL
             .appendingPathComponent("designer/assets/design-system.css")
@@ -210,14 +220,17 @@ struct WebUISmokePlugin: CommandPlugin {
         }
     }
 
-    private func GETBody(_ session: URLSession, _ urlString: String) async -> Data? {
+    private func GET(_ session: URLSession, _ urlString: String) async -> Data? {
         guard let url = URL(string: urlString) else { return nil }
         return try? await session.data(from: url).0
     }
 
-    private func GET(_ session: URLSession, _ urlString: String) async -> Data? {
-        guard let url = URL(string: urlString) else { return nil }
-        return try? await session.data(from: url).0
+    /// case-insensitive header lookup (http header names are case-insensitive).
+    private func headerValue(_ headers: [String: String], _ name: String) -> String? {
+        for (key, value) in headers where key.caseInsensitiveCompare(name) == .orderedSame {
+            return value
+        }
+        return nil
     }
 
     private func GETWithHeaders(_ session: URLSession, _ urlString: String) async -> (Data, [String: String])? {

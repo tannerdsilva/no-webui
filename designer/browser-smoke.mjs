@@ -11,13 +11,17 @@
 // Writes a full-page screenshot to .smoke/browser.png. Exits non-zero on failure.
 //
 // Usage: node designer/browser-smoke.mjs
-//   (self-contained: builds, serves on :9123, checks in headless Chromium,
-//    screenshots to .smoke/browser.png, tears down. not a plugin verb —
-//    headless Chromium cannot run inside the plugin sandbox.)
+//   (self-contained: builds the server and the wasm client, serves on :9123,
+//    checks in headless Chromium, screenshots to .smoke/browser.png, tears
+//    down. sources the swiftly env for the wasm product automatically; a
+//    registered sdk that fails to build FAILS the gate, and without the sdk
+//    the two client probes are skipped loudly — never silently. not a plugin
+//    verb — headless Chromium cannot run inside the plugin sandbox.)
 
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
-import { tmpdir } from "node:os";
+import { mkdtempSync, rmSync, statSync } from "node:fs";
+import { randomUUID } from "node:crypto";
+import { tmpdir, homedir } from "node:os";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
@@ -28,6 +32,7 @@ const BASE = `http://127.0.0.1:${PORT}`;
 
 let pass = 0;
 let fail = 0;
+let skipped = 0;
 const ok = (m) => { pass++; console.log(`  PASS ${m}`); };
 const bad = (m) => { fail++; console.log(`  FAIL ${m}`); };
 
@@ -41,11 +46,25 @@ function run(cmd, args, opts = {}) {
   });
 }
 
-async function waitForServer(base, tries = 40) {
+// The wasm client product is part of the shipped surface, so a green
+// browser-smoke must exercise it. wasm builds need the swiftly-hosted
+// 6.4 sdk toolchain (the Xcode frontend cannot read its prebuilt modules
+// — see AGENTS.md), so the gate invokes the swiftly shim directly —
+// order-independent, unlike `source env.sh`, which no-ops when the dir
+// already sits late in PATH. without the sdk the two client probes are
+// skipped loudly; with it, a build failure FAILS the gate.
+async function swift(args) {
+  const shim = join(homedir() || "/", ".swiftly", "bin", "swift");
+  try { statSync(shim); return run(shim, args); }
+  catch { return run("swift", args); }
+}
+
+async function waitForServer(base, nonce, tries = 40) {
   for (let i = 0; i < tries; i++) {
     try {
       const r = await fetch(base + "/");
-      if (r.ok) return true;
+      // prove this is our own spawned server, not a stale process on the port
+      if (r.ok && r.headers.get("x-webui-smoke-nonce") === nonce) return true;
     } catch {}
     await new Promise((r) => setTimeout(r, 250));
   }
@@ -64,25 +83,37 @@ const binPath = await (async () => {
   return join(shown.out.trim(), "WebUISmokeTest");
 })();
 
-// Build the wasm client product when the wasm sdk is active, so the
-// client-mode hydration probe can run. without the sdk the probe is skipped.
-const hasWasmSdk = (await run("swift", ["sdk", "list"])).out.includes("swift-6.4.0-RELEASE_wasm");
+// Build the wasm client product so the client-mode probes can run. the
+// swiftly env is sourced by the swift() helper; without the sdk the probes
+// are skipped loudly (never silently). a registered sdk whose build fails
+// is a gate failure, not a skip: green must mean the client was exercised.
+const sdkOut = await swift(["sdk", "list"]);
+const hasWasmSdk = sdkOut.out.includes("swift-6.4.0-RELEASE_wasm");
 let wasmBuilt = false;
 if (hasWasmSdk) {
-  const wb = await run("swift", [
+  const wb = await swift([
     "build", "-c", "release", "--swift-sdk", "swift-6.4.0-RELEASE_wasm", "--product", "WebUIClient",
   ]);
-  wasmBuilt = wb.code === 0;
-  if (!wasmBuilt) { console.log(wb.out.slice(-300)); }
+  if (wb.code === 0) {
+    wasmBuilt = true;
+  } else {
+    console.log(wb.out.slice(-600));
+    bad("wasm client build failed with the sdk registered — client probes cannot run");
+  }
 }
 
 console.log("=== browser smoke test ===");
 console.log("starting server ...");
-const server = spawn(binPath, {}, { cwd: ROOT, stdio: ["ignore", "ignore", "ignore"] });
-const up = await waitForServer(BASE);
+const nonce = randomUUID();
+let server = null;
+// hard teardown on every exit path (including crashes from piped output):
+// the gate's own spawned server must never outlive the gate and poison
+// :9123 for the next run.
+process.on("exit", () => { if (server) { try { server.kill("SIGKILL"); } catch {} } });
+server = spawn(binPath, [], { cwd: ROOT, stdio: ["ignore", "ignore", "ignore"], env: { ...process.env, WEBUI_SMOKE_NONCE: nonce } });
+const up = await waitForServer(BASE, nonce);
 if (!up) {
-  bad("server did not become ready");
-  server.kill();
+  bad("server did not become ready with the gate's own identity (kill any WebUISmokeTest holding :9123 and re-run)");
   process.exit(1);
 }
 ok("server ready");
@@ -261,9 +292,26 @@ if (wasmBuilt) {
   const de = demoErrors.filter((t) => !/favicon/i.test(t));
   if (de.length === 0) ok("client-mode probe page has no console errors");
   else bad(`client-mode console errors: ${JSON.stringify(de)}`);
+  // chamber sanitizer parity: the same parse-and-strip the server runtime
+  // applies to inbound fragments must apply on the client path. <script> is
+  // removed, on* handlers and unsafe url-bearing attrs are neutralized, and
+  // safe content survives unchanged.
+  const scrubbed = await demo.evaluate(() => {
+    const inst = window.WebUIClient._sanitize;
+    return {
+      noScript: !inst('<div>x</div><script src="https://evil.test/e.js"></script>').includes('<script'),
+      noHandlers: !inst('<button onclick="alert(1)">x</button>').includes('onclick'),
+      unsafeHref: inst('<a href="jav&#x61;script:alert(1)">x</a>').includes('href=""') || !inst('<a href="javascript:alert(1)">x</a>').includes('javascript:'),
+      unsafeSrc: !inst('<img src="data:text/html,evil">').includes('data:'),
+      safeSurvives: inst('<p>ok <b>bold</b></p><a href="https://example.com">l</a>').includes('https://example.com'),
+    };
+  });
+  if (scrubbed.noScript && scrubbed.noHandlers && scrubbed.unsafeHref && scrubbed.unsafeSrc && scrubbed.safeSurvives) ok("chamber strips script/on*/unsafe urls and preserves safe markup");
+  else bad(`chamber sanitizer regressed: ${JSON.stringify(scrubbed)}`);
   await demo.close();
 } else {
-  console.log("  SKIP client-mode hydration probe (wasm sdk not active for this run)");
+  skipped++;
+  console.log("  SKIP client-mode hydration probe (wasm sdk not registered — install the swiftly swift-6.4.0-RELEASE_wasm sdk for full coverage)");
 }
 
 // 8. Local-search vertical in real chromium: the chamber boots the search page
@@ -331,12 +379,21 @@ if (wasmBuilt) {
   }
   await s.close();
 } else {
-  console.log("  SKIP local-search vertical probe (wasm sdk not active)");
+  skipped++;
+  console.log("  SKIP local-search vertical probe (wasm sdk not registered)");
 }
 
 await browser.close();
 server.kill();
 
-console.log(`\n=== summary: ${pass} passed, ${fail} failed ===`);
-console.log(fail === 0 ? "BROWSER SMOKE PASS" : "BROWSER SMOKE FAIL");
-process.exit(fail === 0 ? 0 : 1);
+console.log(`\n=== summary: ${pass} passed, ${fail} failed${skipped ? `, ${skipped} skipped` : ""} ===`);
+if (fail > 0) {
+  console.log("BROWSER SMOKE FAIL");
+  process.exit(1);
+} else if (skipped > 0) {
+  console.log(`BROWSER SMOKE PASS (${skipped} probe(s) SKIPPED — wasm sdk not registered, run with the swiftly swift-6.4.0-RELEASE_wasm sdk for full coverage)`);
+  process.exit(0);
+} else {
+  console.log("BROWSER SMOKE PASS");
+  process.exit(0);
+}

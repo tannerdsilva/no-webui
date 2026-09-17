@@ -311,6 +311,24 @@ func renderDashboard(state: AuthDemoState, auth: AuthContext, logoutToken: Strin
 /// runtime, native form POST, a synchronizer CSRF token, and a hardened CSP
 /// with `form-action 'self'` (the framework default only covers
 /// default/script/style/img/connect-src; auth pages add the rest explicitly).
+///
+/// the `.login*` classes are this page's own layout vocabulary (the design
+/// sheet deliberately has no rule for them — it ships in every page, and
+/// this is the only consumer). the layout is delivered as page-scoped
+/// rawStyles: centered card, full-width form rows, a soft-danger error
+/// panel. comment-free on purpose — the styles ship verbatim (the first law).
+let loginLayoutStyles = """
+.login { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: var(--space-4); }
+.login__card { width: 100%; max-width: 24rem; background: var(--color-bg-raised); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-card); box-shadow: var(--shadow-lg); padding: var(--space-8); }
+.login__card h1 { margin-bottom: var(--space-6); }
+.login__form { display: flex; flex-direction: column; gap: var(--space-4); }
+.login__form label { display: block; font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); color: var(--color-text); margin-bottom: var(--space-1); }
+.login__form input { width: 100%; }
+.login__form button { width: 100%; }
+.login__error { background: var(--color-danger-soft); border: var(--border-width) solid var(--color-danger); border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); margin-bottom: var(--space-5); font-size: var(--font-size-sm); color: var(--color-danger); }
+@media (max-width: 40rem) { .login__card { padding: var(--space-6); } }
+"""
+
 func renderLoginPage(error: String?, csrfToken: String) -> String {
 	let body = Div(class: "login") {
 		Div(class: "login__card") {
@@ -336,7 +354,8 @@ func renderLoginPage(error: String?, csrfToken: String) -> String {
 		// form-action + base-uri are meta-valid CSP directives; clickjacking
 		// control is delivered as an X-Frame-Options header on the response
 		// (frame-ancestors is header-only and inert in a meta element).
-		contentSecurityPolicy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; form-action 'self'; base-uri 'self'"
+		contentSecurityPolicy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; form-action 'self'; base-uri 'self'",
+		rawStyles: [loginLayoutStyles]
 	).render()
 }
 
@@ -802,18 +821,33 @@ struct WebUIAuthExample {
 	}
 
 	/// the router for a message presenting `token` on a session's socket, or
-	/// `nil` when the token is absent or unknown to this session — answered
-	/// with a redirect to /login and the socket closed. this is the
-	/// cross-session replay gate: a stale page from another (or a former)
-	/// session's render can never present a token this session minted.
+	/// `nil` when the token is absent or unknown to this session. a token this
+	/// session minted but LRU-evicted resolves through the registry's forward
+	/// chain and the page is handed the live token as an in-place `token`
+	/// refresh — no reload, no login kick. a genuinely foreign/forged token
+	/// never resolves; a *valid* session that has lost all router entries
+	/// reloads the page (fresh render + fresh token), and a gone session
+	/// (expired/logged out/foreign) is sent to /login. the socket closes only
+	/// on the reject paths: nothing unknown is ever routed.
 	private func boundRouter(token: String?, tokenHash: [UInt8]?, outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>) async -> EventRouter? {
-		guard let tokenHash, let token,
-		      let router = routers.router(forTokenHash: tokenHash, renderToken: token) else {
+		guard let tokenHash else {
 			try? await writeJSON(WSOutgoing.redirect(url: "/login", replace: true), outbound: outbound)
 			try? await writeClose(outbound: outbound)
 			return nil
 		}
-		return router
+		if let token, let hit = routers.resolve(forTokenHash: tokenHash, renderToken: token) {
+			if hit.needsRefresh {
+				try? await writeJSON(WSOutgoing.token(hit.liveToken), outbound: outbound)
+			}
+			return hit.router
+		}
+		if await sessionExists(tokenHash) {
+			try? await writeJSON(WSOutgoing.redirect(url: "/", replace: true), outbound: outbound)
+		} else {
+			try? await writeJSON(WSOutgoing.redirect(url: "/login", replace: true), outbound: outbound)
+		}
+		try? await writeClose(outbound: outbound)
+		return nil
 	}
 
 	/// `true` when the session behind `tokenHash` still exists and is
@@ -905,11 +939,11 @@ struct WebUIAuthExample {
 			// single-use store past capacity, locking out other logins.
 			let ipKey = "ip:\(peerIP)"
 			guard loginPageThrottle.record(ipKey) else {
-				return try await loginResponse(channel: channel, status: .tooManyRequests, headers: [("Retry-After", "60")], body: "too many login pages — try again later")
+				return try await loginResponse(channel: channel, status: .tooManyRequests, headers: [("Content-Type", "text/plain; charset=utf-8"), ("Retry-After", "60")], body: "too many login pages — try again later")
 			}
 			let token = try CSRFProtection.token(for: "login", secret: csrfSecret)
 			guard await loginTokenStore.reserve(token, expiresAt: CSRFProtection.expiry(of: token) ?? Date().timeIntervalSince1970, key: ipKey) else {
-				return try await loginResponse(channel: channel, status: .tooManyRequests, headers: [("Retry-After", "60")], body: "too many outstanding login forms — submit one first")
+				return try await loginResponse(channel: channel, status: .tooManyRequests, headers: [("Content-Type", "text/plain; charset=utf-8"), ("Retry-After", "60")], body: "too many outstanding login forms — submit one first")
 			}
 			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/html; charset=utf-8")], body: renderLoginPage(error: nil, csrfToken: token))
 		case (.POST, "/login"):
@@ -924,9 +958,9 @@ struct WebUIAuthExample {
 			try await handleIndex(head: head, channel: channel)
 		case (_, "/ws"):
 			// the upgrade path handles this; reaching here means no upgrade.
-			try await loginResponse(channel: channel, status: .notFound, headers: [], body: "not found")
+			try await loginResponse(channel: channel, status: .notFound, headers: [("Content-Type", "text/plain; charset=utf-8")], body: "not found")
 		default:
-			try await loginResponse(channel: channel, status: .notFound, headers: [], body: "not found")
+			try await loginResponse(channel: channel, status: .notFound, headers: [("Content-Type", "text/plain; charset=utf-8")], body: "not found")
 		}
 	}
 
@@ -936,7 +970,7 @@ struct WebUIAuthExample {
 			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/html; charset=utf-8")], body: renderLoginPage(error: message, csrfToken: token))
 		}
 		func tooMany(_ message: String) async throws {
-			try await loginResponse(channel: channel, status: .tooManyRequests, headers: [("Retry-After", "60")], body: message)
+			try await loginResponse(channel: channel, status: .tooManyRequests, headers: [("Content-Type", "text/plain; charset=utf-8"), ("Retry-After", "60")], body: message)
 		}
 
 		// the only accepted encoding is the browser's urlencoded form POST.

@@ -51,10 +51,60 @@ all notable changes to this project are documented here.
 
 ### fixed
 
+- gate integrity: `browser-smoke` self-resolves the swiftly-hosted wasm toolchain
+  (invoking `~/.swiftly/bin/swift` directly — order-independent, unlike
+  `source env.sh`) so its client-mode probes run instead of silently
+  self-skipping; a registered sdk whose build fails is now a gate failure, and
+  sdk-less runs label their skips in the summary instead of claiming a full pass.
+- gate identity: the smoke/fullstack/browser gates mint a per-run nonce
+  (`WEBUI_SMOKE_NONCE`) that the server reflects on every response
+  (`X-WebUI-Smoke-Nonce`); the readiness probe requires it, so a stale or
+  foreign process holding the port fails the gate loudly instead of
+  false-passing. the browser gate also hard-kills its spawned server on every
+  exit path so a failed or truncated run cannot orphan it on :9123.
+- asset plugin now fails the build when `designer/assets/` is missing or empty
+  instead of warning and letting a stale/empty embed ship.
+- render-token replay gate: a token this session minted but LRU-evicted now
+  resolves through a bounded forward chain and the page is handed the live
+  token as an in-place `token` refresh over its existing socket — no reload,
+  no logout. a genuinely foreign/forged token still fails resolution (the
+  cross-session gate stays intact); a reload is now only the fallback for a
+  valid session whose router entries have all been swept.
+- the wasm chamber now runs the same parse-and-strip fragment sanitizer as the
+  server runtime on every fragment write (`applyUpdates`/`setInnerHTML`),
+  closing the client-path sanitization gap.
 - dark-theme accent-text contrast and the designer-preview layout.
 - page shell + form-control theming across the design system (polish pass).
+- the default `title` was `"WebUI UI"` (a stutter) in both `HTMLDocument` and
+  `WebUIDocument`; it is now `"WebUI"`, so a document that omits `title` no
+  longer ships a doubled brand in the tab. the showcase's own title/heading
+  ("WebUI UI Showcase") is corrected to "WebUI Showcase".
+- documents now emit a branded tab icon: a 32 px accent-tile/window glyph
+  inlined as a `data:` uri in the head (the framework csp already permits
+  `img-src data:`), so a host that serves no `/favicon.ico` still gets a
+  branded tab and the browser no longer logs a favicon 404 on page load.
+  `HTMLDocument(icon:)` accepts a custom `<link>` or an empty string to
+  suppress.
+- `WebUIDocument` gains `rawStyles:` — page-scoped styles appended after the
+  design sheet, used by the login page, whose `.login`/`.login__card`/
+  `.login__form` classes had no rules and rendered as an ungrouped form row
+  at the top-left of the page. the login screen is now a centered raised card
+  with a full-width form column.
+- the auth example's throttled (`429`) and not-found (`404`) text responses
+  now send `Content-Type: text/plain; charset=utf-8`; without it the browser
+  mis-decoded the em dash and painted a bare mojibake page.
+- `respond404` in the example and smoke servers returned http 200 with a
+  "not found" body; it now returns `404`.
 
 ### changed
+
+- client transport wiring: the chamber opens a WebSocket when the boot config
+  declares a `wsUrl`, forwards events through it (echoing the render token),
+  and routes inbound server `update`/`redirect`/`reload` frames — `update`
+  frames advance the sync ledger via the new `webui_apply_seq` export before
+  applying their (sanitized) fragments. `wsSend` with no open transport
+  now warns once instead of silently dropping. the local demos stay silent
+  (`wsSent === 0`): they ship no `wsUrl`.
 
 - icon stroke style tightened: `WebUIIcon` / `WebUIIconCustom` / the preview
   generator now emit `stroke-linecap="butt"` + `stroke-linejoin="miter"`

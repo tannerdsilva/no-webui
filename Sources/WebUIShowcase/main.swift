@@ -43,7 +43,7 @@ if let generateIndex = CommandLine.arguments.firstIndex(of: "--generate"),
         .childChannelOption(ChannelOptions.maxMessagesPerRead, value: 1)
 
     let channel = try await bootstrap.bind(host: "0.0.0.0", port: port).get()
-    logger.info("WebUI UI Showcase running at http://localhost:\(port)")
+    logger.info("WebUI Showcase running at http://localhost:\(port)")
 
     try await channel.closeFuture.get()
     try await eventLoopGroup.shutdownGracefully()
@@ -51,9 +51,14 @@ if let generateIndex = CommandLine.arguments.firstIndex(of: "--generate"),
 
 // MARK: - Page Rendering
 func renderShowcase() -> String {
+    // the showcase is a static design reference — no interactive component
+    // registers a handler, so the js runtime is suppressed. shipping it would
+    // open a websocket the showcase server cannot upgrade (the handler has no
+    // /ws route), logging a failed-handshake console error on every page load.
     let doc = WebUIDocument(
-        title: "WebUI UI Showcase",
-        body: ShowcasePage().render()
+        title: "WebUI Showcase",
+        body: ShowcasePage().render(),
+        includeRuntime: false
     )
     return doc.render()
 }
