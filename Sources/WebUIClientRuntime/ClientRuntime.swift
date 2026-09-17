@@ -12,15 +12,15 @@ import Synchronization
 /// is a no-op on the host — this entry is wasm-only in practice; pure-logic
 /// specs exercise `boot()` and the router directly.
 public enum ClientRuntime {
-	nonisolated(unsafe) private static let counterBox = Mutex(0)
-	nonisolated(unsafe) private static let queryBox = Mutex("")
-	nonisolated(unsafe) private static let sortBox = Mutex((column: 0, ascending: true))
-	nonisolated(unsafe) private static let selectedBox = Mutex(Set<String>())
-	nonisolated(unsafe) private static let expandedBox = Mutex(Set<String>())
-	nonisolated(unsafe) private static let selectedCategoryBox = Mutex<String?>(nil)
-	nonisolated(unsafe) private static let emailBox = Mutex("")
-	nonisolated(unsafe) private static let emailValidityBox = Mutex<String?>(nil)
-	nonisolated(unsafe) private static let authBox = Mutex(AuthStateMirror.anonymous)
+	private static let counterBox = Mutex(0)
+	private static let queryBox = Mutex("")
+	private static let sortBox = Mutex((column: 0, ascending: true))
+	private static let selectedBox = Mutex(Set<String>())
+	private static let expandedBox = Mutex(Set<String>())
+	private static let selectedCategoryBox = Mutex<String?>(nil)
+	private static let emailBox = Mutex("")
+	private static let emailValidityBox = Mutex<String?>(nil)
+	private static let authBox = Mutex(AuthStateMirror.anonymous)
 	nonisolated(unsafe) public private(set) static var router = EventRouter()
 	nonisolated(unsafe) public private(set) static var bootPageHTML = ""
 
@@ -34,14 +34,14 @@ public enum ClientRuntime {
 	nonisolated(unsafe) public static var sync = ClientSyncCoordinator(renderToken: "")
 
 	/// the observability ring (p5-t5); drained by the transport owner.
-	nonisolated(unsafe) public static let telemetry = ClientTelemetry()
+	public static let telemetry = ClientTelemetry()
 
 	/// the optimistic-patch ledger (p5-t1): local patches are sequenced
 	/// through `sync` and tracked here until the authority confirms.
-	nonisolated(unsafe) public static let ledger = ClientPatchLedger()
+	public static let ledger = ClientPatchLedger()
 
 	/// email validation rules for the vertical's form field (p5-t2).
-	nonisolated(unsafe) public static let emailValidator = ClientFieldValidator(rules: [.required, .email])
+	public static let emailValidator = ClientFieldValidator(rules: [.required, .email])
 
 	/// the read-only session-presence mirror (advisory ui gating only, d4).
 	public static var authMirror: AuthStateMirror {
@@ -85,7 +85,7 @@ public enum ClientRuntime {
 	nonisolated(unsafe) public private(set) static var nameIndex = ClientPrefixIndex()
 
 	private static func buildNameIndex() -> ClientPrefixIndex {
-		var index = ClientPrefixIndex()
+		let index = ClientPrefixIndex()
 		for record in searchRecords {
 			index.insert(record.name)
 		}
