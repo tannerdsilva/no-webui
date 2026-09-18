@@ -13,6 +13,7 @@ window.WebUIRuntime = (function () {
     debounceMaxWaitMs: 1000,
     optimisticSettleMs: 5000,
     logLevel: 'warn',
+    renderToken: null,
   };
 
   var LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3, silent: 4 };

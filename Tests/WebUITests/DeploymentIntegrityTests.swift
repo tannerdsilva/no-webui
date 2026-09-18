@@ -227,6 +227,21 @@ func runtimeRouterLoggerInScope() {
 	#expect(js.contains("if (msg.token) config.renderToken = msg.token"), "runtime lost the in-place render-token refresh handler")
 }
 
+@Test("runtime preserves the server-minted render token in init")
+func runtimeInitPreservesRenderToken() {
+	let js = WebUIAssets.js
+	// `init` builds `config` by copying only the keys named in `DEFAULTS`.
+	// the server mints a per-render token into the bootstrap config; if it is
+	// not listed in `DEFAULTS`, `init` silently drops it and every subsequent
+	// ping/event goes out tokenless — the token-gated server then redirects
+	// the page and closes the socket (a logged-in user bounced to /chat after
+	// idling). pin the key so the whitelist cannot regress.
+	#expect(
+		js.contains("renderToken: null"),
+		"renderToken missing from the init() DEFAULTS whitelist — the bootstrap render token would be dropped and the token-gated server would close the socket"
+	)
+}
+
 @Test("runtime applies optimistic predictions before sending the event")
 func runtimeAppliesOptimisticPredictions() {
 	let js = WebUIAssets.js
