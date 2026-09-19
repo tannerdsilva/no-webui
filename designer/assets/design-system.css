@@ -2146,6 +2146,8 @@ code, .inline-code {
   border-inline-start: var(--border-width) solid var(--color-border);
 }
 .tree__node:not(.tree__node--open) > .tree__children { display: none; }
+.tree--interactive .tree__row { cursor: pointer; }
+.tree--interactive .tree__row > * { pointer-events: none; }
 
 .tree .checkbox__box { --cb-size: 0.95rem; }
 

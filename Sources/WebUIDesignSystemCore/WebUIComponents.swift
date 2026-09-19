@@ -1399,16 +1399,28 @@ public struct WebUITree: View {
     public let id: String?
     public let expanded: Set<String>
     public let selected: String?
+    public let onToggle: EventHandler?
 
-    public init(nodes: [Node], id: String? = nil, expanded: Set<String> = [], selected: String? = nil) {
+    public init(nodes: [Node], id: String? = nil, expanded: Set<String> = [], selected: String? = nil, onToggle: EventHandler? = nil) {
         self.nodes = nodes
         self.id = id
         self.expanded = expanded
         self.selected = selected
+        self.onToggle = onToggle
     }
 
     public func render() -> String {
-        var html = "<div class=\"tree\">"
+        let interactive = onToggle != nil && id != nil
+        var html = interactive
+            ? "<div class=\"tree tree--interactive\""
+            : "<div class=\"tree\""
+        if let id = id {
+            html += " id=\"" + htmlEscape(id) + "\""
+        }
+        if onToggle != nil, let id = id {
+            html += controlAttributes(id: id, event: .click, handler: onToggle)
+        }
+        html += ">"
         for node in nodes { html += renderNode(node) }
         html += "</div>"
         return html

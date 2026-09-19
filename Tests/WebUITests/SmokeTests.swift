@@ -1685,6 +1685,20 @@ struct CompanionPrimitiveTests {
         #expect(validateTagBalance(html))
     }
 
+    @Test("WebUITree interactive toggle emits routing markers")
+    func treeInteractiveWiring() {
+        let html = WebUITree(
+            nodes: [WebUITree.Node(id: "a", label: "A", children: [WebUITree.Node(id: "b", label: "B")])],
+            id: "wt",
+            onToggle: { _ in [] }
+        ).render()
+        #expect(html.contains("tree tree--interactive"))
+        #expect(html.contains("data-component-id=\"wt\""))
+        #expect(html.contains("data-event=\"click\""))
+        #expect(html.contains("id=\"wt-node-a\""))
+        #expect(validateTagBalance(html))
+    }
+
     @Test("WebUIBreadcrumb collapses long trails and marks current")
     func breadcrumb() {
         let items = (1...6).map { WebUIBreadcrumb.Item("Step \($0)", href: "/s\($0)") }
