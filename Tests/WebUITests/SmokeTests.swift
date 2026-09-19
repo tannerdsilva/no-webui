@@ -915,6 +915,30 @@ struct ModifierChainTests {
         let html = Text("Rounded").cornerRadius("8px").render()
         #expect(html.contains("border-radius: 8px"))
     }
+
+    @Test("fill() emits flex-grow, min-size floors, and cross-axis stretch")
+    func fillModifier() {
+        let html = Text("Fill").fill().render()
+        #expect(html.contains("flex: 1 1 0%"))
+        #expect(html.contains("min-width: 0"))
+        #expect(html.contains("min-height: 0"))
+        #expect(html.contains("align-self: stretch"))
+    }
+
+    @Test("stretch() emits cross-axis stretch without flex-grow")
+    func stretchModifier() {
+        let html = Text("Stretch").width("220px").stretch().render()
+        #expect(html.contains("align-self: stretch"))
+        #expect(html.contains("min-width: 0"))
+        #expect(!html.contains("flex: 1"))
+        #expect(html.contains("width: 220px"))
+    }
+
+    @Test("style() emits an arbitrary declaration")
+    func styleModifier() {
+        let html = Text("Rule").style("border-bottom", "1px solid var(--color-border)").render()
+        #expect(html.contains("border-bottom: 1px solid var(--color-border)"))
+    }
 }
 
 // MARK: - 6. Layout Structural Tests

@@ -98,6 +98,11 @@ all notable changes to this project are documented here.
 
 ### changed
 
+- `WebUIComposer` sends on **Enter** (Shift+Enter for a newline): a plain
+  Enter inside a `form.composer` textarea now submits the composer (via
+  `form.requestSubmit()`, the same path as the send button) instead of
+  inserting a newline. runtime behavior only — no markup/CSS change; pinned
+  by `runtimeComposerEnterSubmits`.
 - client transport wiring: the chamber opens a WebSocket when the boot config
   declares a `wsUrl`, forwards events through it (echoing the render token),
   and routes inbound server `update`/`redirect`/`reload` frames — `update`

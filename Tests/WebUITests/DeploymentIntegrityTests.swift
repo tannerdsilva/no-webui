@@ -66,6 +66,13 @@ func runtimeStringifiesKeydownModifiers() throws {
 	#expect(js.contains("String(event.metaKey)"), "runtime sends metaKey as a JS boolean; Swift decode would reject the event")
 }
 
+@Test("composer submits on Enter; Shift+Enter inserts a newline")
+func runtimeComposerEnterSubmits() throws {
+	let js = WebUIAssets.js
+	#expect(js.contains("closest('form.composer')"), "runtime lost the composer detection for Enter-to-send (Enter would just insert a newline)")
+	#expect(js.contains("requestSubmit"), "runtime lost the composer Enter submit path (Enter would never send the message)")
+}
+
 @Test("an empty fragment html removes the element (ElementRef.remove() contract)")
 func runtimeEmptyFragmentRemovesElement() throws {
 	let js = WebUIAssets.js

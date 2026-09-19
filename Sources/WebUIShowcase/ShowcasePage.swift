@@ -777,6 +777,82 @@ struct ShowcasePage {
                     }
                 }
 
+                // 9b. Shell Components
+                section("Shell Components", "shell") {
+                    VStack(spacing: 16) {
+                        Heading("App-frame shell building blocks", level: .h2)
+
+                        demoCard("WebUISidebar — full + rail") {
+                            VStack(alignment: .leading, spacing: 12) {
+                                WebUISidebar(
+                                    items: [
+                                        WebUISidebarItem(id: "chat", label: "Chat", icon: .bot, badge: "4"),
+                                        WebUISidebarItem(id: "bots", label: "Bots", icon: .users),
+                                        WebUISidebarItem(id: "settings", label: "Settings", icon: .settings),
+                                    ],
+                                    activeID: "chat",
+                                    id: "showcase-sidebar",
+                                    header: "Navigation"
+                                )
+                                WebUISidebar(
+                                    items: [
+                                        WebUISidebarItem(id: "chat", label: "Chat", icon: .bot),
+                                        WebUISidebarItem(id: "bots", label: "Bots", icon: .users),
+                                        WebUISidebarItem(id: "settings", label: "Settings", icon: .settings),
+                                    ],
+                                    activeID: "bots",
+                                    id: "showcase-rail",
+                                    style: .rail
+                                )
+                            }
+                        }
+
+                        demoCard("WebUISegmentedControl") {
+                            WebUISegmentedControl(
+                                items: [
+                                    WebUISegmentedItem(id: "sessions", label: "Sessions", count: 3),
+                                    WebUISegmentedItem(id: "cli", label: "CLI", count: 0),
+                                ],
+                                selectedID: "sessions",
+                                id: "showcase-segmented"
+                            )
+                        }
+
+                        demoCard("WebUISearchField") {
+                            WebUISearchField(placeholder: "Filter conversations…", id: "showcase-search")
+                        }
+
+                        demoCard("WebUIListView") {
+                            WebUIListView(
+                                items: [
+                                    WebUIListItem(id: "one", title: "ARC Agent", subtitle: "local", icon: .bot),
+                                    WebUIListItem(id: "two", title: "Qwen 3.8", subtitle: "@qwen", meta: "7m", icon: .users),
+                                ],
+                                selectedID: "one",
+                                id: "showcase-list"
+                            )
+                        }
+
+                        demoCard("WebUIComposer") {
+                            WebUIComposer(placeholder: "Message…", inputID: "showcase-input", id: "showcase-composer")
+                        }
+
+                        demoCard("WebUIPanel") {
+                            WebUIPanel(title: "Workspace", subtitle: "2", edge: .leading) {
+                                WebUISearchField(placeholder: "Filter…", id: "showcase-panel-search")
+                                WebUITree(
+                                    nodes: [WebUITree.Node(id: "a", label: "arc-agent", icon: .folder, children: [
+                                        WebUITree.Node(id: "s", label: "Sources", icon: .folder, children: [
+                                            WebUITree.Node(id: "f", label: "main.swift", icon: .fileText),
+                                        ]),
+                                    ])],
+                                    expanded: ["a", "s"]
+                                )
+                            }
+                        }
+                    }
+                }
+
                 // 10. Event Handling
                 section("Event Handling", "events") {
                     VStack(spacing: 16) {

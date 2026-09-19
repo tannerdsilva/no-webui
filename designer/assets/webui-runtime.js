@@ -233,6 +233,20 @@ window.WebUIRuntime = (function () {
     }
 
     function handleEvent(event) {
+      if (event.type === 'keydown' && event.key === 'Enter' && !event.shiftKey) {
+        var editTarget = event.target;
+        if (editTarget && editTarget.tagName === 'TEXTAREA' && editTarget.closest('form.composer')) {
+          event.preventDefault();
+          var form = editTarget.closest('form.composer');
+          if (typeof form.requestSubmit === 'function') {
+            form.requestSubmit();
+          } else {
+            form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }));
+          }
+          return;
+        }
+      }
+
       var componentEl = findComponent(event);
       if (!componentEl) return;
 

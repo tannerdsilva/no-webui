@@ -40,6 +40,11 @@ is a `TEXTAREA` or `contentEditable` (newlines keep working) or the component
 declares `data-prevent-enter="false"` (settable from swift via
 `.attribute("data-prevent-enter", "false")`).
 
+within a `form.composer`, a plain Enter instead **submits the composer**
+(calls `form.requestSubmit()`, the same path the send button uses) so the
+message sends on Enter; **Shift+Enter** is left alone and inserts a newline.
+an empty-composer Enter is a no-op server-side.
+
 **Mounting:** adds a single event listener on `document` for each event type
 (event delegation pattern). filters to the nearest element carrying
 `data-component-id`. `findComponent` walks `composedPath()` (capped at 20

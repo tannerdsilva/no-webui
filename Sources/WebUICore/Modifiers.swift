@@ -96,6 +96,12 @@ extension View {
     public func maxWidth(_ width: String) -> ModifiedView<Self, InlineStyle> {
         ModifiedView(content: self, modifier: InlineStyle(.maxWidth, width))
     }
+    public func minWidth(_ width: String) -> ModifiedView<Self, InlineStyle> {
+        ModifiedView(content: self, modifier: InlineStyle(.custom("min-width"), width))
+    }
+    public func minHeight(_ height: String) -> ModifiedView<Self, InlineStyle> {
+        ModifiedView(content: self, modifier: InlineStyle(.custom("min-height"), height))
+    }
 
     // MARK: - Layout
     public func display(_ display: String) -> ModifiedView<Self, InlineStyle> {
@@ -103,6 +109,45 @@ extension View {
     }
     public func flex(_ flex: String) -> ModifiedView<Self, InlineStyle> {
         ModifiedView(content: self, modifier: InlineStyle(.flex, flex))
+    }
+
+    // MARK: - Fill
+    /// make this view occupy all remaining space of a flex/grid parent: grow
+    /// on the main axis, shrink below content size, stretch across the cross
+    /// axis, and drop the flex min-size floors so a large child (a textarea,
+    /// a table) scrolls the parent instead of blowing it open.
+    /// the layout primitives (`VStack`, `HStack`, `ScrollView`) are
+    /// content-sized by default — this is the explicit opt-in to filling.
+    public func fill() -> ModifiedView<Self, AnyViewModifier> {
+        ModifiedView(
+            content: self,
+            modifier: AnyViewModifier(
+                InlineStyle(.flex, "1 1 0%")
+                    .andThen(InlineStyle(.custom("min-width"), "0"))
+                    .andThen(InlineStyle(.custom("min-height"), "0"))
+                    .andThen(InlineStyle(.custom("align-self"), "stretch"))
+            )
+        )
+    }
+
+    /// stretch across the parent's cross axis without growing on the main
+    /// axis — the fixed-size counterpart of ``fill()`` (a 220px sidebar that
+    /// still spans the row's full height, a header bar that spans the width).
+    public func stretch() -> ModifiedView<Self, AnyViewModifier> {
+        ModifiedView(
+            content: self,
+            modifier: AnyViewModifier(
+                InlineStyle(.custom("align-self"), "stretch")
+                    .andThen(InlineStyle(.custom("min-width"), "0"))
+                    .andThen(InlineStyle(.custom("min-height"), "0"))
+            )
+        )
+    }
+
+    /// a single arbitrary css declaration — the escape hatch for properties
+    /// the named modifiers don't cover (`border-bottom`, `z-index`, …).
+    public func style(_ property: String, _ value: String) -> ModifiedView<Self, InlineStyle> {
+        ModifiedView(content: self, modifier: InlineStyle(.custom(property), value))
     }
 
     // MARK: - Borders
