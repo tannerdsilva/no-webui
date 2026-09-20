@@ -1,6 +1,6 @@
 # no-webui — Public API Surface Audit, Frontend Interaction Map, and WebAssembly Rearchitecture Trajectory
 
-_author: swift-dev (hermes agent) · date: 2026-09-15 · project: `no-webui` (this checkout) · status: design/plan — no code changed, nothing committed_
+_author: swift-dev (hermes agent) · date: 2026-09-20 · project: `no-webui` (this checkout) · status: design executed — phases 0–6 partially delivered. the plan below is the reference for what ships; the committed wasm work is tracked in `git log` under `feat(wasm):` (P3/P4/P5 tasks landed through 2026-09-20). the remaining post-1.0 scope is phase 6 (size diet + per-SKU distribution) — see `STABILITY.md`._
 
 ## 0. Executive summary
 

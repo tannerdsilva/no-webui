@@ -178,7 +178,7 @@ final class AuthIdleCloseHandler: ChannelInboundHandler {
 	}
 }
 
-// MARK: - Demo state (per-process interactive model, like WebUIExample)
+// MARK: - Demo state (per-session interactive model)
 
 final class AuthDemoState: Sendable {
 	private struct Values {
@@ -199,6 +199,52 @@ final class AuthDemoState: Sendable {
 	var echo: String {
 		get { values.withLock { $0.echo } }
 		set { values.withLock { $0.echo = newValue } }
+	}
+}
+
+/// per-session interactive state containers. each authenticated session gets
+/// its own counter/progress/echo — the isolation a real consumer needs (one
+/// session's state must never leak into another tab's or user's view). states
+/// are created on first dashboard render, dropped on logout or when the
+/// maintenance sweep finds the session gone, and the total set is bounded so
+/// a session flood cannot grow memory without limit.
+actor SessionStates {
+	/// the largest number of live per-session states the demo retains; the
+	/// oldest is evicted beyond this (each state is tiny, so even the cap is
+	/// modest — the bound is about unbounded set growth, not memory).
+	static let maxStates = 256
+
+	private var states: [[UInt8]: AuthDemoState] = [:]
+	private var order: [[UInt8]] = []
+
+	/// the state for `sessionID`, creating it on first request. creation is
+	/// cheap and idempotent per session id; eviction is oldest-first.
+	func state(for sessionID: [UInt8]) -> AuthDemoState {
+		if let existing = states[sessionID] {
+			return existing
+		}
+		let fresh = AuthDemoState()
+		states[sessionID] = fresh
+		order.append(sessionID)
+		while order.count > Self.maxStates {
+			let evicted = order.removeFirst()
+			states.removeValue(forKey: evicted)
+		}
+		return fresh
+	}
+
+	func remove(sessionID: [UInt8]) {
+		states.removeValue(forKey: sessionID)
+		order.removeAll { $0 == sessionID }
+	}
+
+	/// drop every state whose session no longer exists (called by the
+	/// maintenance sweep after the store purge).
+	func prune(keeping live: Set<[UInt8]>) {
+		let dead = states.keys.filter { !live.contains($0) }
+		for id in dead {
+			remove(sessionID: id)
+		}
 	}
 }
 
@@ -418,7 +464,7 @@ struct WebUIAuthExample {
 	static let demoUsername = "admin"
 	static let demoPassword = "password"
 
-	let state: AuthDemoState
+	let sessionStates: SessionStates
 	let sessionStore: InMemoryAuthSessionStore
 	let csrfSecret: String
 	let adminPasswordRecord: PasswordRecord
@@ -582,7 +628,7 @@ struct WebUIAuthExample {
 		argonPool.start()
 		let connectionGate = ConnectionGate(maximum: Self.intFlag(named: "--max-connections", default: 256))
 		let example = WebUIAuthExample(
-			state: AuthDemoState(),
+			sessionStates: SessionStates(),
 			sessionStore: InMemoryAuthSessionStore(),
 			csrfSecret: csrfSecret,
 			adminPasswordRecord: record,
@@ -734,6 +780,9 @@ struct WebUIAuthExample {
 			if !(await sessionExists(hash)) {
 				routers.remove(forTokenHash: hash)
 			}
+		}
+		if let live = try? await sessionStore.listSessions(for: Self.demoUsername) {
+			await sessionStates.prune(keeping: Set(live.map { $0.id }))
 		}
 	}
 
@@ -1082,6 +1131,7 @@ struct WebUIAuthExample {
 			if let session = try? await sessionStore.find(tokenHash: tokenHash) {
 				try? await sessionStore.invalidate(id: session.id)
 				routers.remove(forTokenHash: tokenHash)
+				await sessionStates.remove(sessionID: session.id)
 				// teardown: close every live socket bound to this session now,
 				// not on the next client event. the per-event liveness check
 				// remains as the backstop for sockets opened during the race.
@@ -1114,7 +1164,7 @@ struct WebUIAuthExample {
 			throw SessionToken.TokenError.entropyUnavailable
 		}
 		let renderToken = Base64.encodeURL(renderTokenBytes)
-		let (html, router) = renderDashboard(state: state, auth: auth, logoutToken: logoutToken, renderToken: renderToken)
+		let (html, router) = renderDashboard(state: await sessionStates.state(for: session.id), auth: auth, logoutToken: logoutToken, renderToken: renderToken)
 		routers.set(router, forTokenHash: try SessionToken.hash(token), renderToken: renderToken)
 		try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/html; charset=utf-8")], body: html)
 	}

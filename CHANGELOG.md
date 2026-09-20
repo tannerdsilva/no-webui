@@ -2,7 +2,27 @@
 
 all notable changes to this project are documented here.
 
-## [unreleased]
+## [1.0.0] — stability epoch (2026-09-20)
+
+### stability epoch
+
+- `Documentation/STABILITY.md` — semantic-versioning policy, the frozen
+  consumer surface (enforced by `Tests/WebUITests/APISurfaceTests.swift`:
+  compile-time initializer pins + render-contract assertions), deprecation
+  rule (one full minor), and the honest known limitations (session caps are
+  deployment policy; the wasm client runtime does not mirror the JS
+  runtime's keyboard affordances; modal focus trapping pending; charts
+  youngest).
+- `WebUIAuthExample`: per-session interactive state containers (`SessionStates`
+  — bounded, purged on logout/expiry by the sweep); ceremony test proving two
+  authenticated sessions get independent state.
+- modal `Escape`-to-dismiss in `webui-runtime.js` — the dismiss control is
+  activated through the normal routed-click path (verified against a live
+  server; no console errors).
+- wasm trajectory status corrected: phases 0–6 executed in `dev` (P3/P4/P5
+  landed), phase 6 (size diet + per-SKU distribution) declared post-1.0.
+- docs made application-type agnostic and the webui-design-system skill
+  dropped its chat-streaming knowledge at the owner's request.
 
 ### added
 

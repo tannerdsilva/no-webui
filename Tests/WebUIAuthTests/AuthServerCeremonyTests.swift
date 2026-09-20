@@ -249,6 +249,39 @@ struct AuthServerCeremonyTests {
 		}
 	}
 
+	@Test("two authenticated sessions get independent state containers")
+	func perSessionStateIsIsolated() async throws {
+		try await withServer { server in
+			let cookieA = try #require(try logIn(server: server))
+			let cookieB = try #require(try logIn(server: server))
+			let headerA = "auth=\(cookieA)"
+			let headerB = "auth=\(cookieB)"
+
+			let dashA = try httpRequest(port: server.port, path: "/", headers: [("cookie", headerA)])
+			let dashB = try httpRequest(port: server.port, path: "/", headers: [("cookie", headerB)])
+			#expect(dashA.status == 200)
+			#expect(dashB.status == 200)
+			let beforeA = try #require(extractCounter(dashA.body))
+			let beforeB = try #require(extractCounter(dashB.body))
+			#expect(beforeA == beforeB)
+
+			// drive one routed click on session A's socket; A's state moves,
+			// B's container is untouched.
+			let renderToken = try #require(extractRenderToken(dashA.body))
+			let componentID = try #require(extractComponentID(dashA.body))
+			let upgraded = try wsUpgrade(port: server.port, cookie: headerA)
+			let socket = try #require(upgraded.socket)
+			let click = #"{"type":"event","component":"\#(componentID)","event":"click","data":{},"token":"\#(renderToken)"}"#
+			try wsSendText(socket, click)
+			#expect(try readUpdateFrame(socket, timeout: 3))
+
+			let afterA = try #require(extractCounter(try httpRequest(port: server.port, path: "/", headers: [("cookie", headerA)]).body))
+			let afterB = try #require(extractCounter(try httpRequest(port: server.port, path: "/", headers: [("cookie", headerB)]).body))
+			#expect(afterA != beforeA)
+			#expect(afterB == beforeB)
+		}
+	}
+
 	// MARK: harness plumbing
 
 	private func withServer(arguments: [String] = [], _ body: (AuthServer) async throws -> Void) async throws {
@@ -566,6 +599,14 @@ private func extractComponentID(_ body: String) -> String? {
 	let pattern = /data-component-id="([^"]+)"/
 	guard let match = body.firstMatch(of: pattern) else { return nil }
 	return String(match.1)
+}
+
+/// the counter value on the dashboard — the read side of a session's state
+/// container.
+private func extractCounter(_ body: String) -> Int? {
+	let pattern = /counter-value[^>]*><span>(-?\d+)<\/span>/
+	guard let match = body.firstMatch(of: pattern) else { return nil }
+	return Int(match.1)
 }
 
 // MARK: - Raw POSIX socket

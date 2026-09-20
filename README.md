@@ -82,7 +82,7 @@ no-webui/
 ├── Tests/
 │   ├── WebUITests/               # web UI tests
 │   └── WebUIAuthTests/           # authentication + session tests
-├── Documentation/                # 10 documentation files (incl. ASSEMBLY.md)
+├── Documentation/                # 11 documentation files (incl. ASSEMBLY.md, STABILITY.md)
 ├── designer/                     # designer sandbox (CSS/JS only)
 ├── README.md
 └── AGENTS.md
@@ -112,6 +112,7 @@ See `designer/README.md` for the full designer guide.
 ## Documentation
 
 - `Documentation/ARCHITECTURE.md` — framework architecture and design decisions
+- `Documentation/STABILITY.md` — versioning policy, frozen surface, deprecated rule
 - `Documentation/ASSEMBLY.md` — project tooling and the build/verification stage map
 - `Documentation/API.md` — full API reference
 - `Documentation/DESIGN_SYSTEM.md` — design system component reference

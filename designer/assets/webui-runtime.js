@@ -255,6 +255,16 @@ window.WebUIRuntime = (function () {
         }
       }
 
+      if (event.type === 'keydown' && event.key === 'Escape') {
+        var overlay = event.target && event.target.closest && event.target.closest('.modal-overlay');
+        if (overlay) {
+          var dismissBtn = overlay.querySelector('[data-dismiss]');
+          if (dismissBtn) {
+            dismissBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+          }
+        }
+      }
+
       var componentEl = findComponent(event);
       if (!componentEl) return;
 

@@ -96,12 +96,19 @@ what it demonstrates:
   or expiry an open socket is redirected to `/login` and closed
 - CSRF-protected POST logout
 
-**deliberately not in the demo (plan M2):** the Argon2 concurrency cap /
-bounded queue (the login endpoint remains a CPU+memory flood amplifier),
-session caps and the sweep service, per-session state containers (the demo
-shares one global state across sessions). the auth demo has no plugin gate —
-the `smoke`/`fullstack-smoke`/`browser-smoke` gates cover the framework
-reference page only, and are untouched by it.
+the demo applies the full M2 hardening: the Argon2 concurrency cap
+(`AsyncSemaphore` + dedicated pool) so the login endpoint is not a
+CPU/memory flood amplifier, per-ip + per-account throttles, single-use
+login tokens with per-issuer outstanding budgets, a connection gate with
+bare-connect admission, idle socket reaping, per-session state containers
+(bounded, purged by the sweep and on logout), and a 60 s maintenance sweep
+(session purge, throttle/token-store pruning, router + state cleanup).
+per-identity session caps are a deployment policy — the store holds every
+live session until expiry, so hosts that need caps enforce them at login
+(e.g. invalidating older sessions via `listSessions` / `invalidateAll`).
+the auth demo has no plugin gate — the `smoke`/`fullstack-smoke`/
+`browser-smoke` gates cover the framework reference page only, and are
+untouched by it.
 
 ## stage 4 — deployment gates
 
