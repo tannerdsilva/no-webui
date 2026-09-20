@@ -45,6 +45,7 @@ func webuiInit(_ configPtr: UnsafeRawPointer?, _ len: Int) {
 	}
 	WebUIBridge.install()
 	ClientRuntime.bootSearch()
+	ClientRuntime.bootApplets()
 	writeFrame(ClientRuntime.bootPageHTML)
 }
 
@@ -89,6 +90,30 @@ func webuiInputPtr() -> Int {
 @_expose(wasm, "webui_render_page")
 func webuiRenderPage() -> Int {
 	let html = HydrationView().render()
+	writeFrame(html)
+	return Int(bitPattern: RenderFrame.buffer)
+}
+
+@_expose(wasm, "webui_render_region")
+func webuiRenderRegion(_ regionPtr: UnsafeRawPointer?, _ len: Int) -> Int {
+	// an applet-region request (`{name, args}`): resolve the registered
+	// renderer in the module and emit its html through the frame. an empty
+	// frame signals "unmapped" so the chamber leaves the placeholder.
+	guard let regionPtr, len > 0 else { return 0 }
+	let text = String(decoding: UnsafeRawBufferPointer(start: regionPtr, count: len), as: UTF8.self)
+	guard let root = try? JSONValue.parse(text),
+	      case .object(let dict) = root,
+	      case .string(let name)? = dict["name"] else {
+		writeFrame("")
+		return Int(bitPattern: RenderFrame.buffer)
+	}
+	let args: String
+	if case .object? = dict["args"], let serialized = dict["args"]?.serialize() {
+		args = serialized
+	} else {
+		args = "{}"
+	}
+	let html = ClientRuntime.regionHTML(name: name, argsJSON: args) ?? ""
 	writeFrame(html)
 	return Int(bitPattern: RenderFrame.buffer)
 }

@@ -20,6 +20,7 @@ public enum ClientRuntime {
 	private static let selectedCategoryBox = Mutex<String?>(nil)
 	private static let emailBox = Mutex("")
 	private static let emailValidityBox = Mutex<String?>(nil)
+	private static let appletCountBox = Mutex(0)
 	private static let authBox = Mutex(AuthStateMirror.anonymous)
 	nonisolated(unsafe) public private(set) static var router = EventRouter()
 	nonisolated(unsafe) public private(set) static var bootPageHTML = ""
@@ -42,6 +43,53 @@ public enum ClientRuntime {
 
 	/// email validation rules for the vertical's form field (p5-t2).
 	public static let emailValidator = ClientFieldValidator(rules: [.required, .email])
+
+	/// register the applet-region renderers (harness v2). the chamber mounts
+	/// `[data-webui-applet]` regions through `webui_render_region`, which
+	/// resolves here. a region's renderer self-wires: it renders inside a
+	/// `RenderContext` bound to the resident router, so its controls route
+	/// through `webui_handle_event` exactly like page-built controls.
+	public static func bootApplets() {
+		appletCountBox.withLock { $0 = 0 }
+		ClientRenderers.register("demo:card") { argsJSON in
+			let label: String
+			if let root = try? JSONValue.parse(argsJSON),
+			   case .object(let dict) = root,
+			   case .string(let value)? = dict["label"] {
+				label = value
+			} else {
+				label = "applet"
+			}
+			return appletCardHTML(label: label)
+		}
+	}
+
+	/// render a registered applet region (nil when the name is unknown).
+	public static func regionHTML(name: String, argsJSON: String) -> String? {
+		ClientRenderers.render(name, argsJSON)
+	}
+
+	/// the `demo:card` region proof: a self-wiring counter card the module
+	/// composes and the chamber mounts into an SSR placeholder. the click
+	/// updates the region locally — the websocket stays silent.
+	private static func appletCardHTML(label: String) -> String {
+		let context = RenderContext(router: router)
+		return RenderContext.$current.withValue(context) {
+			Div(class: "applet-card") {
+				Heading(label, level: .h3)
+				Div(id: "applet-count", class: "applet-card__value") {
+				Text(String(appletCountBox.withLock { $0 }))
+				}
+				Button("+1", id: "applet-inc", type: .button)
+					.onClick { _ in
+						let next = appletCountBox.withLock { $0 } + 1
+						appletCountBox.withLock { $0 = next }
+						return [FragmentUpdate(id: "applet-count", html: Div(id: "applet-count", class: "applet-card__value") { Text(String(next)) }.render())]
+					}
+			}
+			.render()
+		}
+	}
 
 	/// the read-only session-presence mirror (advisory ui gating only, d4).
 	public static var authMirror: AuthStateMirror {
@@ -172,6 +220,8 @@ public enum ClientRuntime {
 						}
 					Raw(Self.validityHTML())
 				}
+				Div(id: "applet-region", class: "applet-card") { EmptyView() }
+					.attribute("data-webui-applet", "demo:card")
 			}
 			.render()
 		}

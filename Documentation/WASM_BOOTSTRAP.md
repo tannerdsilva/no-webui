@@ -28,10 +28,12 @@ path_create_directory, path_filestat_get, path_filestat_set_times, path_link,
 path_open, path_readlink, path_remove_directory, path_rename, path_symlink,
 path_unlink_file, poll_oneoff, proc_exit, random_get.
 
-`env` — the 8 chamber bridge imports (w§3.2):
-
-setInnerHTML, removeElement, getElementValue, setElementValue,
-setCustomValidity, wsSend, now, log.
+`env` — the chamber bridge imports (w§3.2, extended since the original 8):
+the module declares setInnerHTML, removeElement, getElementValue,
+setElementValue, setCustomValidity, wsSend, storageGet, storageSet, now,
+log (10 total; the chamber must implement all or instantiation fails).
+v2 (harness): the export surface gains `webui_render_region` (see
+`WASM_APPLET_HARNESS.md`).
 
 ## chamber-required note
 

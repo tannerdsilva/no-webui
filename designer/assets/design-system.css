@@ -8699,3 +8699,5 @@ h6 {
 .panel__subtitle { font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: none; letter-spacing: normal; font-weight: var(--font-weight-normal); white-space: nowrap; }
 .panel__actions { display: inline-flex; align-items: center; gap: var(--space-1); flex: none; }
 .panel__body { flex: 1; min-height: 0; overflow: auto; padding: var(--space-2) var(--space-2); display: flex; flex-direction: column; }
+.applet-card { padding: var(--space-4); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-xl); background: var(--color-bg-raised); margin-top: var(--space-4); }
+.applet-card__value { margin: var(--space-2) 0; font-size: var(--font-size-2xl); font-weight: var(--font-weight-semibold); color: var(--color-text); }

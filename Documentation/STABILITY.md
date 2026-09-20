@@ -128,6 +128,11 @@ frozen surface is a mistake:
    enforced by review against this document and the changelog. the in-repo
    enforcement (tests, byte-identity pins) guarantees the *current* epoch's
    surface, not the *transition* between epochs.
+7. **the applet harness is pre-2.0.** `WASM_APPLET_HARNESS.md` is the target
+   contract (applet regions, renderer registry, expanded import surface,
+   v2 message shapes). the v1 wire/ABI pinned by this 1.0.0 epoch remains
+   authoritative until the 2.0 epoch cut — the harness lands behind
+   `clientMode` so the JS-runtime path and its pins stay untouched.
 
 ## change discipline
 

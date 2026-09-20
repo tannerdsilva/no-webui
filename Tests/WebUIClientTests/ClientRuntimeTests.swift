@@ -172,6 +172,38 @@ struct ClientRuntimeTests {
 		#expect(!fragment.html.contains("search__error"))
 	}
 
+	@Test("bootApplets registers the demo card renderer")
+	func bootAppletsRegistersCard() {
+		ClientRuntime.bootSearch()
+		ClientRuntime.bootApplets()
+		#expect(ClientRenderers.names() == ["demo:card"])
+		let html = ClientRuntime.regionHTML(name: "demo:card", argsJSON: "{}") ?? ""
+		#expect(html.contains("applet-card"))
+		#expect(html.contains("data-component-id="))
+		#expect(html.contains("data-event="))
+		// the boot page carries the region placeholder the chamber mounts.
+		#expect(ClientRuntime.bootPageHTML.contains("data-webui-applet="))
+	}
+
+	@Test("unknown applet regions report no renderer")
+	func unknownRegionIsNil() {
+		#expect(ClientRenderers.render("missing:view", "{}") == nil)
+	}
+
+	@Test("the demo card control dispatches a local update")
+	func demoCardDispatcher() async throws {
+		ClientRuntime.bootSearch()
+		ClientRuntime.bootApplets()
+		let html = ClientRuntime.regionHTML(name: "demo:card", argsJSON: "{}") ?? ""
+		let controlID = try #require(Self.componentID(for: "applet-inc", in: html))
+		let updates = await ClientRuntime.router.handle(
+			EventData(component: ComponentID(controlID), event: "click", data: [:])
+		)
+		let fragment = try #require(updates.first)
+		#expect(fragment.id == "applet-count")
+		#expect(fragment.html.contains("applet-card__value"))
+	}
+
 	private static func componentID(for elementID: String, in html: String) -> String? {
 		let idAttr = "id=\"\(elementID)\""
 		guard let idRange = html.range(of: idAttr) else { return nil }

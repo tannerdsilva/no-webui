@@ -373,6 +373,29 @@ if (wasmBuilt) {
     const evAfter = await s.evaluate(() => window.WebUIClient._getInstance().eventCount);
     if (evAfter === evBefore) ok("non-component clicks are ignored (no dispatch)");
     else bad(`non-component click dispatched: ${evBefore} -> ${evAfter}`);
+    const appletState = await s.evaluate(() => {
+      const region = document.getElementById("applet-region");
+      const inst = window.WebUIClient._getInstance();
+      return {
+        state: region ? region.getAttribute("data-webui-applet-state") : null,
+        hasCard: !!document.querySelector("#applet-region .applet-card"),
+        count: document.getElementById("applet-count")?.textContent || "",
+        events: inst.eventCount,
+        wsSent: inst.wsSent,
+      };
+    });
+    if (appletState.state === "mounted" && appletState.hasCard) ok("applet region composed + mounted by the module");
+    else bad(`applet region not mounted: ${JSON.stringify(appletState)}`);
+    await s.click("#applet-inc").catch(() => {});
+    await s.waitForTimeout(250);
+    const appletAfter = await s.evaluate(() => {
+      const inst = window.WebUIClient._getInstance();
+      return { count: document.getElementById("applet-count")?.textContent || "", events: inst.eventCount, wsSent: inst.wsSent };
+    });
+    if (appletAfter.count !== appletState.count) ok(`applet control updated locally (${appletState.count} -> ${appletAfter.count})`);
+    else bad(`applet control did not update: ${JSON.stringify(appletAfter)}`);
+    if (appletAfter.wsSent === appletState.wsSent) ok("applet interaction kept the websocket silent");
+    else bad(`websocket sends after applet click: ${appletAfter.wsSent}`);
     const de = sErrors.filter((t) => !/favicon/i.test(t));
     if (de.length === 0) ok("local-search probe has no console errors");
     else bad(`local-search console errors: ${JSON.stringify(de)}`);

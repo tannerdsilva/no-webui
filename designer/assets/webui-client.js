@@ -292,6 +292,27 @@
       if (c) { dispatch(e, c, 'click'); }
     });
   }
+  function mountApplets() {
+    var regions = document.querySelectorAll('[data-webui-applet]');
+    for (var i = 0; i < regions.length; i++) {
+      var el = regions[i];
+      var name = el.getAttribute('data-webui-applet');
+      if (!name) { continue; }
+      var args = {};
+      try { args = JSON.parse(el.getAttribute('data-webui-args') || '{}'); } catch (e) { args = {}; }
+      var env = new TextEncoder().encode(JSON.stringify({ name: name, args: args }));
+      if (env.length > 65536) { continue; }
+      var ptr = holder.exports.webui_input_ptr();
+      new Uint8Array(holder.memory.buffer, ptr, env.length).set(env);
+      var outPtr = holder.exports.webui_render_region(ptr, env.length);
+      var outLen = holder.exports.webui_frame_len();
+      if (!outPtr || outLen === 0) { el.setAttribute('data-webui-applet-state', 'unmapped'); continue; }
+      var html = new TextDecoder().decode(new Uint8Array(holder.memory.buffer, outPtr, outLen));
+      el.innerHTML = serializeFragment(sanitizeFragment(html, el));
+      el.setAttribute('data-webui-applet-state', 'mounted');
+      if (opts && opts.onAppletMounted) { opts.onAppletMounted(name, el); }
+    }
+  }
   function boot(opts) {
     return fetch(opts.wasmUrl)
       .then(function (r) { if (!r.ok) { throw new Error('wasm fetch ' + r.status); } return r.arrayBuffer(); })
@@ -315,6 +336,7 @@
           var app = document.getElementById(opts.target || 'search-app');
           if (app) { app.innerHTML = page; }
           wireEvents();
+          mountApplets();
           if (opts.onLoaded) { opts.onLoaded(page); }
           openTransport();
           return page;
