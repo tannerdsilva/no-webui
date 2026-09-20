@@ -84,7 +84,17 @@ func renderExamplePage(state: ExampleState, router: EventRouter) -> String {
 			}
 		}
 	}
-	return WebUIDocument(title: "WebUI Live Demo", body: body).render()
+	// page-scoped layout: the shared sheet leaves the example's shell classes
+	// unstyled, so give them token-based defaults here (after the sheet, so a
+	// host can still override them via its own cascade without touching the
+	// design system).
+	return WebUIDocument(title: "WebUI Live Demo", body: body, rawStyles: [
+		".app { max-width: 960px; margin: 0 auto; padding: var(--space-8); }",
+		".app__header { padding-bottom: var(--space-4); }",
+		".app__content { display: flex; flex-direction: column; gap: var(--space-4); }",
+		".app__footer { padding-top: var(--space-4); color: var(--color-text-muted); }",
+		".app__actions { display: flex; align-items: center; gap: var(--space-2); }",
+	]).render()
 }
 
 extension RenderContext {

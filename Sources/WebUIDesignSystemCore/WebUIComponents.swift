@@ -156,9 +156,15 @@ public struct WebUICard: View {
         var html = "<div class=\"card \(variant.rawValue)\""
         if let id { html += " id=\"\(htmlEscape(id))\"" }
         html += ">"
+        // the padded interior: the design-system `.card__body` rule carries
+        // the `--space-4` default, so a consumer can override the padding
+        // through the normal cascade (modifier or page-scoped style)
+        // without touching this component.
+        html += "<div class=\"card__body\">"
         for child in children {
             html += child.render()
         }
+        html += "</div>"
         html += "</div>"
         return html
     }

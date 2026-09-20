@@ -586,6 +586,9 @@ func webuiCardRenders() {
     }
     let html = view.render()
     #expect(html.contains("class=\"card card--elevated\""))
+    // content is wrapped in the padded interior so `.card__body`'s token
+    // padding (an overridable CSS default) actually applies.
+    #expect(html.contains("class=\"card__body\""))
     #expect(html.contains("Card content"))
 }
 
