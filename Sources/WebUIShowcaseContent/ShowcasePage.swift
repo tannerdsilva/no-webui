@@ -4,8 +4,10 @@ import WebUIDesignSystem
 import WebUIChart
 
 // MARK: - Showcase Page
-struct ShowcasePage {
-    func render() -> String {
+public struct ShowcasePage {
+    public init() {}
+
+    public func render() -> String {
         let router = EventRouter()
         let ctx = RenderContext(router: router)
         return RenderContext.$current.withValue(ctx) {
