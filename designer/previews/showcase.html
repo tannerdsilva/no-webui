@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'nonce-R2WF3i_OgG2mzdxwMhN27Q'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:;">  <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAApklEQVR4nO2XwQ2AIAxF2ahDeWQZb07idkINCQejECgpfDSS/BvQ118C1JhZB1lmsuyVxNLAjiwfynJFkBhcO/BdaYhBwfMQnWzPlgOZ/dOFeFJHA/h3AWy7TKoAzG1SAQjZhM2Wtd7eMDesKTghA5DW+HsA0kOoDtCib5XgB4ADwC4iQl/FVydgj1EnzQWA/ZIZ9KcU4AK0N6jqjjCtWQJkfHM6epyUsxUEgyvS4gAAAABJRU5ErkJggg==">
+          <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'nonce-SLEYNzI6RSFcwUsXdA2MBg'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:;">  <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAApklEQVR4nO2XwQ2AIAxF2ahDeWQZb07idkINCQejECgpfDSS/BvQ118C1JhZB1lmsuyVxNLAjiwfynJFkBhcO/BdaYhBwfMQnWzPlgOZ/dOFeFJHA/h3AWy7TKoAzG1SAQjZhM2Wtd7eMDesKTghA5DW+HsA0kOoDtCib5XgB4ADwC4iQl/FVydgj1EnzQWA/ZIZ9KcU4AK0N6jqjjCtWQJkfHM6epyUsxUEgyvS4gAAAABJRU5ErkJggg==">
   <title>WebUI Showcase</title>
   
   <style>
@@ -2107,7 +2107,7 @@ transform: rotate(-45deg) translate(1px,-1px);
 .tree__node--open > .tree__row .tree__caret { transform: rotate(90deg); }
 .tree__caret--leaf { visibility: hidden; }
 .tree__icon { width: 1rem; height: 1rem; color: var(--color-text-muted); flex: none; }
-.tree__label { flex: 1; }
+.tree__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tree__children {
 display: flex;
 flex-direction: column;
@@ -8094,7 +8094,7 @@ Plain text content<span class="text-escaped">&lt;script&gt;alert(&#39;xss&#39;)&
 <label class="demo-label">Country:</label><select id="demo-country"><option value="us" selected>United States</option><option value="ca">Canada</option><option value="uk">United Kingdom</option><option value="de">Germany</option><option value="jp">Japan</option></select>
 </div></div>
 </div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
-<h3 class="demo-card-title">Form with CSRF</h3><div class="demo-card-body"><form id="demo-form" action="/submit" method="post"><input type="hidden" name="_csrf" value="ZGVtby1mb3JtOjE3ODk4NjQ4NTU6NkQ3NTkyM0IwQTlDNDRCMDgyQUE0NzI3QTE4Nzg3RDg6MWJlMGJjYzY4MTU4MWYwMGVhNDYxMzY3ZWM1MWMwY2U0ZGRkY2UzNGZlYjZiYzVhOGRmNjhmNWFmMWEwNDkzYw=="><div class="vstack spacing-12 align-flex-start">
+<h3 class="demo-card-title">Form with CSRF</h3><div class="demo-card-body"><form id="demo-form" action="/submit" method="post"><input type="hidden" name="_csrf" value="ZGVtby1mb3JtOjE3ODk4NjUyNDM6QTRDMzE1RUE0NkMzNDVFQkJCQTYyQTZFRTFBQzRCMDc6NzQwYmU3ODkxZGFkMGU0ZmExZGUzOWZhZjZhZDQ3YjlmZGQ5NTJmNjE0YjVlYjg3MzYxYjMwNGFmM2M3NDNjZA=="><div class="vstack spacing-12 align-flex-start">
 <label class="demo-label">Name:</label><input id="form-name" type="text" placeholder="Your name"><label class="demo-label">Message:</label><textarea id="form-message" rows="3" placeholder="Your message"></textarea><button id="form-submit" type="submit">Submit</button>
 </div></form></div>
 </div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
