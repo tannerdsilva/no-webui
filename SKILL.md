@@ -1,279 +1,153 @@
 ---
 name: no-webui
-description: Build web UIs in Swift with the no-webui SwiftUI stack.
-version: 1.1.0
+description: Work on the no-webui framework itself (maintainer): repo layout, swift build/test, the command-plugin verbs (serve/smoke/fullstack-smoke/probe/showcase/showcase-serve), asset embedding + icon pipeline, generated files, security invariants, house style, and maintainer pitfalls. For building an APP that uses the public API, load webui-design-system instead.
+version: 1.2.0
 author: Tanner D'silva, Hermes Agent
 license: MIT
 platforms: [macos]
 metadata:
   hermes:
-    tags: [no-webui, swiftui-for-web, webui, swift, design-system, web-ui]
+    tags: [no-webui, swiftui-for-web, webui, swift, design-system, maintainer, internal]
     related_skills: [webui-design-system, agent-chat-ui]
 ---
 
-# no-webui Skill
+# no-webui — developing the framework (maintainer)
 
-**Your UI is written in Swift.** Every screen, every component, every
-interaction is expressed as Swift view composition — the toolkit renders
-the semantic HTML, applies the design system, and patches the DOM over a
-WebSocket so you never have to. The web is only the delivery surface.
+This skill is for **working on the no-webui Swift package itself**: building it,
+running its gates, editing its designer assets/icons, and fixing the framework.
+If you're building an **app** that composes no-webui's public API (an agent
+host, a dashboard, a demo), load **`webui-design-system`** — this is the
+internal skill, and the consumer-facing guidance lives there (plus the repo's
+`AGENTS.md` and `Documentation/*`, which are canonical).
 
-This package is a SwiftUI-shaped view model for the web: `View` types
-compose like SwiftUI, `.render()` emits HTML, and a small JS runtime handles
-event round-trips and DOM patching. A host app (like `arc-agent`) depends on
-`no-webui` as a Swift package and expresses its entire UI in Swift.
+## Repo layout (one Package.swift)
 
-The one rule that matters more than any other: **build the UI in Swift**,
-not HTML/CSS/JS. If you are hand-writing raw markup, an inline `style`
-attribute, a CSS class string, or a `Raw(...)` HTML blob in a host file,
-stop — that is the anti-pattern. Express it as Swift. Reach for an existing
-no-webui component first; if none fits, add a new **Swift component** so the
-next UI reuses it, instead of pasting markup.
+- **Library products:** `WebUI`, `WebUIDesignSystem`, `WebUIChart`, `WebUIAuth`.
+- **Executables:** `WebUIExample` (:9090 demo), `WebUIAuthExample` (auth demo),
+  `WebUIShowcase` (generates/serves the reference showcase),
+  `WebUISmokeTest` (the interactive page the smoke gates drive),
+  `WebUIShowcaseServer` (live swift-generated showcase on :9092).
+- **`designer/`** — the design system's working dir: `assets/design-system.css`
+  + `assets/webui-runtime.js` (canonical, read at build time), 
+  `icons/icon-manifest.json`, `previews/` (regenerated artifacts).
+- **Shared composition libs:** `WebUISmokeShared`, `WebUIShowcaseContent`
+  (holds `ShowcasePage`, shared by the generator and the live server).
 
-## When to Use
+## Build & test
 
-- You want to write (and own) a web UI **in Swift**, served by a Swift
-  server (gateway, agent harness, tool dashboard, interactive demo).
-- You want server-rendered HTML with live round-trip interactivity
-  (click/input/submit → Swift handler → DOM patch) without a JS SPA.
-- You want to reuse a design system (tokens, buttons, cards, tables, trees,
-  tabs, badges, empty states…) from Swift-rendered views.
-- You want to compose an app frame (nav rail / sidebar / panels) with Swift
-  views, not markup.
-
-Don't use for: a hand-written static HTML/CSS landing page (there's no JS
-authoring here), or any client-side-only UI.
-
-## Prerequisites
-
-- macOS (the Package targets `.macOS(.v15)`), with a working `swift`
-  toolchain (Swift 6.x line; the SwiftUI view-DSL and macros need it).
-- Consumed as a **path dependency** from a host Package.swift:
-
-```swift
-.package(path: "../no-webui")
+```bash
+swift build        # plugins regenerate Assets+Generated.swift, DesignTokens+Generated.swift, IconLibrary.swift
+swift test         # the always-on gate (asserts embedded css/js == designer/assets sources)
+swift run WebUIExample   # example server on :9090
 ```
 
-and linked via the library products:
+The wasm client product needs `source ~/.swiftly/env.sh` and the official
+`swift-6.4-RELEASE_wasm` SDK (the Xcode frontend can't read its prebuilt
+modules). Full stage map: `Documentation/ASSEMBLY.md`.
 
-```swift
-.product(name: "WebUI", package: "no-webui"),
-.product(name: "WebUIDesignSystem", package: "no-webui"),
-.product(name: "WebUIAuth", package: "no-webui"),   // if you need login
-```
+## Plugin verbs (command plugins)
 
-Then `import WebUI` and `import WebUIDesignSystem` in your Swift files.
-No external JS/CSS/npm — the design system and runtime are embedded at
-build time.
+| verb | run | what it does |
+|---|---|---|
+| `serve` | `swift package --disable-sandbox plugin serve` | hosts the WebUISmokeTest server on :9123 (Ctrl+C to stop) |
+| `smoke` | `swift package --disable-sandbox plugin smoke` | self-contained gate: spawn server, check served bytes/asset integrity/page signatures/CSP/interactive count, tear down |
+| `fullstack-smoke` | `swift package --disable-sandbox plugin fullstack-smoke` | drives live WS round-trips (click/echo/redirect/optimistic) |
+| `probe` | `swift package plugin probe [port]` | connect-based port check |
+| `showcase` | `swift package plugin showcase --allow-writing-to-package-directory` | regenerates `designer/previews/showcase.html` |
+| `showcase-serve` | `swift package --disable-sandbox plugin showcase-serve` | hosts the live swift-generated showcase on :9092 |
 
-## Write Your UI in Swift (the guiding principle)
+- **`--disable-sandbox` is mandatory for `serve`/`smoke`/`fullstack-smoke`/`showcase-serve`**
+  (and `probe` needs no flag). The command-plugin sandbox forbids `listen()` —
+  `bind()` fails with `EPERM` even with the local-network permission (which is
+  outbound-only). A forgotten flag surfaces as
+  `server did not become ready — run with --disable-sandbox`.
+- **The `.build` lock:** a running plugin invocation holds the package `.build`
+  lock for its whole run, so never run a gate while `serve` (or any plugin) is
+  up, and never expect a client-style plugin to query a server owned by another
+  invocation.
 
-- **Express every UI as Swift views.** Compose `VStack`/`HStack`/`ZStack`,
-  `ScrollView`, `WebUIButton`, `WebUITree`, `WebUIPanel`, etc., then call
-  `.render()` to get HTML. The toolkit owns the markup.
-- **Prefer an existing component over any markup.** The design-system and
-  shell components cover buttons, inputs, cards, badges, tabs, trees,
-  tables, lists, segmented controls, sidebars, panels, composers, empty
-  states. If you need something new, add it as a **Swift component** (a
-  `struct …: View`) in `Sources/WebUIDesignSystemCore/`, so every future UI
-  composes it — do not emit ad-hoc markup in a host.
-- **Build the language up, not the markup down.** Favor the high-level
-  shell components over the bare primitives, and the primitives over raw
-  elements. A page should read as a SwiftUI view tree, not as an HTML dump.
-- **The smell to avoid in a host file:** raw `<div>`/`<button>` strings,
-  `class="…"` literals, inline `style=` attributes, or `Raw(...)`/`Div`
-  blobs building markup. Refactor that into a reusable Swift `View` and
-  keep the host declarative.
-- **Interactivity is Swift too.** Write `@Sendable (EventData) async -> [FragmentUpdate]`
-  handlers and wire them with `controlAttributes`/modifiers, not with
-  hand-injected JS.
+## Asset embedding
 
-## Quick Reference
+- Edit `designer/assets/design-system.css` / `webui-runtime.js`, then
+  `swift build` — the `WebUIAssetPlugin` regenerates `Assets+Generated.swift`
+  (WebUI) and `DesignTokens+Generated.swift` (WebUIDesignSystemCore) from them.
+- `designer/previews/designer-preview.html` links `assets/design-system.css`
+  directly (live preview, no build step).
+- `designer/previews/showcase.html` is a **generated** artifact — regenerate it
+  (`showcase` verb), never hand-edit. Its live equivalent is
+  `WebUIShowcaseServer` (renders the same page from Swift per request).
 
-- **Products (library):** `WebUI`, `WebUIDesignSystem`, `WebUIChart`,
-  `WebUIAuth`.
-- **Products (executables):** `WebUIExample`, `WebUIAuthExample`,
-  `WebUIShowcase` (generates the reference showcase), `WebUISmokeTest`
-  (the live interactive page used by the smoke gates).
-- **Design assets (canonical source):** `designer/assets/design-system.css`
-  and `designer/assets/webui-runtime.js`. Read from directly at build time
-  (no copy step).
-- **Reference showcase:** `designer/previews/showcase.html` — regenerated,
-  not hand-edited:
-  `swift package plugin showcase --allow-writing-to-package-directory`.
-- **Gates / demo (all need `--disable-sandbox`):**
-  - `swift test` — always-on; asserts the embedded CSS/JS bytes are
-    identical to `designer/assets/`.
-  - `swift package --disable-sandbox plugin smoke` — served bytes == source.
-  - `swift package --disable-sandbox plugin fullstack-smoke` — live WS
-    round-trips.
-  - `swift package --disable-sandbox plugin serve` — interactive demo on
-    :9123 (foreground; Ctrl+C stops).
-  - `node designer/browser-smoke.mjs` — real-DOM layout gate (headless
-    Chromium).
+## Icon pipeline
 
-## The View Model
+- `designer/icons/icon-manifest.json` (name, category, title, tags, viewBox,
+  inner svg geometry) → `WebUIIconPlugin` regenerates `IconLibrary.swift` →
+  `IconName` cases.
+- `swift run WebUIIconTool lint|list|stats|render-preview --manifest …` for
+  validation/catalog tooling. See `Documentation/ICONS.md`.
+- `IconSanitizer.sanitize()` is a parse-and-reemit allowlist for custom icons
+  (only geometry elements + presentation attributes re-emit).
 
-Every UI element is a `View` whose `render() -> String` emits HTML. Compose
-them like SwiftUI, then render the result into a document.
+## Generated files (never hand-edited)
 
-**Primitives (layout / elements):** `VStack`, `HStack`, `ZStack`, `Grid`,
-`Spacer`, `ScrollView`, `Section`, `Navigation`, `Header`, `Footer`, `Main`,
-`Aside`, `Div`, `Span`, `Text`, `Button`, `Link`, `Form`, `Input`,
-`TextArea`, `Select`/`SelectOption`, `Image`, `Heading`, `Paragraph`,
-`UnorderedList`, `OrderedList`, `Table`, `ForEach`, `Group`, `Raw`.
+`Assets+Generated.swift`, `DesignTokens+Generated.swift`, `IconLibrary.swift`
+live under `.build/` (gitignored) and are regenerated by `swift build`. If a
+build fails on a plugin error, check `designer/assets/` still contains both
+css/js files.
 
-**Modifiers (chain onto a View):** `backgroundColor`, `foregroundColor`,
-`font(size:weight:)`, `fontFamily`, `textAlign`, `padding`, `margin`,
-`width`, `height`, `maxWidth`, `minWidth`, `minHeight`, `display`, `flex`,
-`fill()` (grow to remaining space), `stretch()` (full height/width without
-growing), `style(_:_:)` (arbitrary CSS escape hatch), `border`,
-`cornerRadius`, `showIf`, `id(_:)`, `attribute`, and the event modifiers
-(`onClick`, `onSubmit`, `onInput`, `onKeyDown`, `onOptimisticClick`, …).
+## Security invariants (never weaken)
 
-**Icons:** `WebUIIcon(.name, size: .md)` — a 618-glyph `IconName` catalog
-(Lucide/Feather geometry). Components take `IconName`, never emoji.
+CSP with per-document nonce; `sanitizeURL()` blocks `javascript:`/`data:`/
+`vbscript:`; runtime HTML sanitization (strips `<script>`, `on*`, unsafe
+`href`/`src`/`action`/`xlink:href` on real parsed nodes); prototype-pollution
+guard in `State.set()`; `htmlEscape` on all emitted attributes; stateless
+HMAC-SHA256 CSRF tokens (single-use pre-auth via `SingleUseTokenStore` with
+`maxOutstandingPerKey`); `Mutex`-backed state; growth caps (EventRouter 10K,
+ObserverList 100); SVG icon sanitization allowlist; bounded wire parsing
+(`JSONValue.parse` caps nesting at 128); websocket render binding (per-render
+token). The detailed table is in `Documentation/ARCHITECTURE.md`.
 
-**Design-system components** (import WebUIDesignSystem): `WebUIButton`,
-`WebUIInput`, `WebUIBadge`, `WebUIAvatar`, `WebUICard`, `WebUITabs`,
-`WebUITree`, `WebUITable`, `WebUIEmptyState`, `WebUISpinner`,
-`WebUIProgress`, `WebUIModal`, `WebUIToast`, `WebUITooltip`,
-`WebUITimeline`, `WebUIBreadcrumb`, `WebUIStat`, `WebUISkeleton`,
-`WebUIAlert`, `WebUIPagination`.
+## House style for contributions
 
-**Shell components** (app-frame building blocks): `WebUISidebar`
-(`.full` or `.rail` nav, link items, active state + badge),
-`WebUISegmentedControl`, `WebUISearchField`, `WebUIListView`/`WebUIListItem`,
-`WebUIComposer`, `WebUIPanel` (`.leading`/`.trailing` divider).
+- **No-prefix BEM classes** (`.button`, `.button--primary`, `.card`,
+  `.list__item`); `br-` appears only in keyframe names.
+- **Token-only values** in component CSS; tokens single-sourced in the CSS (the
+  Swift `WebUITheme` palette is legacy — don't trust or duplicate it).
+- **No comments in shipped web assets** (`design-system.css`,
+  `webui-runtime.js`, generated documents); comments live in Swift and
+  `Documentation/*.md`.
+- **Dark mode** via `@media (prefers-color-scheme: dark)` remapping the
+  semantic tokens — design and verify both themes.
+- **Icons, never emoji**; each icon slot needs an explicit CSS box.
 
-### Compose and render a page (all Swift)
+## Maintainer pitfalls
 
-```swift
-// imports: WebUI, WebUIDesignSystem
-let body = VStack(spacing: 16) {
-    Heading("Hi", level: .h2)
-    WebUIButton("Go", variant: .primary, size: .md)
-}
-.padding(24)
-.render()               // -> String HTML fragment
-
-let doc = WebUIDocument(title: "Page", body: body,
-                        runtimeConfig: RuntimeConfig(renderToken: "...")).render()
-```
-
-## Interactivity (Swift handlers, server round-trips)
-
-The live layer: the runtime opens a WebSocket and forwards DOM events as
-`{"type":"event","component":"c0","event":"click","data":{...}}`; the
-server's `EventRouter` dispatches to a registered **Swift** handler and
-returns `FragmentUpdate`s, which the runtime applies by replacing target
-elements.
-
-- Register handlers during page build with `controlAttributes(id:event:handler:)`
-  inside `RenderContext.$current.withValue(RenderContext(router: router)) { … }`.
-  The attributes it returns (`data-component-id`/`data-event`) go on the
-  interactive element.
-- An `EventHandler` is Swift: `@Sendable (EventData) async -> [FragmentUpdate]`.
-  Read fields via `event.string("value")` / `event.string("targetId")`
-  (the clicked element's id) / `event.string("key")`.
-- `FragmentUpdate(id: "...", html: "...")` replaces the element whose id
-  matches, so a re-rendered region must re-carry its routing anchor.
-- **Stable-id discipline:** for regions that fragment updates re-render,
-  register handlers under a caller-chosen id and re-emit that same id on
-  every re-render (the page-build registration persists in the router).
-- For a list/segmented/sidebar, put one handler on the container and
-  dispatch on `event.string("targetId")` — give each row a DOM `id` (the
-  row's bare item id) and set `pointer-events: none` on row children so the
-  click resolves to the row element.
-
-## Procedure
-
-1. **Add the dependency** (Prerequisites) and `import WebUI`,
-   `import WebUIDesignSystem`.
-2. **Compose a page shell in Swift** — a nav rail (`WebUISidebar(.rail)`)
-   + content, or an app frame of `WebUIPanel`s. Build it from components,
-   then `.render()`.
-3. **Assemble the document** with `WebUIDocument(title:body:)`. For
-   multi-pane scroll layouts (chat), render the shell flow with `body` at
-   `100vh` and let inner panes own their scroll.
-4. **Wire interactivity in Swift** (see Interactivity) so `EventHandler`s
-   are registered at page build.
-5. **Build** `swift build`, **run** your server, and **verify** (below).
-6. **Regenerate the showcase** after any component/CSS change so
-   `showcase.html` stays in sync.
-
-## Design Rules (the house style)
-
-- **No-prefix BEM classes** — `.button`, `.button--primary`, `.card`,
-  `.list__item`. `br-` appears only in CSS keyframe/animation names.
-- **Token-only values** in component CSS — never raw hex/px; always
-  `var(--color-*)`, `var(--space-*)`, `var(--font-size-*)`.
-- **No comments in shipped assets** — `design-system.css`,
-  `webui-runtime.js`, and every generated document go over the wire
-  verbatim. Comments stay in Swift and `Documentation/*.md`.
-- **Design tokens must be single-sourced in the CSS**; the Swift
-  `WebUITheme` palette is legacy — don't trust or duplicate it.
-- **Dark mode** is handled via `@media (prefers-color-scheme: dark)` that
-  remaps the semantic tokens — design both themes, verify both.
-- **Icons, never emoji**, in component icon slots; each icon slot needs an
-  explicit CSS box.
-
-## Pitfalls
-
-- **Writing raw markup in a host** is the number-one mistake. If you catch
-  yourself emitting `<div…>`/`class="…"`/inline `style=` or a `Raw(...)`
-  blob in a consumer, refactor it into a reusable Swift `View` component —
-  that is the no-webui way, and it's what keeps a UI "world class".
-- **String-escaping in Swift HTML literals.** When building HTML strings,
-  a doubled backslash (`\\`) renders a literal `\`, so `\\(htmlEscape(x))`
-  emits the source text instead of the value. Write single `\(…)`.
-  Prefer Swift multiline string literals to reduce the `\"` escaping.
-- **Nested ternary inside interpolation** (`"…\(a == b ? "x" : "y")…"`)
-  breaks the parser — compute the fragment into a `let` first.
-- **Swift labeled-argument order = declaration order** — a WebUIShell init
-  called with args out of order fails with "argument X must precede
-  argument Y"; read the init first.
 - **The `:not()` form-control reset out-specifies component classes.** The
-  reset rule `input:not(.input):not(…):not(…)` (specificity 0,9,1) overrides
-  a plain `.input`/`.search-field__input` padding. Exclude the component
-  class from the reset chain (`:not(.search-field__input)`) and verify the
-  computed style.
-- **`.fill()` vs `.stretch()`.** `fill()` = `flex:1` (grows on the main
-  axis, takes remaining space); `stretch()` = full cross-axis height/width
-  without growing. Use `stretch()` on fixed-width sidebars/rails and
-  `fill()` on the region that should consume the rest.
-- **`showcase.html` is a generated artifact.** A rendered artifact that
-  shows something the source lacks = stale artifact, not a framework bug;
-  regenerate, don't hand-edit.
-- **The `.build` lock.** A running plugin invocation holds the package
-  `.build` lock, so never run a gate while `serve` (or another plugin) is
-  up. Gates and `serve` need `--disable-sandbox` (bind is sandbox-denied).
-- **Preview `file://` in Playwright.** `browser_navigate` blocks `file://`,
-  but `browser_run_code_unsafe` with `page.goto('file:///…')` works; open
-  previews that way.
-- **Verify the theme, not the file.** Dark captures need
-  `page.emulateMedia({colorScheme:'dark'})` and a computed body
-  `background-color` check (`rgb(6,9,16)` dark / `rgb(244,246,248)` light);
-  never infer theme from a non-white-pixel fraction.
-- **Two host servers can share one port** (IPv4 vs IPv6 `localhost`); a
-  browser can hit the stale instance. Diagnose with `lsof` + `pgrep` and
-  md5 the served asset bytes.
+  reset `input:not(.input):not(…):not(…)` (specificity 0,9,1) overrides a plain
+  `.input`/`.search-field__input` padding — exclude the component class from the
+  reset chain and verify the computed style.
+- **`.fill()` vs `.stretch()`**: `fill()` = `flex:1` (grows); `stretch()` = full
+  cross-axis without growing. `stretch()` for fixed-width sidebars/rails,
+  `fill()` for the region that should consume the rest.
+- **Stale binaries:** `swift build --target` refreshes
+  `.build/<triple>/debug/<Name>-tool`, not `.build/debug/<Name>`; a running
+  server keeps serving the old page until restarted after a full `swift build`.
+- **`Logger` methods take `Logger.Message`**, not `String`; prefer unconditional
+  `Logger.warning()` over `#if DEBUG` for security-relevant warnings.
+- **Smoke pins the interactive count** (24 `data-component-id` attributes on the
+  smoke page) — add/remove a component there and update `WebUISmokePlugin.swift`.
+- **A rendered artifact showing something the source lacks = stale artifact** —
+  regenerate the showcase, don't hand-edit; don't treat it as a framework bug.
 
 ## Verification
 
-- `swift test` passes (asserts embedded CSS/JS are byte-identical to the
-  `designer/assets/` sources).
-- `swift package --disable-sandbox plugin smoke` reports served bytes ==
-  source.
-- `swift package --disable-sandbox plugin fullstack-smoke` exercises live
-  WS round-trips.
-- Read the page source and confirm it was produced by Swift views — the
-  markup should carry the framework's no-prefix component classes
-  (`.list__item`, `.composer`, `.tree`, `.panel__header`, …), never a raw
-  ad-hoc `class="my-custom-thing"` that a host invented.
-- For the UI: build + run your server, then drive it with Playwright —
-  assert the page renders (title + computed body background), your target
-  classes/elements are present, and a click/input/submit round-trips to an
-  updated DOM node (read the server-patched element, not the input value).
-- After any CSS/component change, regenerate the showcase and confirm it
-  shows the new output in **both** light and dark.
+- `swift test` (byte-identity of embedded css/js vs `designer/assets/`),
+  `smoke` (served bytes == source), `fullstack-smoke` (live WS round-trips),
+  `node designer/browser-smoke.mjs` (real-DOM layout gate, headless Chromium).
+- After a CSS/component change, regenerate the showcase and confirm it shows
+  the change in **both** light and dark.
+
+## Canonical docs
+
+`AGENTS.md` is authoritative for build/test/verbs/pitfalls; `Documentation/*`
+covers `ASSEMBLY.md` (stage map), `API.md`, `DESIGN_SYSTEM.md`, `ICONS.md`,
+`ARCHITECTURE.md`. **Consumers** of the public API → `webui-design-system`.
