@@ -200,6 +200,47 @@ public struct WebUISearchField: View {
     }
 }
 
+/// a styled native select (dropdown). changing an option routes a `change`
+/// event to `onChange` (`event.data["value"]`).
+public struct WebUISelect: View {
+    public struct Option: Sendable, Equatable {
+        public let value: String
+        public let label: String
+        public init(value: String, label: String) {
+            self.value = value
+            self.label = label
+        }
+    }
+    public let id: String
+    public let options: [Option]
+    public let label: String?
+    public let value: String?
+    public let onChange: EventHandler?
+
+    public init(id: String, options: [Option], label: String? = nil, value: String? = nil, onChange: EventHandler? = nil) {
+        self.id = id
+        self.options = options
+        self.label = label
+        self.value = value
+        self.onChange = onChange
+    }
+
+    public func render() -> String {
+        let attrs = controlAttributes(id: id, event: .change, handler: onChange)
+        var html = ""
+        if let label {
+            html += "<label class=\"field__label\" for=\"" + htmlEscape(id) + "\">" + htmlEscape(label) + "</label>"
+        }
+        html += "<select id=\"" + htmlEscape(id) + "\" class=\"select\"" + attrs + ">"
+        for opt in options {
+            let sel = opt.value == value ? " selected" : ""
+            html += "<option value=\"" + htmlEscape(opt.value) + "\"" + sel + ">" + htmlEscape(opt.label) + "</option>"
+        }
+        html += "</select>"
+        return html
+    }
+}
+
 // MARK: - List view
 
 /// one selectable row in a ``WebUIListView``.
