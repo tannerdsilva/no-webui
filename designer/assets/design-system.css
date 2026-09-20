@@ -292,6 +292,53 @@ code, pre, kbd, .mono {
   font-family: var(--font-mono);
 }
 
+/* markdown body scope (rendered by markdownToHTML inside chat bubbles etc.) */
+.md { line-height: var(--line-height-normal); color: var(--color-text); min-width: 0; }
+.md p { margin: 0 0 0.5rem; }
+.md > :last-child { margin-bottom: 0; }
+.md h1, .md h2, .md h3, .md h4, .md h5, .md h6 {
+  margin: 0.75rem 0 0.375rem;
+  font-weight: var(--font-weight-semibold);
+  line-height: var(--line-height-tight);
+  color: var(--color-text);
+}
+.md h1 { font-size: var(--font-size-xl); }
+.md h2 { font-size: var(--font-size-lg); }
+.md h3 { font-size: var(--font-size-md); }
+.md h4 { font-size: var(--font-size-sm); }
+.md h5, .md h6 { font-size: var(--font-size-sm); }
+.md ul, .md ol { margin: 0 0 0.5rem; padding-inline-start: 1.25rem; }
+.md li { margin: 0.125rem 0; }
+.md code {
+  font-family: var(--font-mono);
+  font-size: 0.875em;
+  background: var(--color-bg-inset);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 0.125rem 0.3rem;
+}
+.md pre {
+  background: var(--color-bg-inset);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  padding: var(--space-3);
+  overflow-x: auto;
+  margin: 0 0 0.5rem;
+}
+.md pre code { background: none; border: none; padding: 0; font-size: 0.85rem; }
+.md blockquote {
+  margin: 0 0 0.5rem;
+  padding: 0.25rem 0.75rem;
+  border-inline-start: var(--border-width-3) solid var(--color-primary-300);
+  background: var(--color-bg-subtle);
+  color: var(--color-text-muted);
+}
+.md a { color: var(--color-primary-400); text-decoration: underline; text-underline-offset: 2px; }
+.md table { border-collapse: collapse; margin: 0 0 0.5rem; width: 100%; font-size: var(--font-size-sm); }
+.md th, .md td { border: var(--border-width) solid var(--color-border); padding: 0.375rem 0.5rem; text-align: left; }
+.md th { background: var(--color-bg-subtle); font-weight: var(--font-weight-medium); }
+.md img { max-width: 100%; border-radius: var(--radius-md); }
+
 ::selection {
   background: var(--color-primary-200);
   color: var(--color-primary-950);

@@ -155,6 +155,33 @@ struct MarkdownRenderingTests {
 		#expect(markdownToHTML("`**not bold**`") == "<p><code>**not bold**</code></p>")
 	}
 
+	@Test("fenced code blocks render pre/code with escaped content and language")
+	func fencedCode() {
+		let out = markdownToHTML("```swift\nprint(\"hi\")\n```")
+		#expect(out.contains("<pre><code class=\"language-swift\">"))
+		#expect(out.contains("print(&quot;hi&quot;)"))
+		#expect(out.contains("</code></pre>"))
+	}
+
+	@Test("pipe tables render thead/tbody and skip the separator row")
+	func tables() {
+		let out = markdownToHTML("| A | B |\n|---|---|\n| 1 | 2 |\n| 3 | 4 |")
+		#expect(out.contains("<table>"))
+		#expect(out.contains("<th>A</th>"))
+		#expect(out.contains("<th>B</th>"))
+		#expect(out.contains("<td>1</td>"))
+		#expect(out.contains("<td>4</td>"))
+		#expect(!out.contains("---"))
+	}
+
+	@Test("markdownBody wraps the fragment in the md scope")
+	func bodyScope() {
+		let out = markdownBody("# Hi")
+		#expect(out.hasPrefix("<div class=\"md\">"))
+		#expect(out.contains("<h1>Hi</h1>"))
+		#expect(out.hasSuffix("\n</div>"))
+	}
+
 	@Test("links render safe targets and keep unsafe ones literal")
 	func links() {
 		#expect(markdownToHTML("[x](https://example.com)") == "<p><a href=\"https://example.com\">x</a></p>")

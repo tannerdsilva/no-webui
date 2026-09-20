@@ -306,12 +306,40 @@ public func markdownToHTML(_ markdown: String) -> String {
 	html.reserveCapacity(lines.count + 8)
 	var listType: String?
 	var listItems: [String] = []
+	var codeFence: String?
+	var codeLines: [String] = []
+	var tableRows: [[String]] = []
 
 	func flushList() {
 		guard let type = listType else { return }
 		html.append("<\(type)>\(listItems.map { "<li>\($0)</li>" }.joined())</\(type)>")
 		listType = nil
 		listItems = []
+	}
+
+	func flushCode() {
+		guard let lang = codeFence else { codeLines = []; return }
+		let attr = lang.isEmpty ? "" : " class=\"language-\(htmlEscape(lang))\""
+		html.append("<pre><code\(attr)>\(highlightCode(codeLines.joined(separator: "\n"), language: lang))</code></pre>")
+		codeFence = nil
+		codeLines = []
+	}
+
+	func flushTable() {
+		guard tableRows.count >= 2 else { tableRows = []; return }
+		let header = tableRows[0]
+		let body = tableRows.dropFirst(2)
+		var t = "<table><thead><tr>"
+		for c in header { t += "<th>\(renderInlineMarkdown(c))</th>" }
+		t += "</tr></thead><tbody>"
+		for row in body {
+			t += "<tr>"
+			for c in row { t += "<td>\(renderInlineMarkdown(c))</td>" }
+			t += "</tr>"
+		}
+		t += "</tbody></table>"
+		html.append(t)
+		tableRows = []
 	}
 
 	func pushParagraph(_ text: String) {
@@ -322,14 +350,49 @@ public func markdownToHTML(_ markdown: String) -> String {
 		}
 	}
 
+	// a table row is a pipe-delimited line with >= 2 cells (GitHub-style).
+	func tableCells(_ trimmed: String) -> [String]? {
+		let t = trimmed.trimmingCharacters(in: .whitespaces)
+		guard t.hasPrefix("|") else { return nil }
+		let cells = t.split(separator: "|", omittingEmptySubsequences: true)
+			.map { String($0).trimmingCharacters(in: .whitespaces) }
+		return cells.count >= 2 ? cells : nil
+	}
+
 	for rawLine in lines {
 		let trimmed = rawLine.trimmingCharacters(in: .whitespaces)
+
+		if trimmed.hasPrefix("```") {
+			if codeFence != nil {
+				flushCode()
+			} else {
+				flushList()
+				flushTable()
+				codeFence = String(trimmed.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+				codeLines = []
+			}
+			continue
+		}
+		if codeFence != nil {
+			codeLines.append(rawLine)
+			continue
+		}
 		if trimmed.isEmpty {
 			flushList()
+			flushTable()
 			continue
+		}
+		if let cells = tableCells(trimmed) {
+			if tableRows.isEmpty { flushList() }
+			tableRows.append(cells)
+			continue
+		}
+		if !tableRows.isEmpty {
+			flushTable()
 		}
 		if let heading = parseMarkdownHeading(trimmed) {
 			flushList()
+			flushTable()
 			html.append(heading)
 			continue
 		}
@@ -339,10 +402,20 @@ public func markdownToHTML(_ markdown: String) -> String {
 			continue
 		}
 		flushList()
+		flushTable()
 		pushParagraph(trimmed)
 	}
 	flushList()
+	flushCode()
+	flushTable()
 	return html.joined(separator: "\n")
+}
+
+/// a scoped markdown body: wraps ``markdownToHTML(:_:)`` output in the design
+/// system's `.md` rich-text class so chat/message content inherits the
+/// scoped typography (lists, code, tables, headings) without leaking styles.
+public func markdownBody(_ markdown: String) -> String {
+	"<div class=\"md\">\n" + markdownToHTML(markdown) + "\n</div>"
 }
 
 private func parseMarkdownHeading(_ trimmed: String) -> String? {

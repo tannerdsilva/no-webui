@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'nonce-uSWyUgHAIPMaNgV7HOICrw'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:;">  <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAApklEQVR4nO2XwQ2AIAxF2ahDeWQZb07idkINCQejECgpfDSS/BvQ118C1JhZB1lmsuyVxNLAjiwfynJFkBhcO/BdaYhBwfMQnWzPlgOZ/dOFeFJHA/h3AWy7TKoAzG1SAQjZhM2Wtd7eMDesKTghA5DW+HsA0kOoDtCib5XgB4ADwC4iQl/FVydgj1EnzQWA/ZIZ9KcU4AK0N6jqjjCtWQJkfHM6epyUsxUEgyvS4gAAAABJRU5ErkJggg==">
+          <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'nonce-vn9wRntuczCyDQ-3AFK0MA'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:;">  <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAApklEQVR4nO2XwQ2AIAxF2ahDeWQZb07idkINCQejECgpfDSS/BvQ118C1JhZB1lmsuyVxNLAjiwfynJFkBhcO/BdaYhBwfMQnWzPlgOZ/dOFeFJHA/h3AWy7TKoAzG1SAQjZhM2Wtd7eMDesKTghA5DW+HsA0kOoDtCib5XgB4ADwC4iQl/FVydgj1EnzQWA/ZIZ9KcU4AK0N6jqjjCtWQJkfHM6epyUsxUEgyvS4gAAAABJRU5ErkJggg==">
   <title>WebUI Showcase</title>
   
   <style>
@@ -295,6 +295,51 @@ border-radius: inherit;
 code, pre, kbd, .mono {
 font-family: var(--font-mono);
 }
+.md { line-height: var(--line-height-normal); color: var(--color-text); min-width: 0; }
+.md p { margin: 0 0 0.5rem; }
+.md > :last-child { margin-bottom: 0; }
+.md h1, .md h2, .md h3, .md h4, .md h5, .md h6 {
+margin: 0.75rem 0 0.375rem;
+font-weight: var(--font-weight-semibold);
+line-height: var(--line-height-tight);
+color: var(--color-text);
+}
+.md h1 { font-size: var(--font-size-xl); }
+.md h2 { font-size: var(--font-size-lg); }
+.md h3 { font-size: var(--font-size-md); }
+.md h4 { font-size: var(--font-size-sm); }
+.md h5, .md h6 { font-size: var(--font-size-sm); }
+.md ul, .md ol { margin: 0 0 0.5rem; padding-inline-start: 1.25rem; }
+.md li { margin: 0.125rem 0; }
+.md code {
+font-family: var(--font-mono);
+font-size: 0.875em;
+background: var(--color-bg-inset);
+border: var(--border-width) solid var(--color-border);
+border-radius: var(--radius-sm);
+padding: 0.125rem 0.3rem;
+}
+.md pre {
+background: var(--color-bg-inset);
+border: var(--border-width) solid var(--color-border);
+border-radius: var(--radius-md);
+padding: var(--space-3);
+overflow-x: auto;
+margin: 0 0 0.5rem;
+}
+.md pre code { background: none; border: none; padding: 0; font-size: 0.85rem; }
+.md blockquote {
+margin: 0 0 0.5rem;
+padding: 0.25rem 0.75rem;
+border-inline-start: var(--border-width-3) solid var(--color-primary-300);
+background: var(--color-bg-subtle);
+color: var(--color-text-muted);
+}
+.md a { color: var(--color-primary-400); text-decoration: underline; text-underline-offset: 2px; }
+.md table { border-collapse: collapse; margin: 0 0 0.5rem; width: 100%; font-size: var(--font-size-sm); }
+.md th, .md td { border: var(--border-width) solid var(--color-border); padding: 0.375rem 0.5rem; text-align: left; }
+.md th { background: var(--color-bg-subtle); font-weight: var(--font-weight-medium); }
+.md img { max-width: 100%; border-radius: var(--radius-md); }
 ::selection {
 background: var(--color-primary-200);
 color: var(--color-primary-950);
@@ -8042,7 +8087,7 @@ Plain text content<span class="text-escaped">&lt;script&gt;alert(&#39;xss&#39;)&
 <label class="demo-label">Country:</label><select id="demo-country"><option value="us" selected>United States</option><option value="ca">Canada</option><option value="uk">United Kingdom</option><option value="de">Germany</option><option value="jp">Japan</option></select>
 </div></div>
 </div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
-<h3 class="demo-card-title">Form with CSRF</h3><div class="demo-card-body"><form id="demo-form" action="/submit" method="post"><input type="hidden" name="_csrf" value="ZGVtby1mb3JtOjE3ODk4NjMxOTE6NkI5MzlFRTJBNjM2NEFEMUJFRkM3MENFQzU4OEVBNTc6OWU0MDQ1NjFmZDgyZDJhNTNhN2NlNGQ4OGU3ZDQ1MTRkNzUyODBlNmJmY2IwM2ZkODgwZTI1YTQ3YzBmNjAwZA=="><div class="vstack spacing-12 align-flex-start">
+<h3 class="demo-card-title">Form with CSRF</h3><div class="demo-card-body"><form id="demo-form" action="/submit" method="post"><input type="hidden" name="_csrf" value="ZGVtby1mb3JtOjE3ODk4NjQyNDM6RjRBMDU5OUE2QkE4NEFDQUIxRDFEMUU3QTJFRUE0N0U6N2YzNzUzYjBjMWZiZTJlY2IyN2ZiNWFjNDg1Mjc2M2M4YmIwZDZmNzVhYTliNzU5NGE2NjdmZDEzMTk2MTA5ZQ=="><div class="vstack spacing-12 align-flex-start">
 <label class="demo-label">Name:</label><input id="form-name" type="text" placeholder="Your name"><label class="demo-label">Message:</label><textarea id="form-message" rows="3" placeholder="Your message"></textarea><button id="form-submit" type="submit">Submit</button>
 </div></form></div>
 </div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
