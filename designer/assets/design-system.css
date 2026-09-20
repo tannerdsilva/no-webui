@@ -2720,6 +2720,8 @@ code, .inline-code {
   padding: 0;
   display: flex;
   flex-direction: column;
+  align-self: stretch;
+  min-width: 0;
 }
 .list--desc { display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 1rem; }
 .list--desc dt { font-weight: var(--font-weight-medium); color: var(--color-text); }
