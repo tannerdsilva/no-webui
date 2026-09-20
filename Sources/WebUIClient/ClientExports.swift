@@ -41,6 +41,13 @@ func webuiInit(_ configPtr: UnsafeRawPointer?, _ len: Int) {
 			if let authRaw = dict["authState"] {
 				ClientRuntime.applyAuthState(authRaw.serialize())
 			}
+			if case .array(let caps)? = dict["capabilities"] {
+				let names = caps.compactMap { entry -> String? in
+					if case .string(let value) = entry { return value }
+					return nil
+				}
+				ClientRuntime.applyCapabilities(names)
+			}
 		}
 	}
 	WebUIBridge.install()
@@ -116,6 +123,16 @@ func webuiRenderRegion(_ regionPtr: UnsafeRawPointer?, _ len: Int) -> Int {
 	let html = ClientRuntime.regionHTML(name: name, argsJSON: args) ?? ""
 	writeFrame(html)
 	return Int(bitPattern: RenderFrame.buffer)
+}
+
+@_expose(wasm, "webui_broadcast")
+func webuiBroadcast(_ channelPtr: UnsafeRawPointer?, _ channelLen: Int, _ dataPtr: UnsafeRawPointer?, _ dataLen: Int) {
+	// an inbound broadcast channel message (harness v2 capability
+	// `broadcast`): the chamber's BroadcastChannel listener re-enters here.
+	guard let channelPtr, channelLen > 0, let dataPtr, dataLen > 0 else { return }
+	let channel = String(decoding: UnsafeRawBufferPointer(start: channelPtr, count: channelLen), as: UTF8.self)
+	let payload = String(decoding: UnsafeRawBufferPointer(start: dataPtr, count: dataLen), as: UTF8.self)
+	ClientRuntime.handleBroadcast(channel: channel, payload: payload)
 }
 
 @_expose(wasm, "webui_frame_ptr")

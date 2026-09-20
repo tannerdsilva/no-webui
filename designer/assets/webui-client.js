@@ -77,6 +77,44 @@
         new Uint8Array(holder.memory.buffer, outPtr, n).set(bytes.subarray(0, n));
         return n;
       },
+      focusElement: function (idPtr, idLen) {
+        var el = document.getElementById(readStr(idPtr, idLen));
+        if (el) { el.focus(); }
+      },
+      clipboardWrite: function (textPtr, textLen) {
+        if (!holder.config || !holder.config.capabilities || holder.config.capabilities.indexOf('clipboard') === -1) { return; }
+        var text = readStr(textPtr, textLen);
+        if (text && navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(text).catch(function () {});
+        }
+      },
+      broadcastSubscribe: function (channelPtr, channelLen) {
+        if (!holder.config || !holder.config.capabilities || holder.config.capabilities.indexOf('broadcast') === -1) { return; }
+        var channel = readStr(channelPtr, channelLen);
+        if (!channel) { return; }
+        if (holder.broadcastChannels && holder.broadcastChannels[channel]) { return; }
+        var bc = new BroadcastChannel(channel);
+        bc.onmessage = function (e) {
+          var payload = typeof e.data === 'string' ? e.data : JSON.stringify(e.data || {});
+          var chBytes = new TextEncoder().encode(channel);
+          var dBytes = new TextEncoder().encode(payload);
+          var pIn = holder.exports.webui_input_ptr();
+          if (chBytes.length + dBytes.length > 65536) { return; }
+          new Uint8Array(holder.memory.buffer, pIn, chBytes.length).set(chBytes);
+          new Uint8Array(holder.memory.buffer, pIn + chBytes.length, dBytes.length).set(dBytes);
+          if (holder.exports.webui_broadcast) { holder.exports.webui_broadcast(pIn, chBytes.length, pIn + chBytes.length, dBytes.length); }
+        };
+        holder.broadcastChannels = holder.broadcastChannels || {};
+        holder.broadcastChannels[channel] = bc;
+      },
+      broadcastPublish: function (channelPtr, channelLen, dataPtr, dataLen) {
+        if (!holder.config || !holder.config.capabilities || holder.config.capabilities.indexOf('broadcast') === -1) { return; }
+        var channel = readStr(channelPtr, channelLen);
+        var data = readStr(dataPtr, dataLen);
+        if (!channel) { return; }
+        var bc = holder.broadcastChannels && holder.broadcastChannels[channel];
+        if (bc) { bc.postMessage(data); }
+      },
       now: function () { return performance.now(); },
       log: function (level, msgPtr, msgLen) {
         var msg = readStr(msgPtr, msgLen);
@@ -231,6 +269,11 @@
       if (msg.token && holder.config) { holder.config.renderToken = msg.token; }
       return;
     }
+    if (msg.type === 'viewspec') {
+      var regionTarget = msg.id && document.getElementById(msg.id);
+      if (regionTarget && msg.name) { renderRegionInto(regionTarget, msg.name, msg.args || {}); }
+      return;
+    }
     if (msg.type === 'reload') { location.reload(); return; }
   }
   function openTransport() {
@@ -292,6 +335,20 @@
       if (c) { dispatch(e, c, 'click'); }
     });
   }
+  function renderRegionInto(el, name, args) {
+    if (!el || !name || !holder.exports || !holder.exports.webui_render_region) { return false; }
+    var env = new TextEncoder().encode(JSON.stringify({ name: name, args: args || {} }));
+    if (env.length > 65536) { return false; }
+    var ptr = holder.exports.webui_input_ptr();
+    new Uint8Array(holder.memory.buffer, ptr, env.length).set(env);
+    var outPtr = holder.exports.webui_render_region(ptr, env.length);
+    var outLen = holder.exports.webui_frame_len();
+    if (!outPtr || outLen === 0) { el.setAttribute('data-webui-applet-state', 'unmapped'); return false; }
+    var html = new TextDecoder().decode(new Uint8Array(holder.memory.buffer, outPtr, outLen));
+    el.innerHTML = serializeFragment(sanitizeFragment(html, el));
+    el.setAttribute('data-webui-applet-state', 'mounted');
+    return true;
+  }
   function mountApplets() {
     var regions = document.querySelectorAll('[data-webui-applet]');
     for (var i = 0; i < regions.length; i++) {
@@ -300,17 +357,9 @@
       if (!name) { continue; }
       var args = {};
       try { args = JSON.parse(el.getAttribute('data-webui-args') || '{}'); } catch (e) { args = {}; }
-      var env = new TextEncoder().encode(JSON.stringify({ name: name, args: args }));
-      if (env.length > 65536) { continue; }
-      var ptr = holder.exports.webui_input_ptr();
-      new Uint8Array(holder.memory.buffer, ptr, env.length).set(env);
-      var outPtr = holder.exports.webui_render_region(ptr, env.length);
-      var outLen = holder.exports.webui_frame_len();
-      if (!outPtr || outLen === 0) { el.setAttribute('data-webui-applet-state', 'unmapped'); continue; }
-      var html = new TextDecoder().decode(new Uint8Array(holder.memory.buffer, outPtr, outLen));
-      el.innerHTML = serializeFragment(sanitizeFragment(html, el));
-      el.setAttribute('data-webui-applet-state', 'mounted');
-      if (opts && opts.onAppletMounted) { opts.onAppletMounted(name, el); }
+      if (renderRegionInto(el, name, args) && holder.bootOpts && holder.bootOpts.onAppletMounted) {
+        holder.bootOpts.onAppletMounted(name, el);
+      }
     }
   }
   function boot(opts) {
@@ -321,6 +370,7 @@
         holder.exports = r.instance.exports;
         holder.memory = r.instance.exports.memory;
         holder.config = readConfig();
+        holder.bootOpts = opts;
         if (typeof holder.exports._start === 'function') { holder.exports._start(); }
         var cfgPtr = 0; var cfgLen = 0;
         if (holder.config) {
@@ -336,7 +386,8 @@
           var app = document.getElementById(opts.target || 'search-app');
           if (app) { app.innerHTML = page; }
           wireEvents();
-          mountApplets();
+          try { mountApplets(); } catch (err) { holder.mountError = String(err); }
+          holder.handleServerMessage = handleServerMessage;
           if (opts.onLoaded) { opts.onLoaded(page); }
           openTransport();
           return page;

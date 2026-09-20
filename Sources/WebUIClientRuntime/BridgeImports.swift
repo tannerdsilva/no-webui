@@ -1,11 +1,12 @@
 import WebUICore
 
-// the hand-rolled bridge ABI (trajectory w§3.2): the 8 imports the wasm
-// module declares from the chamber's `env` namespace, as file-level globals
-// (`@_extern` requires globals). every import is referenced at boot
-// (WebUIBridge.install) so the full surface stays linked and pinned in the
-// module — the chamber must implement all 8 or instantiation fails; the
-// boundary guards (len > 0 before dereference) are mirrored on the JS side.
+// the hand-rolled bridge ABI (trajectory w§3.2 + harness v2): the wasm
+// module's `env` imports, as file-level globals (`@_extern` requires
+// globals). every import is referenced at boot (WebUIBridge.install) so the
+// full surface stays linked and pinned — the chamber must implement all or
+// instantiation fails. the capability imports (focus, clipboard, broadcast)
+// are no-ops in the chamber unless the boot config grants the capability,
+// so the import surface is also the permission surface.
 
 #if os(WASI)
 @_extern(wasm, module: "env", name: "setInnerHTML")
@@ -32,6 +33,18 @@ func storageGet(_ keyPtr: UnsafeRawPointer?, _ keyLen: Int, _ outPtr: UnsafeMuta
 @_extern(wasm, module: "env", name: "storageSet")
 func storageSet(_ keyPtr: UnsafeRawPointer?, _ keyLen: Int, _ valPtr: UnsafeRawPointer?, _ valLen: Int)
 
+@_extern(wasm, module: "env", name: "focusElement")
+private func focusElement(_ idPtr: UnsafeRawPointer?, _ idLen: Int)
+
+@_extern(wasm, module: "env", name: "clipboardWrite")
+private func clipboardWrite(_ textPtr: UnsafeRawPointer?, _ textLen: Int)
+
+@_extern(wasm, module: "env", name: "broadcastSubscribe")
+private func broadcastSubscribe(_ channelPtr: UnsafeRawPointer?, _ channelLen: Int)
+
+@_extern(wasm, module: "env", name: "broadcastPublish")
+private func broadcastPublish(_ channelPtr: UnsafeRawPointer?, _ channelLen: Int, _ dataPtr: UnsafeRawPointer?, _ dataLen: Int)
+
 @_extern(wasm, module: "env", name: "now")
 private func now() -> Double
 
@@ -57,10 +70,62 @@ public enum WebUIBridge {
 		wsSend(nil, 0)
 		_ = storageGet(nil, 0, scratch, 256)
 		storageSet(nil, 0, nil, 0)
+		WebUIClientRuntime.focusElement(nil, 0)
+		WebUIClientRuntime.clipboardWrite(nil, 0)
+		WebUIClientRuntime.broadcastSubscribe(nil, 0)
+		WebUIClientRuntime.broadcastPublish(nil, 0, nil, 0)
 		_ = now()
 		let message = [UInt8]("webui ready".utf8)
 		message.withUnsafeBytes { raw in
 			log(1, raw.baseAddress, raw.count)
+		}
+#endif
+	}
+
+	/// move browser focus to the element with `id` (capability: `focus`).
+	/// no-op outside wasm or when the capability is not granted.
+	public static func focusElement(_ id: String) {
+#if os(WASI)
+		let bytes = [UInt8](id.utf8)
+		bytes.withUnsafeBytes { raw in
+			WebUIClientRuntime.focusElement(raw.baseAddress, raw.count)
+		}
+#endif
+	}
+
+	/// write `text` to the system clipboard (capability: `clipboard`).
+	public static func writeClipboard(_ text: String) {
+#if os(WASI)
+		let bytes = [UInt8](text.utf8)
+		bytes.withUnsafeBytes { raw in
+			WebUIClientRuntime.clipboardWrite(raw.baseAddress, raw.count)
+		}
+#endif
+	}
+
+	/// subscribe the chamber to a broadcast channel (capability: `broadcast`).
+	/// inbound messages re-enter through `webuiBroadcast` /
+	/// `ClientRuntime.handleBroadcast`.
+	public static func subscribeBroadcast(_ channel: String) {
+#if os(WASI)
+		let bytes = [UInt8](channel.utf8)
+		bytes.withUnsafeBytes { raw in
+			WebUIClientRuntime.broadcastSubscribe(raw.baseAddress, raw.count)
+		}
+#endif
+	}
+
+	/// publish a payload string on a broadcast channel (capability:
+	/// `broadcast`). local echoes do not self-deliver (BroadcastChannel
+	/// semantics); other tabs receive it.
+	public static func publishBroadcast(_ channel: String, _ payload: String) {
+#if os(WASI)
+		let ch = [UInt8](channel.utf8)
+		let data = [UInt8](payload.utf8)
+		ch.withUnsafeBytes { chRaw in
+			data.withUnsafeBytes { dataRaw in
+				WebUIClientRuntime.broadcastPublish(chRaw.baseAddress, chRaw.count, dataRaw.baseAddress, dataRaw.count)
+			}
 		}
 #endif
 	}

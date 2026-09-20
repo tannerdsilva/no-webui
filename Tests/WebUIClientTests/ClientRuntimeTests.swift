@@ -1,5 +1,6 @@
 import Testing
 import WebUICore
+import Synchronization
 @testable import WebUIClientRuntime
 
 // the resident client runtime: boot registers handlers into the page router,
@@ -202,6 +203,40 @@ struct ClientRuntimeTests {
 		let fragment = try #require(updates.first)
 		#expect(fragment.id == "applet-count")
 		#expect(fragment.html.contains("applet-card__value"))
+	}
+
+	@Test("capability grants gate the applet card controls")
+	func capabilityGating() {
+		ClientRuntime.bootSearch()
+		ClientRuntime.applyCapabilities(["focus", "clipboard"])
+		ClientRuntime.bootApplets()
+		let html = ClientRuntime.regionHTML(name: "demo:card", argsJSON: "{}") ?? ""
+		#expect(html.contains("applet-focus"))
+		#expect(html.contains("applet-copy"))
+		ClientRuntime.applyCapabilities([])
+		let ungated = ClientRuntime.regionHTML(name: "demo:card", argsJSON: "{}") ?? ""
+		#expect(!ungated.contains("applet-focus"))
+		#expect(ClientRuntime.hasCapability("focus") == false)
+	}
+
+	@Test("inbound broadcast messages reach the registered handler")
+	func broadcastInbound() {
+		ClientRuntime.bootSearch()
+		let captured = Mutex<(String, String)?>(nil)
+		ClientRuntime.onBroadcast { channel, payload in
+			captured.withLock { $0 = (channel, payload) }
+		}
+		ClientRuntime.handleBroadcast(channel: "applet-inbox", payload: "plain-payload")
+		let got = captured.withLock { $0 }
+		#expect(got?.0 == "applet-inbox")
+		#expect(got?.1 == "plain-payload")
+	}
+
+	@Test("runtime config encodes capabilities into the boot envelope")
+	func capabilitiesEncode() {
+		let config = RuntimeConfig(capabilities: ["focus", "clipboard"])
+		let json = config.encodedJSON()
+		#expect(json.contains("capabilities") && json.contains("focus") && json.contains("clipboard"))
 	}
 
 	private static func componentID(for elementID: String, in html: String) -> String? {

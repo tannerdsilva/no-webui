@@ -19,6 +19,10 @@ public struct RuntimeConfig: Sendable, Encodable {
 	/// socket reconnects after a different user logs in cannot replay queued
 	/// events into that user's router (cross-session replay).
 	public var renderToken: String?
+	/// the applet-harness capability grants (harness v2; no effect on the
+	/// js-runtime path). the chamber wires the corresponding env imports only
+	/// when granted — a page that never asks for `clipboard` cannot use it.
+	public var capabilities: [String]?
 
 	public init(
 		wsUrl: String? = nil,
@@ -31,7 +35,8 @@ public struct RuntimeConfig: Sendable, Encodable {
 		debounceMaxWaitMs: Int? = nil,
 		optimisticSettleMs: Int? = nil,
 		logLevel: String? = nil,
-		renderToken: String? = nil
+		renderToken: String? = nil,
+		capabilities: [String]? = nil
 	) {
 		self.wsUrl = wsUrl
 		self.wsReconnect = wsReconnect
@@ -44,6 +49,7 @@ public struct RuntimeConfig: Sendable, Encodable {
 		self.optimisticSettleMs = optimisticSettleMs
 		self.logLevel = logLevel
 		self.renderToken = renderToken
+		self.capabilities = capabilities
 	}
 
 	public var isEmpty: Bool {
@@ -51,6 +57,7 @@ public struct RuntimeConfig: Sendable, Encodable {
 			&& wsPingIntervalMs == nil && wsPongTimeoutMs == nil && maxQueueSize == nil
 			&& debounceInputMs == nil && debounceMaxWaitMs == nil
 			&& optimisticSettleMs == nil && logLevel == nil && renderToken == nil
+			&& capabilities == nil
 	}
 
 	public func encodedJSON() -> String {
@@ -66,6 +73,10 @@ public struct RuntimeConfig: Sendable, Encodable {
 		if let v = optimisticSettleMs { entries.append("\"optimisticSettleMs\":\(v)") }
 		if let v = logLevel { entries.append("\"logLevel\":\(jsonStringLiteral(v))") }
 		if let v = renderToken { entries.append("\"renderToken\":\(jsonStringLiteral(v))") }
+		if let v = capabilities {
+			let escaped = v.map(jsonStringLiteral).joined(separator: ",")
+			entries.append("\"capabilities\":[\(escaped)]")
+		}
 		return "{\(entries.joined(separator: ","))}"
 	}
 

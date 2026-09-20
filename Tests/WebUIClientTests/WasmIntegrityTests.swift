@@ -58,6 +58,8 @@ struct WasmIntegrityTests {
 			"env.setInnerHTML", "env.removeElement", "env.getElementValue",
 			"env.setElementValue", "env.setCustomValidity", "env.wsSend", "env.now", "env.log",
 			"env.storageGet", "env.storageSet",
+			"env.focusElement", "env.clipboardWrite",
+			"env.broadcastSubscribe", "env.broadcastPublish",
 		]
 		return set
 	}()

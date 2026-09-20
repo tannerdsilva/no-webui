@@ -396,6 +396,38 @@ if (wasmBuilt) {
     else bad(`applet control did not update: ${JSON.stringify(appletAfter)}`);
     if (appletAfter.wsSent === appletState.wsSent) ok("applet interaction kept the websocket silent");
     else bad(`websocket sends after applet click: ${appletAfter.wsSent}`);
+    const capState = await s.evaluate(() => {
+      const inst = window.WebUIClient._getInstance();
+      return {
+        hasFocus: !!document.getElementById("applet-focus"),
+        hasCopy: !!document.getElementById("applet-copy"),
+        cfg: inst.config && inst.config.capabilities,
+      };
+    });
+    if (capState.hasFocus && capState.hasCopy && Array.isArray(capState.cfg) && capState.cfg.indexOf("clipboard") >= 0) ok("applet capability grants reached the mounted region");
+    else bad(`applet capability grants missing: ${JSON.stringify(capState)}`);
+    await s.click("#applet-focus").catch(() => {});
+    await s.waitForTimeout(150);
+    const focused = await s.evaluate(() => document.activeElement && document.activeElement.id);
+    if (focused === "search-input") ok("applet focus capability moved browser focus");
+    else bad(`focus landed on: ${JSON.stringify(focused)}`);
+    await s.click("#applet-copy").catch(() => {});
+    await s.waitForTimeout(150);
+    const copyErrors = sErrors.filter((t) => /clipboard|NotAllowed|permission/i.test(t));
+    if (copyErrors.length === 0) ok("applet clipboard capability ran clean");
+    else bad(`clipboard errors: ${JSON.stringify(copyErrors)}`);
+    const vsResult = await s.evaluate(() => {
+      const inst = window.WebUIClient._getInstance();
+      try {
+        inst.handleServerMessage({ type: "viewspec", id: "applet-region", name: "demo:card", args: { label: "Declarative card" } });
+      } catch (err) {
+        return { error: String(err) };
+      }
+      const region = document.getElementById("applet-region");
+      return { label: region ? region.textContent : "", state: region ? region.getAttribute("data-webui-applet-state") : null };
+    });
+    if (vsResult.state === "mounted" && String(vsResult.label || "").indexOf("Declarative card") >= 0) ok("viewspec message composed a region declaratively");
+    else bad(`viewspec failed: ${JSON.stringify(vsResult)}`);
     const de = sErrors.filter((t) => !/favicon/i.test(t));
     if (de.length === 0) ok("local-search probe has no console errors");
     else bad(`local-search console errors: ${JSON.stringify(de)}`);

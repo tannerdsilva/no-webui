@@ -33,18 +33,21 @@ input staging is still the chamber-written 64 KiB buffer (`webui_input_ptr`);
 region envelopes are small and fit with the same guard, the frame carries
 the emitted html.
 
-## import surface (v2 target)
+## import surface (v2 — implemented)
 
 the environment imports are the **capability seam**: the chamber wires an
 import only when the page's boot config grants it, so the module surface is
-also the permission surface.
+also the permission surface. `RuntimeConfig.capabilities` carries the grants
+in the boot envelope; un-granted imports no-op in the chamber.
 
 | import | v1 | v2 |
 |---|---|---|
 | `setInnerHTML`, `removeElement`, `getElementValue`, `setElementValue`, `setCustomValidity` | yes | yes |
 | `wsSend`, `storageGet`, `storageSet`, `now`, `log` | yes | yes |
-| `focusElement`, `clipboardWrite`, `fileRead`, `broadcastSubscribe`/`webui_broadcast` | — | planned |
-| media-query, fullscreen, drag-drop metadata | — | planned |
+| `focusElement` (grant: `focus`) | — | yes |
+| `clipboardWrite` (grant: `clipboard`) | — | yes |
+| `broadcastSubscribe` / `broadcastPublish` (grant: `broadcast`; inbound re-enters `webui_broadcast` → `ClientRuntime.handleBroadcast`) | — | yes |
+| media-query, fullscreen, drag-drop metadata, `fileRead` | — | planned |
 
 ## message shapes (v2 target)
 

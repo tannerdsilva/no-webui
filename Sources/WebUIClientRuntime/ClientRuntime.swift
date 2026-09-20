@@ -44,6 +44,32 @@ public enum ClientRuntime {
 	/// email validation rules for the vertical's form field (p5-t2).
 	public static let emailValidator = ClientFieldValidator(rules: [.required, .email])
 
+	private static let capabilityBox = Mutex<Set<String>>([])
+	private static let broadcastHandlerBox = Mutex<(@Sendable (String, String) -> Void)?>(nil)
+
+	/// the granted applet-harness capabilities (from the boot envelope).
+	public static var capabilities: Set<String> {
+		capabilityBox.withLock { $0 }
+	}
+
+	public static func hasCapability(_ name: String) -> Bool {
+		capabilityBox.withLock { $0.contains(name) }
+	}
+
+	public static func applyCapabilities(_ names: [String]) {
+		capabilityBox.withLock { $0 = Set(names) }
+	}
+
+	/// register the inbound broadcast handler (harness v2, capability
+	/// `broadcast`): chamber messages re-enter through `webuiBroadcast`.
+	public static func onBroadcast(_ handler: @escaping @Sendable (String, String) -> Void) {
+		broadcastHandlerBox.withLock { $0 = handler }
+	}
+
+	public static func handleBroadcast(channel: String, payload: String) {
+		broadcastHandlerBox.withLock { $0 }?(channel, payload)
+	}
+
 	/// register the applet-region renderers (harness v2). the chamber mounts
 	/// `[data-webui-applet]` regions through `webui_render_region`, which
 	/// resolves here. a region's renderer self-wires: it renders inside a
@@ -62,6 +88,9 @@ public enum ClientRuntime {
 			}
 			return appletCardHTML(label: label)
 		}
+		if hasCapability("broadcast") {
+			WebUIBridge.subscribeBroadcast("applet-inbox")
+		}
 	}
 
 	/// render a registered applet region (nil when the name is unknown).
@@ -78,7 +107,21 @@ public enum ClientRuntime {
 			Div(class: "applet-card") {
 				Heading(label, level: .h3)
 				Div(id: "applet-count", class: "applet-card__value") {
-				Text(String(appletCountBox.withLock { $0 }))
+					Text(String(appletCountBox.withLock { $0 }))
+				}
+				if hasCapability("focus") {
+					Button("Focus search", id: "applet-focus", type: .button)
+						.onClick { _ in
+							WebUIBridge.focusElement("search-input")
+							return []
+						}
+				}
+				if hasCapability("clipboard") {
+					Button("Copy", id: "applet-copy", type: .button)
+						.onClick { _ in
+							WebUIBridge.writeClipboard(String(appletCountBox.withLock { $0 }))
+							return []
+						}
 				}
 				Button("+1", id: "applet-inc", type: .button)
 					.onClick { _ in
