@@ -80,7 +80,10 @@ High-level components (import `WebUIDesignSystem`): `WebUIButton`,
 `WebUITree`, `WebUITable`, `WebUIEmptyState`, `WebUISpinner`, `WebUIProgress`,
 `WebUIModal`, `WebUIToast`, `WebUITooltip`, `WebUITimeline`,
 `WebUIBreadcrumb`, `WebUIStat`, `WebUISkeleton`, `WebUIAlert`,
-`WebUIPagination`.
+`WebUIPagination`. Turn transparency (per-turn reasoning, tool steps, and a
+summary line — for agent chat threads): `WebUIReasoningBlock`,
+`WebUIToolStep`, `WebUITurnSummary` — all fields are HTML-escaped and the
+`.turn-*` styling ships with the design system.
 
 Shell / app-frame building blocks (in `WebUIShell.swift`): `WebUISidebar`
 (`.full`/`.rail`), `WebUISegmentedControl`, `WebUISearchField`,
@@ -236,7 +239,6 @@ Serve the page and check it in a browser before shipping:
 | Shell / app-frame components + composition recipe | `references/high-level-shell-components.md` |
 | CSS layout gotchas (shrink-to-content, stretch, center, full-height) | `references/css-layout-shrink-stretch.md` |
 | Serve your page live (shared library + NIO server + `/ws`) & the `*__body` convention | `references/live-server-and-showcase.md` |
-| Agent chat turn transparency + live streaming (AgentTurn, `done`, actor) | `references/agent-chat-streaming.md` |
 | Top-bar provider + thinking-effort (RuntimeSettings, `reasoning_effort`, `WebUISelect`) | `references/runtime-provider-effort-settings.md` |
 | Interactive server-re-rendered regions (table sort/select/expand) | `references/interactive-table-recipe.md` |
 | WCAG contrast audit + guardrail tests | `references/contrast-audit.md` |
