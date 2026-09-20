@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'nonce-PYh3_wh0DzjsS5FusMYcxQ'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:;">  <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAApklEQVR4nO2XwQ2AIAxF2ahDeWQZb07idkINCQejECgpfDSS/BvQ118C1JhZB1lmsuyVxNLAjiwfynJFkBhcO/BdaYhBwfMQnWzPlgOZ/dOFeFJHA/h3AWy7TKoAzG1SAQjZhM2Wtd7eMDesKTghA5DW+HsA0kOoDtCib5XgB4ADwC4iQl/FVydgj1EnzQWA/ZIZ9KcU4AK0N6jqjjCtWQJkfHM6epyUsxUEgyvS4gAAAABJRU5ErkJggg==">
+          <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'nonce-8rZneDV3oE18YoRAref8QQ'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:;">  <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAApklEQVR4nO2XwQ2AIAxF2ahDeWQZb07idkINCQejECgpfDSS/BvQ118C1JhZB1lmsuyVxNLAjiwfynJFkBhcO/BdaYhBwfMQnWzPlgOZ/dOFeFJHA/h3AWy7TKoAzG1SAQjZhM2Wtd7eMDesKTghA5DW+HsA0kOoDtCib5XgB4ADwC4iQl/FVydgj1EnzQWA/ZIZ9KcU4AK0N6jqjjCtWQJkfHM6epyUsxUEgyvS4gAAAABJRU5ErkJggg==">
   <title>WebUI Showcase</title>
   
   <style>
@@ -340,6 +340,59 @@ color: var(--color-text-muted);
 .md th, .md td { border: var(--border-width) solid var(--color-border); padding: 0.375rem 0.5rem; text-align: left; }
 .md th { background: var(--color-bg-subtle); font-weight: var(--font-weight-medium); }
 .md img { max-width: 100%; border-radius: var(--radius-md); }
+.turn-reasoning {
+margin: 0 0 0.5rem;
+border: var(--border-width) solid var(--color-border);
+border-radius: var(--radius-md);
+background: var(--color-bg-subtle);
+overflow: hidden;
+}
+.turn-reasoning summary {
+cursor: pointer;
+padding: 0.375rem 0.625rem;
+font-size: var(--font-size-2xs);
+font-weight: var(--font-weight-medium);
+color: var(--color-text-muted);
+text-transform: uppercase;
+letter-spacing: 0.05em;
+user-select: none;
+}
+.turn-reasoning pre {
+margin: 0;
+padding: 0.5rem 0.625rem;
+border-top: var(--border-width) solid var(--color-border);
+font-family: var(--font-mono);
+font-size: var(--font-size-2xs);
+color: var(--color-text-muted);
+white-space: pre-wrap;
+max-height: 12rem;
+overflow-y: auto;
+}
+.turn-tool {
+margin: 0 0 0.5rem;
+border: var(--border-width) solid var(--color-border);
+border-inline-start: var(--border-width-3) solid var(--color-primary-300);
+border-radius: var(--radius-md);
+background: var(--color-bg-inset);
+padding: 0.375rem 0.625rem;
+font-size: var(--font-size-2xs);
+}
+.turn-tool--error { border-inline-start-color: var(--color-danger); }
+.turn-tool__name { font-weight: var(--font-weight-medium); color: var(--color-text); font-family: var(--font-mono); }
+.turn-tool__args, .turn-tool__result {
+margin: 0.25rem 0 0;
+padding: 0.25rem 0.375rem;
+font-family: var(--font-mono);
+font-size: var(--font-size-2xs);
+color: var(--color-text-muted);
+white-space: pre-wrap;
+overflow-x: auto;
+border-radius: var(--radius-sm);
+background: var(--color-bg-subtle);
+max-height: 8rem;
+overflow-y: auto;
+}
+.turn-tool--error .turn-tool__result { color: var(--color-danger); }
 ::selection {
 background: var(--color-primary-200);
 color: var(--color-primary-950);
@@ -8099,7 +8152,7 @@ Plain text content<span class="text-escaped">&lt;script&gt;alert(&#39;xss&#39;)&
 <label class="demo-label">Country:</label><select id="demo-country"><option value="us" selected>United States</option><option value="ca">Canada</option><option value="uk">United Kingdom</option><option value="de">Germany</option><option value="jp">Japan</option></select>
 </div></div>
 </div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
-<h3 class="demo-card-title">Form with CSRF</h3><div class="demo-card-body"><form id="demo-form" action="/submit" method="post"><input type="hidden" name="_csrf" value="ZGVtby1mb3JtOjE3ODk4Njc5NzU6OTlFQzY4MzNEOEI4NEM4REE2NTZGOTY2MEZDMUNERjM6MjY5MjJlMDFhZWVkZTQyMDVhYWMwNDk1NDEzMGFmNmM3MGRhOTlkMTFkYTI4NzIxNTM1ZDhlYjM3ZjFlY2U1Yw=="><div class="vstack spacing-12 align-flex-start">
+<h3 class="demo-card-title">Form with CSRF</h3><div class="demo-card-body"><form id="demo-form" action="/submit" method="post"><input type="hidden" name="_csrf" value="ZGVtby1mb3JtOjE3ODk4NzIxMzU6NzRFM0I3RkNFRDFFNEU3RUE0Njg5RTYxMTE5NTc2MEE6M2EwYjlmZmQzOGJmNDc3ZTU5MThkODVjYTQyNDE1ZjJkZGE4ZTUwN2M1MTE1MWE4NGUzZGVlMDdmZDYwZGFmNQ=="><div class="vstack spacing-12 align-flex-start">
 <label class="demo-label">Name:</label><input id="form-name" type="text" placeholder="Your name"><label class="demo-label">Message:</label><textarea id="form-message" rows="3" placeholder="Your message"></textarea><button id="form-submit" type="submit">Submit</button>
 </div></form></div>
 </div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">

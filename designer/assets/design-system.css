@@ -339,6 +339,61 @@ code, pre, kbd, .mono {
 .md th { background: var(--color-bg-subtle); font-weight: var(--font-weight-medium); }
 .md img { max-width: 100%; border-radius: var(--radius-md); }
 
+/* turn transparency: collapsible reasoning + tool steps in the chat thread */
+.turn-reasoning {
+  margin: 0 0 0.5rem;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle);
+  overflow: hidden;
+}
+.turn-reasoning summary {
+  cursor: pointer;
+  padding: 0.375rem 0.625rem;
+  font-size: var(--font-size-2xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  user-select: none;
+}
+.turn-reasoning pre {
+  margin: 0;
+  padding: 0.5rem 0.625rem;
+  border-top: var(--border-width) solid var(--color-border);
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+  color: var(--color-text-muted);
+  white-space: pre-wrap;
+  max-height: 12rem;
+  overflow-y: auto;
+}
+.turn-tool {
+  margin: 0 0 0.5rem;
+  border: var(--border-width) solid var(--color-border);
+  border-inline-start: var(--border-width-3) solid var(--color-primary-300);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-inset);
+  padding: 0.375rem 0.625rem;
+  font-size: var(--font-size-2xs);
+}
+.turn-tool--error { border-inline-start-color: var(--color-danger); }
+.turn-tool__name { font-weight: var(--font-weight-medium); color: var(--color-text); font-family: var(--font-mono); }
+.turn-tool__args, .turn-tool__result {
+  margin: 0.25rem 0 0;
+  padding: 0.25rem 0.375rem;
+  font-family: var(--font-mono);
+  font-size: var(--font-size-2xs);
+  color: var(--color-text-muted);
+  white-space: pre-wrap;
+  overflow-x: auto;
+  border-radius: var(--radius-sm);
+  background: var(--color-bg-subtle);
+  max-height: 8rem;
+  overflow-y: auto;
+}
+.turn-tool--error .turn-tool__result { color: var(--color-danger); }
+
 ::selection {
   background: var(--color-primary-200);
   color: var(--color-primary-950);
