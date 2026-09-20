@@ -63,10 +63,10 @@ stretch, full-height, collapse) are in `references/css-layout-shrink-stretch.md`
 - **Swift 6: a raw TAB byte (0x09) in a string literal is a parse error** —
   generators must use `\t` escapes. Byte-scan string literals for 0x09 if a
   tool edit suddenly fails to parse.
-- **A consumer's config struct hides the app config behind a field** — in
-  arc-agent `WebUIService.Configuration` the `ArcConfig` is `config.arcConfig`,
-  not `.model`/`.provider` directly (compile error writing
-  `config.model.provider`).
+- **A consumer's config struct hides the app config behind a field** — a
+  host's `Configuration` may expose the app config as `config.appConfig`
+  (not `.model`/`.provider` directly), so writing `config.model.provider` is a
+  compile error. Read the host's own config shape first.
 
 ## SwiftPM / server pitfalls
 

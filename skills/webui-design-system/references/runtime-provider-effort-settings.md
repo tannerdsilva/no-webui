@@ -1,8 +1,9 @@
 # Top-bar runtime controls: live provider + thinking-effort selection
 
-The arc-agent chat has a top bar over the shell with a **provider dropdown** and a
-**Low/Medium/High thinking-effort** segmented control. A selection takes effect
-on the next message. Durable pieces:
+An app can expose session-scoped runtime choices — here an LLM **provider
+dropdown** and a **Low/Medium/High thinking-effort** segmented control in a top
+bar over the shell. A selection takes effect on the next request. Durable
+pieces:
 
 ## `WebUISelect` — styled native `<select>` with change routing
 
@@ -36,7 +37,7 @@ mutually-exclusive choices (like low/medium/high).
 ## `RuntimeSettings` actor + `applyRuntimeSettings()`
 
 Live selections are not write-through config (they reset on restart). Hold them
-in a shared actor; the agent re-reads and re-applies at the top of every turn.
+in a shared actor; the app re-reads and re-applies at the top of every turn.
 
 ```swift
 public actor RuntimeSettings {
@@ -50,7 +51,7 @@ public actor RuntimeSettings {
 }
 ```
 
-In the agent, `applyRuntimeSettings()` reads the snapshot and rebuilds the LLM
+In the host app, `applyRuntimeSettings()` reads the snapshot and rebuilds the
 client only when it changed (track `lastAppliedProvider/BaseURL/Effort` to avoid
 rebuilding every turn). The client is built with the chosen `baseURL` and a
 `RequestParameters(reasoningEffort: effort == "auto" ? nil : effort)`; the
@@ -59,13 +60,13 @@ OpenAI-compatible client serializes that as the `reasoning_effort` request field
 
 **Call it at the start of the turn, before you capture the client** — the turn
 loop uses the *passed* client, so a rebuild inside the loop wouldn't be picked
-up. In `runConversationTurn` / the streaming loop: `await applyRuntimeSettings()`
+up. In the turn handler: `await applyRuntimeSettings()`
 then `guard let client = self.llmClient …`. Gate it on the change so it's a no-op
 when nothing changed.
 
 ## Wiring the controls
 
-- Options: `"default"` (the configured provider) + each `BundledProviders.unique`
+- Options: `"default"` (the configured provider) + each available provider
   name; `value` = the current config provider.
 - Handlers update the actor over the ws router (registered under the render
   token like any other control); return `[]` (no re-render needed). `"default"`

@@ -392,7 +392,6 @@ node designer/browser-smoke.mjs     # requires node + playwright (chromium)
 
 ## related projects
 
-- `arc-agent` — ARC agent (Swift agent/gateway with LMDB persistence, web UI, MCP)
 - `swift-mcp` — MCP server framework for Swift (macros, Service Lifecycle)
 - `rawdog` — lean binary encode/decode (alignment, endianness)
 

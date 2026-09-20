@@ -22,7 +22,7 @@ the same idea applied to a different component.
   panel). `.list` now carries `align-self: stretch; min-width: 0`.
 - **Host pages** placed inside `VStack(alignment:.leading)` — `.stretch()` the
   page content or the whole sub-page collapses to ~220–330px with dead space
-  right (fix in arc-agent `AppShell` non-fills branch).
+  right (fix in the host's non-fills branch).
 
 **Diagnose by measuring, not eyeballing**: `list.getBoundingClientRect().width`
 vs the panel-body width (a screenshot of a shrink-wrapped list reads as
@@ -34,7 +34,7 @@ Inside `VStack(alignment:.leading)` (align-items: flex-start) a bar/header row
 *shrink-wraps*, so a `Spacer` on each side of a centered group has zero room
 and the group stays pinned left. Give the row `align-self: stretch`
 (`.stretch()`) so it fills the width, THEN the leading/trailing `Spacer`s
-center the inner content. Verified on the chat top-bar pill: without
+center the inner content. Verified on a top-bar control pill: without
 `.stretch()` the group's left edge sat at ~94px (near-left) regardless of the
 spacers; with it, the pill centered in the content column. This is the fix
 for "this control should be in the middle, not hugging the left."
@@ -60,7 +60,7 @@ Base rule has `min-width: 0; overflow-wrap: anywhere` on `dd`. Verify with
 computed `gridTemplateColumns` + `overflowWrap`, not a low-res screenshot (a
 wrapped value reads as "jumbled" when it's actually correct).
 
-## Agent-shell side panels: collapse on narrow + fill full height
+## App-shell side panels: collapse on narrow + fill full height
 
 - **Collapse**: fixed-width `.panel--leading`/`.panel--trailing` overlay the
   thread on small viewports. `@media (max-width:48rem){ .panel--trailing{
@@ -93,6 +93,6 @@ wrapped value reads as "jumbled" when it's actually correct).
   directly to drive tree/list toggles.
 - **`WebUITree` node ids are used directly as DOM row ids**
   (`<base>-node-<id>`), so they must be path-unique and `-`/`/`-safe. For a
-  real on-disk tree use path-relative ids (e.g. `Sources/Agent`) and have the
-  handler strip the `<base>-node-` prefix to recover the id (see arc-agent
-  `WorkspaceTreeBuilder`).
+  real on-disk tree use path-relative ids (e.g. `Sources/Core`) and have the
+  handler strip the `<base>-node-` prefix to recover the id (use path-relative
+  ids built by the host's tree builder).

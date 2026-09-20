@@ -1,6 +1,6 @@
 ---
 name: webui-design-system
-description: "Use when BUILDING a frontend in your own Swift project with the no-webui public API: add the dependency, author views/components in Swift, wire live server round-trips, apply design tokens/theming, and serve + verify the page. For agent shells, chat, dashboards and general app UIs see the 'Build your UI in Swift' section and the references index. (Maintaining the no-webui package itself — its designer assets, icon pipeline, showcase generation, smoke gates — is repo work documented in the repo's README/AGENTS.md, not this skill.)"
+description: "Use when BUILDING a frontend in your own Swift project with the no-webui public API: add the dependency, author views/components in Swift, wire live server round-trips, apply design tokens/theming, and serve + verify the page. For any kind of app UI — a shell, a dashboard, a chat-style page, a tool — see the 'Build your UI in Swift' section and the references index. (Maintaining the no-webui package itself — its designer assets, icon pipeline, showcase generation, smoke gates — is repo work documented in the repo's README/AGENTS.md, not this skill.)"
 version: 1.13.0
 author: Hermes Agent
 license: MIT
@@ -14,7 +14,7 @@ metadata:
 # WebUI Design System — build web UIs in your own Swift app
 
 This skill is for **consumers** of the no-webui **public API**. You have your
-own Swift executable/server (an agent host, a tool dashboard, a demo app) that
+own Swift executable/server (a dashboard, a console, a demo app) that
 depends on no-webui as a package, and you want to author its frontend in Swift.
 You do **not** edit the no-webui package — you compose its public views and
 components.
@@ -81,7 +81,7 @@ High-level components (import `WebUIDesignSystem`): `WebUIButton`,
 `WebUIModal`, `WebUIToast`, `WebUITooltip`, `WebUITimeline`,
 `WebUIBreadcrumb`, `WebUIStat`, `WebUISkeleton`, `WebUIAlert`,
 `WebUIPagination`. Turn transparency (per-turn reasoning, tool steps, and a
-summary line — for agent chat threads): `WebUIReasoningBlock`,
+summary line): `WebUIReasoningBlock`,
 `WebUIToolStep`, `WebUITurnSummary` — all fields are HTML-escaped and the
 `.turn-*` styling ships with the design system.
 

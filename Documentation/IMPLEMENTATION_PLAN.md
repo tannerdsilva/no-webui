@@ -111,7 +111,7 @@ pinned demo.
 
 | Dependency | Why | First used by |
 |---|---|---|
-| ~~`tannerdsilva/QuickLMDB` (+ `CLMDB`)~~ — **removed 2026-09**, see top note | session store was per house LMDB preference (proven in arc-agent/wiremand); no database dependency in the current core | (was) M0-T8 |
+| ~~`tannerdsilva/QuickLMDB` (+ `CLMDB`)~~ — **removed 2026-09**, see top note | session store was per house LMDB preference (proven in earlier LMDB-based hosts); no database dependency in the current core | (was) M0-T8 |
 | `apple/swift-service-lifecycle` | Second Law: `WebUIAuthServer`, `SessionManager`, sweep are `Service`s under one `ServiceGroup` (the reference servers currently run as bare task groups — the auth server must not) | M1-T1 |
 | SMTP client (under `Mailer` protocol) | password reset out-of-band channel — **named, not selected**: provider chosen at M2-T6b, never in the core | M2-T6b |
 
@@ -666,7 +666,7 @@ flowchart LR
 | TaskLocal bleed across concurrent handlers | hard no-`Task.detached` rule; audit reads bound session (M1-T6) |
 | public login endpoint ships unhardened at M1 | M1 explicitly not deployable; caveat in the milestone DoD |
 | unbounded hash queue defeats the cap | bounded queue + timeout, thresholds asserted (M2-T6) |
-| QuickLMDB dep surprises on Linux | proven in arc-agent/wiremand; M0-T8 has a Linux lane; harness temp envs |
+| QuickLMDB dep surprises on Linux | proven in earlier LMDB-based hosts; M0-T8 has a Linux lane; harness temp envs |
 | driver path drift | M3-T2 pinned to the real path; plugin resolution double-checked |
 | scope creep (WebAuthn/registration/scale) | explicit non-goals; see below |
 

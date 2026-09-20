@@ -375,8 +375,8 @@ CSS classes: `skeleton skeleton--{variant}`; `aria-hidden="true"`.
 
 ### WebUIReasoningBlock / WebUIToolStep / WebUITurnSummary
 
-Turn-transparency components (`WebUITurn.swift`): the per-turn region of an
-agent chat — a collapsible reasoning transcript, one block per tool executed,
+Turn-transparency components (`WebUITurn.swift`): the per-turn region of a
+conversation — a collapsible reasoning transcript, one block per tool executed,
 and a muted one-line summary. They emit the `.turn-*` classes whose token-only
 rules live in `design-system.css`; all fields are HTML-escaped.
 

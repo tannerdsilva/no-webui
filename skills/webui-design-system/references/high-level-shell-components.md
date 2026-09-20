@@ -1,10 +1,10 @@
 # High-level shell components — building a no-webui "powered app"
 
-Session 2026-09-19: restyled arc-agent's chat UI into a Hermes-WebUI-style
-4-column agent shell, built entirely from NEW high-level no-webui components
-(no host-side raw `Div`/`Button`/class strings). The user's goal: no-webui
-should enable "as complex and sophisticated web ui as possible, with as little
-swift code as possible", and a host like arc-agent should lean on it maximally.
+Session 2026-09-19: built a 4-column app shell (nav rail, two side panels, a
+main content column) entirely from NEW high-level no-webui components — no
+host-side raw `Div`/`Button`/class strings. The goal: no-webui should enable
+"as complex and sophisticated web ui as possible, with as little swift code as
+possible", and a host app should lean on it maximally.
 
 ## The components (the library side)
 
@@ -25,7 +25,7 @@ Compose with `WebUITree`/`WebUITabs`/`WebUIButton`/`WebUIBadge`/
 `WebUIEmptyState`/`WebUISpinner` for the rest. Layout stacks (`HStack`/
 `VStack`/`ScrollView`) are fine in the host; raw `Div`/`Button` are not.
 
-## The 4-column agent shell (host-side composition)
+## The 4-column app shell (host-side composition)
 
 ```
 HStack(spacing:0) {
@@ -78,15 +78,15 @@ A doubled backslash (`\\(htmlEscape…` / `\\"`) emits literal text. `write_file
 does NOT double backslashes (`od -c` proves single `\`), so double backslashes
 indicate the authored content. Prefer multiline `"""` strings to avoid `\"`.
 
-## Verification recipe (host app, e.g. arc-agent)
+## Verification recipe (host app)
 
 1. `cd ~/workspace/no-webui && swift build` (re-embeds `design-system.css` via
    `WebUIAssetPlugin`) then `swift package plugin showcase
    --allow-writing-to-package-directory` if you changed the showcase.
-2. `cd ~/workspace/arc-agent && swift build` (path-dep on no-webui picks up the
-   new components + CSS).
-3. Serve auth-disabled: `ARC_WEB_AUTH=0 ARC_WEB_PORT=8199 .build/debug/arc-agent
-   serve --port 8198 --web-port 8199` (don't disturb a live `::1` instance).
+2. `cd <your-app> && swift build` (the path dependency picks up the new
+   components + CSS).
+3. Serve auth-disabled on two fresh ports that don't collide with any running
+   instance: `<your-app> serve --port 8198 --web-port 8199`.
 4. Verify in a browser under a **dark** color-scheme (assert the body
    background is `rgb(6,9,16)` before screenshotting) — dark mode is automatic.
 5. Confirm the search-field computed `padding-left` is `36px` (2.25rem) — if
@@ -96,7 +96,7 @@ indicate the authored content. Prefer multiline `"""` strings to avoid `\"`.
 
 ## Composer round-trip — VERIFIED WORKING (2026-09-19)
 
-The interactive submit round-trip works end-to-end against a live arc-agent
+The interactive submit round-trip works end-to-end against a live host
 gateway. Earlier "403 / gateway gate" and "composer broken" observations were
 **artifacts of browser instrumentation, not a real defect**: a raw-shell
 `curl -H "Upgrade: websocket"` probe 403s at the upgrade gate (`/ws`), and
