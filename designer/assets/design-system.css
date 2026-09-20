@@ -393,6 +393,11 @@ code, pre, kbd, .mono {
   overflow-y: auto;
 }
 .turn-tool--error .turn-tool__result { color: var(--color-danger); }
+.turn-summary {
+  margin: 0 0 0.5rem;
+  font-size: var(--font-size-2xs);
+  color: var(--color-text-faint);
+}
 
 ::selection {
   background: var(--color-primary-200);
