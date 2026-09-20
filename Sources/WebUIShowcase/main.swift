@@ -5,6 +5,7 @@ import NIOHTTP1
 import NIOPosix
 import WebUI
 import WebUIDesignSystem
+import WebUIShowcaseContent
 
 let logger = Logger(label: "webui.showcase")
 

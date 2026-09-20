@@ -40,6 +40,10 @@ let package = Package(
             name: "WebUISmokeTest",
             targets: ["WebUISmokeTest"]
         ),
+        .executable(
+            name: "WebUIShowcaseServer",
+            targets: ["WebUIShowcaseServer"]
+        ),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-log.git", "1.0.0"..<"2.0.0"),
@@ -101,6 +105,16 @@ let package = Package(
             name: "WebUISmokeShared",
             dependencies: [
                 "WebUICore",
+            ]
+        ),
+        // the full showcase page, shared between the static generator
+        // (WebUIShowcase) and the always-on showcase server.
+        .target(
+            name: "WebUIShowcaseContent",
+            dependencies: [
+                "WebUI",
+                "WebUIDesignSystem",
+                "WebUIChart",
             ]
         ),
         .target(
@@ -193,6 +207,7 @@ let package = Package(
                 "WebUI",
                 "WebUIDesignSystem",
                 "WebUIChart",
+                "WebUIShowcaseContent",
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOHTTP1", package: "swift-nio"),
@@ -208,6 +223,22 @@ let package = Package(
                 "WebUIDesignSystem",
                 "WebUIChart",
                 "WebUISmokeShared",
+                .product(name: "Logging", package: "swift-log"),
+                .product(name: "NIOPosix", package: "swift-nio"),
+                .product(name: "NIOHTTP1", package: "swift-nio"),
+                .product(name: "NIOCore", package: "swift-nio"),
+                .product(name: "NIOWebSocket", package: "swift-nio"),
+            ]
+        ),
+
+        // ── Live showcase server (serves the full showcase, swift-generated) ──
+        .executableTarget(
+            name: "WebUIShowcaseServer",
+            dependencies: [
+                "WebUI",
+                "WebUIDesignSystem",
+                "WebUIChart",
+                "WebUIShowcaseContent",
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOHTTP1", package: "swift-nio"),
@@ -256,6 +287,18 @@ let package = Package(
             ),
             dependencies: [
                 .target(name: "WebUISmokeTest"),
+            ]
+        ),
+        .plugin(
+            name: "WebUIShowcaseServePlugin",
+            capability: .command(
+                intent: .custom(
+                    verb: "showcase-serve",
+                    description: "Host the live swift-generated showcase server on :9092 (requires --disable-sandbox)."
+                )
+            ),
+            dependencies: [
+                .target(name: "WebUIShowcaseServer"),
             ]
         ),
         .plugin(
