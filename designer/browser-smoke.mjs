@@ -428,6 +428,27 @@ if (wasmBuilt) {
     });
     if (vsResult.state === "mounted" && String(vsResult.label || "").indexOf("Declarative card") >= 0) ok("viewspec message composed a region declaratively");
     else bad(`viewspec failed: ${JSON.stringify(vsResult)}`);
+    await s.click("#applet-media-btn").catch(() => {});
+    await s.waitForTimeout(200);
+    const mediaText = await s.evaluate(() => document.getElementById("applet-media")?.textContent || "");
+    if (mediaText === "wide") ok("applet media query evaluated in the module");
+    else bad(`media result: ${JSON.stringify(mediaText)}`);
+    await s.evaluate(() => {
+      const dt = new DataTransfer();
+      dt.items.add(new File(["hello world"], "drop-me.txt", { type: "text/plain" }));
+      const ev = new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt });
+      window.dispatchEvent(ev);
+    });
+    await s.waitForTimeout(350);
+    const fileText = await s.evaluate(() => document.getElementById("applet-file")?.textContent || "");
+    if (fileText.indexOf("drop-me.txt") >= 0 && fileText.indexOf("11") >= 0) ok("applet file drop reached the module (name + byte count)");
+    else bad(`file drop result: ${JSON.stringify(fileText)}`);
+    await s.click("#applet-fs").catch(() => {});
+    await s.waitForTimeout(200);
+    const fsState = await s.evaluate(() => ({ fs: !!document.fullscreenElement }));
+    if (fsState.fs) ok("applet fullscreen engaged");
+    else if (sErrors.filter((t) => /fullscreen/i.test(t)).length === 0) ok("applet fullscreen declined cleanly (headless)");
+    else bad(`fullscreen errors: ${JSON.stringify(fsState)}`);
     const de = sErrors.filter((t) => !/favicon/i.test(t));
     if (de.length === 0) ok("local-search probe has no console errors");
     else bad(`local-search console errors: ${JSON.stringify(de)}`);

@@ -47,7 +47,10 @@ in the boot envelope; un-granted imports no-op in the chamber.
 | `focusElement` (grant: `focus`) | — | yes |
 | `clipboardWrite` (grant: `clipboard`) | — | yes |
 | `broadcastSubscribe` / `broadcastPublish` (grant: `broadcast`; inbound re-enters `webui_broadcast` → `ClientRuntime.handleBroadcast`) | — | yes |
-| media-query, fullscreen, drag-drop metadata, `fileRead` | — | planned |
+| `fullscreenElement` (grant: `fullscreen`) | — | yes |
+| `mediaQuery` (grant: `media`) | — | yes |
+| inbound files (drag-drop; grant: `files` → `webui_file_alloc` + `webui_file_commit` → `ClientRuntime.onFile`) | — | yes |
+| media-change subscription, `fileRead` via picker, drag metadata | — | planned |
 
 ## message shapes (v2 target)
 

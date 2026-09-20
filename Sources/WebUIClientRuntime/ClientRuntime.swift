@@ -46,6 +46,7 @@ public enum ClientRuntime {
 
 	private static let capabilityBox = Mutex<Set<String>>([])
 	private static let broadcastHandlerBox = Mutex<(@Sendable (String, String) -> Void)?>(nil)
+	private static let fileHandlerBox = Mutex<(@Sendable (String, String, [UInt8]) -> [FragmentUpdate])?>(nil)
 
 	/// the granted applet-harness capabilities (from the boot envelope).
 	public static var capabilities: Set<String> {
@@ -70,6 +71,18 @@ public enum ClientRuntime {
 		broadcastHandlerBox.withLock { $0 }?(channel, payload)
 	}
 
+	/// register the inbound file handler (harness v3, capability `files`):
+	/// a dropped/opened file re-enters through `webui_file_commit`, the handler
+	/// runs and its fragments are applied by the chamber (same frame path as
+	/// `webui_handle_event`).
+	public static func onFile(_ handler: @escaping @Sendable (String, String, [UInt8]) -> [FragmentUpdate]) {
+		fileHandlerBox.withLock { $0 = handler }
+	}
+
+	public static func handleFile(name: String, mime: String, bytes: [UInt8]) -> [FragmentUpdate] {
+		fileHandlerBox.withLock { $0 }?(name, mime, bytes) ?? []
+	}
+
 	/// register the applet-region renderers (harness v2). the chamber mounts
 	/// `[data-webui-applet]` regions through `webui_render_region`, which
 	/// resolves here. a region's renderer self-wires: it renders inside a
@@ -91,6 +104,14 @@ public enum ClientRuntime {
 		if hasCapability("broadcast") {
 			WebUIBridge.subscribeBroadcast("applet-inbox")
 		}
+		ClientRuntime.onFile { name, _, bytes in
+			return [FragmentUpdate(
+				id: "applet-file",
+				html: Div(id: "applet-file", class: "applet-card__meta") {
+					Text("file: " + name + " (" + String(bytes.count) + " bytes)")
+				}.render()
+			)]
+		}
 	}
 
 	/// render a registered applet region (nil when the name is unknown).
@@ -109,6 +130,12 @@ public enum ClientRuntime {
 				Div(id: "applet-count", class: "applet-card__value") {
 					Text(String(appletCountBox.withLock { $0 }))
 				}
+				Div(id: "applet-file", class: "applet-card__meta") {
+					Text("no file")
+				}
+				Div(id: "applet-media", class: "applet-card__meta") {
+					Text("?")
+				}
 				if hasCapability("focus") {
 					Button("Focus search", id: "applet-focus", type: .button)
 						.onClick { _ in
@@ -121,6 +148,25 @@ public enum ClientRuntime {
 						.onClick { _ in
 							WebUIBridge.writeClipboard(String(appletCountBox.withLock { $0 }))
 							return []
+						}
+				}
+				if hasCapability("fullscreen") {
+					Button("Fullscreen", id: "applet-fs", type: .button)
+						.onClick { _ in
+							WebUIBridge.fullscreenElement("applet-region")
+							return []
+						}
+				}
+				if hasCapability("media") {
+					Button("Media?", id: "applet-media-btn", type: .button)
+						.onClick { _ in
+							let matches = WebUIBridge.mediaQuery("(min-width: 1px)")
+							return [FragmentUpdate(
+								id: "applet-media",
+								html: Div(id: "applet-media", class: "applet-card__meta") {
+									Text(matches ? "wide" : "narrow")
+								}.render()
+							)]
 						}
 				}
 				Button("+1", id: "applet-inc", type: .button)

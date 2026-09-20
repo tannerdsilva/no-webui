@@ -45,6 +45,12 @@ private func broadcastSubscribe(_ channelPtr: UnsafeRawPointer?, _ channelLen: I
 @_extern(wasm, module: "env", name: "broadcastPublish")
 private func broadcastPublish(_ channelPtr: UnsafeRawPointer?, _ channelLen: Int, _ dataPtr: UnsafeRawPointer?, _ dataLen: Int)
 
+@_extern(wasm, module: "env", name: "fullscreenElement")
+private func fullscreenElement(_ idPtr: UnsafeRawPointer?, _ idLen: Int)
+
+@_extern(wasm, module: "env", name: "mediaQuery")
+private func mediaQuery(_ queryPtr: UnsafeRawPointer?, _ queryLen: Int) -> Bool
+
 @_extern(wasm, module: "env", name: "now")
 private func now() -> Double
 
@@ -74,6 +80,8 @@ public enum WebUIBridge {
 		WebUIClientRuntime.clipboardWrite(nil, 0)
 		WebUIClientRuntime.broadcastSubscribe(nil, 0)
 		WebUIClientRuntime.broadcastPublish(nil, 0, nil, 0)
+		WebUIClientRuntime.fullscreenElement(nil, 0)
+		_ = WebUIClientRuntime.mediaQuery(nil, 0)
 		_ = now()
 		let message = [UInt8]("webui ready".utf8)
 		message.withUnsafeBytes { raw in
@@ -127,6 +135,29 @@ public enum WebUIBridge {
 				WebUIClientRuntime.broadcastPublish(chRaw.baseAddress, chRaw.count, dataRaw.baseAddress, dataRaw.count)
 			}
 		}
+#endif
+	}
+
+	/// request fullscreen on the element with `id` (capability: `fullscreen`).
+	public static func fullscreenElement(_ id: String) {
+#if os(WASI)
+		let bytes = [UInt8](id.utf8)
+		bytes.withUnsafeBytes { raw in
+			WebUIClientRuntime.fullscreenElement(raw.baseAddress, raw.count)
+		}
+#endif
+	}
+
+	/// evaluate a media query in the browser (capability: `media`). returns
+	/// false on the host / outside wasm.
+	public static func mediaQuery(_ query: String) -> Bool {
+#if os(WASI)
+		let bytes = [UInt8](query.utf8)
+		return bytes.withUnsafeBytes { raw in
+			WebUIClientRuntime.mediaQuery(raw.baseAddress, raw.count)
+		}
+#else
+		return false
 #endif
 	}
 }

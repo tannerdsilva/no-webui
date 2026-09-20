@@ -208,15 +208,33 @@ struct ClientRuntimeTests {
 	@Test("capability grants gate the applet card controls")
 	func capabilityGating() {
 		ClientRuntime.bootSearch()
-		ClientRuntime.applyCapabilities(["focus", "clipboard"])
+		ClientRuntime.applyCapabilities(["focus", "clipboard", "files", "fullscreen", "media"])
 		ClientRuntime.bootApplets()
 		let html = ClientRuntime.regionHTML(name: "demo:card", argsJSON: "{}") ?? ""
 		#expect(html.contains("applet-focus"))
 		#expect(html.contains("applet-copy"))
+		#expect(html.contains("applet-fs"))
+		#expect(html.contains("applet-media-btn"))
+		#expect(html.contains("applet-file"))
 		ClientRuntime.applyCapabilities([])
 		let ungated = ClientRuntime.regionHTML(name: "demo:card", argsJSON: "{}") ?? ""
 		#expect(!ungated.contains("applet-focus"))
+		#expect(!ungated.contains("applet-fs"))
 		#expect(ClientRuntime.hasCapability("focus") == false)
+	}
+
+	@Test("an inbound file reaches the registered handler")
+	func fileInbound() throws {
+		ClientRuntime.bootSearch()
+		ClientRuntime.bootApplets()
+		let updates = ClientRuntime.handleFile(
+			name: "notes.txt", mime: "text/plain",
+			bytes: [UInt8]("hello".utf8)
+		)
+		let fragment = try #require(updates.first)
+		#expect(fragment.id == "applet-file")
+		#expect(fragment.html.contains("notes.txt"))
+		#expect(fragment.html.contains("5"))
 	}
 
 	@Test("inbound broadcast messages reach the registered handler")

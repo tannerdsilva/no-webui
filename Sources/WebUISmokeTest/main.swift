@@ -424,7 +424,7 @@ func makeSearchDemoPage(wasmHash: String) -> String {
 	let boot = ClientBoot(
 		wasmURL: clientWasmURL(wasmHash),
 		mode: .app,
-		config: RuntimeConfig(capabilities: ["focus", "clipboard", "broadcast"]),
+		config: RuntimeConfig(capabilities: ["focus", "clipboard", "broadcast", "files", "fullscreen", "media"]),
 		scriptURLs: ["/__assets/webui-client.js", "/__assets/search-demo-boot.js"]
 	)
 	return HTMLDocument(

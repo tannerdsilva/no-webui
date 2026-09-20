@@ -11,6 +11,7 @@ import WebUIClientRuntime
 #if os(WASI)
 private let frameCapacity = 1 << 20
 private let inputCapacity = 1 << 16
+private let fileCapacity = 1 << 20
 
 @_expose(wasm, "webui_pump")
 func webuiPump() -> Bool {
@@ -23,9 +24,10 @@ func webuiPump() -> Bool {
 @_expose(wasm, "webui_init")
 func webuiInit(_ configPtr: UnsafeRawPointer?, _ len: Int) {
 	// the boot envelope may carry an `authState` object (non-secret session
-	// presence + roles) and a `persistence` flag (swap the localStorage
-	// backend in). boot the resident router + the local-search vertical's
-	// handlers, and publish the boot page markup through the frame.
+	// presence + roles), a `persistence` flag (swap the localStorage
+	// backend in), and `capabilities` (harness grants). boot the resident
+	// router + the local-search vertical's handlers, and publish the boot
+	// page markup through the frame.
 	if let configPtr, len > 0 {
 		let text = String(decoding: UnsafeRawBufferPointer(start: configPtr, count: len), as: UTF8.self)
 		if let root = try? JSONValue.parse(text),
@@ -81,10 +83,7 @@ func webuiHandleEvent(_ eventPtr: UnsafeRawPointer?, _ len: Int) -> Int {
 	guard let eventPtr, len > 0 else { return Int(bitPattern: RenderFrame.buffer) }
 	let text = String(decoding: UnsafeRawBufferPointer(start: eventPtr, count: len), as: UTF8.self)
 	let updates = ClientRuntime.handleEvent(text)
-	let json = "[" + updates.map { update -> String in
-		"{\"id\":\"\(JSONValue.escapeString(update.id))\",\"html\":\"\(JSONValue.escapeString(update.html))\"}"
-	}.joined(separator: ",") + "]"
-	writeFrame(json)
+	writeFrame(updatesJSON(updates))
 	return Int(bitPattern: RenderFrame.buffer)
 }
 
@@ -135,6 +134,34 @@ func webuiBroadcast(_ channelPtr: UnsafeRawPointer?, _ channelLen: Int, _ dataPt
 	ClientRuntime.handleBroadcast(channel: channel, payload: payload)
 }
 
+@_expose(wasm, "webui_file_alloc")
+func webuiFileAlloc(_ maxLen: Int) -> Int {
+	// reserve the module-owned file buffer for an inbound file (harness v3,
+	// capability `files`). the chamber writes the bytes there, then calls
+	// `webui_file_commit`. returns 0 when the file exceeds the cap.
+	guard maxLen > 0, maxLen <= fileCapacity else { return 0 }
+	return Int(bitPattern: FileBuffer.buffer)
+}
+
+@_expose(wasm, "webui_file_commit")
+func webuiFileCommit(_ dataPtr: UnsafeRawPointer?, _ dataLen: Int, _ metaPtr: UnsafeRawPointer?, _ metaLen: Int) -> Int {
+	// bytes + `{name, mime}` meta: run the registered file handler and emit
+	// its fragments through the frame (the chamber applies them after).
+	guard let dataPtr, dataLen > 0, dataLen <= fileCapacity else { return 0 }
+	let bytes = Array(UnsafeRawBufferPointer(start: dataPtr, count: dataLen))
+	var name = "file"
+	var mime = "application/octet-stream"
+	if let metaPtr, metaLen > 0,
+	   let root = try? JSONValue.parse(String(decoding: UnsafeRawBufferPointer(start: metaPtr, count: metaLen), as: UTF8.self)),
+	   case .object(let dict) = root {
+		if case .string(let value)? = dict["name"] { name = value }
+		if case .string(let value)? = dict["mime"] { mime = value }
+	}
+	let updates = ClientRuntime.handleFile(name: name, mime: mime, bytes: bytes)
+	writeFrame(updatesJSON(updates))
+	return Int(bitPattern: RenderFrame.buffer)
+}
+
 @_expose(wasm, "webui_frame_ptr")
 func webuiFramePtr() -> Int {
 	Int(bitPattern: RenderFrame.buffer)
@@ -143,6 +170,12 @@ func webuiFramePtr() -> Int {
 @_expose(wasm, "webui_frame_len")
 func webuiFrameLen() -> Int {
 	RenderFrame.length
+}
+
+private func updatesJSON(_ updates: [FragmentUpdate]) -> String {
+	"[" + updates.map { update -> String in
+		"{\"id\":\"\(JSONValue.escapeString(update.id))\",\"html\":\"\(JSONValue.escapeString(update.html))\"}"
+	}.joined(separator: ",") + "]"
 }
 
 private func writeFrame(_ text: String) {
@@ -160,5 +193,9 @@ private enum RenderFrame {
 
 private enum InputBuffer {
 	nonisolated(unsafe) static let buffer = UnsafeMutableRawPointer.allocate(byteCount: inputCapacity, alignment: 16)
+}
+
+private enum FileBuffer {
+	nonisolated(unsafe) static let buffer = UnsafeMutableRawPointer.allocate(byteCount: fileCapacity, alignment: 16)
 }
 #endif

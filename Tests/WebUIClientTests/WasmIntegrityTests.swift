@@ -60,6 +60,7 @@ struct WasmIntegrityTests {
 			"env.storageGet", "env.storageSet",
 			"env.focusElement", "env.clipboardWrite",
 			"env.broadcastSubscribe", "env.broadcastPublish",
+			"env.fullscreenElement", "env.mediaQuery",
 		]
 		return set
 	}()

@@ -115,6 +115,17 @@
         var bc = holder.broadcastChannels && holder.broadcastChannels[channel];
         if (bc) { bc.postMessage(data); }
       },
+      fullscreenElement: function (idPtr, idLen) {
+        if (!holder.config || !holder.config.capabilities || holder.config.capabilities.indexOf('fullscreen') === -1) { return; }
+        var el = document.getElementById(readStr(idPtr, idLen));
+        if (el && el.requestFullscreen) { el.requestFullscreen().catch(function () {}); }
+      },
+      mediaQuery: function (queryPtr, queryLen) {
+        if (!holder.config || !holder.config.capabilities || holder.config.capabilities.indexOf('media') === -1) { return false; }
+        var q = readStr(queryPtr, queryLen);
+        if (!q) { return false; }
+        return window.matchMedia(q).matches;
+      },
       now: function () { return performance.now(); },
       log: function (level, msgPtr, msgLen) {
         var msg = readStr(msgPtr, msgLen);
@@ -362,6 +373,29 @@
       }
     }
   }
+  function processDropFile(file) {
+    var reader = new FileReader();
+    reader.onload = function () {
+      var bytes = new Uint8Array(reader.result);
+      if (!holder.exports.webui_file_alloc || !holder.exports.webui_file_commit) { return; }
+      var ptr = holder.exports.webui_file_alloc(bytes.length);
+      if (!ptr) { return; }
+      new Uint8Array(holder.memory.buffer, ptr, bytes.length).set(bytes);
+      var meta = new TextEncoder().encode(JSON.stringify({ name: file.name, mime: file.type || 'application/octet-stream' }));
+      var pIn = holder.exports.webui_input_ptr();
+      new Uint8Array(holder.memory.buffer, pIn, meta.length).set(meta);
+      holder.exports.webui_file_commit(ptr, bytes.length, pIn, meta.length);
+      if (holder.exports.webui_frame_len() > 0) { applyFrame(); }
+    };
+    reader.readAsArrayBuffer(file);
+  }
+  function wireFileDrops() {
+    window.addEventListener('dragover', function (e) { e.preventDefault(); });
+    window.addEventListener('drop', function (e) {
+      e.preventDefault();
+      if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) { processDropFile(e.dataTransfer.files[0]); }
+    });
+  }
   function boot(opts) {
     return fetch(opts.wasmUrl)
       .then(function (r) { if (!r.ok) { throw new Error('wasm fetch ' + r.status); } return r.arrayBuffer(); })
@@ -387,6 +421,7 @@
           if (app) { app.innerHTML = page; }
           wireEvents();
           try { mountApplets(); } catch (err) { holder.mountError = String(err); }
+          if (holder.config && holder.config.capabilities && holder.config.capabilities.indexOf('files') >= 0) { wireFileDrops(); }
           holder.handleServerMessage = handleServerMessage;
           if (opts.onLoaded) { opts.onLoaded(page); }
           openTransport();
