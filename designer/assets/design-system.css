@@ -5211,6 +5211,7 @@ code, .inline-code {
   flex-direction: column;
   gap: var(--space-2);
   max-width: 30rem;
+  min-width: 0;
 }
 .composer__input-row {
   display: flex;
@@ -8598,6 +8599,15 @@ h6 {
 }
 .panel--leading { border-inline-end: var(--border-width) solid var(--color-border); }
 .panel--trailing { border-inline-start: var(--border-width) solid var(--color-border); }
+/* the agent-shell side panels recede on narrow screens so the chat thread
+   keeps the width (the rail nav stays for page switching; the collapse is
+   progressive disclosure, not data loss — the panes are read-only). */
+@media (max-width: 48rem) {
+  .panel--trailing { display: none; }
+}
+@media (max-width: 40rem) {
+  .panel--leading { display: none; }
+}
 .panel__header {
 	display: flex;
 	align-items: center;
