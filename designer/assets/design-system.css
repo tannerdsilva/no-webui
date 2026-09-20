@@ -8698,4 +8698,4 @@ h6 {
 }
 .panel__subtitle { font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: none; letter-spacing: normal; font-weight: var(--font-weight-normal); white-space: nowrap; }
 .panel__actions { display: inline-flex; align-items: center; gap: var(--space-1); flex: none; }
-.panel__body { flex: 1; min-height: 0; overflow: auto; padding: var(--space-2) var(--space-2); }
+.panel__body { flex: 1; min-height: 0; overflow: auto; padding: var(--space-2) var(--space-2); display: flex; flex-direction: column; }

@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'nonce-UHZMrvsDgmD1m0aoA29p6w'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:;">  <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAApklEQVR4nO2XwQ2AIAxF2ahDeWQZb07idkINCQejECgpfDSS/BvQ118C1JhZB1lmsuyVxNLAjiwfynJFkBhcO/BdaYhBwfMQnWzPlgOZ/dOFeFJHA/h3AWy7TKoAzG1SAQjZhM2Wtd7eMDesKTghA5DW+HsA0kOoDtCib5XgB4ADwC4iQl/FVydgj1EnzQWA/ZIZ9KcU4AK0N6jqjjCtWQJkfHM6epyUsxUEgyvS4gAAAABJRU5ErkJggg==">
+          <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'nonce-kQDOpxbFWDaS0Gq-_mEgOQ'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:;">  <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAApklEQVR4nO2XwQ2AIAxF2ahDeWQZb07idkINCQejECgpfDSS/BvQ118C1JhZB1lmsuyVxNLAjiwfynJFkBhcO/BdaYhBwfMQnWzPlgOZ/dOFeFJHA/h3AWy7TKoAzG1SAQjZhM2Wtd7eMDesKTghA5DW+HsA0kOoDtCib5XgB4ADwC4iQl/FVydgj1EnzQWA/ZIZ9KcU4AK0N6jqjjCtWQJkfHM6epyUsxUEgyvS4gAAAABJRU5ErkJggg==">
   <title>WebUI Showcase</title>
   
   <style>
@@ -8089,7 +8089,7 @@ min-width: 0;
 }
 .panel__subtitle { font-size: var(--font-size-xs); color: var(--color-text-muted); text-transform: none; letter-spacing: normal; font-weight: var(--font-weight-normal); white-space: nowrap; }
 .panel__actions { display: inline-flex; align-items: center; gap: var(--space-1); flex: none; }
-.panel__body { flex: 1; min-height: 0; overflow: auto; padding: var(--space-2) var(--space-2); }
+.panel__body { flex: 1; min-height: 0; overflow: auto; padding: var(--space-2) var(--space-2); display: flex; flex-direction: column; }
 </style>
 </head>
 <body>
@@ -8160,7 +8160,7 @@ Plain text content<span class="text-escaped">&lt;script&gt;alert(&#39;xss&#39;)&
 <label class="demo-label">Country:</label><select id="demo-country"><option value="us" selected>United States</option><option value="ca">Canada</option><option value="uk">United Kingdom</option><option value="de">Germany</option><option value="jp">Japan</option></select>
 </div></div>
 </div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
-<h3 class="demo-card-title">Form with CSRF</h3><div class="demo-card-body"><form id="demo-form" action="/submit" method="post"><input type="hidden" name="_csrf" value="ZGVtby1mb3JtOjE3ODk4NzgwNjc6MUQwODYzRjJGQzRDNEVDQUJCNjQxMEVGQkI1RjFDOUU6Yjg1YWFiZGYyZTBmZWFlOGY4OWU2NGQzMzU5YzEzNDFiNWUzMjFiYTQyMTViZmM4NDNkODdkZGI3ZjhkYWUwNA=="><div class="vstack spacing-12 align-flex-start">
+<h3 class="demo-card-title">Form with CSRF</h3><div class="demo-card-body"><form id="demo-form" action="/submit" method="post"><input type="hidden" name="_csrf" value="ZGVtby1mb3JtOjE3ODk4ODMxNDU6NUVENTQzMURDMjBFNDlEOUE1RDhGRjEwREE1NjMwNjE6YzNhODIzM2ZhN2E3N2I4MDdmM2NjZDMyNWRkNmZkNTkxOTU0NTU1N2IxYWViZjk3NjRjNDllY2Y4ODA0N2Q0MQ=="><div class="vstack spacing-12 align-flex-start">
 <label class="demo-label">Name:</label><input id="form-name" type="text" placeholder="Your name"><label class="demo-label">Message:</label><textarea id="form-message" rows="3" placeholder="Your message"></textarea><button id="form-submit" type="submit">Submit</button>
 </div></form></div>
 </div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
