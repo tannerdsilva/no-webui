@@ -347,6 +347,7 @@ let package = Package(
                 "WebUI",
                 "WebUIDesignSystem",
                 "WebUIChart",
+                "WebUIAuth",
             ]
         ),
         .testTarget(

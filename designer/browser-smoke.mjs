@@ -383,6 +383,36 @@ if (wasmBuilt) {
   console.log("  SKIP local-search vertical probe (wasm sdk not registered)");
 }
 
+{
+    const esc = await browser.newPage();
+    await esc.goto(`${BASE}/`, { waitUntil: "load" });
+    const escErrors = [];
+    esc.on("pageerror", (e) => escErrors.push(String(e)));
+    await esc.waitForTimeout(300);
+    await esc.evaluate(() => {
+      const overlay = document.createElement("div");
+      overlay.className = "modal-overlay";
+      overlay.setAttribute("data-component-id", "esc-test");
+      overlay.setAttribute("data-event", "click");
+      const btn = document.createElement("button");
+      btn.setAttribute("data-dismiss", "modal");
+      btn.textContent = "close";
+      overlay.appendChild(btn);
+      document.body.appendChild(overlay);
+      window.__escClicks = 0;
+      btn.addEventListener("click", function () { window.__escClicks++; });
+      btn.focus();
+    });
+    await esc.keyboard.press("Escape");
+    await esc.waitForTimeout(100);
+    const escClicks = await esc.evaluate(() => window.__escClicks);
+    if (escClicks === 1) ok("Escape dispatches the modal dismiss click");
+    else bad(`Escape dismiss click count: ${escClicks} (expected 1)`);
+    if (escErrors.length === 0) ok("Escape probe has no page errors");
+    else bad(`Escape probe page errors: ${JSON.stringify(escErrors)}`);
+    await esc.close();
+}
+
 await browser.close();
 server.kill();
 

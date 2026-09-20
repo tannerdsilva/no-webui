@@ -32,7 +32,10 @@ the frozen surface is the consumer-facing API of the library products
 **`Tests/WebUITests/APISurfaceTests.swift`**: every public initializer is
 referenced at compile time (a signature change fails the build) and every
 component's render contract — class/role/aria/escaping markers — is
-asserted. `Tests/WebUIChart/ChartTests` pins the chart product.
+asserted. `Tests/WebUITests/ChartTests.swift` pins the chart product, the
+`WebUIAuth` signatures are pinned by the same suite's `authSurfacePins`
+(behavior by the `WebUIAuthTests` suites), and the wire/runtime contracts
+are pinned by `WebUIClientTests` + `DeploymentIntegrityTests`.
 
 the frozen surface is:
 
@@ -59,6 +62,11 @@ the frozen surface is:
 - document/assembly: `WebUIDocument` (title/body/`includeRuntime`/
   `runtimeConfig`/`contentSecurityPolicy`/`theme`/`rawStyles`/`clientMode`),
   `RuntimeConfig`, `WebUITheme`, `@Theme`, `DesignToken`.
+- the `WebUIAuth` surface: `SessionToken`, `CSRFProtection`,
+  `PasswordVerifier` / `Argon2Parameters` / `PasswordRecord`, `LoginThrottle`,
+  `SingleUseTokenStore`, `AsyncSemaphore`, `CookieParser` / `HTTPCookie`,
+  `Identity` / `Role` / `AuthContext`, `AuthenticatedSession`, and the
+  `AuthSessionStore` protocol.
 - the assets: `designer/assets/design-system.css` tokens
   (`--space-*`, `--color-*`, `--font-size-*`, `--radius-*`, `--shadow-*`,
   `--z-*`, `--transition-*`) and the emitted class vocabulary
@@ -73,6 +81,17 @@ the frozen surface is:
 outside the frozen surface (free to change in any release): example
 apps (`WebUIExample`, `WebUIAuthExample`, `WebUIShowcaseServer`), plugin
 verbs, docs, and internal target layout.
+
+## migration notes for consumers of 0.x
+
+- `EventData.data` is `[String: JSONValue]`, **not** `[String: String]`.
+  a 0.x consumer reading `data["id"] as? String` must read
+  `event.string("id")` (or `event.number(...)` for numbers). the wire bytes
+  are unchanged — only the Swift-facing payload type moved.
+- component interiors pad through their `__body` element (`.card__body`,
+  `.panel__body`, `.list__body`, `.modal__body`): if a container ever renders
+  content flush against its rounded box, wrap the children in the `__body`
+  element instead of padding the container.
 
 ## deprecation
 
@@ -104,6 +123,11 @@ frozen surface is a mistake:
 5. **phase 6 of the wasm trajectory** (size diet + per-SKU distribution) is
    post-1.0 scope; it changes distribution and payload size, never the
    frozen surface.
+6. **the deprecation rule is a process rule, not a machine rule.** there is
+   no CI or lint that can verify "one full minor before removal"; it is
+   enforced by review against this document and the changelog. the in-repo
+   enforcement (tests, byte-identity pins) guarantees the *current* epoch's
+   surface, not the *transition* between epochs.
 
 ## change discipline
 

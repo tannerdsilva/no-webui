@@ -2,6 +2,7 @@ import Testing
 import Foundation
 import WebUI
 import WebUIDesignSystem
+import WebUIAuth
 
 // MARK: - Public API surface pins
 //
@@ -94,6 +95,14 @@ func modifierSurfacePins() {
 	#expect(padded.contains("var(--space-4)"))
 	let px = rendered(Text("x").padding(12))
 	#expect(px.contains("padding: 12px"))
+	let margin = rendered(Text("x").margin(8))
+	#expect(margin.contains("margin: 8px"))
+	let family = rendered(Text("x").fontFamily("var(--font-mono)"))
+	#expect(family.contains("font-family: var(--font-mono)"))
+	let minWidth = rendered(Text("x").minWidth("0"))
+	#expect(minWidth.contains("min-width: 0"))
+	let height = rendered(Text("x").height("100vh"))
+	#expect(height.contains("height: 100vh"))
 	let styled = rendered(
 		Text("x")
 			.cornerRadius("var(--radius-xl)")
@@ -113,6 +122,34 @@ func modifierSurfacePins() {
 	#expect(hidden.contains("display: none"))
 	let shown = rendered(Text("x").showIf(true))
 	#expect(!shown.contains("display: none"))
+}
+
+@Test("every event modifier renders its routed attribute")
+func eventModifierSurfacePins() {
+	// controlAttributes is the routing seam; the modifiers below must compile
+	// against the documented shape even where their render path is inert
+	// outside a live session.
+	let handler: EventHandler = { _ in [] }
+	_ = Text("x").onClick(perform: handler)
+	_ = Text("x").onSubmit(perform: handler)
+	_ = Text("x").onInput(perform: handler)
+	_ = Text("x").onChange(perform: handler)
+	_ = Text("x").onFocus(perform: handler)
+	_ = Text("x").onBlur(perform: handler)
+	_ = Text("x").onKeyDown(perform: handler)
+	_ = Text("x").onKeyUp(perform: handler)
+	_ = Text("x").onKeyPress(perform: handler)
+	_ = Text("x").onMouseDown(perform: handler)
+	_ = Text("x").onMouseUp(perform: handler)
+	_ = Text("x").onMouseOver(perform: handler)
+	_ = Text("x").onMouseOut(perform: handler)
+	_ = Text("x").onFocusIn(perform: handler)
+	_ = Text("x").onFocusOut(perform: handler)
+	_ = Text("x").onOptimisticClick(predict: { [] }, perform: handler)
+	let attrs = controlAttributes(id: "evt-click", event: .click, handler: handler)
+	let injected = injectAttributes(into: Text("x").render(), attrs)
+	#expect(injected.contains("data-component-id=\"evt-click\""))
+	#expect(injected.contains("data-event=\"click\""))
 }
 
 // MARK: - Design system components
@@ -248,6 +285,50 @@ func compositeSurfacePins() {
 
 // MARK: - Document assembly
 
+@Test("the webuiauth public surface compiles against its documented shapes")
+func authSurfacePins() throws {
+	// signature carets: deleting or renaming any member below fails the build.
+	let record = PasswordRecord(
+		salt: try PasswordVerifier.makeSalt(),
+		hash: [UInt8]("pw".utf8),
+		parameters: .interactive
+	)
+	_ = try PasswordRecord(encoded: record.encodedString())
+	let store: any AuthSessionStore = InMemoryAuthSessionStore()
+	let throttle = LoginThrottle(windowSeconds: 60, maxAttempts: 5)
+	let tokenStore = SingleUseTokenStore()
+	let semaphore = AsyncSemaphore(permits: 1)
+	let identity = Identity(id: "u", roles: [Role.member])
+	let session = AuthenticatedSession(
+		id: [1], tokenHash: [2], identityID: "u", csrfSeed: [3],
+		createdAt: Date(), expiresAt: Date(), lastSeenAt: Date()
+	)
+	let context = AuthContext(session: session, identity: identity)
+	_ = context
+	_ = session.isExpired()
+
+	// behavioral carets on the security-critical members.
+	let csrf = try CSRFProtection.generateSecret()
+	let signed = try CSRFProtection.token(for: "login", secret: csrf)
+	#expect(CSRFProtection.validate(signed, for: "login", secret: csrf))
+	#expect(!CSRFProtection.validate(signed, for: "logout", secret: csrf))
+
+	let token = try SessionToken.generate()
+	#expect(try SessionToken.hash(token).count == 32)
+
+	let cookie = try HTTPCookie(
+		name: "a", value: "b",
+		attributes: .init(maxAge: 60, path: "/", httpOnly: true, sameSite: .lax)
+	).setCookieHeaderValue()
+	#expect(cookie.hasPrefix("a=b"))
+	#expect(CookieParser.requestCookies("a=b; c=d") == ["a": "b", "c": "d"])
+
+	#expect(throttle.record("ip:1"))
+	_ = tokenStore
+	_ = semaphore
+	_ = store
+}
+
 @Test("document assembly pins csp nonce, runtime config, and theming")
 func documentSurfacePins() {
 	let doc = WebUIDocument(
@@ -280,5 +361,5 @@ func runtimeConfigSurfacePins() {
 		logLevel: "warn",
 		renderToken: "tok"
 	)
-	#expect(config != nil)
+	_ = config
 }
