@@ -395,3 +395,28 @@ node designer/browser-smoke.mjs     # requires node + playwright (chromium)
 - `arc-agent` — ARC agent (Swift agent/gateway with LMDB persistence, web UI, MCP)
 - `swift-mcp` — MCP server framework for Swift (macros, Service Lifecycle)
 - `rawdog` — lean binary encode/decode (alignment, endianness)
+
+## shipped agent skills (deliverable)
+
+This repo ships two Hermes agent skills and a `Makefile` installer that deploys
+them into an active Hermes profile's skill library:
+
+- `no-webui` (`./SKILL.md`) — the public-API consumer skill for composing web
+  UIs in Swift with this framework.
+- `webui-design-system` (`skills/webui-design-system/`) — the consumer-facing
+  companion (design-system components, tokens/theming, interactivity, serving,
+  verification, gotchas). Maintainer-only framework work is deliberately
+  excluded and lives in this file + `Documentation/*`.
+
+Install / remove both into the browser-dev profile (or `PROFILE=<name>`):
+
+```bash
+make install-skill                 # validate + install both (non-interactive)
+make install-skill INTERACTIVE=1   # prompt for root/profile/category
+make uninstall-skill               # remove both
+make skill-info                    # show defaults / targets
+```
+
+overrides: `PROFILE`, `HERMES_ROOT`, `FORCE=1` (overwrite existing installs).
+Skills are discovered at a fresh agent session, so a newly installed skill
+appears in a new session, not the running one.
