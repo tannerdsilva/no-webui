@@ -5233,6 +5233,8 @@ code, .inline-code {
   font-size: var(--font-size-base);
   color: var(--color-text);
   line-height: var(--line-height-normal);
+  field-sizing: content;
+  min-height: 1.5em;
   max-height: 6rem;
 }
 .composer__tools {
@@ -5249,6 +5251,9 @@ code, .inline-code {
   transition: background var(--transition-fast), color var(--transition-fast);
 }
 .composer__tool:hover { background: var(--color-bg-subtle); color: var(--color-text); }
+.composer__tool--disabled { opacity: 0.4; cursor: not-allowed; }
+.composer__tool--disabled:hover { background: transparent; color: var(--color-text-muted); }
+.composer__hint { font-size: var(--font-size-2xs); color: var(--color-text-faint); padding-inline: var(--space-3); }
 .composer__tool svg { width: 1.2rem; height: 1.2rem; }
 .composer__send {
   display: grid; place-items: center;

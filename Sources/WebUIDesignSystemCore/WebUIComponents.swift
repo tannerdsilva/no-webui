@@ -1412,8 +1412,8 @@ public struct WebUITree: View {
     public func render() -> String {
         let interactive = onToggle != nil && id != nil
         var html = interactive
-            ? "<div class=\"tree tree--interactive\""
-            : "<div class=\"tree\""
+            ? "<div class=\"tree tree--interactive\" role=\"tree\""
+            : "<div class=\"tree\" role=\"tree\""
         if let id = id {
             html += " id=\"" + htmlEscape(id) + "\""
         }
@@ -1421,30 +1421,44 @@ public struct WebUITree: View {
             html += controlAttributes(id: id, event: .click, handler: onToggle)
         }
         html += ">"
-        for node in nodes { html += renderNode(node) }
+        for node in nodes { html += renderNode(node, level: 1, interactive: interactive) }
         html += "</div>"
         return html
     }
 
-    private func renderNode(_ node: Node) -> String {
+    private func renderNode(_ node: Node, level: Int, interactive: Bool) -> String {
         let hasChildren = !(node.children?.isEmpty ?? true)
         let isOpen = hasChildren && expanded.contains(node.id)
         let nodeCls = isOpen ? "tree__node tree__node--open" : "tree__node"
         let rowCls = selected == node.id ? "tree__row tree__row--selected" : "tree__row"
         let caretCls = hasChildren ? "tree__caret" : "tree__caret tree__caret--leaf"
-        let rowIdAttr = id.map { " id=\"\(htmlEscape($0))-node-\(htmlEscape(node.id))\"" } ?? ""
 
-        var html = "<div class=\"\(nodeCls)\">"
-        html += "<div class=\"\(rowCls)\"\(rowIdAttr)>"
-        html += "<span class=\"\(caretCls)\"></span>"
+        var rowAttrs = ""
+        if let base = id {
+            rowAttrs += " id=\"" + htmlEscape(base) + "-node-" + htmlEscape(node.id) + "\""
+        }
+        rowAttrs += " role=\"treeitem\""
+        rowAttrs += " aria-level=\"" + String(level) + "\""
+        if hasChildren {
+            rowAttrs += " aria-expanded=\"" + String(isOpen) + "\""
+        }
+        if interactive {
+            rowAttrs += " tabindex=\"0\""
+        }
+
+        var html = "<div class=\"" + nodeCls + "\""
+        if hasChildren { html += " role=\"group\"" }
+        html += ">"
+        html += "<div class=\"" + rowCls + "\"" + rowAttrs + ">"
+        html += "<span class=\"" + caretCls + "\"></span>"
         if let icon = node.icon {
             html += "<span class=\"tree__icon fill-slot\">" + WebUIIcon(icon, size: .slot).render() + "</span>"
         }
-        html += "<span class=\"tree__label\">\(htmlEscape(node.label))</span>"
+        html += "<span class=\"tree__label\">" + htmlEscape(node.label) + "</span>"
         html += "</div>"
         if hasChildren {
             html += "<div class=\"tree__children\">"
-            for child in node.children! { html += renderNode(child) }
+            for child in node.children! { html += renderNode(child, level: level + 1, interactive: interactive) }
             html += "</div>"
         }
         html += "</div>"

@@ -287,19 +287,30 @@ public struct WebUIComposer: View {
     public let id: String
     public let disabled: Bool
     public let onSubmit: EventHandler?
+    /// when set the attach tool is wired as an interactive control; when nil
+    /// it renders disabled so the affordance is honest rather than a dead
+    /// button the user clicks and nothing happens.
+    public let onAttach: EventHandler?
+    /// an optional muted helper line shown under the input row (e.g. the
+    /// enter-to-send hint).
+    public let hint: String?
 
     public init(
         placeholder: String,
         inputID: String,
         id: String,
         disabled: Bool = false,
-        onSubmit: EventHandler? = nil
+        onSubmit: EventHandler? = nil,
+        onAttach: EventHandler? = nil,
+        hint: String? = nil
     ) {
         self.placeholder = placeholder
         self.inputID = inputID
         self.id = id
         self.disabled = disabled
         self.onSubmit = onSubmit
+        self.onAttach = onAttach
+        self.hint = hint
     }
 
     public func render() -> String {
@@ -308,7 +319,11 @@ public struct WebUIComposer: View {
         html += "<div class=\"composer__input-row\">"
         html += "<textarea class=\"composer__textarea\" id=\"\(htmlEscape(inputID))\" name=\"message\" rows=\"1\" placeholder=\"\(htmlEscape(placeholder))\"></textarea>"
         html += "<div class=\"composer__tools\">"
-        html += "<button type=\"button\" class=\"composer__tool\" aria-label=\"attach\">"
+        let attachAttrs = onAttach != nil
+            ? controlAttributes(id: id + "-attach", event: .click, handler: onAttach)
+            : " disabled aria-disabled=\"true\""
+        let toolClass = onAttach != nil ? "composer__tool" : "composer__tool composer__tool--disabled"
+        html += "<button type=\"button\" class=\"\(toolClass)\" aria-label=\"attach\"\(attachAttrs)>"
         html += WebUIIcon(.paperclip, size: .slot).render()
         html += "</button>"
         html += "</div>"
@@ -318,6 +333,9 @@ public struct WebUIComposer: View {
         html += WebUIIcon(.send, size: .slot).render()
         html += "</button>"
         html += "</div>"
+        if let hint {
+            html += "<div class=\"composer__hint\">\(htmlEscape(hint))</div>"
+        }
         html += "</form>"
         return html
     }

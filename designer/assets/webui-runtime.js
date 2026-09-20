@@ -233,6 +233,14 @@ window.WebUIRuntime = (function () {
     }
 
     function handleEvent(event) {
+      if (event.type === 'keydown') {
+        var treeRow = event.target && event.target.closest && event.target.closest('.tree--interactive [role=treeitem]');
+        if (treeRow && (event.key === 'Enter' || event.key === ' ')) {
+          event.preventDefault();
+          treeRow.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+          return;
+        }
+      }
       if (event.type === 'keydown' && event.key === 'Enter' && !event.shiftKey) {
         var editTarget = event.target;
         if (editTarget && editTarget.tagName === 'TEXTAREA' && editTarget.closest('form.composer')) {
