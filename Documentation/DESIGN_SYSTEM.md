@@ -219,10 +219,10 @@ use the scale, never raw integers:
 
 ## Components
 
-All components are in `WebUIComponents.swift`. Each accepts standard modifiers
-(`.font()`, `.padding()`, …) since they conform to `View`. every parameter is
-validated in `Tests/WebUITests/` and every class below exists in the shipped
-css.
+All components are in `WebUIComponents.swift` (plus `WebUITurn.swift` for the
+turn-transparency components). Each accepts standard modifiers (`.font()`,
+`.padding()`, …) since they conform to `View`. every parameter is validated in
+`Tests/WebUITests/` and every class below exists in the shipped css.
 
 ### WebUIButton
 
@@ -372,6 +372,24 @@ WebUISkeleton(variant: .card, count: 3)
 `height`; `count` clamps to ≥ 1.
 
 CSS classes: `skeleton skeleton--{variant}`; `aria-hidden="true"`.
+
+### WebUIReasoningBlock / WebUIToolStep / WebUITurnSummary
+
+Turn-transparency components (`WebUITurn.swift`): the per-turn region of an
+agent chat — a collapsible reasoning transcript, one block per tool executed,
+and a muted one-line summary. They emit the `.turn-*` classes whose token-only
+rules live in `design-system.css`; all fields are HTML-escaped.
+
+```swift
+WebUIReasoningBlock("step 1 → step 2")
+WebUIToolStep(name: "read_file", arguments: "path: README.md", result: "content…", meta: " · 120ms")
+WebUIToolStep(name: "web_search", result: "failed", isError: true)
+WebUITurnSummary("3 tools · 1.2k tokens · 4 iterations")
+```
+
+CSS classes: `turn-reasoning` (+ `summary`/`pre` children),
+`turn-tool` (+ `turn-tool--error`, `turn-tool__name`, `turn-tool__args`,
+`turn-tool__result`), `turn-summary`.
 
 ### WebUIToast
 

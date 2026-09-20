@@ -88,17 +88,21 @@ prefixes only for tree ids; the envelope is different (it's a full object).
 ## Web rendering (no-webui components/CSS)
 
 `ChatMessage` wears `reasoning: String?`, `toolSteps: [AgentToolStep]?`,
-`summary: String?`. The assistant bubble body is built as raw HTML:
-- `<details class="turn-reasoning"><summary>Reasoning</summary><pre>…</pre></details>`
-- per tool: `<div class="turn-tool">` with `.turn-tool__name` (name + duration),
-  `.turn-tool__args`, `.turn-tool__result` (truncate long results ~200 chars,
-  scrollable via `max-height` + `overflow-y:auto`); `turn-tool--error` variant.
-- `.turn-summary` muted line: "N tools · X tokens · M iterations".
+`summary: String?`. The assistant bubble body composes the toolkit's
+turn-transparency components (design-system CSS for `.turn-*` is token-only
+and shipped):
 
-Because the framework's `markdownBody` escapes raw HTML, put these blocks in
-the content **before** the `markdownBody(finalResponse)` fragment (they are
-raw HTML, not markdown). CSS lives in `design-system.css` (`.turn-reasoning`
-`.turn-tool` `.turn-summary`), token-only.
+```swift
+WebUIReasoningBlock(reasoning)                                  // <details class="turn-reasoning"><summary>Reasoning</summary><pre>…</pre></details>
+WebUIToolStep(name:arguments:result:isError:meta: " · 120ms")   // <div class="turn-tool">…turn-tool__name/__args/__result…
+WebUITurnSummary(summary)                                        // <div class="turn-summary">…
+```
+
+Each component HTML-escapes every field, so agent content can never inject
+markup. `markdownBody` escapes raw HTML too, so render the component blocks
+**before** the `markdownBody(finalResponse)` fragment (they are markup, not
+markdown). Truncate long tool results (~200 chars) on the host before passing
+them in; the result block is scrollable via `max-height` + `overflow-y:auto`.
 
 ## Verification recipe
 
