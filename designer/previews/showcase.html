@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-          <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'nonce-8rZneDV3oE18YoRAref8QQ'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:;">  <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAApklEQVR4nO2XwQ2AIAxF2ahDeWQZb07idkINCQejECgpfDSS/BvQ118C1JhZB1lmsuyVxNLAjiwfynJFkBhcO/BdaYhBwfMQnWzPlgOZ/dOFeFJHA/h3AWy7TKoAzG1SAQjZhM2Wtd7eMDesKTghA5DW+HsA0kOoDtCib5XgB4ADwC4iQl/FVydgj1EnzQWA/ZIZ9KcU4AK0N6jqjjCtWQJkfHM6epyUsxUEgyvS4gAAAABJRU5ErkJggg==">
+          <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'nonce-VfsCioRVUkH4LpeiQvCOcA'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:;">  <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAApklEQVR4nO2XwQ2AIAxF2ahDeWQZb07idkINCQejECgpfDSS/BvQ118C1JhZB1lmsuyVxNLAjiwfynJFkBhcO/BdaYhBwfMQnWzPlgOZ/dOFeFJHA/h3AWy7TKoAzG1SAQjZhM2Wtd7eMDesKTghA5DW+HsA0kOoDtCib5XgB4ADwC4iQl/FVydgj1EnzQWA/ZIZ9KcU4AK0N6jqjjCtWQJkfHM6epyUsxUEgyvS4gAAAABJRU5ErkJggg==">
   <title>WebUI Showcase</title>
   
   <style>
@@ -5070,7 +5070,8 @@ font-weight: var(--font-weight-semibold);
 display: flex;
 flex-direction: column;
 gap: var(--space-2);
-max-width: 30rem;
+align-self: stretch;
+max-width: 100%;
 min-width: 0;
 }
 .composer__input-row {
@@ -8152,7 +8153,7 @@ Plain text content<span class="text-escaped">&lt;script&gt;alert(&#39;xss&#39;)&
 <label class="demo-label">Country:</label><select id="demo-country"><option value="us" selected>United States</option><option value="ca">Canada</option><option value="uk">United Kingdom</option><option value="de">Germany</option><option value="jp">Japan</option></select>
 </div></div>
 </div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
-<h3 class="demo-card-title">Form with CSRF</h3><div class="demo-card-body"><form id="demo-form" action="/submit" method="post"><input type="hidden" name="_csrf" value="ZGVtby1mb3JtOjE3ODk4NzIxMzU6NzRFM0I3RkNFRDFFNEU3RUE0Njg5RTYxMTE5NTc2MEE6M2EwYjlmZmQzOGJmNDc3ZTU5MThkODVjYTQyNDE1ZjJkZGE4ZTUwN2M1MTE1MWE4NGUzZGVlMDdmZDYwZGFmNQ=="><div class="vstack spacing-12 align-flex-start">
+<h3 class="demo-card-title">Form with CSRF</h3><div class="demo-card-body"><form id="demo-form" action="/submit" method="post"><input type="hidden" name="_csrf" value="ZGVtby1mb3JtOjE3ODk4NzI3Nzg6ODM1Q0E1OTc4NTAzNDdDQzhBNURFMzc2M0E1MDE4ODc6ZWQ1ZmQ3NDI0ZDQ2MzYwN2NhNjc3YjcwMGM2MjY3MGZjZjNmN2MyMmQ4YzFhODljZDA4NzViODU1NWIxOGUyZQ=="><div class="vstack spacing-12 align-flex-start">
 <label class="demo-label">Name:</label><input id="form-name" type="text" placeholder="Your name"><label class="demo-label">Message:</label><textarea id="form-message" rows="3" placeholder="Your message"></textarea><button id="form-submit" type="submit">Submit</button>
 </div></form></div>
 </div></div><div class="card card--outlined"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
