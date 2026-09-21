@@ -1,7 +1,7 @@
 ---
 name: webui-design-system
 description: "Use when BUILDING a frontend in your own Swift project with the no-webui public API: add the dependency, author views/components in Swift, wire live server round-trips, apply design tokens/theming, and serve + verify the page. For any kind of app UI — a shell, a dashboard, a chat-style page, a tool — see the 'Build your UI in Swift' section and the references index. (Maintaining the no-webui package itself — its designer assets, icon pipeline, showcase generation, smoke gates — is repo work documented in the repo's README/AGENTS.md, not this skill.)"
-version: 1.13.0
+version: 1.14.0
 author: Hermes Agent
 license: MIT
 platforms: [macos]
@@ -88,6 +88,38 @@ summary line): `WebUIReasoningBlock`,
 Shell / app-frame building blocks (in `WebUIShell.swift`): `WebUISidebar`
 (`.full`/`.rail`), `WebUISegmentedControl`, `WebUISearchField`,
 `WebUIListView`/`WebUIListItem`, `WebUIComposer`, `WebUIPanel`, `WebUISelect`.
+
+**Extended controls** (also `import WebUIDesignSystem`): a large set of
+composite/niche components that previously existed only as designed css classes
+are now public Swift views, grouped by category:
+
+- navigation/chrome: `WebUINavbar`, `WebUIBottomNav`, `WebUIFab`,
+  `WebUISpeedDial`, `WebUIWizard`, `WebUITransfer`, `WebUIButtonGroup`,
+  `WebUISplitButton`, `WebUIToc`;
+- overlays/surfaces: `WebUIAccordion`, `WebUICollapse`, `WebUIActionSheet`,
+  `WebUIBottomSheet`, `WebUIDrawer`, `WebUIPopover`, `WebUIHoverCard`,
+  `WebUILinkPreview`, `WebUILightbox`, `WebUIMenu`, `WebUIContextMenu`,
+  `WebUIDropdown`, `WebUIComboBox`, `WebUICommandPalette`;
+- data/rich display: `WebUICalendar`, `WebUIDatePicker`, `WebUITimeZonePicker`,
+  `WebUICountryPicker`, `WebUIGantt`, `WebUIKanban`, `WebUIDataSheet`,
+  `WebUIJsonTree`, `WebUIDiff`, `WebUITerminal`, `WebUICodeBlock`,
+  `WebUIBarChart`, `WebUILineChart`, `WebUIDonut`, `WebUIMasonry`, `WebUIMap`,
+  `WebUIQr`, `WebUIPayCard`;
+- forms: `WebUISlider`, `WebUIToggle`, `WebUIStepper`, `WebUIOTP`, `WebUIMFA`,
+  `WebUIRecurrence`, `WebUIMultiSelect`, `WebUIValidation`, `WebUIDropZone`,
+  `WebUISignature`, `WebUIInlineEdit`, `WebUIMasked`, `WebUIRating`,
+  `WebUITag`, `WebUIChipInput`, `WebUICardInput`;
+- comms: `WebUIMention`, `WebUIReactions`, `WebUITypingIndicator`,
+  `WebUINotification`, `WebUIToastStack`, `WebUIBell`;
+- feedback/state: `WebUIStatCard`, `WebUIDelta`, `WebUICelebrate`,
+  `WebUIConfetti`, `WebUICountdown`, `WebUICookieConsent`, `WebUIPullRefresh`,
+  `WebUISkeletonCard`, `WebUIAppletCard`, `WebUIAvatarStack`,
+  `WebUIBadgeStatus`, `WebUIBadgeCount`, `WebUIRadioGroup`,
+  `WebUICheckboxGroup`.
+
+These are all **presentational** (see the gotcha below) — pick them over raw
+markup for any region they express. The authoritative list + file groupings
+live in `Documentation/DESIGN_SYSTEM.md` → "Extended Controls".
 
 If a region needs markup no component expresses, add a Swift component (see
 `references/high-level-shell-components.md` for the composition conventions and
@@ -315,6 +347,12 @@ in its `README.md`, `AGENTS.md`, and `Documentation/*`; reach for those (or the
   the component class from the reset chain and verify the computed style.
 - **Two host servers can share one port** (IPv4 vs IPv6 `localhost`); a browser
   can hit a stale instance. Diagnose with `lsof` + `pgrep`, md5 the served bytes.
+- **The extended/control components are presentational.** Every extended
+  component (accordion, kanban, wizard, slider, notification, …) emits the
+  designed markup but does **not** self-wire a Swift handler. For interactivity
+  (expand an accordion, open a drawer, page a slider) pair it with a
+  `controlAttributes(id:event:handler:)` wiring or a self-wiring control, and
+  re-emit the stable `id` on re-render.
 
 ## Committing (in your own app)
 

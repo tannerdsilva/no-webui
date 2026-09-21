@@ -741,6 +741,31 @@ classed controls are excluded via `:not(.input)` / `:not(.select)` /
 component classes, so without those guards it would override `.input`
 padding and state backgrounds.
 
+## Extended Controls (the `WebUI*Extras*` components)
+
+the design-system css carries a large set of component families beyond the
+~22 wrapped in `WebUIComponents.swift`. those families are now exposed as
+first-class public Swift views in `Sources/WebUIDesignSystemCore/`, split into
+four files by category. each is a plain `View` that emits the documented css
+class structure, so it inherits the tokens, dark mode, and hover/focus states
+for free.
+
+| file | components |
+|---|---|
+| `WebUIExtrasNavOverlay.swift` | `WebUINavbar`, `WebUIBottomNav`, `WebUIFab`, `WebUISpeedDial`, `WebUIWizard`, `WebUITransfer`, `WebUIButtonGroup`, `WebUISplitButton`, `WebUIToc`, `WebUIAccordion`, `WebUICollapse`, `WebUIActionSheet`, `WebUIBottomSheet`, `WebUIDrawer`, `WebUIPopover`, `WebUIHoverCard`, `WebUILinkPreview`, `WebUILightbox`, `WebUIMenu`, `WebUIContextMenu`, `WebUIDropdown`, `WebUIComboBox`, `WebUICommandPalette` |
+| `WebUIExtrasData.swift` | `WebUICalendar`, `WebUIDatePicker`, `WebUITimeZonePicker`, `WebUICountryPicker`, `WebUIGantt`, `WebUIKanban`, `WebUIDataSheet`, `WebUIJsonTree`, `WebUIDiff`, `WebUITerminal`, `WebUICodeBlock`, `WebUIBarChart`, `WebUILineChart`, `WebUIDonut`, `WebUIMasonry`, `WebUIMap`, `WebUIQr`, `WebUIPayCard` |
+| `WebUIExtrasForm.swift` | `WebUISlider`, `WebUIToggle`, `WebUIStepper`, `WebUIOTP`, `WebUIMFA`, `WebUIRecurrence`, `WebUIMultiSelect`, `WebUIValidation`, `WebUIDropZone`, `WebUISignature`, `WebUIInlineEdit`, `WebUIMasked`, `WebUIRating`, `WebUITag`, `WebUIChipInput`, `WebUICardInput` |
+| `WebUIExtrasCommsState.swift` | `WebUIMention`, `WebUIReactions`, `WebUITypingIndicator`, `WebUINotification`, `WebUIToastStack`, `WebUIBell`, `WebUIStatCard`, `WebUIDelta`, `WebUICelebrate`, `WebUIConfetti`, `WebUICountdown`, `WebUICookieConsent`, `WebUIPullRefresh`, `WebUISkeletonCard`, `WebUIAppletCard`, `WebUIAvatarStack`, `WebUIBadgeStatus`, `WebUIBadgeCount`, `WebUIRadioGroup`, `WebUICheckboxGroup` |
+
+notes:
+
+- these cover the previously designed-but-unwrapped families; every class
+  they emit is defined in `designer/assets/design-system.css`.
+- they are **presentational** like the rest of the toolkit: they render static
+  markup and do not self-wire a Swift handler. for an action path use an
+  existing `controlAttributes`/self-wiring control, or extend the component.
+- render-contract tests live in `Tests/WebUITests/WebUIExtrasTests.swift`.
+
 ## CSS Class Naming Convention
 
 All classes follow BEM-like naming:
