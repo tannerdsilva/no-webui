@@ -337,15 +337,40 @@
     };
   }
   function handleBinaryFrame(buf) {
-    if (!buf || buf.byteLength < 5) { return; }
+    if (!buf || buf.byteLength < 6) { return; }
     var view = new DataView(buf);
     if (view.getUint8(0) !== 0x64) { return; }
-    var len = view.getUint32(1, true);
-    if (5 + len > buf.byteLength) { return; }
-    var text = decoder(new Uint8Array(buf, 5, len));
-    var msg;
-    try { msg = JSON.parse(text); } catch (err) { return; }
-    handleServerMessage(msg);
+    var kind = view.getUint8(1);
+    if (kind === 0x00) {
+      var len = view.getUint32(2, true);
+      if (6 + len > buf.byteLength) { return; }
+      var text = decoder(new Uint8Array(buf, 6, len));
+      var msg;
+      try { msg = JSON.parse(text); } catch (err) { return; }
+      handleServerMessage(msg);
+      return;
+    }
+    if (kind === 0x01) {
+      var nameLen = view.getUint32(2, true);
+      var nameOff = 6;
+      if (nameOff + nameLen + 4 > buf.byteLength) { return; }
+      var bulkName = decoder(new Uint8Array(buf, nameOff, nameLen));
+      var dataOff = nameOff + nameLen;
+      var bulkLen = view.getUint32(dataOff, true);
+      dataOff += 4;
+      if (dataOff + bulkLen > buf.byteLength) { return; }
+      if (!holder.exports.webui_data_alloc || !holder.exports.webui_data_commit) { return; }
+      var bulkPtr = holder.exports.webui_data_alloc(bulkLen);
+      if (!bulkPtr) { return; }
+      new Uint8Array(holder.memory.buffer, bulkPtr, bulkLen).set(new Uint8Array(buf, dataOff, bulkLen));
+      var nameBytes = new TextEncoder().encode(bulkName);
+      if (nameBytes.length > 65536) { return; }
+      var nameIn = holder.exports.webui_input_ptr();
+      new Uint8Array(holder.memory.buffer, nameIn, nameBytes.length).set(nameBytes);
+      holder.exports.webui_data_commit(bulkPtr, bulkLen, nameIn, nameBytes.length);
+      if (holder.exports.webui_frame_len() > 0) { applyFrame(); }
+      return;
+    }
   }
 
   var idbHandle = null;

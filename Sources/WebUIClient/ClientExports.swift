@@ -12,6 +12,7 @@ import WebUIClientRuntime
 private let frameCapacity = 1 << 20
 private let inputCapacity = 1 << 16
 private let fileCapacity = 1 << 20
+private let dataCapacity = 1 << 20
 
 @_expose(wasm, "webui_pump")
 func webuiPump() -> Bool {
@@ -188,6 +189,32 @@ func webuiStateApply(_ payloadPtr: UnsafeRawPointer?, _ payloadLen: Int) -> Int 
 	return Int(bitPattern: RenderFrame.buffer)
 }
 
+@_expose(wasm, "webui_data_alloc")
+func webuiDataAlloc(_ maxLen: Int) -> Int {
+	// reserve the module-owned buffer for an inbound bulk payload (harness
+	// v2.1, kind 0x01 frames): the chamber writes raw bytes there, then calls
+	// `webui_data_commit`. returns 0 when the payload exceeds the cap.
+	guard maxLen > 0, maxLen <= dataCapacity else { return 0 }
+	return Int(bitPattern: DataBuffer.buffer)
+}
+
+@_expose(wasm, "webui_data_commit")
+func webuiDataCommit(_ dataPtr: UnsafeRawPointer?, _ dataLen: Int, _ namePtr: UnsafeRawPointer?, _ nameLen: Int) -> Int {
+	// raw bytes + name (input staging): run the registered bulk handler and
+	// emit its fragments through the frame (the chamber applies after).
+	guard let dataPtr, dataLen > 0, dataLen <= dataCapacity else { return 0 }
+	let bytes = Array(UnsafeRawBufferPointer(start: dataPtr, count: dataLen))
+	let name: String
+	if let namePtr, nameLen > 0 {
+		name = String(decoding: UnsafeRawBufferPointer(start: namePtr, count: nameLen), as: UTF8.self)
+	} else {
+		name = "data"
+	}
+	let updates = ClientRuntime.handleDataBytes(name: name, bytes: bytes)
+	writeFrame(updatesJSON(updates))
+	return Int(bitPattern: RenderFrame.buffer)
+}
+
 @_expose(wasm, "webui_data_apply")
 func webuiDataApply(_ payloadPtr: UnsafeRawPointer?, _ payloadLen: Int) -> Int {
 	// a binary `data` message (`{name, payload}`): run the registered data
@@ -246,5 +273,9 @@ private enum InputBuffer {
 
 private enum FileBuffer {
 	nonisolated(unsafe) static let buffer = UnsafeMutableRawPointer.allocate(byteCount: fileCapacity, alignment: 16)
+}
+
+private enum DataBuffer {
+	nonisolated(unsafe) static let buffer = UnsafeMutableRawPointer.allocate(byteCount: dataCapacity, alignment: 16)
 }
 #endif

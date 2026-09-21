@@ -279,6 +279,17 @@ struct ClientRuntimeTests {
 		#expect(json.contains("capabilities") && json.contains("focus") && json.contains("clipboard"))
 	}
 
+	@Test("bulk typed-array payloads reach the registered handler")
+	func bulkDataInbound() throws {
+		ClientRuntime.bootSearch()
+		ClientRuntime.bootApplets()
+		let updates = ClientRuntime.handleDataBytes(name: "bulk-catalog", bytes: [UInt8](repeating: 7, count: 10000))
+		let fragment = try #require(updates.first)
+		#expect(fragment.id == "applet-bulk")
+		#expect(fragment.html.contains("bulk-catalog"))
+		#expect(fragment.html.contains(String(10000)))
+	}
+
 	private static func componentID(for elementID: String, in html: String) -> String? {
 		let idAttr = "id=\"\(elementID)\""
 		guard let idRange = html.range(of: idAttr) else { return nil }

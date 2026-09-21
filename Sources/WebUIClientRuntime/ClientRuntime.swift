@@ -49,6 +49,7 @@ public enum ClientRuntime {
 	private static let fileHandlerBox = Mutex<(@Sendable (String, String, [UInt8]) -> [FragmentUpdate])?>(nil)
 	private static let stateHandlerBox = Mutex<(@Sendable (String, String) -> [FragmentUpdate])?>(nil)
 	private static let dataHandlerBox = Mutex<(@Sendable (String, String) -> [FragmentUpdate])?>(nil)
+	private static let dataBytesBox = Mutex<(@Sendable (String, [UInt8]) -> [FragmentUpdate])?>(nil)
 
 	/// the granted applet-harness capabilities (from the boot envelope).
 	public static var capabilities: Set<String> {
@@ -107,6 +108,16 @@ public enum ClientRuntime {
 		dataHandlerBox.withLock { $0 }?(name, payload) ?? []
 	}
 
+	/// register the inbound bulk-data handler (harness v2.1): raw typed-array
+	/// payloads re-enter through `webui_data_commit` — no JSON wrapper.
+	public static func onDataBytes(_ handler: @escaping @Sendable (String, [UInt8]) -> [FragmentUpdate]) {
+		dataBytesBox.withLock { $0 = handler }
+	}
+
+	public static func handleDataBytes(name: String, bytes: [UInt8]) -> [FragmentUpdate] {
+		dataBytesBox.withLock { $0 }?(name, bytes) ?? []
+	}
+
 	/// register the applet-region renderers (harness v2). the chamber mounts
 	/// `[data-webui-applet]` regions through `webui_render_region`, which
 	/// resolves here. a region's renderer self-wires: it renders inside a
@@ -152,6 +163,14 @@ public enum ClientRuntime {
 				}.render()
 			)]
 		}
+		ClientRuntime.onDataBytes { name, bytes in
+			return [FragmentUpdate(
+				id: "applet-bulk",
+				html: Div(id: "applet-bulk", class: "applet-card__meta") {
+					Text("bulk: " + name + " (" + String(bytes.count) + " bytes)")
+				}.render()
+			)]
+		}
 	}
 
 	/// render a registered applet region (nil when the name is unknown).
@@ -181,6 +200,9 @@ public enum ClientRuntime {
 				}
 				Div(id: "applet-data", class: "applet-card__meta") {
 					Text("no data")
+				}
+				Div(id: "applet-bulk", class: "applet-card__meta") {
+					Text("no bulk")
 				}
 				if hasCapability("focus") {
 					Button("Focus search", id: "applet-focus", type: .button)

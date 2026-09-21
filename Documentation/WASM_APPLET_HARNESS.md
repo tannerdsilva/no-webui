@@ -56,21 +56,23 @@ in the boot envelope; un-granted imports no-op in the chamber.
 
 v1 (unchanged, JSON text frames): `event`, `ping`/`pong` (+`token`),
 `update` (`{type:"update", fragments:[{id,html}]}`), `redirect`, `error`,
-`token`. v2 adds binary **frames** — `[0x64][u32 len][json bytes]` — the
-chamber's ws listener accepts both text and binary (`binaryType =
+`token`. v2.1 adds binary **frames** — `[0x64][kind][u32 len][payload]` —
+the chamber's ws listener accepts both text and binary (`binaryType =
 'arraybuffer'`; `handleBinaryFrame` also exposed for hosts/gates):
 
-| type | direction | shape |
+| kind | payload | dispatch |
 |---|---|---|
-| `viewspec` | server→module | `{type, id, name, args}` — compose a region declaratively through `webui_render_region` |
-| `state` | server→module | `{type:"state", path, value}` — `webui_state_apply` → client state store + handler fragments |
-| `data` | server→module | `{type:"data", name, payload}` — `webui_data_apply` → handler fragments (typed-array/binary envelope; JSON payload inside the frame for now) |
-| `update` | server→module | v1 fragments (unchanged, also accepted in binary frames) |
+| `0x00` | length-prefixed JSON body | `handleServerMessage` (viewspec / state / data / update) |
+| `0x01` | `[u32 nameLen][name][u32 dataLen][raw bytes]` — bulk typed array, **no JSON wrapper** | `webui_data_alloc` + `webui_data_commit` → `ClientRuntime.onDataBytes` → handler fragments |
+
+with `kind 0x01` the raw bytes are written into the module-owned data
+buffer (1 MB cap) and the name rides the input staging — the payload never
+round-trips through a JSON string, so bulk datasets, binary blobs, and
+encoded records move at raw bandwidth.
 
 the v1 `update` fragments stay valid: the chamber applies them sanitized;
 binary frames just move the envelope from text to bytes without a new
-dialect. bulk typed-array payloads (no JSON wrapper) are next on the data
-plane.
+dialect.
 
 ## client-state persistence (harness v4)
 
