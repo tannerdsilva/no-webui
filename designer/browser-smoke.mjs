@@ -325,7 +325,21 @@ if (wasmBuilt) {
   await s.waitForSelector("#search-app input", { timeout: 20000 }).catch(() => {});
   const booted = await s.evaluate(() => !!document.querySelector("#search-app input"));
   if (booted) ok("search vertical mounted from wasm boot");
-  else bad("search vertical did not mount (chamber boot failed)");
+  else bad(`search vertical did not mount: ${JSON.stringify(await s.evaluate(() => {
+    const inst = window.WebUIClient._getInstance();
+    return {
+      isolated: self.crossOriginIsolated,
+      sab: typeof SharedArrayBuffer,
+      worker: inst.worker ? "exists" : "none",
+      mode: inst.workerMode,
+      bootApplied: !!inst.bootApplied,
+      actions: inst.frameActions.length,
+      pendingFrame: !!inst.pendingFrameBytes,
+      err: window.__webuiSearchError || null,
+      workerErr: inst.workerError || null,
+      searchApp: !!document.getElementById("search-app"),
+    };
+  }))}`);
   if (booted) {
     await s.fill("#search-app input", "a");
     await s.waitForTimeout(300);
@@ -421,19 +435,22 @@ if (wasmBuilt) {
     const copyErrors = sErrors.filter((t) => /clipboard|NotAllowed|permission/i.test(t));
     if (copyErrors.length === 0) ok("applet clipboard capability ran clean");
     else bad(`clipboard errors: ${JSON.stringify(copyErrors)}`);
-    const vsResult = await s.evaluate(() => {
+    const vsErr = await s.evaluate(() => {
       const inst = window.WebUIClient._getInstance();
       try {
         inst.handleServerMessage({ type: "viewspec", id: "applet-region", name: "demo:card", args: { label: "Declarative card" } });
-      } catch (err) {
-        return { error: String(err) };
-      }
+        return null;
+      } catch (err) { return String(err); }
+    });
+    await s.waitForTimeout(300);
+    const vsResult = await s.evaluate(() => {
       const region = document.getElementById("applet-region");
       return { label: region ? region.textContent : "", state: region ? region.getAttribute("data-webui-applet-state") : null };
     });
+    if (vsErr) { vsResult.error = vsErr; }
     if (vsResult.state === "mounted" && String(vsResult.label || "").indexOf("Declarative card") >= 0) ok("viewspec message composed a region declaratively");
     else bad(`viewspec failed: ${JSON.stringify(vsResult)}`);
-    const binState = await s.evaluate(() => {
+    await s.evaluate(() => {
       const inst = window.WebUIClient._getInstance();
       const msg = JSON.stringify({ type: "state", path: "remote.status", value: "online" });
       const bytes = new TextEncoder().encode(msg);
@@ -444,11 +461,12 @@ if (wasmBuilt) {
       view.setUint32(2, bytes.length, true);
       new Uint8Array(buf, 6).set(bytes);
       inst.handleBinaryFrame(buf);
-      return document.getElementById("applet-remote")?.textContent || "";
     });
+    await s.waitForTimeout(300);
+    const binState = await s.evaluate(() => document.getElementById("applet-remote")?.textContent || "");
     if (binState.indexOf("remote.status") >= 0 && binState.indexOf("online") >= 0) ok("binary state frame applied to the module store");
     else bad(`binary state: ${JSON.stringify(binState)}`);
-    const binData = await s.evaluate(() => {
+    await s.evaluate(() => {
       const inst = window.WebUIClient._getInstance();
       const msg = JSON.stringify({ type: "data", name: "catalog", payload: "a,b,c" });
       const bytes = new TextEncoder().encode(msg);
@@ -459,11 +477,12 @@ if (wasmBuilt) {
       view.setUint32(2, bytes.length, true);
       new Uint8Array(buf, 6).set(bytes);
       inst.handleBinaryFrame(buf);
-      return document.getElementById("applet-data")?.textContent || "";
     });
+    await s.waitForTimeout(300);
+    const binData = await s.evaluate(() => document.getElementById("applet-data")?.textContent || "");
     if (binData.indexOf("catalog") >= 0) ok("binary data frame applied to the module");
     else bad(`binary data: ${JSON.stringify(binData)}`);
-    const bulkResult = await s.evaluate(() => {
+    await s.evaluate(() => {
       const inst = window.WebUIClient._getInstance();
       const payload = new TextEncoder().encode("a,b,c,d".repeat(1250));
       const nameBytes = new TextEncoder().encode("bulk-catalog");
@@ -477,15 +496,19 @@ if (wasmBuilt) {
       view.setUint32(dataOff, payload.length, true);
       new Uint8Array(buf, dataOff + 4).set(payload);
       inst.handleBinaryFrame(buf);
-      return document.getElementById("applet-bulk")?.textContent || "";
     });
+    await s.waitForTimeout(350);
+    const bulkResult = await s.evaluate(() => document.getElementById("applet-bulk")?.textContent || "");
     if (bulkResult.indexOf("bulk-catalog") >= 0 && bulkResult.indexOf(String(1250 * 7)) >= 0) ok("bulk typed-array payload reached the module un-wrapped");
     else bad(`bulk data: ${JSON.stringify(bulkResult)}`);
     await s.click("#applet-media-btn").catch(() => {});
     await s.waitForTimeout(200);
-    const mediaText = await s.evaluate(() => document.getElementById("applet-media")?.textContent || "");
-    if (mediaText === "wide") ok("applet media query evaluated in the module");
-    else bad(`media result: ${JSON.stringify(mediaText)}`);
+    const mediaProbe = await s.evaluate(() => ({
+      text: document.getElementById("applet-media")?.textContent || "",
+      pageMatches: (() => { try { return window.matchMedia("(min-width: 1px)").matches ? "1" : "0"; } catch (e) { return "E"; } })(),
+    }));
+    if (mediaProbe.text === "wide") ok("applet media query evaluated in the module");
+    else bad(`media result: ${JSON.stringify(mediaProbe)}`);
     await s.evaluate(() => {
       const dt = new DataTransfer();
       dt.items.add(new File(["hello world"], "drop-me.txt", { type: "text/plain" }));
@@ -502,6 +525,25 @@ if (wasmBuilt) {
     if (fsState.fs) ok("applet fullscreen engaged");
     else if (sErrors.filter((t) => /fullscreen/i.test(t)).length === 0) ok("applet fullscreen declined cleanly (headless)");
     else bad(`fullscreen errors: ${JSON.stringify(fsState)}`);
+    const offload = await s.evaluate(async () => {
+      const inst = window.WebUIClient._getInstance();
+      if (typeof inst.bench !== "function") { return { ms: 0, maxGap: 0, noBench: true }; }
+      let maxGap = 0;
+      let last = performance.now();
+      const ticker = setInterval(function () {
+        const now = performance.now();
+        maxGap = Math.max(maxGap, now - last);
+        last = now;
+      }, 25);
+      const ms = await Promise.race([
+        inst.bench(1000000000),
+        new Promise((res) => setTimeout(() => res(-1), 60000)),
+      ]);
+      clearInterval(ticker);
+      return { ms: ms, maxGap: Math.round(maxGap) };
+    });
+    if (!offload.noBench && offload.ms > 1 && offload.maxGap < 200) ok(`worker offloaded compute (bench ${Math.round(offload.ms)}ms, main-thread max gap ${offload.maxGap}ms)`);
+    else bad(`worker offload check: ${JSON.stringify(offload)}`);
     const idbBefore = await s.evaluate(() => parseInt((document.getElementById("boot-count")?.textContent || "boot 0").replace(/\D/g, "")) || 0);
     await s.reload({ waitUntil: "domcontentloaded" });
     await s.waitForSelector("#search-app input", { timeout: 20000 }).catch(() => {});
@@ -510,9 +552,22 @@ if (wasmBuilt) {
       count: document.getElementById("boot-count")?.textContent || "",
       local: localStorage.getItem("boot.count"),
     }));
+    const idbDump = await s.evaluate(() => new Promise((res) => {
+      const req = indexedDB.open("webui");
+      req.onsuccess = () => {
+        const db = req.result;
+        const tx = db.transaction("kv", "readonly");
+        const store = tx.objectStore("kv");
+        const out = {};
+        const cur = store.openCursor();
+        cur.onsuccess = () => { const c = cur.result; if (c) { out[c.key] = c.value; c.continue(); } else { res(out); } };
+        cur.onerror = () => res({ err: String(cur.error) });
+      };
+      req.onerror = () => res({ err: String(req.error) });
+    }));
     const idbAfter = parseInt((idbProbe.count).replace(/\D/g, "")) || 0;
     if (idbAfter === idbBefore + 1 && idbProbe.local === null) ok("indexeddb persistence survived the reload (localStorage untouched)");
-    else bad(`idb persistence: before=${idbBefore} after=${JSON.stringify(idbProbe)}`);
+    else bad(`idb persistence: before=${idbBefore} after=${JSON.stringify(idbProbe)} dump=${JSON.stringify(idbDump)}`);
     const de = sErrors.filter((t) => !/favicon/i.test(t));
     if (de.length === 0) ok("local-search probe has no console errors");
     else bad(`local-search console errors: ${JSON.stringify(de)}`);

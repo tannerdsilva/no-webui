@@ -74,6 +74,30 @@ the v1 `update` fragments stay valid: the chamber applies them sanitized;
 binary frames just move the envelope from text to bytes without a new
 dialect.
 
+## worker offload (harness v5)
+
+when a client-mode page (`mode: search|app`) is served with the
+cross-origin isolation headers (`Cross-Origin-Opener-Policy: same-origin` +
+`Cross-Origin-Embedder-Policy: require-corp`), the chamber boots the module
+in a **Web Worker**: the wasm never runs on the main thread, so sorts,
+searches, and renders keep the UI thread free. without isolation, the
+main-thread path is used — same behavior, no shared-array requirement.
+
+- `designer/assets/webui-worker.js` hosts the module; its `wasi_*` +
+  `env` import surface mirrors the chamber's, with DOM/capability imports
+  forwarded over a **SharedArrayBuffer mailbox** (one outstanding request;
+  `Atomics` + a `pump` wake message; the main thread performs the DOM op
+  and releases the waiter).
+- **linear memory stays worker-private** — no cross-thread memory races;
+  payloads travel via postMessage (transferable for bulk).
+- responses carry a `reqId` the chamber pairs with its waiter, so frames
+  are never misrouted (region html vs fragment updates).
+- the gate proves the offload: `webui_bench` runs in the worker while a
+  main-thread interval keeps ticking (max gap bounded) — compute is off
+  the UI thread, verified.
+
+the smoke server emits the isolation headers on every client-mode page.
+
 ## client-state persistence (harness v4)
 
 `RuntimeConfig.persistence`: `"localstorage"` (default) or `"indexeddb"`.

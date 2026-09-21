@@ -238,6 +238,18 @@ func webuiDataApply(_ payloadPtr: UnsafeRawPointer?, _ payloadLen: Int) -> Int {
 	return Int(bitPattern: RenderFrame.buffer)
 }
 
+@_expose(wasm, "webui_bench")
+func webuiBench(_ n: Int) -> UInt64 {
+	// a deterministic busy loop for the worker-offload gate probe: the module
+	// computes on the worker thread while the main thread keeps ticking. the
+	// accumulator is returned so the optimizer cannot remove the loop.
+	var acc: UInt64 = 0
+	for i in 0..<max(0, min(n, 1_000_000_000)) {
+		acc &+= UInt64(i) &* 31 &+ 7
+	}
+	return acc
+}
+
 @_expose(wasm, "webui_frame_ptr")
 func webuiFramePtr() -> Int {
 	Int(bitPattern: RenderFrame.buffer)

@@ -1,6 +1,6 @@
   window.WebUIClient = (function () {
     'use strict';
-    var holder = { exports: null, memory: null, wsSent: 0, eventCount: 0, config: null, transport: null, warnedNoTransport: false };
+    var holder = { exports: null, memory: null, wsSent: 0, eventCount: 0, config: null, transport: null, warnedNoTransport: false, worker: null, workerMode: false, mailbox: null, i32: null, frameActions: [], pendingRegion: null, onBench: null, onFrame: null, initialTarget: null };
   function decoder(bytes) { return new TextDecoder().decode(bytes); }
   function noop() { return 0; }
   function errno() { return 8; }
@@ -270,6 +270,11 @@
   function handleServerMessage(msg) {
     if (!msg || !msg.type) { return; }
     if (msg.type === 'update') {
+      if (holder.workerMode && holder.worker) {
+        if (typeof msg.seq === 'number') { workerSend('apply_seq', { type: 'apply_seq', seq: msg.seq }); }
+        if (Array.isArray(msg.fragments)) { applyUpdates(msg.fragments); }
+        return;
+      }
       if (typeof msg.seq === 'number' && holder.exports && typeof holder.exports.webui_apply_seq === 'function') {
         var bytes = new TextEncoder().encode(String(msg.seq));
         var p = holder.exports.webui_input_ptr();
@@ -280,6 +285,7 @@
       return;
     }
     if (msg.type === 'redirect') {
+      if (holder.workerMode && holder.worker) { workerSend('demote_auth', { type: 'demote_auth' }); }
       if (holder.exports && typeof holder.exports.webui_demote_auth === 'function') {
         holder.exports.webui_demote_auth();
       }
@@ -298,6 +304,10 @@
       return;
     }
     if (msg.type === 'state') {
+      if (holder.workerMode && holder.worker) {
+        sendAndApply('state', { type: 'state', path: msg.path, value: msg.value }, updatesApply);
+        return;
+      }
       var stBytes = new TextEncoder().encode(JSON.stringify({ path: msg.path, value: msg.value }));
       var pSt = holder.exports.webui_input_ptr();
       if (stBytes.length <= 65536 && holder.exports.webui_state_apply) {
@@ -308,6 +318,10 @@
       return;
     }
     if (msg.type === 'data') {
+      if (holder.workerMode && holder.worker) {
+        sendAndApply('data', { type: 'data', name: msg.name, payload: msg.payload }, updatesApply);
+        return;
+      }
       var dtBytes = new TextEncoder().encode(JSON.stringify({ name: msg.name, payload: msg.payload }));
       var pDt = holder.exports.webui_input_ptr();
       if (dtBytes.length <= 65536 && holder.exports.webui_data_apply) {
@@ -359,6 +373,11 @@
       var bulkLen = view.getUint32(dataOff, true);
       dataOff += 4;
       if (dataOff + bulkLen > buf.byteLength) { return; }
+      if (holder.workerMode && holder.worker) {
+        var bulkBytes = new Uint8Array(buf.slice(dataOff, dataOff + bulkLen)).buffer;
+        sendAndApply('data_bulk', { type: 'data_bulk', name: bulkName, bytes: bulkBytes }, updatesApply, [bulkBytes]);
+        return;
+      }
       if (!holder.exports.webui_data_alloc || !holder.exports.webui_data_commit) { return; }
       var bulkPtr = holder.exports.webui_data_alloc(bulkLen);
       if (!bulkPtr) { return; }
@@ -436,6 +455,11 @@
       env.token = holder.config.renderToken;
     }
     var json = JSON.stringify(env);
+    if (holder.workerMode && holder.worker) {
+      holder.eventCount += 1;
+      sendAndApply('event', { type: 'event', json: json }, updatesApply);
+      return;
+    }
     var enc = new TextEncoder().encode(json);
     var ptr = holder.exports.webui_input_ptr();
     new Uint8Array(holder.memory.buffer, ptr, enc.length).set(enc);
@@ -454,7 +478,17 @@
     });
   }
   function renderRegionInto(el, name, args) {
-    if (!el || !name || !holder.exports || !holder.exports.webui_render_region) { return false; }
+    if (!el || !name) { return false; }
+    if (holder.workerMode && holder.worker) {
+      var target = el;
+      sendAndApply('render_region', { type: 'render_region', name: name, args: args || {} }, function (bytes) {
+        var regionHTML = decoder(new Uint8Array(bytes));
+        target.innerHTML = serializeFragment(sanitizeFragment(regionHTML, target));
+        target.setAttribute('data-webui-applet-state', 'mounted');
+      });
+      return true;
+    }
+    if (!holder.exports || !holder.exports.webui_render_region) { return false; }
     var env = new TextEncoder().encode(JSON.stringify({ name: name, args: args || {} }));
     if (env.length > 65536) { return false; }
     var ptr = holder.exports.webui_input_ptr();
@@ -480,10 +514,178 @@
       }
     }
   }
+  function handleRPC() {
+    if (!holder.mailbox || !holder.i32) { return; }
+    if (Atomics.load(holder.i32, 2) === 0) { return; }
+    try {
+    var dv = new DataView(holder.mailbox);
+    var base = 64;
+    var op = dv.getInt32(base, true);
+    var argCount = dv.getInt32(base + 4, true);
+    var off = 8;
+    var args = [];
+    for (var i = 0; i < argCount; i++) {
+      var l = dv.getInt32(base + off, true); off += 4;
+      args.push(decoder(new Uint8Array(new Uint8Array(holder.mailbox, base + off, l)))); off += l;
+    }
+    var respBase = 32768;
+    var out = "";
+    var status = 0;
+    switch (op) {
+      case 1: {
+        var el = document.getElementById(args[0]);
+        if (el) { el.innerHTML = serializeFragment(sanitizeFragment(args[1], el)); }
+        break;
+      }
+      case 2: { var e2 = document.getElementById(args[0]); if (e2) { e2.remove(); } break; }
+      case 3: { var e3 = document.getElementById(args[0]); out = (e3 && e3.value != null) ? String(e3.value) : ""; break; }
+      case 4: { var e4 = document.getElementById(args[0]); if (e4 && e4.value != null) { e4.value = args[1]; } break; }
+      case 5: { var e5 = document.getElementById(args[0]); if (e5 && typeof e5.setCustomValidity === 'function') { e5.setCustomValidity(args[1]); } break; }
+      case 6: {
+        if (args[0]) {
+          holder.wsSent += 1;
+          if (holder.transport && holder.transport.readyState === WebSocket.OPEN) { holder.transport.send(args[0]); }
+        }
+        break;
+      }
+      case 7: {
+        if (holder.idbEnabled) {
+          var cached = holder.idbCache ? holder.idbCache[args[0]] : null;
+          out = (cached === undefined ? "" : cached);
+        } else {
+          try { out = localStorage.getItem(args[0]) || ""; } catch (e) { out = ""; }
+        }
+        break;
+      }
+      case 8: {
+        if (holder.idbEnabled) {
+          if (holder.idbCache) { holder.idbCache[args[0]] = args[1]; }
+          idbPersist(args[0], args[1]);
+        } else {
+          try { localStorage.setItem(args[0], args[1]); } catch (e) {}
+        }
+        break;
+      }
+      case 9: { var e9 = document.getElementById(args[0]); if (e9) { e9.focus(); } break; }
+      case 10: {
+        if (navigator.clipboard && navigator.clipboard.writeText) { navigator.clipboard.writeText(args[0]).catch(function () {}); }
+        break;
+      }
+      case 11: {
+        var channel = args[0];
+        if (!holder.broadcastChannels) { holder.broadcastChannels = {}; }
+        if (!holder.broadcastChannels[channel]) {
+          var bc = new BroadcastChannel(channel);
+          bc.onmessage = function (e) {
+            var payload = typeof e.data === 'string' ? e.data : JSON.stringify(e.data || {});
+            if (holder.worker) { holder.worker.postMessage({ type: 'broadcast_in', channel: channel, payload: payload }); }
+          };
+          holder.broadcastChannels[channel] = bc;
+        }
+        break;
+      }
+      case 12: { var b12 = holder.broadcastChannels && holder.broadcastChannels[args[0]]; if (b12) { b12.postMessage(args[1]); } break; }
+      case 13: { var e13 = document.getElementById(args[0]); if (e13 && e13.requestFullscreen) { e13.requestFullscreen().catch(function () {}); } break; }
+      case 14: { try { out = window.matchMedia(args[0]).matches ? "1" : "0"; } catch (e) { out = "E"; } break; }
+      default: status = 1;
+    }
+    var ob = new TextEncoder().encode(out);
+    var n = Math.min(ob.length, 32760);
+    new Uint8Array(holder.mailbox, respBase + 8, n).set(ob.subarray(0, n));
+    dv.setInt32(respBase + 4, n, true);
+    dv.setInt32(respBase, status, true);
+    } catch (err) {
+      var fdv = new DataView(holder.mailbox);
+      fdv.setInt32(32768 + 4, 0, true);
+      fdv.setInt32(32768, 1, true);
+    }
+    Atomics.store(holder.i32, 2, 0);
+    Atomics.store(holder.i32, 3, 1);
+    Atomics.notify(holder.i32, 3);
+  }
+
+  var frameSeq = 0;
+  var frameWaiters = {};
+
+  function sendAndApply(type, payload, applyFn, transfer) {
+    if (!holder.worker) { return false; }
+    frameSeq += 1;
+    payload.reqId = frameSeq;
+    if (applyFn) { frameWaiters[frameSeq] = applyFn; }
+    holder.worker.postMessage(payload, transfer || []);
+    return true;
+  }
+
+  function sendFrame(type, payload) {
+    return sendAndApply(type, payload, null);
+  }
+
+  function bootWorker(opts) {
+    return new Promise(function (resolve, reject) {
+      var workerUrl = opts.workerUrl || '/__assets/webui-worker.js';
+      var mailbox = new SharedArrayBuffer(65536);
+      holder.mailbox = mailbox;
+      holder.i32 = new Int32Array(mailbox, 0, 4);
+      var worker = new Worker(workerUrl);
+      holder.worker = worker;
+      holder.workerMode = true;
+      worker.onerror = function (err) {
+        holder.workerError = String((err && err.message) || 'worker error');
+        reject(new Error(holder.workerError));
+      };
+      holder.initialTarget = opts.target || 'search-app';
+      frameSeq += 1;
+      var bootReq = frameSeq;
+      frameWaiters[bootReq] = function (bytes) {
+        var target = document.getElementById(holder.initialTarget);
+        if (target) { target.innerHTML = decoder(new Uint8Array(bytes)); }
+        holder.bootApplied = true;
+        if (holder.onBootApplied) { holder.onBootApplied(); }
+      };
+      worker.onmessage = function (e) {
+        var msg = e.data || {};
+        if (msg.type === 'pump') { handleRPC(); return; }
+        if (msg.type === 'frame') {
+          if (!msg.bytes) { return; }
+          var waiter = frameWaiters[msg.reqId];
+          if (waiter) {
+            delete frameWaiters[msg.reqId];
+            waiter(msg.bytes);
+            return;
+          }
+          if (!holder.bootApplied && holder.initialTarget) {
+            var fb = frameWaiters[bootReq];
+            if (fb) { delete frameWaiters[bootReq]; fb(msg.bytes); }
+          }
+          return;
+        }
+        if (msg.type === 'ready') { resolve(true); return; }
+        if (msg.type === 'error') { reject(new Error(msg.message)); return; }
+        if (msg.type === 'bench_done') { if (holder.onBench) { holder.onBench(msg.ms); } return; }
+      };
+      worker.postMessage({ type: 'boot', wasmUrl: opts.wasmUrl, config: readConfig() || {}, mailbox: mailbox, reqId: bootReq });
+    });
+  }
+
+  function benchInModule(n) {
+    if (holder.workerMode && holder.worker) {
+      return new Promise(function (resolve) {
+        holder.onBench = function (ms) { holder.onBench = null; resolve(ms); };
+        holder.worker.postMessage({ type: 'bench', n: n });
+      });
+    }
+    return Promise.resolve(0);
+  }
+
   function processDropFile(file) {
     var reader = new FileReader();
     reader.onload = function () {
       var bytes = new Uint8Array(reader.result);
+      if (holder.workerMode && holder.worker) {
+        var payload = bytes.slice().buffer;
+        sendAndApply('file', { type: 'file', name: file.name, mime: file.type || 'application/octet-stream', bytes: payload }, updatesApply, [payload]);
+        return;
+      }
       if (!holder.exports.webui_file_alloc || !holder.exports.webui_file_commit) { return; }
       var ptr = holder.exports.webui_file_alloc(bytes.length);
       if (!ptr) { return; }
@@ -504,6 +706,8 @@
     });
   }
   function boot(opts) {
+    var wantsWorker = (opts.mode === 'search' || opts.mode === 'app') && typeof SharedArrayBuffer !== 'undefined' && self.crossOriginIsolated && !opts.sync;
+    if (wantsWorker) { return bootWorkerFlow(opts); }
     var bootConfig = readConfig();
     var needsIDB = bootConfig && bootConfig.persistence === 'indexeddb';
     if (needsIDB) { holder.idbEnabled = true; }
@@ -556,5 +760,37 @@
         return frame;
       });
   }
+  function updatesApply(bytes) {
+    var text = decoder(new Uint8Array(bytes));
+    try { applyUpdates(JSON.parse(text)); } catch (e) {}
+  }
+
+  function bootWorkerFlow(opts) {
+    var workerConfig = readConfig();
+    holder.config = workerConfig;
+    var needsIDB = workerConfig && workerConfig.persistence === 'indexeddb';
+    if (needsIDB) { holder.idbEnabled = true; }
+    var prep = needsIDB ? idbHydrate() : Promise.resolve({});
+    return prep.then(function (cache) {
+      if (needsIDB) { holder.idbCache = cache; }
+      return bootWorker(opts);
+    }).then(function () {
+      return new Promise(function (resolve) {
+        var finish = function () {
+          wireEvents();
+          mountApplets();
+          if (holder.config && holder.config.capabilities && holder.config.capabilities.indexOf('files') >= 0) { wireFileDrops(); }
+          holder.handleServerMessage = handleServerMessage;
+          holder.handleBinaryFrame = handleBinaryFrame;
+          holder.bench = benchInModule;
+          openTransport();
+          if (opts.onLoaded) { opts.onLoaded(0); }
+          resolve(true);
+        };
+        if (holder.bootApplied) { finish(); } else { holder.onBootApplied = finish; }
+      });
+    });
+  }
+
   return { boot: boot, _getInstance: function () { return holder; }, _sanitize: function (html) { var probe = document.createElement('div'); return serializeFragment(sanitizeFragment(html, probe)); } };
 })();

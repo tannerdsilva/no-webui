@@ -652,6 +652,8 @@ extension SmokeApp {
 					text = WebUIAssets.js; contentType = "text/javascript; charset=utf-8"
 				case "/__assets/webui-client.js":
 					text = WebUIAssets.client; contentType = "text/javascript; charset=utf-8"
+				case "/__assets/webui-worker.js":
+					text = WebUIAssets.worker; contentType = "text/javascript; charset=utf-8"
 				case "/__assets/client-demo-boot.js":
 					text = WebUIAssets.clientBoot; contentType = "text/javascript; charset=utf-8"
 				case "/__assets/search-demo-boot.js":
@@ -679,6 +681,8 @@ extension SmokeApp {
 		// security headers — parity with the auth server.
 		head.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
 		head.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
+		head.headers.replaceOrAdd(name: "Cross-Origin-Opener-Policy", value: "same-origin")
+		head.headers.replaceOrAdd(name: "Cross-Origin-Embedder-Policy", value: "require-corp")
 		head.headers.replaceOrAdd(name: "Cache-Control", value: "no-store")
 		// when a gate spawned this server it checks its own nonce so it can
 		// never mistake a stale/foreign process for its child.
@@ -703,6 +707,8 @@ extension SmokeApp {
 		head.headers.replaceOrAdd(name: "Connection", value: "close")
 		head.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
 		head.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
+		head.headers.replaceOrAdd(name: "Cross-Origin-Opener-Policy", value: "same-origin")
+		head.headers.replaceOrAdd(name: "Cross-Origin-Embedder-Policy", value: "require-corp")
 		head.headers.replaceOrAdd(name: "Cache-Control", value: cacheControl)
 		if let nonce = Self.smokeNonce {
 			head.headers.replaceOrAdd(name: "X-WebUI-Smoke-Nonce", value: nonce)
