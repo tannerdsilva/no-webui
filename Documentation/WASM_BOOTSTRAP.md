@@ -56,6 +56,22 @@ be referenced from a reachable root (webui_init → WebUIBridge.install).
   `Cache-Control: public, max-age=31536000, immutable`; the content hash is
   computed over the artifact with rawdog's `RAW_sha256` at server startup, so
   a new binary automatically emits new URLs and can never be served stale.
+- **wire compression**: serve the wasm with brotli (`Content-Encoding: br`,
+  gzip fallback) + `Vary: Accept-Encoding`. the 6.4 full-stdlib client is
+  ~55 MB raw (post-strip, see below) and ~12 MB brotli — the browser
+  decompresses transparently before `WebAssembly.instantiate`. worth it on
+  WAN; on loopback the compile/instantiate cost dominates either way.
+- **strip by default**: the `wasm-client` plugin strips custom sections
+  (name table + DWARF) before hashing — the module's import/export surface
+  is unchanged (verified byte-identical), but the artifact drops the
+  advisory sections (`64.7 MB → 55.1 MB`, ~15%). `--no-strip` keeps readable
+  wasm stack traces in devtools.
+- **absent-artifact posture**: the `WebUIWasmPlugin` build-tool plugin emits
+  a `present=false` carrier (soft — host builds stay green, wasm route 404s)
+  when the artifact wasn't built. consumers who ship client-mode pages can
+  opt into a hard gate with `WEBUI_REQUIRE_WASM=1`: an absent artifact then
+  fails the host build with the exact `wasm-client` command — never a silent
+  404 in production.
 - client pages carry `<meta name="webui-wasm" content="/__assets/app.<hash>.wasm">`;
   the boot scripts read it (fallback to the alias). verified by the smoke /
   fullstack gates (byte parity + immutable header) and by the browser probes

@@ -13,6 +13,14 @@ let package = Package(
             targets: ["WebUI"]
         ),
         .library(
+            name: "WebUICore",
+            targets: ["WebUICore"]
+        ),
+        .library(
+            name: "WebUIClientRuntime",
+            targets: ["WebUIClientRuntime"]
+        ),
+        .library(
             name: "WebUIDesignSystem",
             targets: ["WebUIDesignSystem"]
         ),
@@ -23,6 +31,22 @@ let package = Package(
         .library(
             name: "WebUIAuth",
             targets: ["WebUIAuth"]
+        ),
+        .library(
+            name: "WebUIDesignSystemCore",
+            targets: ["WebUIDesignSystemCore"]
+        ),
+        .executable(
+            name: "WebUIClient",
+            targets: ["WebUIClient"]
+        ),
+        .plugin(
+            name: "WebUIWasmPlugin",
+            targets: ["WebUIWasmPlugin"]
+        ),
+        .plugin(
+            name: "WebUIWasmClientPlugin",
+            targets: ["WebUIWasmClientPlugin"]
         ),
         .executable(
             name: "WebUIExample",
@@ -78,6 +102,7 @@ let package = Package(
             ],
             plugins: [
                 "WebUIAssetPlugin",
+                "WebUIWasmPlugin",
             ]
         ),
         .target(
@@ -161,6 +186,14 @@ let package = Package(
         // ── Icon Tool (svg iconography generator + linter) ───────
         .executableTarget(
             name: "WebUIIconTool"
+        ),
+
+        // ── Wasm Tool (validates + hashes the prebuilt client artifact) ──
+        .executableTarget(
+            name: "WebUIWasmTool",
+            dependencies: [
+                .product(name: "RAW_sha256", package: "rawdog"),
+            ]
         ),
 
         // ── @Theme Macro ────────────────────────────────────────
@@ -263,6 +296,25 @@ let package = Package(
             ]
         ),
         .plugin(
+            name: "WebUIWasmPlugin",
+            capability: .buildTool(),
+            dependencies: [
+                .target(name: "WebUIWasmTool"),
+            ]
+        ),
+        .plugin(
+            name: "WebUIWasmClientPlugin",
+            capability: .command(
+                intent: .custom(
+                    verb: "wasm-client",
+                    description: "Cross-build the wasm client product with the wasm SDK (requires --disable-sandbox; builds into .build/wasm-client-scratch then copies the stripped artifact to .build/out/…)."
+                )
+            ),
+            dependencies: [
+                .target(name: "WebUIWasmTool"),
+            ]
+        ),
+        .plugin(
             name: "WebUIShowcasePlugin",
             capability: .command(
                 intent: .custom(
@@ -348,6 +400,12 @@ let package = Package(
                 "WebUIDesignSystem",
                 "WebUIChart",
                 "WebUIAuth",
+            ]
+        ),
+        .testTarget(
+            name: "WebUIWasmToolTests",
+            dependencies: [
+                .product(name: "RAW_sha256", package: "rawdog"),
             ]
         ),
         .testTarget(
