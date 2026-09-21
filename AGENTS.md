@@ -38,28 +38,44 @@ inline comments explain code, markdown files explain architecture and APIs.
 ## build and test
 
 ```bash
-swift build             # includes the WebUIAssetPlugin + WebUIIconPlugin (auto-generates Assets+Generated.swift + DesignTokens+Generated.swift + IconLibrary.swift)
-swift test              # 648 tests, 83 suites
+swift build             # includes the WebUIAssetPlugin + WebUIIconPlugin + WebUIWasmPlugin (auto-generates Assets+Generated.swift + DesignTokens+Generated.swift + IconLibrary.swift + Wasm+Generated.swift)
+swift test              # 702 tests, 85 suites
 swift run WebUIExample  # example server on :9090
 ```
 
 the wasm client is a separate product built with the official swift 6.4 wasm sdk
 (the swiftly-hosted `swift-6.4-RELEASE` toolchain — the Xcode frontend cannot
 read the sdk's prebuilt modules and lacks `swift-autolink-extract`; wasm commands
-need `source ~/.swiftly/env.sh` first):
+need the swiftly shim, not `source ~/.swiftly/env.sh`, which is
+PATH-order-dependent in spawn contexts). the *native* way to produce the
+artifact is the `wasm-client` plugin verb (see below) — it wraps the raw
+invocation in an isolated scratch build root:
 
 ```bash
-swift build -c release --swift-sdk swift-6.4.0-RELEASE_wasm --product WebUIClient
+swift package --disable-sandbox plugin wasm-client [--product TheirClient] [--no-strip]
 # verify modes (browser-hosted once env imports are linked; wasmkit can no
 # longer instantiate the shipped module — it is chamber-only by design)
 node designer/browser-smoke.mjs
 ```
 
+the `wasm-client` verb cross-builds into `.build/wasm-client-scratch` (an
+isolated build root — the plugin invocation holds the package `.build` lock,
+so building into the package's own `.build` deadlocks), strips custom sections
+(name table + DWARF) by default (`--no-strip` keeps readable devtools stack
+traces), and copies the artifact to
+`.build/out/Products/Release-webassembly-wasm32/<product>.wasm` — the path the
+`WebUIWasmPlugin` build-tool plugin validates + hashes into `WebUIWasmInfo`
+during every host build.
+
 client-mode pages flip with one argument: `HTMLDocument(…, clientMode:
 ClientBoot(wasmURL: …))` (and `WebUIDocument`). the emission carries the
 `webui-wasm` meta contract + external chamber/boot scripts + the client csp;
-serving those routes is the host's job (`WebUIBoot` hashes the artifact for the
-immutable route). gates that exercise client mode build the wasm product first.
+serving those routes is the host's job (`WebUIBoot` exposes the build-time
+hash for the immutable route + `wasmProductURL(productName:)` for consumers'
+own artifacts). the `WebUIWasmPlugin` absent-artifact posture is soft by
+default (host builds stay green, wasm route 404s); set `WEBUI_REQUIRE_WASM=1`
+to turn an absent artifact into a build failure. consumers who ship client-mode
+pages build the wasm product first (`wasm-client` verb).
 
 all project tooling is command plugins — there are no shell scripts. see
 `Documentation/ASSEMBLY.md` for the full stage map and `designer/README.md`
@@ -74,6 +90,7 @@ for the designer workflow.
 | `fullstack-smoke` | `swift package --disable-sandbox plugin fullstack-smoke` | self-contained gate: spawns the server, drives live WebSocket round-trips (click/echo/redirect/optimistic) via node, tears down. |
 | `probe` | `swift package plugin probe [port]` | connect-based port check (bind-probe is sandbox-denied). |
 | `showcase` | `swift package plugin showcase --allow-writing-to-package-directory` | regenerates `designer/previews/showcase.html` directly (declared `writeToPackageDirectory`). add `--output <path>` for ad-hoc targets. |
+| `wasm-client` | `swift package --disable-sandbox plugin wasm-client [--product X] [--no-strip]` | cross-builds the wasm client product with the official sdk into `.build/wasm-client-scratch` (isolated root; in-package `.build` would deadlock), strips custom sections by default, copies the artifact to the canonical serving path. |
 
 svg icon toolset (an executable target, not a plugin — the plugin
 `WebUIIconPlugin` runs `generate` automatically during every build):

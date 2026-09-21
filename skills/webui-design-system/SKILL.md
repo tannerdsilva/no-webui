@@ -116,6 +116,53 @@ let doc = WebUIDocument(
 `WebUIDocument` assembles the full HTML document with the design-system CSS
 and JS runtime embedded, an auto-generated CSP + nonce, and the theme.
 
+## Client mode (run the same UI in wasm)
+
+The same `View`/`ViewModifier` core can run **inside the browser** — the
+client-mode page flips with one argument, and the wasm artifact is produced by
+a plugin verb from the no-webui dependency (no raw `swift build --swift-sdk`
+invocation, no memorized flags):
+
+```bash
+# one extra step, per rebuild — replaces the raw wasm-sdk build command
+swift package --disable-sandbox plugin wasm-client --product TheirClient
+# then a normal host build serves client-mode pages
+swift build
+swift run TheirServer
+```
+
+- **`wasm-client`** cross-builds the named client product with the official
+  wasm sdk into an isolated `.build/wasm-client-scratch` (a scratch root is
+  required: the plugin invocation holds the package build lock). it **strips
+  custom sections by default** (name table + DWARF — ~15% smaller artifact,
+  no behavior change); pass `--no-strip` to keep readable stack traces in
+  devtools. requires `--disable-sandbox` (like the serve/smoke verbs).
+- **products for consumers**: `WebUIClientRuntime`, `WebUICore`,
+  `WebUIDesignSystemCore`, `WebUIClient` are library/executable products of
+  no-webui — your client target links `WebUIClientRuntime` + `WebUICore` and
+  installs the runtime wiring (`ClientExecutor.install()` +
+  `ClientRuntime.boot()`), mirroring the reference `WebUIClient` reactor.
+- **flip the page**: `HTMLDocument(…, clientMode: ClientBoot(wasmURL: …))` /
+  `WebUIDocument(…, clientMode: …)`. `wasmURL` is the url your server serves
+  the artifact at (use `WebUIBoot.wasmProductURL(productName: "TheirClient")`
+  to resolve it, and `WebUIBoot.wasmSHA256` for the build-time content hash
+  that feeds the immutable-cached route).
+- **absent-artifact posture**: the framework's `WebUIWasmPlugin` emits a soft
+  `present=false` carrier when no artifact was built (host builds stay green,
+  the wasm route 404s). if your app ships client-mode pages and an absent
+  artifact should fail the build, set `WEBUI_REQUIRE_WASM=1` (read at
+  plugin-execution time) — the build then fails with the exact `wasm-client`
+  command instead of a production 404.
+- **the artifact must exist before the host build** — the plugin validates +
+  hashes it into the carrier during `swift build`, so build `wasm-client`
+  first, then `swift build`. (This is the same two-invocation rule the
+  framework's own gates follow.)
+
+Client mode runs the same render core in wasm: local event routing, optimistic
+patches, client state store, and an auth-presence mirror, with the websocket
+demoted to the authority channel. See `Documentation/WASM_NATIVE_BUILD_SPIKE.md`
+in the repo for the full build-integration design.
+
 ## Tokens & theming
 
 - **SpaceToken**: `.one…` `.twentyFour` (values 1–24) → `var(--space-N)`.
