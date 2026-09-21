@@ -402,6 +402,11 @@ if (wasmBuilt) {
         hasFocus: !!document.getElementById("applet-focus"),
         hasCopy: !!document.getElementById("applet-copy"),
         cfg: inst.config && inst.config.capabilities,
+        meta: document.querySelector('meta[name="webui-config"]')?.getAttribute("content") || null,
+        instance: !!window.WebUIClient,
+        bootOpts: inst.bootOpts || null,
+        mountError: inst.mountError || null,
+        searchError: window.__webuiSearchError || null,
       };
     });
     if (capState.hasFocus && capState.hasCopy && Array.isArray(capState.cfg) && capState.cfg.indexOf("clipboard") >= 0) ok("applet capability grants reached the mounted region");
@@ -428,6 +433,34 @@ if (wasmBuilt) {
     });
     if (vsResult.state === "mounted" && String(vsResult.label || "").indexOf("Declarative card") >= 0) ok("viewspec message composed a region declaratively");
     else bad(`viewspec failed: ${JSON.stringify(vsResult)}`);
+    const binState = await s.evaluate(() => {
+      const inst = window.WebUIClient._getInstance();
+      const msg = JSON.stringify({ type: "state", path: "remote.status", value: "online" });
+      const bytes = new TextEncoder().encode(msg);
+      const buf = new ArrayBuffer(5 + bytes.length);
+      const view = new DataView(buf);
+      view.setUint8(0, 0x64);
+      view.setUint32(1, bytes.length, true);
+      new Uint8Array(buf, 5).set(bytes);
+      inst.handleBinaryFrame(buf);
+      return document.getElementById("applet-remote")?.textContent || "";
+    });
+    if (binState.indexOf("remote.status") >= 0 && binState.indexOf("online") >= 0) ok("binary state frame applied to the module store");
+    else bad(`binary state: ${JSON.stringify(binState)}`);
+    const binData = await s.evaluate(() => {
+      const inst = window.WebUIClient._getInstance();
+      const msg = JSON.stringify({ type: "data", name: "catalog", payload: "a,b,c" });
+      const bytes = new TextEncoder().encode(msg);
+      const buf = new ArrayBuffer(5 + bytes.length);
+      const view = new DataView(buf);
+      view.setUint8(0, 0x64);
+      view.setUint32(1, bytes.length, true);
+      new Uint8Array(buf, 5).set(bytes);
+      inst.handleBinaryFrame(buf);
+      return document.getElementById("applet-data")?.textContent || "";
+    });
+    if (binData.indexOf("catalog") >= 0) ok("binary data frame applied to the module");
+    else bad(`binary data: ${JSON.stringify(binData)}`);
     await s.click("#applet-media-btn").catch(() => {});
     await s.waitForTimeout(200);
     const mediaText = await s.evaluate(() => document.getElementById("applet-media")?.textContent || "");
@@ -449,6 +482,17 @@ if (wasmBuilt) {
     if (fsState.fs) ok("applet fullscreen engaged");
     else if (sErrors.filter((t) => /fullscreen/i.test(t)).length === 0) ok("applet fullscreen declined cleanly (headless)");
     else bad(`fullscreen errors: ${JSON.stringify(fsState)}`);
+    const idbBefore = await s.evaluate(() => parseInt((document.getElementById("boot-count")?.textContent || "boot 0").replace(/\D/g, "")) || 0);
+    await s.reload({ waitUntil: "domcontentloaded" });
+    await s.waitForSelector("#search-app input", { timeout: 20000 }).catch(() => {});
+    await s.waitForTimeout(700);
+    const idbProbe = await s.evaluate(() => ({
+      count: document.getElementById("boot-count")?.textContent || "",
+      local: localStorage.getItem("boot.count"),
+    }));
+    const idbAfter = parseInt((idbProbe.count).replace(/\D/g, "")) || 0;
+    if (idbAfter === idbBefore + 1 && idbProbe.local === null) ok("indexeddb persistence survived the reload (localStorage untouched)");
+    else bad(`idb persistence: before=${idbBefore} after=${JSON.stringify(idbProbe)}`);
     const de = sErrors.filter((t) => !/favicon/i.test(t));
     if (de.length === 0) ok("local-search probe has no console errors");
     else bad(`local-search console errors: ${JSON.stringify(de)}`);

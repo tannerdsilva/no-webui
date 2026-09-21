@@ -19,10 +19,15 @@ public struct RuntimeConfig: Sendable, Encodable {
 	/// socket reconnects after a different user logs in cannot replay queued
 	/// events into that user's router (cross-session replay).
 	public var renderToken: String?
-	/// the applet-harness capability grants (harness v2; no effect on the
+	/// the applet-harness capability grants (harness v2+; no effect on the
 	/// js-runtime path). the chamber wires the corresponding env imports only
 	/// when granted — a page that never asks for `clipboard` cannot use it.
 	public var capabilities: [String]?
+	/// the client-state persistence backend (harness v4): `"localstorage"`
+	/// (default) or `"indexeddb"` (durable beyond the ~5 mb limit, async
+	/// writes). the chamber picks the backing; the module-side store contract
+	/// is unchanged.
+	public var persistence: String?
 
 	public init(
 		wsUrl: String? = nil,
@@ -36,7 +41,8 @@ public struct RuntimeConfig: Sendable, Encodable {
 		optimisticSettleMs: Int? = nil,
 		logLevel: String? = nil,
 		renderToken: String? = nil,
-		capabilities: [String]? = nil
+		capabilities: [String]? = nil,
+		persistence: String? = nil
 	) {
 		self.wsUrl = wsUrl
 		self.wsReconnect = wsReconnect
@@ -50,6 +56,7 @@ public struct RuntimeConfig: Sendable, Encodable {
 		self.logLevel = logLevel
 		self.renderToken = renderToken
 		self.capabilities = capabilities
+		self.persistence = persistence
 	}
 
 	public var isEmpty: Bool {
@@ -57,7 +64,7 @@ public struct RuntimeConfig: Sendable, Encodable {
 			&& wsPingIntervalMs == nil && wsPongTimeoutMs == nil && maxQueueSize == nil
 			&& debounceInputMs == nil && debounceMaxWaitMs == nil
 			&& optimisticSettleMs == nil && logLevel == nil && renderToken == nil
-			&& capabilities == nil
+			&& capabilities == nil && persistence == nil
 	}
 
 	public func encodedJSON() -> String {
@@ -77,6 +84,7 @@ public struct RuntimeConfig: Sendable, Encodable {
 			let escaped = v.map(jsonStringLiteral).joined(separator: ",")
 			entries.append("\"capabilities\":[\(escaped)]")
 		}
+		if let v = persistence { entries.append("\"persistence\":\(jsonStringLiteral(v))") }
 		return "{\(entries.joined(separator: ","))}"
 	}
 

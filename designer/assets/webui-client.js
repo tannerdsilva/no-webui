@@ -65,12 +65,24 @@
       storageSet: function (keyPtr, keyLen, valPtr, valLen) {
         var key = readStr(keyPtr, keyLen);
         var val = readStr(valPtr, valLen);
+        if (holder.idbEnabled) {
+          if (holder.idbCache) { holder.idbCache[key] = val; }
+          idbPersist(key, val);
+          return;
+        }
         try { localStorage.setItem(key, val); } catch (e) {}
       },
       storageGet: function (keyPtr, keyLen, outPtr, outLen) {
         if (!outPtr || outLen <= 0) { return 0; }
         var raw = null;
-        try { raw = localStorage.getItem(readStr(keyPtr, keyLen)); } catch (e) { return 0; }
+        if (holder.idbEnabled) {
+          if (holder.idbCache) {
+            var cached = holder.idbCache[readStr(keyPtr, keyLen)];
+            raw = (cached === undefined ? null : cached);
+          }
+        } else {
+          try { raw = localStorage.getItem(readStr(keyPtr, keyLen)); } catch (e) { return 0; }
+        }
         if (!raw) { return 0; }
         var bytes = new TextEncoder().encode(raw);
         var n = Math.min(bytes.length, outLen);
@@ -285,6 +297,26 @@
       if (regionTarget && msg.name) { renderRegionInto(regionTarget, msg.name, msg.args || {}); }
       return;
     }
+    if (msg.type === 'state') {
+      var stBytes = new TextEncoder().encode(JSON.stringify({ path: msg.path, value: msg.value }));
+      var pSt = holder.exports.webui_input_ptr();
+      if (stBytes.length <= 65536 && holder.exports.webui_state_apply) {
+        new Uint8Array(holder.memory.buffer, pSt, stBytes.length).set(stBytes);
+        holder.exports.webui_state_apply(pSt, stBytes.length);
+        if (holder.exports.webui_frame_len() > 0) { applyFrame(); }
+      }
+      return;
+    }
+    if (msg.type === 'data') {
+      var dtBytes = new TextEncoder().encode(JSON.stringify({ name: msg.name, payload: msg.payload }));
+      var pDt = holder.exports.webui_input_ptr();
+      if (dtBytes.length <= 65536 && holder.exports.webui_data_apply) {
+        new Uint8Array(holder.memory.buffer, pDt, dtBytes.length).set(dtBytes);
+        holder.exports.webui_data_apply(pDt, dtBytes.length);
+        if (holder.exports.webui_frame_len() > 0) { applyFrame(); }
+      }
+      return;
+    }
     if (msg.type === 'reload') { location.reload(); return; }
   }
   function openTransport() {
@@ -293,7 +325,9 @@
     var ws;
     try { ws = new WebSocket(holder.config.wsUrl); } catch (e) { console.warn('WebUIClient ws connect failed: ' + e.message); return; }
     holder.transport = ws;
+    ws.binaryType = 'arraybuffer';
     ws.onmessage = function (e) {
+      if (e.data instanceof ArrayBuffer) { handleBinaryFrame(e.data); return; }
       var msg;
       try { msg = JSON.parse(e.data); } catch (err) { return; }
       handleServerMessage(msg);
@@ -302,6 +336,54 @@
       if (holder.transport === ws) { holder.transport = null; }
     };
   }
+  function handleBinaryFrame(buf) {
+    if (!buf || buf.byteLength < 5) { return; }
+    var view = new DataView(buf);
+    if (view.getUint8(0) !== 0x64) { return; }
+    var len = view.getUint32(1, true);
+    if (5 + len > buf.byteLength) { return; }
+    var text = decoder(new Uint8Array(buf, 5, len));
+    var msg;
+    try { msg = JSON.parse(text); } catch (err) { return; }
+    handleServerMessage(msg);
+  }
+
+  var idbHandle = null;
+  function idbOpen() {
+    if (idbHandle) { return idbHandle; }
+    idbHandle = new Promise(function (resolve, reject) {
+      var req = indexedDB.open('webui', 1);
+      req.onupgradeneeded = function () {
+        var db = req.result;
+        if (!db.objectStoreNames.contains('kv')) { db.createObjectStore('kv'); }
+      };
+      req.onsuccess = function () { resolve(req.result); };
+      req.onerror = function () { reject(req.error); };
+    });
+    return idbHandle;
+  }
+  function idbHydrate() {
+    return idbOpen().then(function (db) {
+      return new Promise(function (resolve) {
+        var tx = db.transaction('kv', 'readonly');
+        var store = tx.objectStore('kv');
+        var out = {};
+        var cur = store.openCursor();
+        cur.onsuccess = function () {
+          var c = cur.result;
+          if (c) { out[c.key] = c.value; c.continue(); } else { resolve(out); }
+        };
+        cur.onerror = function () { resolve(out); };
+      });
+    }).catch(function () { return {}; });
+  }
+  function idbPersist(key, val) {
+    idbOpen().then(function (db) {
+      var tx = db.transaction('kv', 'readwrite');
+      tx.objectStore('kv').put(val, key);
+    }).catch(function () {});
+  }
+
   function findComponent(target) {
     var el = target;
     for (var depth = 0; el && depth < 20; depth++, el = el.parentElement) {
@@ -397,13 +479,20 @@
     });
   }
   function boot(opts) {
-    return fetch(opts.wasmUrl)
+    var bootConfig = readConfig();
+    var needsIDB = bootConfig && bootConfig.persistence === 'indexeddb';
+    if (needsIDB) { holder.idbEnabled = true; }
+    var hydratePromise = needsIDB ? idbHydrate() : Promise.resolve({});
+    return hydratePromise.then(function (cache) {
+      if (needsIDB) { holder.idbCache = cache; }
+      return fetch(opts.wasmUrl);
+    })
       .then(function (r) { if (!r.ok) { throw new Error('wasm fetch ' + r.status); } return r.arrayBuffer(); })
       .then(function (bytes) { return WebAssembly.instantiate(bytes, wasiImports()); })
       .then(function (r) {
         holder.exports = r.instance.exports;
         holder.memory = r.instance.exports.memory;
-        holder.config = readConfig();
+        holder.config = bootConfig;
         holder.bootOpts = opts;
         if (typeof holder.exports._start === 'function') { holder.exports._start(); }
         var cfgPtr = 0; var cfgLen = 0;
@@ -423,6 +512,7 @@
           try { mountApplets(); } catch (err) { holder.mountError = String(err); }
           if (holder.config && holder.config.capabilities && holder.config.capabilities.indexOf('files') >= 0) { wireFileDrops(); }
           holder.handleServerMessage = handleServerMessage;
+          holder.handleBinaryFrame = handleBinaryFrame;
           if (opts.onLoaded) { opts.onLoaded(page); }
           openTransport();
           return page;

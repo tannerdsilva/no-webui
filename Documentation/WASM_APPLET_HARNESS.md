@@ -52,22 +52,34 @@ in the boot envelope; un-granted imports no-op in the chamber.
 | inbound files (drag-drop; grant: `files` → `webui_file_alloc` + `webui_file_commit` → `ClientRuntime.onFile`) | — | yes |
 | media-change subscription, `fileRead` via picker, drag metadata | — | planned |
 
-## message shapes (v2 target)
+## message shapes (v2 — implemented)
 
 v1 (unchanged, JSON text frames): `event`, `ping`/`pong` (+`token`),
 `update` (`{type:"update", fragments:[{id,html}]}`), `redirect`, `error`,
-`token`. v2 additions (binary length-prefixed envelope with JSON fallback):
+`token`. v2 adds binary **frames** — `[0x64][u32 len][json bytes]` — the
+chamber's ws listener accepts both text and binary (`binaryType =
+'arraybuffer'`; `handleBinaryFrame` also exposed for hosts/gates):
 
 | type | direction | shape |
 |---|---|---|
-| `viewspec` | server→module | declarative render descriptor for a region (the eventual `ClientRenderers`-era replacement for string fragments) |
-| `data` | server→module | bulk payload (typed array; bypasses JSON string overhead) |
-| `state` | both | sync snapshot/delta for `ClientStateStore` paths |
-| `ack` | module→server | optimistic batch ack with the server seq |
+| `viewspec` | server→module | `{type, id, name, args}` — compose a region declaratively through `webui_render_region` |
+| `state` | server→module | `{type:"state", path, value}` — `webui_state_apply` → client state store + handler fragments |
+| `data` | server→module | `{type:"data", name, payload}` — `webui_data_apply` → handler fragments (typed-array/binary envelope; JSON payload inside the frame for now) |
+| `update` | server→module | v1 fragments (unchanged, also accepted in binary frames) |
 
 the v1 `update` fragments stay valid: the chamber applies them sanitized;
-v2 adds module-side `viewspec` resolution so a region's composition can be
-**declared**, not only computed by the server.
+binary frames just move the envelope from text to bytes without a new
+dialect. bulk typed-array payloads (no JSON wrapper) are next on the data
+plane.
+
+## client-state persistence (harness v4)
+
+`RuntimeConfig.persistence`: `"localstorage"` (default) or `"indexeddb"`.
+with `"indexeddb"` the chamber hydrates the state from IndexedDB **before**
+wasm instantiation, and the `storageGet`/`storageSet` imports serve the
+hydrated cache + async-persist writes — the module-side store contract is
+unchanged (same `LocalStorageClientStateStore`, different backing). the
+gate proves durability across a reload with `localStorage` untouched.
 
 ## verification (in-repo ladder)
 

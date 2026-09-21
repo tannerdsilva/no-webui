@@ -50,18 +50,18 @@ public struct ClientBoot: Sendable {
 		self.scriptURLs = scriptURLs
 	}
 
-	/// the `<head>` slot markup a client-mode page carries: the `webui-wasm`
-	/// meta contract, the external chamber/boot script tags, and (when a
-	/// config is present) the only-set `webui-config` meta the chamber's boot
-	/// glue reads for the a4 knob split.
+	/// the `<head>` slot markup a client-mode page carries: `webui-wasm` meta,
+	/// `webui-config` meta (emitted BEFORE the script tags — the chamber's
+	/// boot glue reads it during script execution, so a config meta after the
+	/// scripts would be invisible at boot), then the chamber/boot scripts.
 	public func headMarkup() -> String {
 		var parts: [String] = []
 		parts.append("<meta name=\"webui-wasm\" content=\"\(htmlEscape(wasmURL))\">")
-		for url in scriptURLs {
-			parts.append("<script src=\"\(htmlEscape(url))\"></script>")
-		}
 		if let config, !config.isEmpty {
 			parts.append("<meta name=\"webui-config\" content=\"\(htmlEscape(config.encodedJSON()))\">")
+		}
+		for url in scriptURLs {
+			parts.append("<script src=\"\(htmlEscape(url))\"></script>")
 		}
 		return parts.joined(separator: "\n")
 	}

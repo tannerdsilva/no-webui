@@ -47,6 +47,8 @@ public enum ClientRuntime {
 	private static let capabilityBox = Mutex<Set<String>>([])
 	private static let broadcastHandlerBox = Mutex<(@Sendable (String, String) -> Void)?>(nil)
 	private static let fileHandlerBox = Mutex<(@Sendable (String, String, [UInt8]) -> [FragmentUpdate])?>(nil)
+	private static let stateHandlerBox = Mutex<(@Sendable (String, String) -> [FragmentUpdate])?>(nil)
+	private static let dataHandlerBox = Mutex<(@Sendable (String, String) -> [FragmentUpdate])?>(nil)
 
 	/// the granted applet-harness capabilities (from the boot envelope).
 	public static var capabilities: Set<String> {
@@ -83,6 +85,28 @@ public enum ClientRuntime {
 		fileHandlerBox.withLock { $0 }?(name, mime, bytes) ?? []
 	}
 
+	/// register the inbound state handler (harness v4): server `state`
+	/// messages are applied to the store and the handler patches the ui.
+	public static func onState(_ handler: @escaping @Sendable (String, String) -> [FragmentUpdate]) {
+		stateHandlerBox.withLock { $0 = handler }
+	}
+
+	@discardableResult
+	public static func applyState(path: String, value: JSONValue) -> [FragmentUpdate] {
+		try? state.set(path, value)
+		return stateHandlerBox.withLock { $0 }?(path, value.serialize()) ?? []
+	}
+
+	/// register the inbound data handler (harness v4): binary `data` messages
+	/// re-enter through `webui_data_apply`.
+	public static func onData(_ handler: @escaping @Sendable (String, String) -> [FragmentUpdate]) {
+		dataHandlerBox.withLock { $0 = handler }
+	}
+
+	public static func handleData(name: String, payload: String) -> [FragmentUpdate] {
+		dataHandlerBox.withLock { $0 }?(name, payload) ?? []
+	}
+
 	/// register the applet-region renderers (harness v2). the chamber mounts
 	/// `[data-webui-applet]` regions through `webui_render_region`, which
 	/// resolves here. a region's renderer self-wires: it renders inside a
@@ -112,6 +136,22 @@ public enum ClientRuntime {
 				}.render()
 			)]
 		}
+		ClientRuntime.onState { path, value in
+			return [FragmentUpdate(
+				id: "applet-remote",
+				html: Div(id: "applet-remote", class: "applet-card__meta") {
+					Text("state: " + path + " = " + value)
+				}.render()
+			)]
+		}
+		ClientRuntime.onData { name, payload in
+			return [FragmentUpdate(
+				id: "applet-data",
+				html: Div(id: "applet-data", class: "applet-card__meta") {
+					Text("data: " + name + " (" + String(payload.count) + " chars)")
+				}.render()
+			)]
+		}
 	}
 
 	/// render a registered applet region (nil when the name is unknown).
@@ -135,6 +175,12 @@ public enum ClientRuntime {
 				}
 				Div(id: "applet-media", class: "applet-card__meta") {
 					Text("?")
+				}
+				Div(id: "applet-remote", class: "applet-card__meta") {
+					Text("no state")
+				}
+				Div(id: "applet-data", class: "applet-card__meta") {
+					Text("no data")
 				}
 				if hasCapability("focus") {
 					Button("Focus search", id: "applet-focus", type: .button)

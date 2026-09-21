@@ -250,6 +250,28 @@ struct ClientRuntimeTests {
 		#expect(got?.1 == "plain-payload")
 	}
 
+	@Test("server state messages apply to the store and patch the ui")
+	func stateInbound() throws {
+		ClientRuntime.bootSearch()
+		ClientRuntime.bootApplets()
+		let updates = ClientRuntime.applyState(path: "remote.status", value: .string("online"))
+		let fragment = try #require(updates.first)
+		#expect(fragment.id == "applet-remote")
+		#expect(fragment.html.contains("remote.status"))
+		let stored = ClientRuntime.state.get("remote.status")
+		#expect(stored == .string("online"))
+	}
+
+	@Test("binary data messages reach the registered handler")
+	func dataInbound() throws {
+		ClientRuntime.bootSearch()
+		ClientRuntime.bootApplets()
+		let updates = ClientRuntime.handleData(name: "catalog", payload: "a,b,c")
+		let fragment = try #require(updates.first)
+		#expect(fragment.id == "applet-data")
+		#expect(fragment.html.contains("catalog"))
+	}
+
 	@Test("runtime config encodes capabilities into the boot envelope")
 	func capabilitiesEncode() {
 		let config = RuntimeConfig(capabilities: ["focus", "clipboard"])

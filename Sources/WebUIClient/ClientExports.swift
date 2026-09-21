@@ -32,7 +32,15 @@ func webuiInit(_ configPtr: UnsafeRawPointer?, _ len: Int) {
 		let text = String(decoding: UnsafeRawBufferPointer(start: configPtr, count: len), as: UTF8.self)
 		if let root = try? JSONValue.parse(text),
 		   case .object(let dict) = root {
+			let wantsPersistence: Bool
 			if dict["persistence"] == .bool(true) {
+				wantsPersistence = true
+			} else if case .string(let mode)? = dict["persistence"], mode == "indexeddb" {
+				wantsPersistence = true
+			} else {
+				wantsPersistence = false
+			}
+			if wantsPersistence {
 				#if os(WASI)
 				ClientRuntime.state = LocalStorageClientStateStore()
 				#endif
@@ -158,6 +166,47 @@ func webuiFileCommit(_ dataPtr: UnsafeRawPointer?, _ dataLen: Int, _ metaPtr: Un
 		if case .string(let value)? = dict["mime"] { mime = value }
 	}
 	let updates = ClientRuntime.handleFile(name: name, mime: mime, bytes: bytes)
+	writeFrame(updatesJSON(updates))
+	return Int(bitPattern: RenderFrame.buffer)
+}
+
+@_expose(wasm, "webui_state_apply")
+func webuiStateApply(_ payloadPtr: UnsafeRawPointer?, _ payloadLen: Int) -> Int {
+	// a server `state` message (`{path, value}`): apply to the client state
+	// store and run the registered handler (its fragments ride the frame).
+	guard let payloadPtr, payloadLen > 0 else { return Int(bitPattern: RenderFrame.buffer) }
+	let text = String(decoding: UnsafeRawBufferPointer(start: payloadPtr, count: payloadLen), as: UTF8.self)
+	guard let root = try? JSONValue.parse(text),
+	      case .object(let dict) = root,
+	      case .string(let path)? = dict["path"],
+	      let value = dict["value"] else {
+		writeFrame("")
+		return Int(bitPattern: RenderFrame.buffer)
+	}
+	let updates = ClientRuntime.applyState(path: path, value: value)
+	writeFrame(updatesJSON(updates))
+	return Int(bitPattern: RenderFrame.buffer)
+}
+
+@_expose(wasm, "webui_data_apply")
+func webuiDataApply(_ payloadPtr: UnsafeRawPointer?, _ payloadLen: Int) -> Int {
+	// a binary `data` message (`{name, payload}`): run the registered data
+	// handler (its fragments ride the frame; the chamber applies after).
+	guard let payloadPtr, payloadLen > 0 else { return Int(bitPattern: RenderFrame.buffer) }
+	let text = String(decoding: UnsafeRawBufferPointer(start: payloadPtr, count: payloadLen), as: UTF8.self)
+	guard let root = try? JSONValue.parse(text),
+	      case .object(let dict) = root,
+	      case .string(let name)? = dict["name"] else {
+		writeFrame("")
+		return Int(bitPattern: RenderFrame.buffer)
+	}
+	let payload: String
+	if let raw = dict["payload"] {
+		payload = raw.serialize()
+	} else {
+		payload = ""
+	}
+	let updates = ClientRuntime.handleData(name: name, payload: payload)
 	writeFrame(updatesJSON(updates))
 	return Int(bitPattern: RenderFrame.buffer)
 }
