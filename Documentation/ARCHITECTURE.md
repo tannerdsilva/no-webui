@@ -6,24 +6,37 @@ The framework has four layers that connect to form a complete server-rendered
 web UI with live DOM updates:
 
 ```
-┌─────────────────────────────────────────────────────────┐
-│                    HTTP Server (your app)                │
-│  ┌─────────────┐  ┌──────────────┐  ┌────────────────┐  │
-│  │ View Tree   │→ │ HTMLDocument │→ │ HTTP Response  │  │
-│  │ (structs)   │  │ (assembly)   │  │ (HTML string)  │  │
-│  └─────────────┘  └──────────────┘  └────────────────┘  │
-│                        │                                 │
-│  ┌─────────────┐  ┌──────────────┐  ┌────────────────┐  │
-│  │ EventRouter │← │ WebSocket    │← │ Client Event   │  │
-│  │ (dispatch)  │  │ (upgrade)    │  │ (JSON message) │  │
-│  └──────┬──────┘  └──────────────┘  └────────────────┘  │
-│         │                                                │
-│  ┌──────▼──────┐                                         │
-│  │ Fragment    │──→ WS send → DOM patch (JS runtime)     │
-│  │ Updates     │                                         │
-│  └─────────────┘                                         │
-└─────────────────────────────────────────────────────────┘
+┌──────────────────────────── HTTP Server (your app) ────────────────────────────┐
+│  ┌─────────────┐  ┌──────────────┐  ┌────────────────┐                       │
+│  │ View Tree   │→ │ HTMLDocument │→ │ HTTP Response  │                       │
+│  │ (structs)   │  │ (assembly)   │  │ (HTML string)  │                       │
+│  └─────────────┘  └──────────────┘  └────────────────┘                       │
+│                        │                                                     │
+│  ┌─────────────┐  ┌──────────────┐  ┌────────────────┐                       │
+│  │ EventRouter │← │ WebSocket    │← │ Client Event   │                       │
+│  │ (dispatch)  │  │ (upgrade)    │  │ (JSON message) │                       │
+│  └──────┬──────┘  └──────────────┘  └────────────────┘                       │
+│         │                                                                     │
+│  ┌──────▼──────┐  ── WS send → engine: optimistic + patch + scroll/focus      │
+│  │ Fragment    │  capability islands (wasm) compose regions locally           │
+│  │ Updates     │  service worker caches the shell (offline capability)        │
+│  └─────────────┘                                                              │
+└────────────────────────────────────────────────────────────────────────────────┘
 ```
+
+the **client runtimes** (next architecture, `NEXT_ARCHITECTURE.md`): the
+default is the framework-owned **engine** (`webui-engine.js`, ~30 kb) —
+event capture on the `data-component-id` contract, `/ws` transport with
+reconnect + optimistic prediction, sanitized fragment patching with
+scroll/focus survival, keyboard/focus parity (incl. modal trap + return),
+view transitions, and capability-island mounting. **wasm islands**
+(pure-Swift logic compiled with the embedded sdk, ~kb-scale, e.g.
+`WebUIValidateIsland`) are fetched lazily per declared capability and
+compose regions with zero round trips. the **wasm client** (`WebUIClient`)
+remains available via an explicit `ClientBoot(flavor: .wasm, …)` for
+applet/client-mode pages. the server stays authority for persistence,
+auth, and render correctness (`FragmentUpdate` is the universal patch
+envelope in both directions).
 
 ## Layer 1: View Tree
 

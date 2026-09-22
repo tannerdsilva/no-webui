@@ -1,12 +1,11 @@
 import Foundation
 import PackagePlugin
 
-/// a missing artifact is a build failure — wasm is the sole client runtime in
-/// this package, so an absent artifact would ship a page that cannot run (the
-/// serving seam would 404). a *present but corrupt* artifact is likewise a
-/// failure (it would ship wrong bytes to every client-mode page). this mirrors
-/// the `WebUIAssetPlugin` discipline: load-bearing generated files never
-/// degrade silently.
+/// the client artifact is OPTIONAL now: the engine is the default runtime, so
+/// an absent `WebUIClient.wasm` must not fail the host build — the plugin emits
+/// a `present = false` carrier and the wasm routes 404 for explicit wasm-mode
+/// consumers until they run `wasm-client`. a *present but corrupt* artifact is
+/// still a failure (it would ship wrong bytes to every client-mode page).
 struct WasmPluginError: Error, CustomStringConvertible {
     let description: String
     init(_ description: String) { self.description = description }
@@ -56,12 +55,22 @@ struct WebUIWasmPlugin: BuildToolPlugin {
                 )
             ]
         } else {
-            // absent artifact = hard build failure, never a silent 404. wasm is
-            // unconditionally the client runtime; the consumer runs
-            // `swift package --disable-sandbox plugin wasm-client` first.
-            throw WasmPluginError(
-                "WebUIClient.wasm is absent at \(artifactURL.path) — run `swift package --disable-sandbox plugin wasm-client` (or build with the wasm sdk) before this host build. client-mode pages require the wasm artifact."
-            )
+            // absent artifact = soft absent carrier. the engine is the default
+            // client runtime, so engine-only hosts build green; pages that
+            // declare the wasm client run `wasm-client` first, and their wasm
+            // routes 404 (loudly) until the artifact exists.
+            return [
+                .buildCommand(
+                    displayName: "Emitting absent WebUIClient carrier (soft)",
+                    executable: tool.url,
+                    arguments: [
+                        "--missing",
+                        "--output", outputURL.path,
+                        "--product", "WebUIClient",
+                    ],
+                    outputFiles: [outputURL]
+                )
+            ]
         }
     }
 }

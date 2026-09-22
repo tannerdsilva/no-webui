@@ -155,16 +155,19 @@ free core already exists; embedded tier is kB-scale per `WASM_TRAJECTORY.md` §
 - **p5 (sunset):** remove the monolith default; update `ARCHITECTURE.md`,
   `STABILITY.md`, skills, and the consumer docs to the new reality.
 
-## 5. ux budget (what "top tier" is measured against)
+## 5. ux budget (measured 2026-09-22, headless chromium on loopback)
 
-| metric | target | today |
+| metric | target | measured today |
 |---|---|---|
-| first contentful paint (4g) | < 1 s | dominated by 12 mb brotli + instantiate |
-| time-to-interactive | engine byte (~10 kb gz) loaded | after wasm compile + `/ws` up |
-| critical-path javascript | ~30 kb raw / ~10 kb gz | ~47 kb glue + 55 mb module |
-| interaction latency | optimistic same-turn; server confirm | same-turn prediction works; confirm via `/ws` (fine) |
-| keyboard parity | full (tree enter/space, escape-dismiss, focus trap + return) | missing in wasm mirror; "planned" forever |
-| offline | opt-in island; reconcile on reconnect | exists but gated behind the monolith |
+| first contentful paint (4g) | < 1 s | domcontentloaded + load ≈ 19 ms on loopback (fcp untracked under headless paint entries) |
+| time-to-interactive | engine byte loaded | engine instance + `/ws` connected ≈ 38 ms after nav start |
+| critical-path javascript | ~30 kb raw / ~10 kb gz | engine 37.4 kb raw (host gzip/brotli is a serving concern — the 9090 example server does not compress; gzipped ≈ 10 kb) |
+| page shell bytes | — | sample page: 310 kb raw incl. inline minified design css (~40 kb gz); island artifact 164 kb (embedded sdk, stripped) |
+| interaction latency | optimistic same-turn; server confirm | same-turn prediction + confirm over `/ws` (measured by browser-smoke probes) |
+| keyboard parity | full (tree enter/space, escape-dismiss, focus trap + return) | implemented + probed in `designer/browser-smoke.mjs` (engine path) |
+| offline | opt-in island; reconcile on reconnect | offline capability → service-worker shell (cache-first engine/css + `/__assets`, network-first navs); engine reconnects on `online`. indexeddb sync reconcile is deferred (needs the worker/bridge machinery — see p4 note in `NEXT_IMPLEMENTATION_PLAN.md`) |
+| contrast | wcag aa | guarded by `DeploymentIntegrityTests` wcag-ratio assertions (≥ 4.5:1) |
+| wasm on the default page | none | none — `meta[name="webui-wasm"]` absent on the engine default page |
 
 ## 6. risks — argued honestly (the skeptic's case)
 
