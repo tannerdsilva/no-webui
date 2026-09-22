@@ -39,27 +39,6 @@ func replacingAllOccurrences(_ string: String, of target: String, with replaceme
     return result
 }
 
-// MARK: - HTML Escaping
-public func htmlEscape(_ string: String) -> String {
-    guard string.unicodeScalars.contains(where: { c in
-        c == "&" || c == "<" || c == ">" || c == "\"" || c == "'"
-    }) else { return string }
-
-    var result = ""
-    result.reserveCapacity(string.utf8.count + 8)
-    for c in string.unicodeScalars {
-        switch c {
-        case "&":  result += "&amp;"
-        case "<":  result += "&lt;"
-        case ">":  result += "&gt;"
-        case "\"": result += "&quot;"
-        case "'":  result += "&#39;"
-        default:   result.unicodeScalars.append(c)
-        }
-    }
-    return result
-}
-
 // MARK: - Attribute Injection
 
 /// One attribute parsed from an opening tag. `value` is the raw text as

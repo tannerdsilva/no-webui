@@ -91,8 +91,12 @@ let package = Package(
 
         // ── Web UI Framework ─────────────────────────────────────
         .target(
+            name: "WebUISharedCore"
+        ),
+        .target(
             name: "WebUICore",
             dependencies: [
+                "WebUISharedCore",
                 .product(name: "Logging", package: "swift-log"),
             ],
             plugins: [
@@ -117,6 +121,7 @@ let package = Package(
             name: "WebUIClientRuntime",
             dependencies: [
                 "WebUICore",
+                "WebUISharedCore",
                 "WebUIDesignSystemCore",
                 "WebUIChart",
             ],
@@ -137,17 +142,19 @@ let package = Package(
         // the capability-island core: same-swift logic that compiles to a
         // small standalone wasm module (next architecture d3). libraries
         // here must stay foundation-free — they build for wasm32-wasi.
+        // deliberately depends only on the zero-dep leaf, so island builds
+        // never compile swift-log (not embedded-compatible).
         .target(
             name: "WebUIIslandCore",
             dependencies: [
-                "WebUICore",
-                "WebUIClientRuntime",
+                "WebUISharedCore",
             ]
         ),
         .executableTarget(
             name: "WebUIValidateIsland",
             dependencies: [
                 "WebUIIslandCore",
+                "WebUISharedCore",
             ]
         ),
         .target(
@@ -448,6 +455,7 @@ let package = Package(
             name: "WebUIIslandCoreTests",
             dependencies: [
                 "WebUIIslandCore",
+                "WebUISharedCore",
                 "WebUIClientRuntime",
             ]
         ),
@@ -456,6 +464,7 @@ let package = Package(
             dependencies: [
                 "WebUIClientRuntime",
                 "WebUICore",
+                "WebUISharedCore",
                 "WebUIDesignSystemCore",
                 "WebUISmokeShared",
             ]

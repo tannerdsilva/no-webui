@@ -1,10 +1,14 @@
 // MARK: - JSONValue
-
-/// a minimal rfc 8259 json value — the data-free replacement for Foundation's
-/// `Data`-backed JSON decode/encode inside the framework. `parse` is strict
-/// (rejects trailing tokens, unescaped control characters, malformed numbers);
-/// `serialize` emits compact json with an integral-friendly number form
-/// (whole values are written without a trailing `.0`).
+//
+// a minimal rfc 8259 json value — the data-free replacement for Foundation's
+// `Data`-backed JSON decode/encode inside the framework. `parse` is strict
+// (rejects trailing tokens, unescaped control characters, malformed numbers);
+// `serialize` emits compact json with an integral-friendly number form
+// (whole values are written without a trailing `.0`).
+//
+// scalar-clean by design: the parser walks `unicodeScalars`, never
+// `Character` grapheme clusters — the embedded wasm runtime omits the
+// grapheme-break tables, so a Character-level parser would not link there.
 public enum JSONValue: Equatable, Sendable {
     case null
     case bool(Bool)
@@ -69,9 +73,9 @@ public enum JSONValue: Equatable, Sendable {
     }
 
     private static func hex4(_ value: UInt32) -> String {
-        let digits = Array("0123456789abcdef")
-        func d(_ shift: UInt32) -> Character { digits[Int((value >> shift) & 0xf)] }
-        return "\\u\(d(12))\(d(8))\(d(4))\(d(0))"
+        let digits = Array("0123456789abcdef".unicodeScalars)
+        func d(_ shift: UInt32) -> Unicode.Scalar { digits[Int((value >> shift) & 0xf)] }
+        return "\\u\(String.UnicodeScalarView([d(12), d(8), d(4), d(0)]))"
     }
 }
 
@@ -80,7 +84,7 @@ public enum JSONValue: Equatable, Sendable {
 /// structural errors from `JSONValue.parse`.
 public enum JSONError: Error, Equatable, Sendable {
     case unexpectedEnd
-    case invalidToken(Character)
+    case invalidToken(Unicode.Scalar)
     case invalidString
     case invalidEscape
     case invalidNumber
@@ -99,16 +103,16 @@ private struct JSONParser {
     /// message throws `nestingTooDeep` instead of overflowing the stack.
     static let maxNestingDepth = 128
 
-    private let chars: [Character]
+    private let scalars: [Unicode.Scalar]
     private var index = 0
     private var depth = 0
 
     init(_ text: String) {
-        self.chars = Array(text)
+        self.scalars = Array(text.unicodeScalars)
     }
 
-    var isAtEnd: Bool { index >= chars.count }
-    private func peek() -> Character? { index < chars.count ? chars[index] : nil }
+    var isAtEnd: Bool { index >= scalars.count }
+    private func peek() -> Unicode.Scalar? { index < scalars.count ? scalars[index] : nil }
     private mutating func advance() { index += 1 }
 
     mutating func requireEnd() throws {
@@ -117,7 +121,7 @@ private struct JSONParser {
     }
 
     mutating func skipWhitespace() {
-        while let c = peek(), c == " " || c == "\t" || c == "\n" || c == "\r" {
+        while let c = peek(), c.value == 0x20 || c.value == 0x09 || c.value == 0x0A || c.value == 0x0D {
             advance()
         }
     }
@@ -125,20 +129,20 @@ private struct JSONParser {
     mutating func parseValue() throws -> JSONValue {
         skipWhitespace()
         guard let c = peek() else { throw JSONError.unexpectedEnd }
-        switch c {
-        case "{": return try parseObject()
-        case "[": return try parseArray()
-        case "\"": return .string(try parseString())
-        case "t": try parseLiteral("true"); return .bool(true)
-        case "f": try parseLiteral("false"); return .bool(false)
-        case "n": try parseLiteral("null"); return .null
-        case "-", "0"..."9": return .number(try parseNumber())
+        switch c.value {
+        case 0x7B: return try parseObject()
+        case 0x5B: return try parseArray()
+        case 0x22: return .string(try parseString())
+        case 0x74: try parseLiteral("true"); return .bool(true)
+        case 0x66: try parseLiteral("false"); return .bool(false)
+        case 0x6E: try parseLiteral("null"); return .null
+        case 0x2D, 0x30...0x39: return .number(try parseNumber())
         default: throw JSONError.invalidToken(c)
         }
     }
 
     mutating func parseLiteral(_ literal: String) throws {
-        for expected in literal {
+        for expected in literal.unicodeScalars {
             guard peek() == expected else { throw JSONError.invalidToken(expected) }
             advance()
         }
@@ -151,20 +155,20 @@ private struct JSONParser {
         guard depth <= Self.maxNestingDepth else { throw JSONError.nestingTooDeep }
         var object: [String: JSONValue] = [:]
         skipWhitespace()
-        if peek() == "}" { advance(); return .object(object) }
+        if peek()?.value == 0x7D { advance(); return .object(object) }
         while true {
             skipWhitespace()
-            guard peek() == "\"" else { throw JSONError.invalidToken(peek() ?? Character("\u{FFFD}")) }
+            guard peek()?.value == 0x22 else { throw JSONError.invalidToken(peek() ?? Unicode.Scalar(0xFFFD)!) }
             let key = try parseString()
             skipWhitespace()
-            guard peek() == ":" else { throw JSONError.invalidToken(peek() ?? Character("\u{FFFD}")) }
+            guard peek()?.value == 0x3A else { throw JSONError.invalidToken(peek() ?? Unicode.Scalar(0xFFFD)!) }
             advance()
             object[key] = try parseValue()
             skipWhitespace()
             guard let separator = peek() else { throw JSONError.unexpectedEnd }
             advance()
-            if separator == "}" { return .object(object) }
-            guard separator == "," else { throw JSONError.invalidToken(separator) }
+            if separator.value == 0x7D { return .object(object) }
+            guard separator.value == 0x2C else { throw JSONError.invalidToken(separator) }
         }
     }
 
@@ -175,14 +179,14 @@ private struct JSONParser {
         guard depth <= Self.maxNestingDepth else { throw JSONError.nestingTooDeep }
         var elements: [JSONValue] = []
         skipWhitespace()
-        if peek() == "]" { advance(); return .array(elements) }
+        if peek()?.value == 0x5D { advance(); return .array(elements) }
         while true {
             elements.append(try parseValue())
             skipWhitespace()
             guard let separator = peek() else { throw JSONError.unexpectedEnd }
             advance()
-            if separator == "]" { return .array(elements) }
-            guard separator == "," else { throw JSONError.invalidToken(separator) }
+            if separator.value == 0x5D { return .array(elements) }
+            guard separator.value == 0x2C else { throw JSONError.invalidToken(separator) }
         }
     }
 
@@ -191,29 +195,32 @@ private struct JSONParser {
         var out = ""
         while true {
             guard let c = peek() else { throw JSONError.unexpectedEnd }
-            if c == "\"" { advance(); return out }
-            if c == "\\" {
+            switch c.value {
+            case 0x22:
+                advance()
+                return out
+            case 0x5C:
                 advance()
                 guard let escaped = peek() else { throw JSONError.unexpectedEnd }
                 advance()
-                switch escaped {
-                case "\"": out.append("\"")
-                case "\\": out.append("\\")
-                case "/": out.append("/")
-                case "b": out.append("\u{08}")
-                case "f": out.append("\u{0C}")
-                case "n": out.append("\n")
-                case "r": out.append("\r")
-                case "t": out.append("\t")
-                case "u":
+                switch escaped.value {
+                case 0x22: out.unicodeScalars.append("\"")
+                case 0x5C: out.unicodeScalars.append("\\")
+                case 0x2F: out.unicodeScalars.append("/")
+                case 0x62: out.unicodeScalars.append("\u{08}")
+                case 0x66: out.unicodeScalars.append("\u{0C}")
+                case 0x6E: out.unicodeScalars.append("\n")
+                case 0x72: out.unicodeScalars.append("\r")
+                case 0x74: out.unicodeScalars.append("\t")
+                case 0x75:
                     let scalar = try parseUnicodeEscape()
                     out.unicodeScalars.append(scalar)
                 default: throw JSONError.invalidEscape
                 }
-            } else if c < " " {
+            case 0x00...0x1F:
                 throw JSONError.invalidString
-            } else {
-                out.append(c)
+            default:
+                out.unicodeScalars.append(c)
                 advance()
             }
         }
@@ -230,12 +237,13 @@ private struct JSONParser {
         return value
     }
 
-    private func hexDigitValue(_ c: Character?) -> UInt32? {
+    private func hexDigitValue(_ c: Unicode.Scalar?) -> UInt32? {
         guard let c else { return nil }
-        switch c {
-        case "0"..."9": return UInt32(c.wholeNumberValue ?? 0)
-        case "a"..."f": return UInt32((c.asciiValue ?? 0) - Character("a").asciiValue! + 10)
-        case "A"..."F": return UInt32((c.asciiValue ?? 0) - Character("A").asciiValue! + 10)
+        let v = c.value
+        switch v {
+        case 0x30...0x39: return v - 0x30
+        case 0x61...0x66: return v - 0x61 + 10
+        case 0x41...0x46: return v - 0x41 + 10
         default: return nil
         }
     }
@@ -244,9 +252,9 @@ private struct JSONParser {
         let first = try parseHex4()
         // surrogate pair: a high surrogate must be followed by \uXXXX low.
         if first >= 0xD800 && first <= 0xDBFF {
-            guard peek() == "\\" else { throw JSONError.invalidEscape }
+            guard peek()?.value == 0x5C else { throw JSONError.invalidEscape }
             advance()
-            guard peek() == "u" else { throw JSONError.invalidEscape }
+            guard peek()?.value == 0x75 else { throw JSONError.invalidEscape }
             advance()
             let second = try parseHex4()
             guard second >= 0xDC00 && second <= 0xDFFF else { throw JSONError.invalidEscape }
@@ -262,27 +270,30 @@ private struct JSONParser {
 
     mutating func parseNumber() throws -> Double {
         let start = index
-        if peek() == "-" { advance() }
-        while let c = peek(), c >= "0" && c <= "9" { advance() }
-        if peek() == "." {
+        if peek()?.value == 0x2D { advance() }
+        while let c = peek(), c.value >= 0x30 && c.value <= 0x39 { advance() }
+        if peek()?.value == 0x2E {
             advance()
-            guard let c = peek(), c >= "0" && c <= "9" else { throw JSONError.invalidNumber }
-            while let c = peek(), c >= "0" && c <= "9" { advance() }
+            guard let c = peek(), c.value >= 0x30 && c.value <= 0x39 else { throw JSONError.invalidNumber }
+            while let c = peek(), c.value >= 0x30 && c.value <= 0x39 { advance() }
         }
-        if peek() == "e" || peek() == "E" {
+        if peek()?.value == 0x65 || peek()?.value == 0x45 {
             advance()
-            if peek() == "+" || peek() == "-" { advance() }
-            guard let c = peek(), c >= "0" && c <= "9" else { throw JSONError.invalidNumber }
-            while let c = peek(), c >= "0" && c <= "9" { advance() }
+            if peek()?.value == 0x2B || peek()?.value == 0x2D { advance() }
+            guard let c = peek(), c.value >= 0x30 && c.value <= 0x39 else { throw JSONError.invalidNumber }
+            while let c = peek(), c.value >= 0x30 && c.value <= 0x39 { advance() }
         }
-        let slice = String(chars[start..<index])
+        let slice = String(String.UnicodeScalarView(scalars[start..<index]))
         guard let value = Double(slice), value.isFinite else { throw JSONError.invalidNumber }
         return value
     }
 }
 
 // MARK: - Codable
-
+//
+// `Decoder`/`Encoder` are unavailable in embedded swift; the island path uses
+// `parse`/`serialize` only, so the conformance is host/full-stdlib surface.
+#if !hasFeature(Embedded)
 extension JSONValue: Codable {
     public init(from decoder: any Decoder) throws {
         let container = try decoder.singleValueContainer()
@@ -325,6 +336,7 @@ extension JSONValue: Codable {
         }
     }
 }
+#endif
 
 // MARK: - Literal conformances
 

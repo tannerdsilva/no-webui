@@ -1,5 +1,5 @@
 import WebUIIslandCore
-import WebUICore
+import WebUISharedCore
 
 // the host build just needs a main (the target is wasm-only in practice);
 // the real surface is the wasi exports below.
@@ -35,7 +35,7 @@ func webuiFrameLen() -> Int {
 @_expose(wasm, "webui_render_region")
 func webuiRenderRegion(_ ptr: UnsafeRawPointer?, _ len: Int) -> Int {
 	guard let ptr, len > 0 else { return 0 }
-	let json = String(decoding: UnsafeRawBufferPointer(start: ptr, count: len), as: UTF8.self)
+	let json = utf8Decode(ptr, len)
 	// the mount envelope is `{name, args}` — unwrap the args payload the same
 	// way the client's own `webui_render_region` does.
 	let argsJSON: String
@@ -53,10 +53,50 @@ func webuiRenderRegion(_ ptr: UnsafeRawPointer?, _ len: Int) -> Int {
 @_expose(wasm, "webui_validate")
 func webuiValidate(_ ptr: UnsafeRawPointer?, _ len: Int) -> Int {
 	guard let ptr, len > 0 else { return 0 }
-	let json = String(decoding: UnsafeRawBufferPointer(start: ptr, count: len), as: UTF8.self)
-	let result = ValidateIsland.evaluate(json: json)
+	let result = ValidateIsland.evaluate(json: utf8Decode(ptr, len))
 	writeFrame("{\"ok\":\(result.ok),\"message\":\"\(JSONValue.escapeString(result.message))\"}")
 	return Int(bitPattern: FrameBuffer.buffer)
+}
+
+/// strict-enough utf-8 decode into a `String` without touching the
+/// normalization tables: `String(decoding:as:)` canonicalizes, which the
+/// embedded runtime omits, so the island link would fail on the
+/// `_swift_stdlib_nfd_*` symbols. invalid sequences become U+FFFD.
+private func utf8Decode(_ ptr: UnsafeRawPointer, _ len: Int) -> String {
+	let bytes = UnsafeRawBufferPointer(start: ptr, count: len)
+	var out = ""
+	var i = 0
+	while i < len {
+		let b = bytes[i]
+		let scalar: UInt32
+		let width: Int
+		if b < 0x80 {
+			scalar = UInt32(b)
+			width = 1
+		} else if (b & 0xE0) == 0xC0, i + 1 < len, (bytes[i + 1] & 0xC0) == 0x80 {
+			scalar = (UInt32(b & 0x1F) << 6) | UInt32(bytes[i + 1] & 0x3F)
+			width = 2
+		} else if (b & 0xF0) == 0xE0, i + 2 < len, (bytes[i + 1] & 0xC0) == 0x80, (bytes[i + 2] & 0xC0) == 0x80 {
+			scalar = (UInt32(b & 0x0F) << 12) | (UInt32(bytes[i + 1] & 0x3F) << 6) | UInt32(bytes[i + 2] & 0x3F)
+			width = 3
+		} else if (b & 0xF8) == 0xF0, i + 3 < len,
+		          (bytes[i + 1] & 0xC0) == 0x80, (bytes[i + 2] & 0xC0) == 0x80, (bytes[i + 3] & 0xC0) == 0x80 {
+			scalar = (UInt32(b & 0x07) << 18) | (UInt32(bytes[i + 1] & 0x3F) << 12)
+				| (UInt32(bytes[i + 2] & 0x3F) << 6) | UInt32(bytes[i + 3] & 0x3F)
+			width = 4
+		} else {
+			out.unicodeScalars.append("\u{FFFD}")
+			i += 1
+			continue
+		}
+		if scalar <= 0x10FFFF, !(0xD800...0xDFFF).contains(scalar) {
+			out.unicodeScalars.append(Unicode.Scalar(scalar)!)
+		} else {
+			out.unicodeScalars.append("\u{FFFD}")
+		}
+		i += width
+	}
+	return out
 }
 
 private func writeFrame(_ text: String) {

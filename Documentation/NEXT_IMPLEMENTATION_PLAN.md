@@ -161,15 +161,22 @@ opt-in; keyboard/focus gaps from `STABILITY.md` #2–3 close.
 goal: same-swift logic moves into small lazy modules; pages that don't declare a
 capability never fetch wasm.
 
-**measured outcome (p2 landed):** the full-stdlib-sdk island
-(`WebUIValidateIsland`, pure swift, `-Osize`, stripped) is **52.8 mb** — every
-standalone module re-links the sdk's ICU/full-stdlib tables, so the
-"kB-scale island" target is not met by the full-stdlib sdk. the embedded sdk
-(`swift-6.4.0-RELEASE_wasm-embedded`) **cannot compile the dependency graph**:
-`swift-log` is not embedded-compatible (`'description' has been explicitly
-marked unavailable`). the kB-tier is blocked until island targets drop the
-`Logging` edge (an embedded-clean log shim for `WebUICore`) — recorded as the
-phase-6 follow-up, not achievable here.
+**measured outcome (p2 landed, embedded diet landed):** the full-stdlib-sdk
+island (`WebUIValidateIsland`, pure swift, `-Osize`, stripped) was **52.8 mb** —
+the sdk re-links ICU per standalone module. the kB tier is now **landed**:
+`WebUISharedCore` (foundation-free leaf: `JSONValue` + `htmlEscape` +
+`ClientFieldValidator`) was extracted so island builds never compile
+swift-log (not embedded-compatible), the leaf was made **scalar-clean**
+(`String`/grapheme/normalization APIs are trimmed in the embedded stdlib:
+no `Character(...)` (canonicalizing), no `String(decoding:as:)` (normalizes),
+no `firstRange`, scalar-level email/substring checks, `invalidToken` now
+carries `Unicode.Scalar`), and the plugin links the sdk's
+**`libswiftUnicodeDataTables.a`** — shipped under
+`<sdk>/swift/embedded/wasm32-unknown-wasip1/` but omitted from the default
+embedded link line, which is why the `_swift_stdlib_nfd_*`/grapheme symbols
+were unresolved. result: **164,447 bytes (160 kb)** stripped — a **336×
+reduction** — with full canonical-equivalence semantics intact (the real
+tables are linked, not stubbed).
 
 ### task 2.1 — island build verb
 

@@ -44,26 +44,27 @@ public struct ClientFieldValidator: Sendable {
 		case .required:
 			return Self.trimmed(value).isEmpty ? "this field is required" : nil
 		case .minLength(let minimum):
-			return value.count < minimum ? "at least \(minimum) characters" : nil
+			return value.unicodeScalars.count < minimum ? "at least \(minimum) characters" : nil
 		case .maxLength(let maximum):
-			return value.count > maximum ? "at most \(maximum) characters" : nil
+			return value.unicodeScalars.count > maximum ? "at most \(maximum) characters" : nil
 		case .email:
 			return isPlausibleEmail(value) ? nil : "enter a valid email address"
 		case .contains(let needle):
-			return value.contains(needle) ? nil : "must contain \"\(needle)\""
+			return Self.contains(value, needle) ? nil : "must contain \"\(needle)\""
 		}
 	}
 
-	/// a deliberately structural check — one `@`, no ascii whitespace, a dot
-	/// after the `@`, and a non-empty local part. no regex, wasm-clean.
+	/// a deliberate structural check — one `@`, no ascii whitespace, a dot
+	/// after the `@`, and a non-empty local part. no regex, wasm-clean, and
+	/// scalar-level (the embedded stdlib omits grapheme-break tables).
 	public static func isPlausibleEmail(_ value: String) -> Bool {
-		let trimmed = Self.trimmed(value)
-		guard let at = trimmed.firstIndex(of: "@") else { return false }
-		let local = trimmed[..<at]
-		let domain = trimmed[trimmed.index(after: at)...]
+		let scalars = Array(Self.trimmed(value).unicodeScalars)
+		guard let at = scalars.firstIndex(where: { $0.value == 0x40 }) else { return false }
+		let local = scalars[..<at]
+		let domain = scalars[scalars.index(after: at)...]
 		guard !local.isEmpty, !domain.isEmpty else { return false }
-		guard domain.contains(".") else { return false }
-		return !trimmed.unicodeScalars.contains(where: { Self.isWhitespaceOrNewline($0) })
+		guard domain.contains(where: { $0.value == 0x2E }) else { return false }
+		return !scalars.contains(where: { Self.isWhitespaceOrNewline($0) })
 	}
 
 	/// `.whitespacesAndNewlines` membership, hand-rolled — the wasm build has
@@ -92,5 +93,23 @@ public struct ClientFieldValidator: Sendable {
 		while end > start, isWhitespaceOrNewline(scalars[end - 1]) { end -= 1 }
 		if start == 0, end == scalars.count { return value }
 		return String(String.UnicodeScalarView(scalars[start..<end]))
+	}
+
+	/// substring membership without `firstRange(of:)`/`contains(_:)` — the
+	/// embedded stdlib drops the range-returning String API entirely. scalar
+	/// comparison (single-source parity holds: the same code runs on host).
+	private static func contains(_ value: String, _ needle: String) -> Bool {
+		if needle.unicodeScalars.isEmpty { return true }
+		let h = Array(value.unicodeScalars)
+		let n = Array(needle.unicodeScalars)
+		if n.count > h.count { return false }
+		var i = 0
+		while i <= h.count - n.count {
+			var j = 0
+			while j < n.count, h[i + j] == n[j] { j += 1 }
+			if j == n.count { return true }
+			i += 1
+		}
+		return false
 	}
 }

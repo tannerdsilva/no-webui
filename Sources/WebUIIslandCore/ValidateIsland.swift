@@ -1,5 +1,4 @@
-import WebUICore
-import WebUIClientRuntime
+import WebUISharedCore
 
 // MARK: - Validate capability island
 //
@@ -22,21 +21,24 @@ public enum ValidateIsland {
 		for entry in entries {
 			guard case .object(let obj) = entry,
 			      case .string(let kind)? = obj["rule"] else { return nil }
-			switch kind {
-			case "required":
+			let kindScalars = Array(kind.unicodeScalars)
+			func matches(_ literal: String) -> Bool {
+				kindScalars.elementsEqual(literal.unicodeScalars)
+			}
+			if matches("required") {
 				rules.append(.required)
-			case "minLength":
+			} else if matches("minLength") {
 				guard let arg = intArgument(obj["arg"]) else { return nil }
 				rules.append(.minLength(arg))
-			case "maxLength":
+			} else if matches("maxLength") {
 				guard let arg = intArgument(obj["arg"]) else { return nil }
 				rules.append(.maxLength(arg))
-			case "email":
+			} else if matches("email") {
 				rules.append(.email)
-			case "contains":
+			} else if matches("contains") {
 				guard case .string(let needle)? = obj["arg"] else { return nil }
 				rules.append(.contains(needle))
-			default:
+			} else {
 				return nil
 			}
 		}
