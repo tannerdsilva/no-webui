@@ -14,6 +14,8 @@ window.WebUIEngine = (function () {
     optimisticSettleMs: 5000,
     logLevel: 'warn',
     renderToken: null,
+    capabilities: null,
+    persistence: null,
   };
 
   var LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3, silent: 4 };
@@ -502,6 +504,23 @@ window.WebUIEngine = (function () {
 
       log.debug('Patching ' + fragments.length + ' fragment(s)' + (seq !== undefined ? ' seq=' + seq : ''));
 
+      var reduced = document.matchMedia && document.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      var transition = (!optimistic && !reduced && typeof document.startViewTransition === 'function')
+        ? document.startViewTransition
+        : null;
+      if (transition) {
+        var applied = false;
+        try {
+          transition(function () { applyFragments(fragments, optimistic); });
+          applied = true;
+        } catch (e) { }
+        if (!applied) { applyFragments(fragments, optimistic); }
+      } else {
+        applyFragments(fragments, optimistic);
+      }
+    }
+
+    function applyFragments(fragments, optimistic) {
       for (var i = 0; i < fragments.length; i++) {
         var f = fragments[i];
         if (!f.id || f.html === undefined) {
@@ -1090,7 +1109,15 @@ window.WebUIEngine = (function () {
 
     wsClient.connect();
 
-    var bootIslands = function () { wireIslandInputs(); mountAllIslands(); };
+    var bootIslands = function () {
+      if (_islandConfig && _islandConfig.capabilities && _islandConfig.capabilities.indexOf('offline') !== -1 && navigator.serviceWorker) {
+        navigator.serviceWorker.register('/ui/webui-shell.js', { scope: '/' }).catch(function () { });
+      }
+      window.addEventListener('online', function () {
+        if (instance && instance.wsClient) { instance.wsClient.connect(); }
+      });
+      wireIslandInputs(); mountAllIslands();
+    };
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', bootIslands);
     } else {

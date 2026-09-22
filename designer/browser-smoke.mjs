@@ -296,6 +296,46 @@ if (!WASM) {
   console.log("  SKIP capability island probes (engine-mode only)");
 }
 
+// 6c. Progressive capability (p4, engine mode): offline shell service worker
+// registers from the declared capability, claims, and controls a reload; view
+// transitions API is present and the reduced-motion guard keeps patches fast.
+if (!WASM) {
+  await page.waitForTimeout(600);
+  const swState = await page.evaluate(async () => {
+    if (!('serviceWorker' in navigator)) { return { supported: false }; }
+    const reg = await navigator.serviceWorker.getRegistration();
+    return { supported: true, registered: !!reg, active: !!(reg && reg.active) };
+  });
+  if (!swState.supported) ok("service worker not supported here (offline shell skipped cleanly)");
+  else if (swState.registered && swState.active) ok("offline shell service worker registered + active");
+  else bad(`service worker state: ${JSON.stringify(swState)}`);
+  await page.reload({ waitUntil: "domcontentloaded" });
+  await page.waitForTimeout(500);
+  const controlled = await page.evaluate(() => !!navigator.serviceWorker.controller);
+  if (controlled) ok("reloaded page is controlled by the shell (cache-first shell path active)");
+  else bad("reloaded page not controlled by the shell");
+  const vtx = await page.evaluate(() => ({
+    api: typeof document.startViewTransition === 'function',
+    reduced: matchMedia('(prefers-reduced-motion: reduce)').matches,
+  }));
+  if (vtx.api) ok("view transitions API present (engine wraps authoritative patches)");
+  else bad("view transitions API missing");
+  await page.emulateMedia({ reducedMotion: 'reduce' });
+  const vtPatch = await page.evaluate(() => {
+    const inst = window.WebUIEngine._getInstance();
+    if (inst && inst.patch) {
+      inst.patch([{ id: "counter-value", html: '<div id="counter-value" class="counter-value" role="status"><span>7</span></div>' }]);
+    }
+    return document.querySelector("#counter-value")?.textContent.trim() ?? "";
+  });
+  await page.emulateMedia({ reducedMotion: null });
+  if (vtPatch === "7") ok("patches apply under prefers-reduced-motion (guard path)");
+  else bad(`reduced-motion patch failed: ${JSON.stringify(vtPatch)}`);
+} else {
+  skipped++;
+  console.log("  SKIP progressive-capability probes (engine-mode only)");
+}
+
 // 7. Client-mode hydration probe: the chamber fetches + instantiates
 // app.wasm under the client csp (`'wasm-unsafe-eval'`), calls
 // webui_render_page, patches #app, and reports byte-match vs the SSR it

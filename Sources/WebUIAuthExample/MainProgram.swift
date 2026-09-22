@@ -552,6 +552,7 @@ struct WebUIAuthExample {
 		// out of the back-forward cache after logout on shared machines.
 		head.headers.replaceOrAdd(name: "Cache-Control", value: "no-store")
 		head.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
+		head.headers.replaceOrAdd(name: "Service-Worker-Allowed", value: "/")
 		for (name, value) in headers {
 			head.headers.replaceOrAdd(name: name, value: value)
 		}
@@ -981,6 +982,9 @@ struct WebUIAuthExample {
 			return
 		case (.GET, "/ui/webui-engine.js"):
 			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/javascript; charset=utf-8")], body: WebUIAssets.engine)
+			return
+		case (.GET, "/ui/webui-shell.js"):
+			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/javascript; charset=utf-8")], body: WebUIAssets.shell)
 			return
 		default:
 			break

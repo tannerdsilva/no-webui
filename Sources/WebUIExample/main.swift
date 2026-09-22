@@ -338,6 +338,8 @@ struct WebUIExample {
 					try await respond(channel: channel.channel, body: WebUIAssets.clientBoot, contentType: "text/javascript; charset=utf-8")
 				} else if uri == "/ui/webui-engine.js" {
 					try await respond(channel: channel.channel, body: WebUIAssets.engine, contentType: "text/javascript; charset=utf-8")
+				} else if uri == "/ui/webui-shell.js" {
+					try await respond(channel: channel.channel, body: WebUIAssets.shell, contentType: "text/javascript; charset=utf-8")
 				} else if uri.hasPrefix("/__assets/webui-client."), uri.hasSuffix(".wasm") {
 					try await respondWasm(channel: channel.channel)
 				} else if uri == "/" || uri == "/index.html" {
@@ -358,6 +360,7 @@ struct WebUIExample {
 		// security headers — parity with the auth server.
 		head.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
 		head.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
+		head.headers.replaceOrAdd(name: "Service-Worker-Allowed", value: "/")
 		head.headers.replaceOrAdd(name: "Cache-Control", value: "no-store")
 		var buf = ByteBuffer()
 		buf.writeString(body)

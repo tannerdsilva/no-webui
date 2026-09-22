@@ -324,7 +324,7 @@ func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
 			head: smokePageStyle,
 			clientMode: wasmMode
 				? ClientBoot(wasmURL: clientWasmURL(WebUIBoot.wasmSHA256), config: RuntimeConfig(), flavor: .wasm)
-				: ClientBoot(config: RuntimeConfig(capabilities: ["validate", "never-built"]), flavor: .engine)
+				: ClientBoot(config: RuntimeConfig(capabilities: ["validate", "never-built", "offline"]), flavor: .engine)
 		).render()
 	}
 
@@ -703,6 +703,8 @@ extension SmokeApp {
 					text = WebUIAssets.clientBoot; contentType = "text/javascript; charset=utf-8"
 				case "/ui/webui-engine.js":
 					text = WebUIAssets.engine; contentType = "text/javascript; charset=utf-8"
+				case "/ui/webui-shell.js":
+					text = WebUIAssets.shell; contentType = "text/javascript; charset=utf-8"
 				case "/__assets/webui-client.js":
 					text = WebUIAssets.client; contentType = "text/javascript; charset=utf-8"
 				case "/__assets/webui-worker.js":
@@ -736,6 +738,9 @@ extension SmokeApp {
 		head.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
 		head.headers.replaceOrAdd(name: "Cross-Origin-Opener-Policy", value: "same-origin")
 		head.headers.replaceOrAdd(name: "Cross-Origin-Embedder-Policy", value: "require-corp")
+		// the offline shell registers at '/' from /ui/webui-shell.js; the
+		// header widens the default max scope to allow that.
+		head.headers.replaceOrAdd(name: "Service-Worker-Allowed", value: "/")
 		head.headers.replaceOrAdd(name: "Cache-Control", value: "no-store")
 		// when a gate spawned this server it checks its own nonce so it can
 		// never mistake a stale/foreign process for its child.

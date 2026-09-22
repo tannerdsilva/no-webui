@@ -37,3 +37,10 @@ func engineAssetEmbedded() {
     #expect(!WebUIAssets.engine.contains("/*"))
     #expect(!WebUIAssets.engine.contains("WebUIRuntime"))
 }
+
+@Test("WebUIAssets.shell embeds the offline shell, comment-free")
+func shellAssetEmbedded() {
+    #expect(WebUIAssets.shell.contains("webui-shell-v1"))
+    #expect(WebUIAssets.shell.contains("clients.claim"))
+    #expect(!WebUIAssets.shell.contains("/*"))
+}

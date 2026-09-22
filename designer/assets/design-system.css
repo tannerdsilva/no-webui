@@ -7999,6 +7999,13 @@ h6 {
 .island--ok { border-color: var(--color-success); color: var(--color-success); }
 .island--error { border-color: var(--color-danger); color: var(--color-danger); }
 
+/* view transitions (next architecture p4) — the framework motion contract:
+   composited crossfade on root, 300ms ease (the design system's standard) */
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: 300ms; }
+@media (prefers-reduced-motion: reduce) {
+  ::view-transition-old(root), ::view-transition-new(root) { animation: none; }
+}
+
 /* ═══════════════════════════════════════════════════════════
    Showcase page chrome
    Layout for the generated reference page (header, sidebar,
