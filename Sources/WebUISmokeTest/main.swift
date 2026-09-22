@@ -298,6 +298,18 @@ func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
 						Text("Click a bar to toggle its selection.")
 					}
 				}
+				WebUICard(variant: .elevated) {
+					Heading("Island validation (same Swift in wasm)", level: .h3)
+					Div(class: "smoke__island-row") {
+						Text("Type a value: ")
+						Raw("<input id=\"island-input\" data-island-input=\"island-validate\" class=\"input\" type=\"text\" value=\"a\">")
+					}
+					Raw("<div id=\"island-validate\" data-webui-island=\"validate\" data-webui-args='{\"value\":\"a\",\"rules\":[{\"rule\":\"required\"},{\"rule\":\"minLength\",\"arg\":4}]}'></div>")
+					Raw("<div id=\"island-never\" data-webui-island=\"never-built\" data-webui-args='{}'></div>")
+					Div(class: "smoke__chart-hint") {
+						Text("The chip above is composed by a lazily loaded wasm island (no round trip).")
+					}
+				}
 			}
 		}
 	}
@@ -312,7 +324,7 @@ func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
 			head: smokePageStyle,
 			clientMode: wasmMode
 				? ClientBoot(wasmURL: clientWasmURL(WebUIBoot.wasmSHA256), config: RuntimeConfig(), flavor: .wasm)
-				: nil
+				: ClientBoot(config: RuntimeConfig(capabilities: ["validate", "never-built"]), flavor: .engine)
 		).render()
 	}
 
@@ -378,16 +390,17 @@ struct SmokeApp {
 	let connectionGate: ConnectionGate
 	let clientWasm: [UInt8]
 	let clientWasmHash: String
+	let islandValidate: [UInt8]
 	let clientDemoPage: String
 	let searchDemoPage: String
 }
 
-/// read the release `WebUIClient.wasm` product (built separately with the wasm
-/// sdk) so the smoke server can serve it as a first-class static asset. an
-/// absent artifact yields empty bytes and the wasm route 404s (gates build it
-/// first).
-func readClientWasmArtifact() -> [UInt8] {
-	let path = ".build/out/Products/Release-webassembly-wasm32/WebUIClient.wasm"
+/// read a release wasm product (built separately with the wasm sdk) so the
+/// smoke server can serve it as a first-class static asset. an absent
+/// artifact yields empty bytes and the route 404s (gates build it first).
+func readWasmArtifact(_ product: String) -> [UInt8] {
+	guard let url = WebUIBoot.wasmProductURL(productName: product) else { return [] }
+	let path = url.path
 	let fd = open(path, O_RDONLY)
 	guard fd >= 0 else { return [] }
 	defer { close(fd) }
@@ -464,8 +477,9 @@ extension SmokeApp {
 		let router = EventRouter()
 		let page = renderSmokePage(state: state, router: router)
 		let connectionGate = ConnectionGate(maximum: intFlag(named: "--max-connections", default: 256))
-		let clientWasm = readClientWasmArtifact()
+		let clientWasm = readWasmArtifact("WebUIClient")
 		let wasmHash = WebUIBoot.wasmHash(of: clientWasm)
+		let islandValidate = readWasmArtifact("WebUIValidateIsland")
 		let app = SmokeApp(
 			state: state,
 			router: router,
@@ -473,6 +487,7 @@ extension SmokeApp {
 			connectionGate: connectionGate,
 			clientWasm: clientWasm,
 			clientWasmHash: wasmHash,
+			islandValidate: islandValidate,
 			clientDemoPage: makeClientDemoPage(wasmHash: wasmHash),
 			searchDemoPage: makeSearchDemoPage(wasmHash: wasmHash)
 		)
@@ -660,6 +675,21 @@ extension SmokeApp {
 						bytes: self.clientWasm,
 						contentType: "application/wasm",
 						cacheControl: "public, max-age=31536000, immutable"
+					)
+					return
+				}
+				if head.uri == "/__assets/webui-validate.wasm" {
+					// the validate capability island (next architecture d3);
+					// the engine fetches it lazily when a page declares the
+					// capability. absent artifact = 404 = the degrade path.
+					guard !self.islandValidate.isEmpty else {
+						try await respond404(channel: channel.channel)
+						return
+					}
+					try await respond(
+						channel: channel.channel,
+						bytes: self.islandValidate,
+						contentType: "application/wasm"
 					)
 					return
 				}

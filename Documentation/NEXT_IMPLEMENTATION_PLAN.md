@@ -161,6 +161,16 @@ opt-in; keyboard/focus gaps from `STABILITY.md` #2–3 close.
 goal: same-swift logic moves into small lazy modules; pages that don't declare a
 capability never fetch wasm.
 
+**measured outcome (p2 landed):** the full-stdlib-sdk island
+(`WebUIValidateIsland`, pure swift, `-Osize`, stripped) is **52.8 mb** — every
+standalone module re-links the sdk's ICU/full-stdlib tables, so the
+"kB-scale island" target is not met by the full-stdlib sdk. the embedded sdk
+(`swift-6.4.0-RELEASE_wasm-embedded`) **cannot compile the dependency graph**:
+`swift-log` is not embedded-compatible (`'description' has been explicitly
+marked unavailable`). the kB-tier is blocked until island targets drop the
+`Logging` edge (an embedded-clean log shim for `WebUICore`) — recorded as the
+phase-6 follow-up, not achievable here.
+
 ### task 2.1 — island build verb
 
 - new command plugin `WebUIIslandPlugin` (`verb: wasm-island`, model on

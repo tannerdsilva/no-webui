@@ -730,7 +730,7 @@ window.WebUIEngine = (function () {
       settleMs = ms;
     }
 
-    return { patch: patch, reset: reset, setSettle: setSettle };
+    return { patch: patch, reset: reset, setSettle: setSettle, sanitize: sanitizeFragment };
   }
 
   var UNSAFE_PROTOCOLS = /^(javascript|data|vbscript):/i;
@@ -927,6 +927,134 @@ window.WebUIEngine = (function () {
     else if (!e.shiftKey && e.target === f[f.length - 1]) { e.preventDefault(); f[0].focus(); }
   }, true);
 
+  var _islandSanitize = null;
+  var _islandConfig = null;
+  var islandModules = {};
+  var islandLoading = {};
+  function buildImports(module) {
+    var imports = {};
+    var declared = WebAssembly.Module.imports(module);
+    for (var i = 0; i < declared.length; i++) {
+      var imp = declared[i];
+      var bucket = imports[imp.module] || (imports[imp.module] = {});
+      bucket[imp.name] = function () { return 0; };
+    }
+    return imports;
+  }
+  function instantiateIsland(module) {
+    return WebAssembly.instantiate(module, buildImports(module)).then(function (result) {
+      var inst = result && result.instance ? result.instance : result;
+      return inst.exports;
+    });
+  }
+  function ensureIslandMemory(exports) {
+    var target = 8 * 1024 * 1024;
+    if (!exports.memory || exports.memory.buffer.byteLength >= target) { return; }
+    var grow = exports.memory.grow;
+    if (typeof grow !== 'function') { return; }
+    var pages = Math.ceil((target - exports.memory.buffer.byteLength) / 65536);
+    try { grow(pages); } catch (e) { }
+  }
+  function islandState(el, state) {
+    el.setAttribute('data-webui-island-state', state);
+  }
+  function islandRender(el, name) {
+    var mod = islandModules[name];
+    if (!mod || !mod.exports || !mod.exports.webui_render_region) {
+      islandState(el, 'unmapped');
+      return false;
+    }
+    var args = {};
+    try { args = JSON.parse(el.getAttribute('data-webui-args') || '{}'); } catch (e) { }
+    var payload = new TextEncoder().encode(JSON.stringify({ name: name, args: args }));
+    if (payload.length > 65536) { islandState(el, 'unmapped'); return false; }
+    var ptr = mod.exports.webui_input_ptr();
+    new Uint8Array(mod.memory.buffer, ptr, payload.length).set(payload);
+    var outPtr = mod.exports.webui_render_region(ptr, payload.length);
+    var outLen = mod.exports.webui_frame_len();
+    if (!outPtr || outLen === 0) { islandState(el, 'unmapped'); return false; }
+    var html = new TextDecoder().decode(new Uint8Array(mod.memory.buffer, outPtr, outLen));
+    while (el.firstChild) { el.removeChild(el.firstChild); }
+    if (_islandSanitize) {
+      el.appendChild(_islandSanitize(html, el));
+    } else {
+      el.innerHTML = html;
+    }
+    islandState(el, 'mounted');
+    return true;
+  }
+  function loadIsland(name) {
+    if (islandModules[name]) { return Promise.resolve(islandModules[name]); }
+    if (islandLoading[name]) { return islandLoading[name]; }
+    var url = '/__assets/webui-' + name + '.wasm';
+    islandLoading[name] = fetch(url)
+      .then(function (r) { if (!r.ok) { throw new Error('island fetch ' + r.status); } return r; })
+      .then(function (res) {
+        if (typeof WebAssembly.compileStreaming === 'function' && res && res.body) {
+          return WebAssembly.compileStreaming(Promise.resolve(res));
+        }
+        return res.arrayBuffer().then(function (bytes) { return new WebAssembly.Module(bytes); });
+      })
+      .then(instantiateIsland)
+      .then(function (exports) {
+        if (!exports) { return null; }
+        if (typeof exports._start === 'function') {
+          try { exports._start(); } catch (e) { }
+        }
+        ensureIslandMemory(exports);
+        islandModules[name] = { exports: exports, memory: exports.memory };
+        return islandModules[name];
+      })
+      .catch(function (err) {
+        islandLoading[name] = null;
+        if (err && err.message) {
+          _islandLog('island ' + name + ' unavailable (' + err.message + '); page stays server-rendered', 'warn');
+        }
+        return null;
+      });
+    return islandLoading[name];
+  }
+  function mountAllIslands() {
+    var regions = document.querySelectorAll('[data-webui-island]');
+    for (var i = 0; i < regions.length; i++) {
+      (function (el) {
+        var name = el.getAttribute('data-webui-island');
+        if (!name) { return; }
+        if (_islandConfig && _islandConfig.capabilities && _islandConfig.capabilities.indexOf(name) === -1) {
+          islandState(el, 'unmapped');
+          return;
+        }
+        loadIsland(name).then(function (mod) {
+          if (mod) { islandRender(el, name); }
+          else { islandState(el, 'unmapped'); }
+        });
+      })(regions[i]);
+    }
+  }
+  function wireIslandInputs() {
+    document.addEventListener('input', function (e) {
+      var t = e.target;
+      if (!t || !t.getAttribute) { return; }
+      var regionId = t.getAttribute('data-island-input');
+      if (!regionId) { return; }
+      var region = document.getElementById(regionId);
+      if (!region || !region.getAttribute) { return; }
+      var name = region.getAttribute('data-webui-island');
+      if (!name || !islandModules[name]) { return; }
+      var args = {};
+      try { args = JSON.parse(region.getAttribute('data-webui-args') || '{}'); } catch (err) { }
+      args.value = t.value;
+      region.setAttribute('data-webui-args', JSON.stringify(args));
+      islandRender(region, name);
+    });
+  }
+  function _islandLog(msg, level) {
+    try {
+      if (level === 'warn') { console.warn('[WebUIEngine] ' + msg); }
+      else { console.log('[WebUIEngine] ' + msg); }
+    } catch (e) { }
+  }
+
 
   function init(opts) {
     if (instance) {
@@ -955,9 +1083,19 @@ window.WebUIEngine = (function () {
     eventDelegator.reset(config);
     fragmentPatcher.setSettle(config.optimisticSettleMs);
 
+    _islandSanitize = fragmentPatcher.sanitize;
+    _islandConfig = config;
+
     eventDelegator.mount();
 
     wsClient.connect();
+
+    var bootIslands = function () { wireIslandInputs(); mountAllIslands(); };
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', bootIslands);
+    } else {
+      bootIslands();
+    }
 
     var popstateHandler = function () {
       wsClient.send({ type: 'navigate', url: location.pathname + location.search });

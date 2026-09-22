@@ -7983,6 +7983,22 @@ h6 {
   z-index: 1;
 }
 
+/* capability islands (next architecture d3) — client-composed status chips */
+.island {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  border: var(--border-width) solid var(--color-border);
+  background: var(--color-bg-raised);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+}
+.island__dot { width: 8px; height: 8px; border-radius: 999px; background: currentColor; }
+.island--ok { border-color: var(--color-success); color: var(--color-success); }
+.island--error { border-color: var(--color-danger); color: var(--color-danger); }
+
 /* ═══════════════════════════════════════════════════════════
    Showcase page chrome
    Layout for the generated reference page (header, sidebar,

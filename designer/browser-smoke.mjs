@@ -129,16 +129,18 @@ const page = await context.newPage();
 
 const consoleErrors = [];
 const failedRequests = [];
+let expectedIsland404s = 0;
 page.on("console", (m) => {
   if (m.type() === "error") consoleErrors.push(m.text());
 });
 page.on("requestfailed", (r) => failedRequests.push(r.url()));
 page.on("response", (r) => {
-  if (r.status() >= 400 && !/favicon/i.test(r.url())) failedRequests.push(`${r.status()} ${r.url()}`);
+  if (r.status() >= 400 && !/favicon|never-built/i.test(r.url())) failedRequests.push(`${r.status()} ${r.url()}`);
+  if (r.status() === 404 && /never-built/i.test(r.url())) expectedIsland404s++;
 });
 
-await page.goto(BASE + "/", { waitUntil: "networkidle" });
-await page.waitForTimeout(400);
+await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
+await page.waitForTimeout(600);
 
 // 1. Progress fills left-anchored, labels at the right edge + visible.
 const progress = await page.evaluate(() =>
@@ -186,7 +188,10 @@ else bad(`page references external assets: ${JSON.stringify(externalAssets)}`);
 // the smoke server has no live backend, so a ws:// 404 is expected noise.
 // Filter only that; any other console error is a real failure.
 const isExpectedWs = (t) => /websocket|ws:\/\//i.test(t) && /handshake|connection to|404|unexpected response/i.test(t);
-const realErrors = consoleErrors.filter((t) => !isExpectedWs(t) && !/favicon/i.test(t));
+const isGenericResource404 = (t) => /Failed to load resource/.test(t) && /404/.test(t);
+const realErrors = consoleErrors.filter((t) =>
+  !isExpectedWs(t) && !/favicon/i.test(t) && !(isGenericResource404(t) && expectedIsland404s > 0)
+);
 if (realErrors.length === 0) ok("no uncaught console errors (ws:// handshake noise filtered)");
 else bad(`console errors: ${JSON.stringify(realErrors)}`);
 if (failedRequests.length === 0) ok("no failed resource loads");
@@ -264,6 +269,31 @@ if (chartBar) {
 	else bad("chart bar click did not produce a selection render");
 } else {
 	bad("chart bar #smoke-chart-mark-Jan-Atlas not found in DOM");
+}
+
+// 6b. Capability islands (engine mode only): a declared validate island mounts
+// from the lazily fetched wasm module (same Swift, no round trip); an absent
+// capability degrades to unmapped while the page stays fully interactive.
+if (!WASM) {
+  await page.waitForSelector("#island-validate[data-webui-island-state]", { timeout: 15000 }).catch(() => {});
+  await page.waitForTimeout(200);
+  const islandState = await page.evaluate(() => ({
+    validate: document.getElementById("island-validate")?.getAttribute("data-webui-island-state") ?? null,
+    never: document.getElementById("island-never")?.getAttribute("data-webui-island-state") ?? null,
+    text: document.getElementById("island-validate")?.textContent ?? "",
+  }));
+  if (islandState.validate === "mounted" && islandState.text.includes("at least 4 characters")) ok(`validate island mounted from lazy wasm (${islandState.text.trim()})`);
+  else bad(`validate island not mounted: ${JSON.stringify(islandState)}`);
+  if (islandState.never === "unmapped") ok("absent capability island degrades to unmapped (page stays server-rendered)");
+  else bad(`degrade island state: ${JSON.stringify(islandState.never)}`);
+  await page.fill("#island-input", "hello@example.com");
+  await page.waitForTimeout(350);
+  const islandAfter = await page.evaluate(() => document.getElementById("island-validate")?.textContent ?? "");
+  if (islandAfter.includes("valid")) ok("island re-validated on input from the module (no round trip)");
+  else bad(`island did not re-validate: ${JSON.stringify(islandAfter)}`);
+} else {
+  skipped++;
+  console.log("  SKIP capability island probes (engine-mode only)");
 }
 
 // 7. Client-mode hydration probe: the chamber fetches + instantiates

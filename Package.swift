@@ -48,6 +48,14 @@ let package = Package(
             name: "WebUIWasmClientPlugin",
             targets: ["WebUIWasmClientPlugin"]
         ),
+        .plugin(
+            name: "WebUIIslandPlugin",
+            targets: ["WebUIIslandPlugin"]
+        ),
+        .library(
+            name: "WebUIIslandCore",
+            targets: ["WebUIIslandCore"]
+        ),
         .executable(
             name: "WebUIExample",
             targets: ["WebUIExample"]
@@ -124,6 +132,22 @@ let package = Package(
                 "WebUISmokeShared",
                 "WebUIDesignSystemCore",
                 "WebUIChart",
+            ]
+        ),
+        // the capability-island core: same-swift logic that compiles to a
+        // small standalone wasm module (next architecture d3). libraries
+        // here must stay foundation-free — they build for wasm32-wasi.
+        .target(
+            name: "WebUIIslandCore",
+            dependencies: [
+                "WebUICore",
+                "WebUIClientRuntime",
+            ]
+        ),
+        .executableTarget(
+            name: "WebUIValidateIsland",
+            dependencies: [
+                "WebUIIslandCore",
             ]
         ),
         .target(
@@ -315,6 +339,18 @@ let package = Package(
             ]
         ),
         .plugin(
+            name: "WebUIIslandPlugin",
+            capability: .command(
+                intent: .custom(
+                    verb: "wasm-island",
+                    description: "Cross-build a capability island product (e.g. WebUIValidateIsland) with the wasm SDK into .build/wasm-island-scratch, then copies the stripped artifact to .build/out/Products/… (requires --disable-sandbox)."
+                )
+            ),
+            dependencies: [
+                .target(name: "WebUIWasmTool"),
+            ]
+        ),
+        .plugin(
             name: "WebUIShowcasePlugin",
             capability: .command(
                 intent: .custom(
@@ -406,6 +442,13 @@ let package = Package(
             name: "WebUIWasmToolTests",
             dependencies: [
                 .product(name: "RAW_sha256", package: "rawdog"),
+            ]
+        ),
+        .testTarget(
+            name: "WebUIIslandCoreTests",
+            dependencies: [
+                "WebUIIslandCore",
+                "WebUIClientRuntime",
             ]
         ),
         .testTarget(
