@@ -117,9 +117,12 @@ are now public Swift views, grouped by category:
   `WebUIBadgeStatus`, `WebUIBadgeCount`, `WebUIRadioGroup`,
   `WebUICheckboxGroup`.
 
-These are all **presentational** (see the gotcha below) — pick them over raw
-markup for any region they express. The authoritative list + file groupings
-live in `Documentation/DESIGN_SYSTEM.md` → "Extended Controls".
+Most of these are **presentational** display components; the **interactive
+subset** self-wires through typed handlers (see the gotcha below). Pass a stable
+`id` alongside a handler (`onToggle`/`onDismiss`/`onSelect`/`onChange`) and the
+control routes to your Swift handler. Pick them over raw markup for any region
+they express. The authoritative list + file groupings live in
+`Documentation/DESIGN_SYSTEM.md` → "Extended Controls".
 
 If a region needs markup no component expresses, add a Swift component (see
 `references/high-level-shell-components.md` for the composition conventions and
@@ -179,12 +182,10 @@ swift run TheirServer
   the artifact at (use `WebUIBoot.wasmProductURL(productName: "TheirClient")`
   to resolve it, and `WebUIBoot.wasmSHA256` for the build-time content hash
   that feeds the immutable-cached route).
-- **absent-artifact posture**: the framework's `WebUIWasmPlugin` emits a soft
-  `present=false` carrier when no artifact was built (host builds stay green,
-  the wasm route 404s). if your app ships client-mode pages and an absent
-  artifact should fail the build, set `WEBUI_REQUIRE_WASM=1` (read at
-  plugin-execution time) — the build then fails with the exact `wasm-client`
-  command instead of a production 404.
+- **artifact is required**: the framework's `WebUIWasmPlugin` hard-fails if the
+  wasm artifact is absent — wasm is the sole client runtime, so build it first
+  (`wasm-client` verb). there is no soft `present=false` carrier and no
+  `WEBUI_REQUIRE_WASM` switch anymore.
 - **the artifact must exist before the host build** — the plugin validates +
   hashes it into the carrier during `swift build`, so build `wasm-client`
   first, then `swift build`. (This is the same two-invocation rule the
@@ -347,12 +348,22 @@ in its `README.md`, `AGENTS.md`, and `Documentation/*`; reach for those (or the
   the component class from the reset chain and verify the computed style.
 - **Two host servers can share one port** (IPv4 vs IPv6 `localhost`); a browser
   can hit a stale instance. Diagnose with `lsof` + `pgrep`, md5 the served bytes.
-- **The extended/control components are presentational.** Every extended
-  component (accordion, kanban, wizard, slider, notification, …) emits the
-  designed markup but does **not** self-wire a Swift handler. For interactivity
-  (expand an accordion, open a drawer, page a slider) pair it with a
-  `controlAttributes(id:event:handler:)` wiring or a self-wiring control, and
-  re-emit the stable `id` on re-render.
+- **Interactive extras self-wire; display-only extras are presentational.**
+  The interactive subset self-wires a typed handler via `controlAttributes` —
+  pass a stable `id` plus the handler and the control routes clicks/inputs to
+  your Swift handler (dispatch on `event.string("targetId")`; each interactive
+  child carries a derived `id`, e.g. `"<id>-item-0"` / `"<id>-inc"`). Wired so
+  far: accordion/collapse (`onToggle`), drawer/bottom-sheet/action-sheet
+  (`onDismiss`/`onSelect`), menu/context-menu/dropdown/combo/command-palette
+  (`onSelect`), navbar/bottom-nav/fab/split-button/lightbox
+  (`onNavigate`/`onSelect`/`onTap`), calendar/date-picker/timezone/country
+  (`onChange`/`onSelect`), stepper/toggle/slider/multi-select/otp/rating/
+  inline-edit/recurrence/chip-input/tag (`onChange`/`onSave`/`onRemove`),
+  reactions/notification/bell/mention/cookie-consent/pull-refresh
+  (`onChange`/`onTap`/`onSelect`/`onRefresh`). The rest are pure display
+  (badges, tags, avatars, charts, skeletons, stat/celebrate/countdown, …) or
+  drag/edit widgets whose interaction contract isn't designed yet (kanban,
+  transfer, datasheet, signature) — those stay modifier-drivable via `.onClick`.
 
 ## Committing (in your own app)
 
