@@ -973,11 +973,32 @@ struct WebUIAuthExample {
 			// comments (the first law) and ~6% more bytes on the wire.
 			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/css; charset=utf-8")], body: DesignSystemAssets.minifiedCss)
 			return
-		case (.GET, "/__assets/js"):
-			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/javascript; charset=utf-8")], body: WebUIAssets.js)
+		case (.GET, "/ui/webui-client.js"):
+			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/javascript; charset=utf-8")], body: WebUIAssets.client)
+			return
+		case (.GET, "/ui/webui-app-boot.js"):
+			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/javascript; charset=utf-8")], body: WebUIAssets.clientBoot)
 			return
 		default:
 			break
+		}
+
+		// the wasm client artifact — content-addressed & immutable (wasm is the
+		// only client runtime; there is no js runtime to serve anymore).
+		if head.method == .GET, head.uri.hasPrefix("/__assets/webui-client."), head.uri.hasSuffix(".wasm"),
+			let url = WebUIBoot.wasmProductURL(productName: "WebUIClient"),
+			let data = try? Data(contentsOf: url) {
+			var wasmHead = HTTPResponseHead(version: .http1_1, status: .ok)
+			wasmHead.headers.replaceOrAdd(name: "Content-Type", value: "application/wasm")
+			wasmHead.headers.replaceOrAdd(name: "Content-Length", value: "\(data.count)")
+			wasmHead.headers.replaceOrAdd(name: "Connection", value: "close")
+			wasmHead.headers.replaceOrAdd(name: "Cache-Control", value: "public, max-age=31536000, immutable")
+			wasmHead.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
+			wasmHead.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
+			var buf = ByteBuffer()
+			buf.writeBytes(data)
+			try await writeResponse(channel: channel, head: wasmHead, body: buf)
+			return
 		}
 
 		switch (head.method, head.uri) {

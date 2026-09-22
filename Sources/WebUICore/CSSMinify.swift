@@ -1,5 +1,3 @@
-import Foundation
-
 // MARK: - CSS Miniification
 
 // conservative minifier for css destined for the wire: strips `/* */`
@@ -7,6 +5,9 @@ import Foundation
 // not touch whitespace inside rules, so selectors and declarations survive
 // intact. the goals are comment-free shipped css (the first law) and a
 // meaningful payload reduction, not maximal compression.
+// Foundation-free: `trimmingHTMLWhitespace` (U+0020/U+0009 only, matching
+// `CharacterSet.whitespaces`) lives in Utilities.swift — newlines are NOT
+// trimmed, so a stray `\r` on a CRLF line survives exactly as Foundation did.
 public func minifyCSS(_ css: String) -> String {
 	let chars = Array(css)
 	var out = ""
@@ -34,6 +35,6 @@ public func minifyCSS(_ css: String) -> String {
 	}
 
 	let lines = out.split(separator: "\n", omittingEmptySubsequences: false)
-	let trimmed = lines.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
+	let trimmed = lines.map { trimmingHTMLWhitespace(String($0)) }.filter { !$0.isEmpty }
 	return trimmed.joined(separator: "\n")
 }

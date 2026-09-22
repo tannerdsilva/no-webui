@@ -1,5 +1,3 @@
-import Foundation
-
 // MARK: - ViewBuilder
 @resultBuilder
 public enum ViewBuilder {

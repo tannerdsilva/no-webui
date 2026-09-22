@@ -617,3 +617,267 @@ func checkboxGroup() {
     #expect(h.contains("checkbox__box"))
     #expect(h.contains("checked"))
 }
+
+// MARK: - Self-wiring (controlAttributes) tests
+
+@Test("WebUIAccordion self-wires item headers when given id + onToggle")
+func accordionSelfWires() {
+    let v = WebUIAccordion(items: [.init("One", open: true) { Text("body") }, .init("Two") { Text("b") }],
+                           id: "acc", onToggle: { _ in [] })
+    let h = v.render()
+    #expect(h.contains("data-component-id=\"acc\""))
+    #expect(h.contains("data-event=\"click\""))
+    #expect(h.contains("id=\"acc-item-0\""))
+    #expect(h.contains("id=\"acc-item-1\""))
+}
+
+@Test("WebUIToggle self-wires its checkbox with change event")
+func toggleSelfWires() {
+    let v = WebUIToggle("x", id: "t", onChange: { _ in [] })
+    let h = v.render()
+    #expect(h.contains("data-component-id=\"t-input\""))
+    #expect(h.contains("data-event=\"change\""))
+    #expect(h.contains("id=\"t-input\""))
+}
+
+@Test("WebUIStepper self-wires +/− buttons")
+func stepperSelfWires() {
+    let v = WebUIStepper(3, id: "s", onChange: { _ in [] })
+    let h = v.render()
+    #expect(h.contains("data-component-id=\"s\""))
+    #expect(h.contains("data-event=\"click\""))
+    #expect(h.contains("id=\"s-dec\""))
+    #expect(h.contains("id=\"s-inc\""))
+}
+
+@Test("WebUIDrawer self-wires its close button")
+func drawerSelfWires() {
+    let v = WebUIDrawer(title: "t", id: "d", onDismiss: { _ in [] }) { Text("body") }
+    let h = v.render()
+    #expect(h.contains("data-component-id=\"d\""))
+    #expect(h.contains("id=\"d-close\""))
+}
+
+@Test("WebUIMenu self-wires each item")
+func menuSelfWires() {
+    let v = WebUIMenu(items: [.init("A"), .init("B")], id: "m", onSelect: { _ in [] })
+    let h = v.render()
+    #expect(h.contains("data-component-id=\"m\""))
+    #expect(h.contains("id=\"m-item-0\""))
+    #expect(h.contains("id=\"m-item-1\""))
+}
+
+@Test("WebUISlider self-wires its range input")
+func sliderSelfWires() {
+    let v = WebUISlider(50, id: "sl", onChange: { _ in [] })
+    let h = v.render()
+    #expect(h.contains("data-component-id=\"sl-input\""))
+    #expect(h.contains("data-event=\"input\""))
+}
+
+// MARK: - Curated-set self-wiring tests (subagent-wired components)
+
+@Test("WebUIBottomNav self-wires items")
+func bottomNavSelfWires() {
+    let v = WebUIBottomNav(items: [.init("A", icon: .star), .init("B", icon: .star)], id: "bn", onSelect: { _ in [] })
+    let h = v.render()
+    #expect(h.contains("data-component-id=\"bn\""))
+    #expect(h.contains("data-event=\"click\""))
+    #expect(h.contains("id=\"bn-item-0\""))
+    #expect(h.contains("id=\"bn-item-1\""))
+}
+
+@Test("WebUIFab self-wires on tap")
+func fabSelfWires() {
+    let v = WebUIFab("Add", icon: .star, id: "f", onTap: { _ in [] })
+    let h = v.render()
+    #expect(h.contains("data-component-id=\"f\""))
+    #expect(h.contains("data-event=\"click\""))
+}
+
+@Test("WebUISplitButton self-wires main + caret")
+func splitButtonSelfWires() {
+    let v = WebUISplitButton("Save", id: "sb", onSelect: { _ in [] })
+    let h = v.render()
+    #expect(h.contains("data-component-id=\"sb\""))
+    #expect(h.contains("id=\"sb-main\""))
+    #expect(h.contains("id=\"sb-caret\""))
+}
+
+@Test("WebUIActionSheet self-wires actions + cancel")
+func actionSheetSelfWires() {
+    let v = WebUIActionSheet(actions: [.init("A"), .init("B", destructive: true)], id: "as", onSelect: { _ in [] })
+    let h = v.render()
+    #expect(h.contains("data-component-id=\"as\""))
+    #expect(h.contains("id=\"as-item-0\""))
+    #expect(h.contains("id=\"as-cancel\""))
+}
+
+@Test("WebUIBottomSheet self-wires its close button")
+func bottomSheetSelfWires() {
+    let v = WebUIBottomSheet(title: "t", id: "bs", onDismiss: { _ in [] }) { Text("body") }
+    let h = v.render()
+    #expect(h.contains("data-component-id=\"bs\""))
+    #expect(h.contains("id=\"bs-close\""))
+}
+
+@Test("WebUIDropdown self-wires its trigger")
+func dropdownSelfWires() {
+    let v = WebUIDropdown("Options", id: "dd", onSelect: { _ in [] }) { Text("x") }
+    let h = v.render()
+    #expect(h.contains("data-component-id=\"dd\""))
+    #expect(h.contains("id=\"dd-trigger\""))
+}
+
+@Test("WebUILightbox self-wires nav buttons")
+func lightboxSelfWires() {
+    let v = WebUILightbox(image: "/i.png", id: "lb", onNavigate: { _ in [] })
+    let h = v.render()
+    #expect(h.contains("data-component-id=\"lb\""))
+    #expect(h.contains("id=\"lb-prev\""))
+    #expect(h.contains("id=\"lb-next\""))
+    #expect(h.contains("id=\"lb-close\""))
+}
+
+@Test("WebUIContextMenu self-wires via inner menu")
+func contextMenuSelfWires() {
+    let v = WebUIContextMenu(items: [.init("A")], id: "cm", onSelect: { _ in [] })
+    let h = v.render()
+    #expect(h.contains("data-component-id=\"cm\""))
+    #expect(h.contains("id=\"cm-item-0\""))
+}
+
+@Test("WebUICalendar self-wires days")
+func calendarSelfWires() {
+    let v = WebUICalendar(month: "Jan", days: [.init(1), .init(2)], id: "cal", onChange: { _ in [] })
+    let h = v.render()
+    #expect(h.contains("data-component-id=\"cal\""))
+    #expect(h.contains("id=\"cal-day-0\""))
+    #expect(h.contains("id=\"cal-day-1\""))
+}
+
+@Test("WebUIDatePicker self-wires days")
+func datePickerSelfWires() {
+    let v = WebUIDatePicker(month: "Jan", days: [.init(1)], id: "dp", onChange: { _ in [] })
+    let h = v.render()
+    #expect(h.contains("data-component-id=\"dp\""))
+    #expect(h.contains("id=\"dp-day-0\""))
+}
+
+@Test("WebUITimeZonePicker self-wires entries")
+func tzSelfWires() {
+    let v = WebUITimeZonePicker(entries: [.init("UTC", offset: "+0")], id: "tz", onSelect: { _ in [] })
+    let h = v.render()
+    #expect(h.contains("data-component-id=\"tz\""))
+    #expect(h.contains("id=\"tz-tz-0\""))
+}
+
+@Test("WebUICountryPicker self-wires rows")
+func countrySelfWires() {
+    let v = WebUICountryPicker(entries: [.init(flag: "US", name: "USA", code: "+1", offset: "EST")], id: "c", onSelect: { _ in [] })
+    let h = v.render()
+    #expect(h.contains("data-component-id=\"c\""))
+    #expect(h.contains("id=\"c-row-0\""))
+}
+
+@Test("WebUIMultiSelect self-wires options")
+func multiSelectSelfWires() {
+    let v = WebUIMultiSelect(options: [.init("A"), .init("B")], id: "ms", onChange: { _ in [] })
+    let h = v.render()
+    #expect(h.contains("data-component-id=\"ms\""))
+    #expect(h.contains("id=\"ms-opt-0\""))
+    #expect(h.contains("id=\"ms-opt-1\""))
+}
+
+@Test("WebUIOTP self-wires cell inputs")
+func otpSelfWires() {
+    let v = WebUIOTP(length: 4, id: "otp", onChange: { _ in [] })
+    let h = v.render()
+    #expect(h.contains("data-component-id=\"otp-cell-0\""))
+    #expect(h.contains("id=\"otp-cell-0\""))
+}
+
+@Test("WebUIRating self-wires stars")
+func ratingSelfWires() {
+    let v = WebUIRating(4, id: "r", onChange: { _ in [] })
+    let h = v.render()
+    #expect(h.contains("data-component-id=\"r\""))
+    #expect(h.contains("id=\"r-star-1\""))
+}
+
+@Test("WebUIInlineEdit self-wires save")
+func inlineEditSelfWires() {
+    let v = WebUIInlineEdit("n", state: .editing, id: "ie", onSave: { _ in [] })
+    let h = v.render()
+    #expect(h.contains("data-component-id=\"ie\""))
+    #expect(h.contains("id=\"ie-save\""))
+}
+
+@Test("WebUIRecurrence self-wires chips and days")
+func recurrenceSelfWires() {
+    let v = WebUIRecurrence(options: [.init("Daily", active: true)], id: "rec", onChange: { _ in [] })
+    let h = v.render()
+    #expect(h.contains("data-component-id=\"rec\""))
+    #expect(h.contains("id=\"rec-chip-0\""))
+    #expect(h.contains("id=\"rec-day-0\""))
+}
+
+@Test("WebUIChipInput self-wires remove buttons")
+func chipInputSelfWires() {
+    let v = WebUIChipInput(chips: ["a", "b"], id: "ci", onChange: { _ in [] })
+    let h = v.render()
+    #expect(h.contains("data-component-id=\"ci\""))
+    #expect(h.contains("id=\"ci-chip-0\""))
+}
+
+@Test("WebUITag self-wires its remove button")
+func tagSelfWires() {
+    let v = WebUITag("beta", removable: true, id: "tg", onRemove: { _ in [] })
+    let h = v.render()
+    #expect(h.contains("data-component-id=\"tg\""))
+    #expect(h.contains("id=\"tg-remove\""))
+}
+
+@Test("WebUIReactions self-wires emoji")
+func reactionsSelfWires() {
+    let v = WebUIReactions(reactions: [.init("👍", count: 1)], id: "rx", onChange: { _ in [] })
+    let h = v.render()
+    #expect(h.contains("data-component-id=\"rx\""))
+    #expect(h.contains("id=\"rx-r-0\""))
+}
+
+@Test("WebUINotification self-wires on tap")
+func notificationSelfWires() {
+    let v = WebUINotification(text: "n", id: "nt", onTap: { _ in [] })
+    let h = v.render()
+    #expect(h.contains("data-component-id=\"nt\""))
+}
+
+@Test("WebUIBell self-wires on tap")
+func bellSelfWires() {
+    let v = WebUIBell(count: 1, id: "b", onTap: { _ in [] })
+    let h = v.render()
+    #expect(h.contains("data-component-id=\"b\""))
+}
+
+@Test("WebUIMention self-wires options")
+func mentionSelfWires() {
+    let v = WebUIMention(options: [.init("Alice", handle: "@a")], id: "mn", onSelect: { _ in [] })
+    let h = v.render()
+    #expect(h.contains("data-component-id=\"mn\""))
+    #expect(h.contains("id=\"mn-option-0\""))
+}
+
+@Test("WebUICookieConsent self-wires")
+func cookieConsentSelfWires() {
+    let v = WebUICookieConsent(text: "c", id: "cc", onSelect: { _ in [] }) { WebUIButton("Accept") }
+    let h = v.render()
+    #expect(h.contains("data-component-id=\"cc\""))
+}
+
+@Test("WebUIPullRefresh self-wires on refresh")
+func pullRefreshSelfWires() {
+    let v = WebUIPullRefresh(state: .active, id: "pr", onRefresh: { _ in [] })
+    let h = v.render()
+    #expect(h.contains("data-component-id=\"pr\""))
+}

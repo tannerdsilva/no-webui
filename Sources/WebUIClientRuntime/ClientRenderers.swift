@@ -1,4 +1,3 @@
-import Foundation
 import Synchronization
 
 /// the applet-renderer registry (harness v2). an applet region is a page

@@ -436,8 +436,9 @@ func htmlDocumentRenders() {
     #expect(html.contains("<p>Hello</p>"))
     #expect(html.contains("<style>"))
     #expect(html.contains("color: red;"))
-    #expect(html.contains("<script nonce"))
-    #expect(html.contains("console.log('hello');"))
+    #expect(html.contains("<meta name=\"webui-wasm\""))
+    #expect(html.contains("<script src=\"/ui/webui-client.js\">"))
+    #expect(!html.contains("console.log('hello');"))
 }
 
 @Test("HTMLDocument dev mode links external assets")
@@ -451,7 +452,8 @@ func htmlDocumentDevMode() {
     )
     let html = doc.render()
     #expect(html.contains("<link rel=\"stylesheet\" href=\"/ui/styles.css\">"))
-    #expect(html.contains("<script src=\"/ui/scripts.js\">"))
+    #expect(html.contains("<script src=\"/ui/webui-client.js\">"))
+    #expect(!html.contains("<script src=\"/ui/scripts.js\">"))
     #expect(!html.contains("<style>"))
 }
 

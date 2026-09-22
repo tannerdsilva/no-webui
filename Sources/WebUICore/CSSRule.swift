@@ -1,5 +1,3 @@
-import Foundation
-
 // MARK: - CSSDeclaration
 public struct CSSDeclaration: Sendable, Equatable {
     public let property: String

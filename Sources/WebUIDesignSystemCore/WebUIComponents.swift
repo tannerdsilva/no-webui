@@ -1,6 +1,77 @@
-import Foundation
 import Logging
 import WebUICore
+
+// MARK: - Foundation-free formatting helpers
+//
+// printf-equivalent number formatting that never touches Foundation, so this
+// module renders identically in plain-stdlib contexts (shared with the
+// server build). `String(format:)` previously backed these call sites; these
+// mirror its output: fixed-point `%.Nf` (round half-to-even at the last
+// printed digit, matching the FPU's default mode) and zero-padded `%0Nd`
+// integers (the sign occupies one width slot, like printf).
+
+/// `%.Nf`-style fixed-point rendering of `Double`: exactly `places` digits
+/// after the decimal separator. rounds half-to-even at that position, like
+/// `printf`'s `%.Nf` under the default FPU rounding mode.
+func webuiFixedPoint(_ value: Double, places: Int) -> String {
+    precondition(places >= 0 && places <= 6, "webuiFixedPoint: unsupported places")
+    guard value.isFinite else { return String(value) }
+    if value == 0 {
+        let f = String(repeating: "0", count: places)
+        let dot = f.isEmpty ? "" : "."
+        return (value.sign == .minus ? "-" : "") + "0" + dot + f
+    }
+    // exact integer = round-half-even(value * 10^places).
+    // value = m * 2^(e-52) exactly (m = 53-bit significand, e = exponent), so
+    // value * 10^p = m * 5^p * 2^(e-52+p) = A / 2^s with A = m*5^p integer.
+    // rounding A/2^s to the nearest integer (ties to even) is pure integer
+    // arithmetic -- no intermediate double rounding, matching printf %.Nf.
+    let fraction = value.significandBitPattern & ((1 << 52) - 1)
+    let m = (1 << 52) | fraction
+    var pow5: Int64 = 1
+    for _ in 0..<places { pow5 *= 5 }
+    let A = Int64(bitPattern: m) * pow5
+    let s = 52 - value.exponent - places
+    let scaled: Int64
+    if s <= 0 {
+        let shift = -s
+        if shift >= 63 { scaled = 0 } else if shift == 0 {
+            scaled = Int64(clamping: A)
+        } else {
+            scaled = Int64(clamping: A) &<< shift
+        }
+    } else if s >= 63 {
+        scaled = 0
+    } else {
+        let half = Int64(1) << (s - 1)
+        let q = Int64(A >> s)
+        let r = Int64(clamping: A) & ((Int64(1) << s) - 1)
+        scaled = r > half ? q + 1 : (r < half ? q : (q % 2 == 0 ? q : q + 1))
+    }
+    let absScaled: Int64 = scaled < 0 ? -scaled : scaled
+    var f = 1
+    for _ in 0..<places { f *= 10 }
+    let whole = absScaled / Int64(f)
+    let frac = absScaled % Int64(f)
+    var fracStr = String(frac)
+    if fracStr.count < places {
+        fracStr = String(repeating: "0", count: places - fracStr.count) + fracStr
+    }
+    let neg = value.sign == .minus
+    let dot = places > 0 ? "." : ""
+    return (neg ? "-" : "") + String(whole) + dot + fracStr
+}
+
+/// `%0Nd`-style rendering of `Int`: zero-padded to at least `width`
+/// characters.
+func webuiZeroPad(_ value: Int, width: Int) -> String {
+    if value < 0 {
+        return "-" + webuiZeroPad(-value, width: max(width - 1, 0))
+    }
+    let digits = "\(value)"
+    if digits.count >= width { return digits }
+    return String(repeating: "0", count: width - digits.count) + digits
+}
 
 // MARK: - WebUI Button
 public struct WebUIButton: View {
@@ -1151,7 +1222,7 @@ public struct WebUIStat: View {
         let coords = points.enumerated().map { (i, v) -> String in
             let x = Double(i) * step
             let y = span == 0 ? h / 2 : h - ((v - minV) / span) * h
-            return String(format: "%.1f,%.1f", x, y)
+            return webuiFixedPoint(x, places: 1) + "," + webuiFixedPoint(y, places: 1)
         }
         let line = coords.joined(separator: " ")
         let area = "\(coords.first ?? "0,16") \(line) 100,32 0,32"

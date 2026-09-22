@@ -644,12 +644,25 @@ extension SmokeApp {
 					)
 					return
 				}
+				if head.uri.hasPrefix("/__assets/webui-client."), head.uri.hasSuffix(".wasm") {
+					// the framework's wasm-always default client route —
+					// content-addressed & immutable.
+					try await respond(
+						channel: channel.channel,
+						bytes: self.clientWasm,
+						contentType: "application/wasm",
+						cacheControl: "public, max-age=31536000, immutable"
+					)
+					return
+				}
 				let (text, contentType): (String, String)
 				switch head.uri {
 				case "/__assets/css":
 					text = DesignSystemAssets.minifiedCss; contentType = "text/css; charset=utf-8"
-				case "/__assets/js":
-					text = WebUIAssets.js; contentType = "text/javascript; charset=utf-8"
+				case "/ui/webui-client.js":
+					text = WebUIAssets.client; contentType = "text/javascript; charset=utf-8"
+				case "/ui/webui-app-boot.js":
+					text = WebUIAssets.clientBoot; contentType = "text/javascript; charset=utf-8"
 				case "/__assets/webui-client.js":
 					text = WebUIAssets.client; contentType = "text/javascript; charset=utf-8"
 				case "/__assets/webui-worker.js":

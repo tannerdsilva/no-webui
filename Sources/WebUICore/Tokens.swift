@@ -1,5 +1,3 @@
-import Foundation
-
 // MARK: - SpaceToken
 
 public enum SpaceToken: Int, CaseIterable, Sendable {

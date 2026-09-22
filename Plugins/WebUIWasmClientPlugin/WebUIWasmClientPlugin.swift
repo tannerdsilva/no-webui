@@ -73,6 +73,10 @@ struct WebUIWasmClientPlugin: CommandPlugin {
             "--build-path", scratch,
             "--package-path", packageDir,
             "--product", product,
+            // size-optimise the wasm code section (the dominant remaining cost
+            // after custom-section strip is Foundation/ICU data, which the
+            // wasm-compiled targets pull via `import Foundation`).
+            "-Xswiftc", "-Osize",
         ]
         let pipe = Pipe()
         build.standardOutput = pipe

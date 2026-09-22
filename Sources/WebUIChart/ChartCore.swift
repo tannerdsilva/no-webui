@@ -10,7 +10,7 @@ import WebUICore
 /// (for annotations/legends) and the value (for scaling).
 public enum Plottable: Sendable, Hashable {
 	case number(Double)
-	case date(Date)
+	case date(Double)
 	case category(String)
 
 	/// The kind of scale this value implies.
@@ -28,7 +28,7 @@ public enum Plottable: Sendable, Hashable {
 	public var numericValue: Double? {
 		switch self {
 		case .number(let v): return v
-		case .date(let d): return d.timeIntervalSinceReferenceDate
+		case .date(let d): return d
 		case .category: return nil
 		}
 	}
@@ -53,7 +53,7 @@ public struct PlottableValue: Sendable, Hashable {
 	public static func value(_ label: String, _ number: some BinaryInteger) -> PlottableValue {
 		PlottableValue(label: label, value: .number(Double(exactly: number) ?? 0))
 	}
-	public static func value(_ label: String, _ date: Date) -> PlottableValue {
+	public static func value(_ label: String, _ date: Double) -> PlottableValue {
 		PlottableValue(label: label, value: .date(date))
 	}
 	public static func value(_ label: String, _ category: String) -> PlottableValue {
@@ -77,7 +77,7 @@ public enum ChartScaleKind: Sendable, Hashable {
 public enum ChartScaleType: Sendable, Hashable {
 	case automatic
 	case linear(domain: ClosedRange<Double>?)
-	case date(domain: ClosedRange<Date>?)
+	case date(domain: ClosedRange<Double>?)
 	case categorical(domain: [String]?)
 	case normalized
 }
@@ -100,6 +100,18 @@ extension ChartScaleType {
 			return .categorical
 		case .normalized:
 			return .linear
+		}
+	}
+
+	/// The domain pinned by the scale, as a numeric interval — for `.date`,
+	/// the bounds converted to seconds since the reference date (the renderer
+	/// works in that numeric space). `nil` = infer from the data.
+	func linearDomain() -> ClosedRange<Double>? {
+		switch self {
+		case .linear(let d?): return d
+		case .date(let d?): return d.lowerBound...d.upperBound
+		case .automatic, .categorical, .normalized, .linear(nil), .date(nil):
+			return nil
 		}
 	}
 }

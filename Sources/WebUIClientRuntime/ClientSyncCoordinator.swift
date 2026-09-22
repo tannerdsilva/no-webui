@@ -1,4 +1,3 @@
-import Foundation
 import Synchronization
 
 // p3-t4: the client-side sync authority discipline. local mutations sequence

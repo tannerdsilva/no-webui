@@ -1,4 +1,3 @@
-import Foundation
 import WebUICore
 import WebUIDesignSystemCore
 import WebUIChart
@@ -442,9 +441,9 @@ public enum ClientRuntime {
 		records.sort { a, b in
 			let less: Bool
 			switch column {
-			case 1: less = a.region.localizedCaseInsensitiveCompare(b.region) == .orderedAscending
+			case 1: less = a.region.lowercased() < b.region.lowercased()
 			case 2: less = a.ms < b.ms
-			default: less = a.name.localizedCaseInsensitiveCompare(b.name) == .orderedAscending
+			default: less = a.name.lowercased() < b.name.lowercased()
 			}
 			return ascending ? less : !less
 		}

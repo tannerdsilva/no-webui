@@ -1,4 +1,3 @@
-import Foundation
 import WebUICore
 import Synchronization
 
@@ -18,8 +17,8 @@ public protocol ClientStateStore: Sendable {
 	func get(_ path: String) -> JSONValue?
 	func set(_ path: String, _ value: JSONValue) throws
 	func remove(_ path: String)
-	func subscribe(_ path: String, _ handler: @escaping @Sendable (JSONValue?) -> Void) -> UUID
-	func unsubscribe(_ id: UUID)
+	func subscribe(_ path: String, _ handler: @escaping @Sendable (JSONValue?) -> Void) -> UInt64
+	func unsubscribe(_ id: UInt64)
 }
 
 /// a thread-safe in-memory backend. paths are flat keys; every dotted segment
@@ -45,11 +44,11 @@ public struct InMemoryClientStateStore: ClientStateStore {
 		box.remove(path)
 	}
 
-	public func subscribe(_ path: String, _ handler: @escaping @Sendable (JSONValue?) -> Void) -> UUID {
+	public func subscribe(_ path: String, _ handler: @escaping @Sendable (JSONValue?) -> Void) -> UInt64 {
 		box.subscribe(path, handler)
 	}
 
-	public func unsubscribe(_ id: UUID) {
+	public func unsubscribe(_ id: UInt64) {
 		box.unsubscribe(id)
 	}
 }
@@ -69,7 +68,8 @@ enum ClientStatePaths {
 final class ClientStateBox: @unchecked Sendable {
 	private struct Values {
 		var values: [String: JSONValue] = [:]
-		var subscriptions: [UUID: (path: String, handler: @Sendable (JSONValue?) -> Void)] = [:]
+		var subscriptions: [UInt64: (path: String, handler: @Sendable (JSONValue?) -> Void)] = [:]
+		var nextID: UInt64 = 0
 	}
 	private let mutex = Mutex(Values())
 
@@ -95,13 +95,17 @@ final class ClientStateBox: @unchecked Sendable {
 		fanOut(path: path, previous: previous, value: nil)
 	}
 
-	func subscribe(_ path: String, _ handler: @escaping @Sendable (JSONValue?) -> Void) -> UUID {
-		let id = UUID()
-		mutex.withLock { $0.subscriptions[id] = (path, handler) }
-		return id
+	func subscribe(_ path: String, _ handler: @escaping @Sendable (JSONValue?) -> Void) -> UInt64 {
+		var newID: UInt64 = 0
+		mutex.withLock { box in
+			box.nextID += 1
+			newID = box.nextID
+			box.subscriptions[newID] = (path, handler)
+		}
+		return newID
 	}
 
-	func unsubscribe(_ id: UUID) {
+	func unsubscribe(_ id: UInt64) {
 		mutex.withLock { _ = $0.subscriptions.removeValue(forKey: id) }
 	}
 

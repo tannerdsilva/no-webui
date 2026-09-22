@@ -1,4 +1,3 @@
-import Foundation
 import WebUICore
 
 // ============================================================================
@@ -24,26 +23,33 @@ public struct WebUICalendar: View {
     public let month: String
     public let weekdays: [String]
     public let days: [Day]
-    public init(month: String, weekdays: [String] = ["S", "M", "T", "W", "T", "F", "S"], days: [Day]) {
+    /// stable component id — the routing anchor; also prefixes child day ids.
+    public let id: String?
+    public let onChange: EventHandler?
+    public init(month: String, weekdays: [String] = ["S", "M", "T", "W", "T", "F", "S"], days: [Day],
+                id: String? = nil, onChange: EventHandler? = nil) {
         self.month = month; self.weekdays = weekdays; self.days = days
+        self.id = id; self.onChange = onChange
     }
 
     public func render() -> String {
-        var html = "<div class=\"calendar\">"
+        let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onChange) } ?? ""
+        var html = "<div class=\"calendar\"\(attrs)>"
         html += "<div class=\"calendar__header\">"
         html += "<div class=\"calendar__month\">\(htmlEscape(month))</div>"
         html += "<div class=\"calendar__nav\"><button aria-label=\"Previous\">‹</button><button aria-label=\"Next\">›</button><button class=\"calendar__today\">Today</button></div>"
         html += "</div>"
         html += "<div class=\"calendar__grid\">"
         for wd in weekdays { html += "<div class=\"calendar__weekday\">\(htmlEscape(wd))</div>" }
-        for day in days {
+        for (i, day) in days.enumerated() {
             var cls = "calendar__day"
             if day.muted { cls += " calendar__day--muted" }
             if day.selected { cls += " calendar__day--selected" }
             if day.today { cls += " calendar__day--today" }
             if day.inRange { cls += " calendar__day--range" }
             if day.events > 0 { cls += " calendar__day--event" }
-            html += "<button class=\"\(cls)\">\(day.num)"
+            let dayID = id.map { " id=\"\(htmlEscape($0))-day-\(i)\"" } ?? ""
+            html += "<button class=\"\(cls)\"\(dayID)>\(day.num)"
             if day.events > 0 {
                 html += "<span class=\"calendar__events\">"
                 for _ in 0..<min(day.events, 3) { html += "<i class=\"calendar__event-dot\"></i>" }
@@ -77,18 +83,24 @@ public struct WebUIDatePicker: View {
     public let month: String
     public let weekdays: [String]
     public let days: [Day]
-    public init(month: String, weekdays: [String] = ["S", "M", "T", "W", "T", "F", "S"], days: [Day]) {
+    /// stable component id — the routing anchor; also prefixes child day ids.
+    public let id: String?
+    public let onChange: EventHandler?
+    public init(month: String, weekdays: [String] = ["S", "M", "T", "W", "T", "F", "S"], days: [Day],
+                id: String? = nil, onChange: EventHandler? = nil) {
         self.month = month; self.weekdays = weekdays; self.days = days
+        self.id = id; self.onChange = onChange
     }
 
     public func render() -> String {
-        var html = "<div class=\"date-picker\">"
+        let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onChange) } ?? ""
+        var html = "<div class=\"date-picker\"\(attrs)>"
         html += "<div class=\"date-picker__header\"><button class=\"date-picker__nav\" aria-label=\"Previous\">‹</button>"
         html += "<div class=\"date-picker__month\">\(htmlEscape(month))</div>"
         html += "<button class=\"date-picker__nav\" aria-label=\"Next\">›</button></div>"
         html += "<div class=\"date-picker__grid\">"
         for wd in weekdays { html += "<div class=\"date-picker__weekday\">\(htmlEscape(wd))</div>" }
-        for day in days {
+        for (i, day) in days.enumerated() {
             var cls = "date-picker__day"
             if day.muted { cls += " date-picker__day--muted" }
             if day.disabled { cls += " date-picker__day--disabled" }
@@ -97,7 +109,8 @@ public struct WebUIDatePicker: View {
             if day.rangeStart { cls += " date-picker__day--range-start" }
             if day.rangeEnd { cls += " date-picker__day--range-end" }
             if day.inRange { cls += " date-picker__day--in-range" }
-            html += "<button class=\"\(cls)\"\(day.disabled ? " disabled" : "")>\(day.num)</button>"
+            let dayID = id.map { " id=\"\(htmlEscape($0))-day-\(i)\"" } ?? ""
+            html += "<button class=\"\(cls)\"\(dayID)\(day.disabled ? " disabled" : "")>\(day.num)</button>"
         }
         html += "</div></div>"
         return html
@@ -110,14 +123,21 @@ public struct WebUITimeZonePicker: View {
     public struct Entry: Sendable { public let city: String; public let offset: String; public let selected: Bool
         public init(_ city: String, offset: String, selected: Bool = false) { self.city = city; self.offset = offset; self.selected = selected } }
     public let entries: [Entry]
-    public init(entries: [Entry]) { self.entries = entries }
+    /// stable component id — the routing anchor; also prefixes child entry ids.
+    public let id: String?
+    public let onSelect: EventHandler?
+    public init(entries: [Entry], id: String? = nil, onSelect: EventHandler? = nil) {
+        self.entries = entries; self.id = id; self.onSelect = onSelect
+    }
 
     public func render() -> String {
-        var html = "<div class=\"tz-picker\">"
+        let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onSelect) } ?? ""
+        var html = "<div class=\"tz-picker\"\(attrs)>"
         html += "<div class=\"tz-picker__search\"><input type=\"search\" placeholder=\"Find a timezone…\"></div>"
         html += "<div class=\"tz-picker__list\">"
-        for e in entries {
-            html += "<div class=\"tz\(e.selected ? " tz--selected" : "")\"><span class=\"tz__city\">\(htmlEscape(e.city))</span><span class=\"tz__offset\">\(htmlEscape(e.offset))</span></div>"
+        for (i, e) in entries.enumerated() {
+            let entryID = id.map { " id=\"\(htmlEscape($0))-tz-\(i)\"" } ?? ""
+            html += "<div class=\"tz\(e.selected ? " tz--selected" : "")\"\(entryID)><span class=\"tz__city\">\(htmlEscape(e.city))</span><span class=\"tz__offset\">\(htmlEscape(e.offset))</span></div>"
         }
         html += "</div></div>"
         return html
@@ -130,14 +150,21 @@ public struct WebUICountryPicker: View {
     public struct Entry: Sendable { public let flag: String; public let name: String; public let code: String; public let offset: String
         public init(flag: String, name: String, code: String, offset: String) { self.flag = flag; self.name = name; self.code = code; self.offset = offset } }
     public let entries: [Entry]
-    public init(entries: [Entry]) { self.entries = entries }
+    /// stable component id — the routing anchor; also prefixes child row ids.
+    public let id: String?
+    public let onSelect: EventHandler?
+    public init(entries: [Entry], id: String? = nil, onSelect: EventHandler? = nil) {
+        self.entries = entries; self.id = id; self.onSelect = onSelect
+    }
 
     public func render() -> String {
-        var html = "<div class=\"country-picker\">"
+        let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onSelect) } ?? ""
+        var html = "<div class=\"country-picker\"\(attrs)>"
         html += "<div class=\"country-picker__search\"><input type=\"search\" placeholder=\"Search countries…\"></div>"
         html += "<div class=\"country-picker__list\">"
-        for e in entries {
-            html += "<div class=\"country-picker__row\"><span class=\"country-picker__flag\">\(htmlEscape(e.flag))</span>"
+        for (i, e) in entries.enumerated() {
+            let rowID = id.map { " id=\"\(htmlEscape($0))-row-\(i)\"" } ?? ""
+            html += "<div class=\"country-picker__row\"\(rowID)><span class=\"country-picker__flag\">\(htmlEscape(e.flag))</span>"
             html += "<span class=\"country-picker__name\">\(htmlEscape(e.name))</span>"
             html += "<span class=\"country-picker__code\">\(htmlEscape(e.code))</span>"
             html += "<span class=\"country-picker__offset\">\(htmlEscape(e.offset))</span></div>"
@@ -408,7 +435,7 @@ public struct WebUIDonut: View {
         for s in slices {
             let start = acc / total * 360.0
             let end = (acc + s.value) / total * 360.0
-            segments.append("\(htmlEscape(s.color)) \(String(format: "%.1f", start))deg \(String(format: "%.1f", end))deg")
+            segments.append("\(htmlEscape(s.color)) \(webuiFixedPoint(start, places: 1))deg \(webuiFixedPoint(end, places: 1))deg")
             acc += s.value
         }
         let conic = "conic-gradient(\(segments.joined(separator: ", ")))"

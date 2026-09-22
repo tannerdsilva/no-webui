@@ -244,7 +244,8 @@ struct AuthServerCeremonyTests {
 			// would exceed the delivered body and the closing tags would be
 			// missing.
 			#expect(dashboard.body.trimmingCharacters(in: .whitespacesAndNewlines).hasSuffix("</html>"))
-			#expect(dashboard.body.contains("WebUIRuntime.init({\"renderToken\""))
+			#expect(dashboard.body.contains("webui-config"))
+			#expect(dashboard.body.contains("renderToken"))
 			#expect(dashboard.header("content-length") == "\(dashboard.body.utf8.count)")
 		}
 	}
@@ -589,8 +590,11 @@ private func readToken(_ socket: RawSocket, timeout: TimeInterval) throws -> Str
 
 /// the per-render websocket token embedded in the bootstrap config.
 private func extractRenderToken(_ body: String) -> String? {
+	// the render token now rides the `webui-config` meta, whose json content
+	// is html-entity-escaped (`&quot;`); decode before matching.
+	let decoded = body.replacingOccurrences(of: "&quot;", with: "\"")
 	let pattern = /"renderToken":"([^"]+)"/
-	guard let match = body.firstMatch(of: pattern) else { return nil }
+	guard let match = decoded.firstMatch(of: pattern) else { return nil }
 	return String(match.1)
 }
 

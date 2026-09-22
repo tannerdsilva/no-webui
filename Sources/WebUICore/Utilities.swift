@@ -1,4 +1,43 @@
-import Foundation
+// MARK: - Foundation-free string helpers
+//
+// stdlib stand-ins for the Foundation APIs this file used (`CharacterSet`-based
+// trimming, `components(separatedBy:)`, `replacingOccurrences(of:with:)`) so the
+// rendering core never links Foundation/ICU. Behaviour matches the Foundation
+// equivalents exactly for the inputs these renderers produce.
+
+/// trims leading/trailing space + tab (U+0020/U+0009) — the same set
+/// `CharacterSet.whitespaces` covers (NOT newlines, matching Foundation).
+func trimmingHTMLWhitespace(_ string: String) -> String {
+    var start = string.startIndex
+    var end = string.endIndex
+    while start < end {
+        let c = string[start]
+        if c == " " || c == "\t" { start = string.index(after: start) } else { break }
+    }
+    while end > start {
+        let prev = string.index(before: end)
+        let c = string[prev]
+        if c == " " || c == "\t" { end = prev } else { break }
+    }
+    return String(string[start..<end])
+}
+
+/// non-overlapping replace-all, matching `String.replacingOccurrences(of:with:)`.
+func replacingAllOccurrences(_ string: String, of target: String, with replacement: String) -> String {
+    guard !target.isEmpty else { return string }
+    var result = ""
+    var index = string.startIndex
+    while index < string.endIndex {
+        guard let found = string[index...].firstRange(of: target) else {
+            result += string[index...]
+            break
+        }
+        result += string[index..<found.lowerBound]
+        result += replacement
+        index = found.upperBound
+    }
+    return result
+}
 
 // MARK: - HTML Escaping
 public func htmlEscape(_ string: String) -> String {
@@ -115,7 +154,7 @@ private func serializeAttr(_ a: ParsedAttr) -> String {
 		if !v.contains("'") {
 			return " \(a.key)='\(v)'"
 		}
-		return " \(a.key)=\"\(v.replacingOccurrences(of: "\"", with: "&quot;"))\""
+		return " \(a.key)=\"\(replacingAllOccurrences(v, of: "\"", with: "&quot;"))\""
 	}
 	if v.contains("'") {
 		return " \(a.key)=\"\(v)\""
@@ -174,8 +213,8 @@ private func parseAttributeString(_ attributes: String) -> [ParsedAttr] {
 /// (CSS drops a declaration when two run together without a separator, so
 /// the join is what keeps both halves of a merged style alive.)
 private func appendStyleDeclaration(existing: String, declaration: String) -> String {
-	let e = existing.trimmingCharacters(in: .whitespaces)
-	let d = declaration.trimmingCharacters(in: .whitespaces)
+	let e = trimmingHTMLWhitespace(existing)
+	let d = trimmingHTMLWhitespace(declaration)
 	if d.isEmpty { return existing }
 	if e.isEmpty { return d }
 	if e.hasSuffix(";") { return e + " " + d }
@@ -301,7 +340,9 @@ public func injectAttributes(into html: String, _ attributes: String) -> String 
 // token is recognized, so raw html in markdown never reaches the document and
 // link targets pass through sanitizeURL. unpaired delimiters render literally.
 public func markdownToHTML(_ markdown: String) -> String {
-	let lines = markdown.components(separatedBy: "\n")
+	// stdlib split keeps empty subsequences exactly like Foundation's
+	// `components(separatedBy:)` (leading/trailing/adjacent separators).
+	let lines = markdown.split(separator: "\n", omittingEmptySubsequences: false).map(String.init)
 	var html: [String] = []
 	html.reserveCapacity(lines.count + 8)
 	var listType: String?
@@ -352,15 +393,15 @@ public func markdownToHTML(_ markdown: String) -> String {
 
 	// a table row is a pipe-delimited line with >= 2 cells (GitHub-style).
 	func tableCells(_ trimmed: String) -> [String]? {
-		let t = trimmed.trimmingCharacters(in: .whitespaces)
+		let t = trimmingHTMLWhitespace(trimmed)
 		guard t.hasPrefix("|") else { return nil }
 		let cells = t.split(separator: "|", omittingEmptySubsequences: true)
-			.map { String($0).trimmingCharacters(in: .whitespaces) }
+			.map { trimmingHTMLWhitespace(String($0)) }
 		return cells.count >= 2 ? cells : nil
 	}
 
 	for rawLine in lines {
-		let trimmed = rawLine.trimmingCharacters(in: .whitespaces)
+		let trimmed = trimmingHTMLWhitespace(rawLine)
 
 		if trimmed.hasPrefix("```") {
 			if codeFence != nil {
@@ -368,7 +409,7 @@ public func markdownToHTML(_ markdown: String) -> String {
 			} else {
 				flushList()
 				flushTable()
-				codeFence = String(trimmed.dropFirst(3)).trimmingCharacters(in: .whitespaces)
+				codeFence = trimmingHTMLWhitespace(String(trimmed.dropFirst(3)))
 				codeLines = []
 			}
 			continue
@@ -426,7 +467,7 @@ private func parseMarkdownHeading(_ trimmed: String) -> String? {
 		idx = trimmed.index(after: idx)
 	}
 	guard level > 0 else { return nil }
-	let text = String(trimmed[idx...]).trimmingCharacters(in: .whitespaces)
+	let text = trimmingHTMLWhitespace(String(trimmed[idx...]))
 	let h = min(level, 6)
 	return "<h\(h)>\(renderInlineMarkdown(text))</h\(h)>"
 }
@@ -442,7 +483,7 @@ private func parseMarkdownListItem(_ trimmed: String) -> (type: String, content:
 		idx = trimmed.index(after: idx)
 	}
 	if digits > 0, idx < trimmed.endIndex, trimmed[idx] == "." || trimmed[idx] == ")" {
-		return ("ol", String(trimmed[trimmed.index(after: idx)...]).trimmingCharacters(in: .whitespaces))
+		return ("ol", trimmingHTMLWhitespace(String(trimmed[trimmed.index(after: idx)...])))
 	}
 	return nil
 }
@@ -472,21 +513,22 @@ private func renderInlineMarkdown(_ text: String) -> String {
 	if inCode { carved += "`" + current }
 
 	var out = wrapMarkdownDelimited(carved, delimiter: "**", open: "<strong>", close: "</strong>")
-	out = out.replacingOccurrences(of: "**", with: "\u{2}")
+	out = replacingAllOccurrences(out, of: "**", with: "\u{2}")
 	out = wrapMarkdownDelimited(out, delimiter: "*", open: "<em>", close: "</em>")
-	out = out.replacingOccurrences(of: "\u{2}", with: "**")
+	out = replacingAllOccurrences(out, of: "\u{2}", with: "**")
 	out = renderMarkdownLinks(out)
 	for (index, span) in codeSpans.enumerated() {
-		out = out.replacingOccurrences(of: "\u{0}\(index)\u{1}", with: "<code>\(span)</code>")
+		out = replacingAllOccurrences(out, of: "\u{0}\(index)\u{1}", with: "<code>\(span)</code>")
 	}
 	return out
 }
 
 private func wrapMarkdownDelimited(_ text: String, delimiter: String, open: String, close: String) -> String {
-	let parts = text.components(separatedBy: delimiter)
+	// stdlib split keeps empty parts exactly like `components(separatedBy:)`;
 	// an odd part count means an even number of delimiters (balanced pairs);
 	// anything else is an unpaired stray and stays literal so the output
 	// never carries an unclosed tag.
+	let parts = text.split(separator: delimiter, omittingEmptySubsequences: false).map(String.init)
 	guard parts.count >= 3, parts.count % 2 == 1 else { return text }
 	var result = parts[0]
 	var closing = false

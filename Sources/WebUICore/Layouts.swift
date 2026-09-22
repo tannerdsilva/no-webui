@@ -1,5 +1,3 @@
-import Foundation
-
 // MARK: - VStack
 public struct VStack: View {
     public let alignment: HorizontalAlignment

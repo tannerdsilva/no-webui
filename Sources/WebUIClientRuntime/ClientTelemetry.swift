@@ -1,4 +1,3 @@
-import Foundation
 import WebUICore
 import Synchronization
 
@@ -90,8 +89,19 @@ extension ObservableEvent {
 	}
 
 	private func escape(_ value: String) -> String {
-		value
-			.replacingOccurrences(of: "\\", with: "\\\\")
-			.replacingOccurrences(of: "\"", with: "\\\"")
+		// hand-rolled (no Foundation on wasm): within an already-escaped
+		// JSONValue string this only needs to protect the backslash and quote.
+		var out = ""
+		out.reserveCapacity(value.count)
+		for ch in value {
+			if ch == "\\" {
+				out += "\\\\"
+			} else if ch == "\"" {
+				out += "\\\""
+			} else {
+				out.append(ch)
+			}
+		}
+		return out
 	}
 }

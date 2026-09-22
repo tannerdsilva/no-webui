@@ -1,4 +1,3 @@
-import Foundation
 import WebUICore
 
 // ============================================================================
@@ -20,21 +19,33 @@ public struct WebUINavbar: View {
     public let links: [Link]
     public let actions: [any View]
     public let sticky: Bool
-
+    /// stable container id; when set with `onNavigate` each link self-wires
+    /// (`targetId == "<id>-link-<index>"`).
+    public let id: String?
+    public let onNavigate: EventHandler?
     public init(brand: String? = nil, links: [Link] = [], sticky: Bool = false,
-                @ViewBuilder actions: () -> [any View] = { [] }) {
-        self.brand = brand; self.links = links; self.sticky = sticky; self.actions = actions()
+                id: String? = nil, onNavigate: EventHandler? = nil,
+                @ViewBuilder actions: () -> [any View]) {
+        self.brand = brand; self.links = links; self.sticky = sticky
+        self.id = id; self.onNavigate = onNavigate; self.actions = actions()
     }
 
     public func render() -> String {
-        var html = "<nav class=\"navbar\(sticky ? " navbar--sticky" : "")\">"
+        let attrs: String
+        if let id, let onNavigate {
+            attrs = controlAttributes(id: id, event: .click, handler: onNavigate)
+        } else {
+            attrs = ""
+        }
+        var html = "<nav class=\"navbar\(sticky ? " navbar--sticky" : "")\"\(attrs)>"
         if let brand {
             html += "<a class=\"navbar__brand\" href=\"/\"><span class=\"navbar__brand-mark\"></span>\(htmlEscape(brand))</a>"
         }
         if !links.isEmpty {
             html += "<div class=\"navbar__links\">"
-            for link in links {
-                html += "<a class=\"navbar__link\(link.active ? " navbar__link--active" : "")\" href=\"\(htmlEscape(link.href))\">\(htmlEscape(link.label))</a>"
+            for (index, link) in links.enumerated() {
+                let linkID = id.map { " id=\"\(htmlEscape("\($0)-link-\(index)"))\"" } ?? ""
+                html += "<a class=\"navbar__link\(link.active ? " navbar__link--active" : "")\"\(linkID) href=\"\(htmlEscape(link.href))\">\(htmlEscape(link.label))</a>"
             }
             html += "</div>"
         }
@@ -61,12 +72,25 @@ public struct WebUIBottomNav: View {
         }
     }
     public let items: [Item]
-    public init(items: [Item]) { self.items = items }
+    /// stable container id; when set with `onSelect` each item self-wires
+    /// (`targetId == "<id>-item-<index>"`).
+    public let id: String?
+    public let onSelect: EventHandler?
+    public init(items: [Item], id: String? = nil, onSelect: EventHandler? = nil) {
+        self.items = items; self.id = id; self.onSelect = onSelect
+    }
 
     public func render() -> String {
-        var html = "<nav class=\"bottom-nav\" aria-label=\"Primary\">"
-        for item in items {
-            html += "<a class=\"bottom-nav__item\(item.active ? " bottom-nav__item--active" : "")\" href=\"#\">"
+        let attrs: String
+        if let id, let onSelect {
+            attrs = controlAttributes(id: id, event: .click, handler: onSelect)
+        } else {
+            attrs = ""
+        }
+        var html = "<nav class=\"bottom-nav\"\(attrs) aria-label=\"Primary\">"
+        for (index, item) in items.enumerated() {
+            let itemID = id.map { " id=\"\(htmlEscape("\($0)-item-\(index)"))\"" } ?? ""
+            html += "<a class=\"bottom-nav__item\(item.active ? " bottom-nav__item--active" : "")\"\(itemID) href=\"#\">"
             html += "<span class=\"bottom-nav__icon\">\(WebUIIcon(item.icon, size: .medium).render())</span>"
             if let badge = item.badge {
                 html += "<span class=\"bottom-nav__badge\">\(htmlEscape(badge))</span>"
@@ -93,18 +117,20 @@ public struct WebUIFab: View {
     public let size: Size
     public let extended: Bool
     public let id: String?
-
+    public let onTap: EventHandler?
     public init(_ label: String? = nil, icon: IconName, variant: Variant = .primary,
-                size: Size = .md, extended: Bool = false, id: String? = nil) {
+                size: Size = .md, extended: Bool = false, id: String? = nil, onTap: EventHandler? = nil) {
         self.label = label; self.icon = icon; self.variant = variant
-        self.size = size; self.extended = extended; self.id = id
+        self.size = size; self.extended = extended; self.id = id; self.onTap = onTap
     }
 
     public func render() -> String {
         var classes = "fab\(variant.rawValue)\(size.rawValue)"
         if extended { classes += " fab--extended" }
+        let tapAttrs = id.map { controlAttributes(id: $0, event: .click, handler: onTap) } ?? ""
         var html = "<button class=\"\(classes)\""
         if let id { html += " id=\"\(htmlEscape(id))\"" }
+        html += "\(tapAttrs)"
         html += " aria-label=\"\(htmlEscape(label ?? ""))\">"
         html += "<span class=\"fab__icon\">\(WebUIIcon(icon, size: .medium).render())</span>"
         if let label {
@@ -223,17 +249,26 @@ public struct WebUISplitButton: View {
     public let label: String
     public let caret: Bool
     public let id: String?
-    public init(_ label: String, caret: Bool = true, id: String? = nil) {
-        self.label = label; self.caret = caret; self.id = id
+    /// handler for main/caret clicks; the main button carries `id + "-main"`,
+    /// the caret carries `id + "-caret"` (`event.data["targetId"]`).
+    public let onSelect: EventHandler?
+    public init(_ label: String, caret: Bool = true, id: String? = nil, onSelect: EventHandler? = nil) {
+        self.label = label; self.caret = caret; self.id = id; self.onSelect = onSelect
     }
 
     public func render() -> String {
-        var html = "<div class=\"split-button\">"
-        html += "<button class=\"button button--primary\""
-        if let id { html += " id=\"\(htmlEscape(id))\"" }
-        html += ">\(htmlEscape(label))</button>"
+        let attrs: String
+        if let id, let onSelect {
+            attrs = controlAttributes(id: id, event: .click, handler: onSelect)
+        } else {
+            attrs = ""
+        }
+        var html = "<div class=\"split-button\"\(attrs)>"
+        let mainID = id.map { " id=\"\(htmlEscape("\($0)-main"))\"" } ?? ""
+        html += "<button class=\"button button--primary\"\(mainID)>\(htmlEscape(label))</button>"
         if caret {
-            html += "<button class=\"button button--primary button--caret\" aria-label=\"Options\">▾</button>"
+            let caretID = id.map { " id=\"\(htmlEscape("\($0)-caret"))\"" } ?? ""
+            html += "<button class=\"button button--primary button--caret\"\(caretID) aria-label=\"Options\">▾</button>"
         }
         html += "</div>"
         return html
@@ -288,13 +323,27 @@ public struct WebUIAccordion: View {
     }
     public let items: [Item]
     public let variant: Variant
-    public init(items: [Item], variant: Variant = .default_) { self.items = items; self.variant = variant }
+    /// stable container id. when set alongside `onToggle`, the accordion
+    /// self-wires its item headers (dispatch on `event.string("targetId")`).
+    public let id: String?
+    /// handler for item toggles; each header carries `id + "-item-<index>"`.
+    public let onToggle: EventHandler?
+    public init(items: [Item], variant: Variant = .default_, id: String? = nil, onToggle: EventHandler? = nil) {
+        self.items = items; self.variant = variant; self.id = id; self.onToggle = onToggle
+    }
 
     public func render() -> String {
-        var html = "<div class=\"accordion\(variant.rawValue)\">"
-        for item in items {
+        let attrs: String
+        if let id, let onToggle {
+            attrs = controlAttributes(id: id, event: .click, handler: onToggle)
+        } else {
+            attrs = ""
+        }
+        var html = "<div class=\"accordion\(variant.rawValue)\"\(attrs)>"
+        for (index, item) in items.enumerated() {
             html += "<div class=\"accordion__item\(item.open ? " accordion__item--open" : "")\">"
-            html += "<button class=\"accordion__header\" aria-expanded=\"\(item.open)\"><span class=\"accordion__chevron\"></span>\(htmlEscape(item.title))</button>"
+            let headerID = id.map { " id=\"\(htmlEscape("\($0)-item-\(index)"))\"" } ?? ""
+            html += "<button class=\"accordion__header\"\(headerID) aria-expanded=\"\(item.open)\"><span class=\"accordion__chevron\"></span>\(htmlEscape(item.title))</button>"
             html += "<div class=\"accordion__body\">\(item.children)</div>"
             html += "</div>"
         }
@@ -309,13 +358,25 @@ public struct WebUICollapse: View {
     public let header: String
     public let open: Bool
     public let children: [any View]
-    public init(_ header: String, open: Bool = false, @ViewBuilder content: () -> [any View]) {
-        self.header = header; self.open = open; self.children = content()
+    /// stable container id. when set alongside `onToggle`, the collapse
+    /// self-wires its header toggle.
+    public let id: String?
+    public let onToggle: EventHandler?
+    public init(_ header: String, open: Bool = false, id: String? = nil, onToggle: EventHandler? = nil,
+                @ViewBuilder content: () -> [any View]) {
+        self.header = header; self.open = open; self.id = id; self.onToggle = onToggle; self.children = content()
     }
 
     public func render() -> String {
-        var html = "<div class=\"collapse\(open ? " collapse--open" : "")\">"
-        html += "<button class=\"collapse__header\" aria-expanded=\"\(open)\"><span class=\"collapse__chevron\"></span>\(htmlEscape(header))</button>"
+        let attrs: String
+        if let id, let onToggle {
+            attrs = controlAttributes(id: id, event: .click, handler: onToggle)
+        } else {
+            attrs = ""
+        }
+        var html = "<div class=\"collapse\(open ? " collapse--open" : "")\"\(attrs)>"
+        let headerID = id.map { " id=\"\(htmlEscape($0))\"" } ?? ""
+        html += "<button class=\"collapse__header\"\(headerID) aria-expanded=\"\(open)\"><span class=\"collapse__chevron\"></span>\(htmlEscape(header))</button>"
         html += "<div class=\"collapse__content\"><div class=\"collapse__inner\">"
         for c in children { html += c.render() }
         html += "</div></div></div>"
@@ -335,20 +396,34 @@ public struct WebUIActionSheet: View {
     public let sub: String?
     public let actions: [Action]
     public let cancel: String
-    public init(title: String? = nil, sub: String? = nil, actions: [Action], cancel: String = "Cancel") {
+    /// stable container id; when set with `onSelect` the root self-wires and
+    /// each action carries `id + "-item-<index>"`, the cancel row `id + "-cancel"`.
+    public let id: String?
+    public let onSelect: EventHandler?
+    public init(title: String? = nil, sub: String? = nil, actions: [Action], cancel: String = "Cancel",
+                id: String? = nil, onSelect: EventHandler? = nil) {
         self.title = title; self.sub = sub; self.actions = actions; self.cancel = cancel
+        self.id = id; self.onSelect = onSelect
     }
 
     public func render() -> String {
-        var html = "<div class=\"action-sheet\" role=\"menu\">"
+        let attrs: String
+        if let id, let onSelect {
+            attrs = controlAttributes(id: id, event: .click, handler: onSelect)
+        } else {
+            attrs = ""
+        }
+        var html = "<div class=\"action-sheet\"\(attrs) role=\"menu\">"
         if let title { html += "<div class=\"action-sheet__header\"><div class=\"action-sheet__title\">\(htmlEscape(title))</div>" }
         if let sub { html += "<div class=\"action-sheet__sub\">\(htmlEscape(sub))</div>" }
         if title != nil { html += "</div>" }
-        for action in actions {
-            html += "<button class=\"action-sheet__item\(action.destructive ? " action-sheet__item--destructive" : "")\" role=\"menuitem\">\(htmlEscape(action.label))</button>"
+        for (index, action) in actions.enumerated() {
+            let itemID = id.map { " id=\"\(htmlEscape("\($0)-item-\(index)"))\"" } ?? ""
+            html += "<button class=\"action-sheet__item\(action.destructive ? " action-sheet__item--destructive" : "")\"\(itemID) role=\"menuitem\">\(htmlEscape(action.label))</button>"
         }
         html += "<div class=\"action-sheet__divider\"></div>"
-        html += "<button class=\"action-sheet__cancel\">\(htmlEscape(cancel))</button>"
+        let cancelID = id.map { " id=\"\(htmlEscape("\($0)-cancel"))\"" } ?? ""
+        html += "<button class=\"action-sheet__cancel\"\(cancelID)>\(htmlEscape(cancel))</button>"
         html += "</div>"
         return html
     }
@@ -362,16 +437,28 @@ public struct WebUIBottomSheet: View {
     public let children: [any View]
     public let footer: [any View]
     public let variant: Variant
-    public init(title: String? = nil, variant: Variant = .half,
+    /// stable container id; when set with `onDismiss` the close button
+    /// self-wires (`targetId == "<id>-close"`).
+    public let id: String?
+    public let onDismiss: EventHandler?
+    public init(title: String? = nil, variant: Variant = .half, id: String? = nil, onDismiss: EventHandler? = nil,
                 @ViewBuilder content: () -> [any View], @ViewBuilder footer: () -> [any View] = { [] }) {
-        self.title = title; self.variant = variant; self.children = content(); self.footer = footer()
+        self.title = title; self.variant = variant; self.id = id; self.onDismiss = onDismiss
+        self.children = content(); self.footer = footer()
     }
 
     public func render() -> String {
-        var html = "<div class=\"bottom-sheet\(variant.rawValue)\" role=\"dialog\" aria-modal=\"true\">"
+        let attrs: String
+        if let id, let onDismiss {
+            attrs = controlAttributes(id: id, event: .click, handler: onDismiss)
+        } else {
+            attrs = ""
+        }
+        var html = "<div class=\"bottom-sheet\(variant.rawValue)\"\(attrs) role=\"dialog\" aria-modal=\"true\">"
         html += "<div class=\"bottom-sheet__handle\"></div>"
         if let title {
-            html += "<div class=\"bottom-sheet__header\"><div class=\"bottom-sheet__title\">\(htmlEscape(title))</div><button class=\"bottom-sheet__close\" aria-label=\"Close\">×</button></div>"
+            let closeID = id.map { " id=\"\(htmlEscape("\($0)-close"))\"" } ?? ""
+            html += "<div class=\"bottom-sheet__header\"><div class=\"bottom-sheet__title\">\(htmlEscape(title))</div><button class=\"bottom-sheet__close\"\(closeID) aria-label=\"Close\">×</button></div>"
         }
         html += "<div class=\"bottom-sheet__body\">"
         for c in children { html += c.render() }
@@ -396,16 +483,28 @@ public struct WebUIDrawer: View {
     public let size: Size
     public let children: [any View]
     public let footer: [any View]
-    public init(title: String? = nil, edge: Edge = .right, size: Size = .md,
+    /// stable container id; when set with `onDismiss` the close button
+    /// self-wires (`targetId == "<id>-close"`).
+    public let id: String?
+    public let onDismiss: EventHandler?
+    public init(title: String? = nil, edge: Edge = .right, size: Size = .md, id: String? = nil, onDismiss: EventHandler? = nil,
                 @ViewBuilder content: () -> [any View], @ViewBuilder footer: () -> [any View] = { [] }) {
-        self.title = title; self.edge = edge; self.size = size; self.children = content(); self.footer = footer()
+        self.title = title; self.edge = edge; self.size = size; self.id = id; self.onDismiss = onDismiss
+        self.children = content(); self.footer = footer()
     }
 
     public func render() -> String {
-        var html = "<div class=\"drawer\(edge.rawValue)\(size.rawValue)\" role=\"dialog\" aria-modal=\"true\">"
+        let attrs: String
+        if let id, let onDismiss {
+            attrs = controlAttributes(id: id, event: .click, handler: onDismiss)
+        } else {
+            attrs = ""
+        }
+        var html = "<div class=\"drawer\(edge.rawValue)\(size.rawValue)\"\(attrs) role=\"dialog\" aria-modal=\"true\">"
         html += "<div class=\"drawer__panel\">"
         if let title {
-            html += "<div class=\"drawer__header\"><div class=\"drawer__title\">\(htmlEscape(title))</div><button class=\"drawer__close\" aria-label=\"Close\">×</button></div>"
+            let closeID = id.map { " id=\"\(htmlEscape("\($0)-close"))\"" } ?? ""
+            html += "<div class=\"drawer__header\"><div class=\"drawer__title\">\(htmlEscape(title))</div><button class=\"drawer__close\"\(closeID) aria-label=\"Close\">×</button></div>"
         }
         html += "<div class=\"drawer__content\">"
         for c in children { html += c.render() }
@@ -517,18 +616,33 @@ public struct WebUILightbox: View {
     public let image: String
     public let caption: String?
     public let count: String?
-    public init(image: String, caption: String? = nil, count: String? = nil) {
+    /// stable container id; when set with `onNavigate` the prev/next/close
+    /// tools self-wire (`"<id>-prev"`, `"<id>-next"`, `"<id>-close"`).
+    public let id: String?
+    public let onNavigate: EventHandler?
+    public init(image: String, caption: String? = nil, count: String? = nil,
+                id: String? = nil, onNavigate: EventHandler? = nil) {
         self.image = image; self.caption = caption; self.count = count
+        self.id = id; self.onNavigate = onNavigate
     }
 
     public func render() -> String {
-        var html = "<div class=\"lightbox\" role=\"dialog\" aria-modal=\"true\">"
+        let attrs: String
+        if let id, let onNavigate {
+            attrs = controlAttributes(id: id, event: .click, handler: onNavigate)
+        } else {
+            attrs = ""
+        }
+        var html = "<div class=\"lightbox\"\(attrs) role=\"dialog\" aria-modal=\"true\">"
         html += "<div class=\"lightbox__stage\"><img class=\"lightbox__img\" src=\"\(htmlEscape(image))\" alt=\"\(htmlEscape(caption ?? ""))\"></div>"
         html += "<div class=\"lightbox__toolbar\">"
         if let count { html += "<div class=\"lightbox__counter\">\(htmlEscape(count))</div>" }
-        html += "<button class=\"lightbox__tool\" aria-label=\"Previous\">‹</button>"
-        html += "<button class=\"lightbox__tool\" aria-label=\"Next\">›</button>"
-        html += "<button class=\"lightbox__close\" aria-label=\"Close\">×</button>"
+        let prevID = id.map { " id=\"\(htmlEscape("\($0)-prev"))\"" } ?? ""
+        let nextID = id.map { " id=\"\(htmlEscape("\($0)-next"))\"" } ?? ""
+        let closeID = id.map { " id=\"\(htmlEscape("\($0)-close"))\"" } ?? ""
+        html += "<button class=\"lightbox__tool\"\(prevID) aria-label=\"Previous\">‹</button>"
+        html += "<button class=\"lightbox__tool\"\(nextID) aria-label=\"Next\">›</button>"
+        html += "<button class=\"lightbox__close\"\(closeID) aria-label=\"Close\">×</button>"
         html += "</div>"
         if let caption { html += "<div class=\"lightbox__caption\">\(htmlEscape(caption))</div>" }
         html += "</div>"
@@ -552,14 +666,27 @@ public struct WebUIMenu: View {
         }
     }
     public let items: [Item]
-    public init(items: [Item]) { self.items = items }
+    /// stable container id; when set with `onSelect` each item self-wires
+    /// (`targetId == "<id>-item-<index>"`).
+    public let id: String?
+    public let onSelect: EventHandler?
+    public init(items: [Item], id: String? = nil, onSelect: EventHandler? = nil) {
+        self.items = items; self.id = id; self.onSelect = onSelect
+    }
 
     public func render() -> String {
-        var html = "<div class=\"menu\" role=\"menu\">"
-        for item in items {
+        let attrs: String
+        if let id, let onSelect {
+            attrs = controlAttributes(id: id, event: .click, handler: onSelect)
+        } else {
+            attrs = ""
+        }
+        var html = "<div class=\"menu\"\(attrs) role=\"menu\">"
+        for (index, item) in items.enumerated() {
             var cls = "menu__item"
             if item.destructive { cls += " menu__item--destructive" }
-            html += "<button class=\"\(cls)\" role=\"menuitem\"\(item.disabled ? " disabled" : "")>"
+            let itemID = id.map { " id=\"\(htmlEscape("\($0)-item-\(index)"))\"" } ?? ""
+            html += "<button class=\"\(cls)\"\(itemID) role=\"menuitem\"\(item.disabled ? " disabled" : "")>"
             if let icon = item.icon { html += "<span class=\"menu__icon\">\(WebUIIcon(icon, size: .small).render())</span>" }
             html += "<span class=\"menu__label\">\(htmlEscape(item.label))</span>"
             if let shortcut = item.shortcut { html += "<span class=\"menu__shortcut\">\(htmlEscape(shortcut))</span>" }
@@ -574,11 +701,17 @@ public struct WebUIMenu: View {
 /// a right-click context menu (a .menu with the context modifier).
 public struct WebUIContextMenu: View {
     public let items: [WebUIMenu.Item]
-    public init(items: [WebUIMenu.Item]) { self.items = items }
+    /// stable container id; when set with `onSelect` the inner menu self-wires
+    /// each item (`targetId == "<id>-item-<index>"`).
+    public let id: String?
+    public let onSelect: EventHandler?
+    public init(items: [WebUIMenu.Item], id: String? = nil, onSelect: EventHandler? = nil) {
+        self.items = items; self.id = id; self.onSelect = onSelect
+    }
 
     public func render() -> String {
         var html = "<div class=\"context-menu\">"
-        let menu = WebUIMenu(items: items).render()
+        let menu = WebUIMenu(items: items, id: id, onSelect: onSelect).render()
         html += menu
         html += "</div>"
         return html
@@ -590,13 +723,25 @@ public struct WebUIContextMenu: View {
 public struct WebUIDropdown: View {
     public let trigger: String
     public let children: [any View]
-    public init(_ trigger: String, @ViewBuilder content: () -> [any View] = { [] }) {
-        self.trigger = trigger; self.children = content()
+    /// stable container id; when set with `onSelect` the root self-wires and
+    /// the trigger button carries `id + "-trigger"`.
+    public let id: String?
+    public let onSelect: EventHandler?
+    public init(_ trigger: String, id: String? = nil, onSelect: EventHandler? = nil,
+                @ViewBuilder content: () -> [any View]) {
+        self.trigger = trigger; self.id = id; self.onSelect = onSelect; self.children = content()
     }
 
     public func render() -> String {
-        var html = "<div class=\"dropdown\">"
-        html += "<button class=\"dropdown__trigger\">\(htmlEscape(trigger))<span class=\"dropdown__chevron\">▾</span></button>"
+        let attrs: String
+        if let id, let onSelect {
+            attrs = controlAttributes(id: id, event: .click, handler: onSelect)
+        } else {
+            attrs = ""
+        }
+        var html = "<div class=\"dropdown\"\(attrs)>"
+        let triggerID = id.map { " id=\"\(htmlEscape("\($0)-trigger"))\"" } ?? ""
+        html += "<button class=\"dropdown__trigger\"\(triggerID)>\(htmlEscape(trigger))<span class=\"dropdown__chevron\">▾</span></button>"
         html += "<div class=\"dropdown__panel\">"
         for c in children { html += c.render() }
         html += "</div></div>"
@@ -618,21 +763,34 @@ public struct WebUIComboBox: View {
     public let placeholder: String
     public let options: [Option]
     public let emptyMessage: String
-    public init(placeholder: String = "", options: [Option], emptyMessage: String = "No matches") {
+    /// stable container id; when set with `onChange` each option self-wires
+    /// (`targetId == "<id>-opt-<index>"`).
+    public let id: String?
+    public let onChange: EventHandler?
+    public init(placeholder: String = "", options: [Option], emptyMessage: String = "No matches",
+                id: String? = nil, onChange: EventHandler? = nil) {
         self.placeholder = placeholder; self.options = options; self.emptyMessage = emptyMessage
+        self.id = id; self.onChange = onChange
     }
 
     public func render() -> String {
-        var html = "<div class=\"combo\">"
+        let attrs: String
+        if let id, let onChange {
+            attrs = controlAttributes(id: id, event: .click, handler: onChange)
+        } else {
+            attrs = ""
+        }
+        var html = "<div class=\"combo\"\(attrs)>"
         html += "<div class=\"combo__input\"><input type=\"text\" placeholder=\"\(htmlEscape(placeholder))\"><span class=\"dropdown__chevron\">▾</span></div>"
         html += "<div class=\"combo__panel\">"
         if options.isEmpty {
             html += "<div class=\"combo__empty\">\(htmlEscape(emptyMessage))</div>"
         }
-        for option in options {
+        for (index, option) in options.enumerated() {
             var cls = "combo__option"
             if option.selected { cls += " combo__option--selected" }
-            html += "<div class=\"\(cls)\" role=\"option\" aria-selected=\"\(option.selected)\">\(htmlEscape(option.label))</div>"
+            let optID = id.map { " id=\"\(htmlEscape("\($0)-opt-\(index)"))\"" } ?? ""
+            html += "<div class=\"\(cls)\"\(optID) role=\"option\" aria-selected=\"\(option.selected)\">\(htmlEscape(option.label))</div>"
         }
         html += "</div></div>"
         return html
@@ -653,22 +811,37 @@ public struct WebUICommandPalette: View {
     public let commands: [Command]
     public let placeholder: String
     public let footer: String?
-    public init(commands: [Command], placeholder: String = "Type a command…", footer: String? = nil) {
+    /// stable container id; when set with `onSelect` each command self-wires
+    /// (`targetId == "<id>-cmd-<index>"`).
+    public let id: String?
+    public let onSelect: EventHandler?
+    public init(commands: [Command], placeholder: String = "Type a command…", footer: String? = nil,
+                id: String? = nil, onSelect: EventHandler? = nil) {
         self.commands = commands; self.placeholder = placeholder; self.footer = footer
+        self.id = id; self.onSelect = onSelect
     }
 
     public func render() -> String {
-        var html = "<div class=\"command-palette\" role=\"dialog\" aria-modal=\"true\">"
+        let attrs: String
+        if let id, let onSelect {
+            attrs = controlAttributes(id: id, event: .click, handler: onSelect)
+        } else {
+            attrs = ""
+        }
+        var html = "<div class=\"command-palette\"\(attrs) role=\"dialog\" aria-modal=\"true\">"
         html += "<div class=\"command-palette__input\"><input type=\"text\" placeholder=\"\(htmlEscape(placeholder))\"></div>"
         html += "<div class=\"command-palette__results\">"
         let groupsOrdered = commands.map(\.group).filter { !$0.isEmpty }.uniquePreservingOrder
+        var cmdIndex = 0
         for group in groupsOrdered {
             html += "<div class=\"command-palette__group\"><div class=\"command-palette__group-label\">\(htmlEscape(group))</div>"
             for c in commands where c.group == group {
-                html += "<div class=\"command-palette__item\">"
+                let cmdID = id.map { " id=\"\(htmlEscape("\($0)-cmd-\(cmdIndex)"))\"" } ?? ""
+                html += "<div class=\"command-palette__item\"\(cmdID)>"
                 html += "<span class=\"command-palette__item-label\">\(htmlEscape(c.label))</span>"
                 if let sc = c.shortcut { html += "<kbd>\(htmlEscape(sc))</kbd>" }
                 html += "</div>"
+                cmdIndex += 1
             }
             html += "</div>"
         }

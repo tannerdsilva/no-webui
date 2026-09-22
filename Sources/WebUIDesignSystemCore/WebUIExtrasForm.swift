@@ -1,4 +1,3 @@
-import Foundation
 import WebUICore
 
 // ============================================================================
@@ -17,18 +16,27 @@ public struct WebUISlider: View {
     public let showLabels: Bool
     public let minLabel: String
     public let maxLabel: String
+    /// stable id; when set with `onChange` the range input self-wires
+    /// (`targetId == "<id>-input"`, event `.input`).
+    public let id: String?
+    public let onChange: EventHandler?
     public init(_ value: Double, min: Double = 0, max: Double = 100, size: Size = .md,
-                vertical: Bool = false, showLabels: Bool = false, minLabel: String = "", maxLabel: String = "") {
+                vertical: Bool = false, showLabels: Bool = false, minLabel: String = "", maxLabel: String = "",
+                id: String? = nil, onChange: EventHandler? = nil) {
         self.value = value; self.min = min; self.max = max; self.size = size
         self.vertical = vertical; self.showLabels = showLabels; self.minLabel = minLabel; self.maxLabel = maxLabel
+        self.id = id; self.onChange = onChange
     }
 
     public func render() -> String {
         let range = Swift.max(self.max - self.min, 1e-9)
         let pct = Swift.min(Swift.max((self.max - self.min) / range * 100.0, 0), 100)
+        let inputID = id.map { htmlEscape("\($0)-input") } ?? ""
+        let inputAttrs = id.map { controlAttributes(id: "\($0)-input", event: .input, handler: onChange) } ?? ""
+        let idAttr = inputID.isEmpty ? "" : " id=\"\(inputID)\""
         var html = "<div class=\"slider\(size.rawValue)\(vertical ? " slider--vertical" : "")\">"
-        html += "<input type=\"range\" class=\"slider__input\" min=\"\(min)\" max=\"\(max)\" value=\"\(value)\" aria-valuenow=\"\(value)\" style=\"display:none\">"
-        html += "<div class=\"slider__track\"><div class=\"slider__fill\" style=\"width:\(String(format: "%.2f", pct))%\"></div><span class=\"slider__thumb\" style=\"left:\(String(format: "%.2f", pct))%\"></span></div>"
+        html += "<input type=\"range\" class=\"slider__input\"\(idAttr) min=\"\(min)\" max=\"\(max)\" value=\"\(value)\" aria-valuenow=\"\(value)\"\(inputAttrs)>"
+        html += "<div class=\"slider__track\"><div class=\"slider__fill\" style=\"width:\(webuiFixedPoint(pct, places: 2))%\"></div><span class=\"slider__thumb\" style=\"left:\(webuiFixedPoint(pct, places: 2))%\"></span></div>"
         html += "<div class=\"slider__ticks\">"
         for _ in 0..<11 { html += "<span class=\"slider__tick\"></span>" }
         html += "</div>"
@@ -50,10 +58,16 @@ public struct WebUIToggle: View {
     public let labelLeft: Bool
     public let loading: Bool
     public let disabled: Bool
+    /// stable id; when set with `onChange` the checkbox input self-wires
+    /// (`targetId == "<id>-input"`, event `.change`).
+    public let id: String?
+    public let onChange: EventHandler?
     public init(_ label: String = "", checked: Bool = false, size: Size = .md,
-                labelLeft: Bool = false, loading: Bool = false, disabled: Bool = false) {
+                labelLeft: Bool = false, loading: Bool = false, disabled: Bool = false,
+                id: String? = nil, onChange: EventHandler? = nil) {
         self.label = label; self.checked = checked; self.size = size
         self.labelLeft = labelLeft; self.loading = loading; self.disabled = disabled
+        self.id = id; self.onChange = onChange
     }
 
     public func render() -> String {
@@ -61,9 +75,12 @@ public struct WebUIToggle: View {
         if labelLeft { classes += " toggle--label-left" }
         if loading { classes += " toggle--loading" }
         if disabled { classes += " toggle--disabled" }
+        let inputID = id.map { htmlEscape("\($0)-input") } ?? ""
+        let inputAttrs = id.map { controlAttributes(id: "\($0)-input", event: .change, handler: onChange) } ?? ""
+        let idAttr = inputID.isEmpty ? "" : " id=\"\(inputID)\""
         var html = "<label class=\"\(classes)\">"
         if labelLeft && !label.isEmpty { html += "<span class=\"toggle__label\">\(htmlEscape(label))</span>" }
-        html += "<input type=\"checkbox\" class=\"toggle__input\"\(checked ? " checked" : "")\(disabled ? " disabled" : "")>"
+        html += "<input type=\"checkbox\" class=\"toggle__input\"\(idAttr)\(checked ? " checked" : "")\(disabled ? " disabled" : "")\(inputAttrs)>"
         html += "<span class=\"toggle__track\"><span class=\"toggle__thumb\"></span></span>"
         if !labelLeft && !label.isEmpty { html += "<span class=\"toggle__label\">\(htmlEscape(label))</span>" }
         html += "</label>"
@@ -77,13 +94,27 @@ public struct WebUIStepper: View {
     public enum Size: String, Sendable { case sm = " stepper--sm", md = "", lg = " stepper--lg" }
     public let value: Int
     public let size: Size
-    public init(_ value: Int, size: Size = .md) { self.value = value; self.size = size }
+    /// stable container id; when set with `onChange` the +/− buttons
+    /// self-wire (`targetId == "<id>-inc" | "<id>-dec"`).
+    public let id: String?
+    public let onChange: EventHandler?
+    public init(_ value: Int, size: Size = .md, id: String? = nil, onChange: EventHandler? = nil) {
+        self.value = value; self.size = size; self.id = id; self.onChange = onChange
+    }
 
     public func render() -> String {
-        var html = "<div class=\"stepper\(size.rawValue)\" role=\"group\" aria-label=\"Stepper\">"
-        html += "<button class=\"stepper__btn\" aria-label=\"Decrease\">−</button>"
+        let attrs: String
+        if let id, let onChange {
+            attrs = controlAttributes(id: id, event: .click, handler: onChange)
+        } else {
+            attrs = ""
+        }
+        let decID = id.map { " id=\"\(htmlEscape("\($0)-dec"))\"" } ?? ""
+        let incID = id.map { " id=\"\(htmlEscape("\($0)-inc"))\"" } ?? ""
+        var html = "<div class=\"stepper\(size.rawValue)\"\(attrs) role=\"group\" aria-label=\"Stepper\">"
+        html += "<button class=\"stepper__btn\"\(decID) aria-label=\"Decrease\">−</button>"
         html += "<span class=\"stepper__value\">\(value)</span>"
-        html += "<button class=\"stepper__btn\" aria-label=\"Increase\">+</button>"
+        html += "<button class=\"stepper__btn\"\(incID) aria-label=\"Increase\">+</button>"
         html += "</div>"
         return html
     }
@@ -97,15 +128,23 @@ public struct WebUIOTP: View {
     public let value: [Int]?
     public let size: Size
     public let error: Bool
-    public init(length: Int = 6, value: [Int]? = nil, size: Size = .md, error: Bool = false) {
+    /// stable id; when set with `onChange` each digit cell self-wires
+    /// (`targetId == "<id>-cell-<index>"`, event `.input`).
+    public let id: String?
+    public let onChange: EventHandler?
+    public init(length: Int = 6, value: [Int]? = nil, size: Size = .md, error: Bool = false,
+                id: String? = nil, onChange: EventHandler? = nil) {
         self.length = length; self.value = value; self.size = size; self.error = error
+        self.id = id; self.onChange = onChange
     }
 
     public func render() -> String {
         var html = "<div class=\"otp\(size.rawValue)\(error ? " otp--error" : "")\" aria-label=\"One-time code\">"
         for i in 0..<length {
             let filled = (value != nil && i < value!.count)
-            html += "<input class=\"otp__cell\(filled ? " otp__cell--filled" : "")\(i == (value?.count ?? 0) ? " otp__cell--active" : "")\" type=\"text\" inputmode=\"numeric\" maxlength=\"1\" value=\"\(filled ? "\(value![i])" : "")\" aria-label=\"Digit \(i + 1)\">"
+            let cellID = id.map { " id=\"\(htmlEscape("\($0)-cell-\(i)"))\"" } ?? ""
+            let cellAttrs = id.map { controlAttributes(id: "\($0)-cell-\(i)", event: .input, handler: onChange) } ?? ""
+            html += "<input class=\"otp__cell\(filled ? " otp__cell--filled" : "")\(i == (value?.count ?? 0) ? " otp__cell--active" : "")\"\(cellID) type=\"text\" inputmode=\"numeric\" maxlength=\"1\" value=\"\(filled ? "\(value![i])" : "")\" aria-label=\"Digit \(i + 1)\"\(cellAttrs)>"
         }
         html += "</div>"
         return html
@@ -148,20 +187,30 @@ public struct WebUIRecurrence: View {
         public init(_ label: String, active: Bool = false) { self.label = label; self.active = active } }
     public let options: [Option]
     public let days: [String]
-    public init(options: [Option], days: [String] = ["M", "T", "W", "T", "F", "S", "S"]) {
+    /// stable id; when set with `onChange` the root div self-wires
+    /// (`targetId == "<id>"`, event `.click`); each chip gets
+    /// `id == "<id>-chip-<index>"` and each day `id == "<id>-day-<index>"`.
+    public let id: String?
+    public let onChange: EventHandler?
+    public init(options: [Option], days: [String] = ["M", "T", "W", "T", "F", "S", "S"],
+                id: String? = nil, onChange: EventHandler? = nil) {
         self.options = options; self.days = days
+        self.id = id; self.onChange = onChange
     }
 
     public func render() -> String {
-        var html = "<div class=\"recurrence\">"
+        let rootAttrs = id.map { controlAttributes(id: $0, event: .click, handler: onChange) } ?? ""
+        var html = "<div class=\"recurrence\"\(rootAttrs)>"
         html += "<div class=\"recurrence__options\">"
-        for opt in options {
-            html += "<button class=\"recurrence__chip\(opt.active ? " recurrence__chip--active" : "")\">\(htmlEscape(opt.label))</button>"
+        for (i, opt) in options.enumerated() {
+            let chipID = id.map { " id=\"\(htmlEscape("\($0)-chip-\(i)"))\"" } ?? ""
+            html += "<button class=\"recurrence__chip\(opt.active ? " recurrence__chip--active" : "")\"\(chipID)>\(htmlEscape(opt.label))</button>"
         }
         html += "</div>"
         html += "<div class=\"recurrence__days\">"
         for (i, d) in days.enumerated() {
-            html += "<button class=\"recurrence__day\(i < 5 ? " recurrence__day--active" : "")\">\(htmlEscape(d))</button>"
+            let dayID = id.map { " id=\"\(htmlEscape("\($0)-day-\(i)"))\"" } ?? ""
+            html += "<button class=\"recurrence__day\(i < 5 ? " recurrence__day--active" : "")\"\(dayID)>\(htmlEscape(d))</button>"
         }
         html += "</div></div>"
         return html
@@ -175,11 +224,21 @@ public struct WebUIMultiSelect: View {
         public init(_ label: String, selected: Bool = false) { self.label = label; self.selected = selected } }
     public let options: [Option]
     public let placeholder: String
-    public init(options: [Option], placeholder: String = "Select…") { self.options = options; self.placeholder = placeholder }
+    /// stable id; when set with `onChange` the root div self-wires
+    /// (`targetId == "<id>"`, event `.click`); each option gets
+    /// `id == "<id>-opt-<index>"`.
+    public let id: String?
+    public let onChange: EventHandler?
+    public init(options: [Option], placeholder: String = "Select…",
+                id: String? = nil, onChange: EventHandler? = nil) {
+        self.options = options; self.placeholder = placeholder
+        self.id = id; self.onChange = onChange
+    }
 
     public func render() -> String {
         let sel = options.filter(\.selected)
-        var html = "<div class=\"multiselect\">"
+        let rootAttrs = id.map { controlAttributes(id: $0, event: .click, handler: onChange) } ?? ""
+        var html = "<div class=\"multiselect\"\(rootAttrs)>"
         html += "<button class=\"multiselect__trigger\">"
         if sel.isEmpty {
             html += "<span class=\"multiselect__placeholder\">\(htmlEscape(placeholder))</span>"
@@ -189,8 +248,9 @@ public struct WebUIMultiSelect: View {
         }
         html += "<span class=\"multiselect__chevron\">▾</span></button>"
         html += "<div class=\"multiselect__panel\"><div class=\"multiselect__search\"><input type=\"search\" placeholder=\"Filter…\"></div>"
-        for option in options {
-            html += "<div class=\"multiselect__option\(option.selected ? " multiselect__option--selected" : "")\">\(htmlEscape(option.label))</div>"
+        for (i, option) in options.enumerated() {
+            let optID = id.map { " id=\"\(htmlEscape("\($0)-opt-\(i)"))\"" } ?? ""
+            html += "<div class=\"multiselect__option\(option.selected ? " multiselect__option--selected" : "")\"\(optID)>\(htmlEscape(option.label))</div>"
         }
         html += "</div></div>"
         return html
@@ -255,14 +315,26 @@ public struct WebUIInlineEdit: View {
     public let value: String
     public let state: State
     public let error: Bool
-    public init(_ value: String, state: State = .idle, error: Bool = false) { self.value = value; self.state = state; self.error = error }
+    /// stable id; when set with `onSave` the root div self-wires
+    /// (`targetId == "<id>"`, event `.click`); the save button gets
+    /// `id == "<id>-save"` and cancel `<id>-cancel`.
+    public let id: String?
+    public let onSave: EventHandler?
+    public init(_ value: String, state: State = .idle, error: Bool = false,
+                id: String? = nil, onSave: EventHandler? = nil) {
+        self.value = value; self.state = state; self.error = error
+        self.id = id; self.onSave = onSave
+    }
 
     public func render() -> String {
-        var html = "<div class=\"inline-edit\(state.rawValue)\(error ? " inline-edit--error" : "")\">"
+        let rootAttrs = id.map { controlAttributes(id: $0, event: .click, handler: onSave) } ?? ""
+        let saveID = id.map { " id=\"\(htmlEscape("\($0)-save"))\"" } ?? ""
+        let cancelID = id.map { " id=\"\(htmlEscape("\($0)-cancel"))\"" } ?? ""
+        var html = "<div class=\"inline-edit\(state.rawValue)\(error ? " inline-edit--error" : "")\"\(rootAttrs)>"
         html += "<div class=\"inline-edit__value\">\(htmlEscape(value))<span class=\"inline-edit__pencil\" aria-hidden=\"true\">✎</span></div>"
         if state == .editing {
             html += "<div class=\"inline-edit__editing\"><input class=\"inline-edit__input\(error ? " inline-edit__input--error" : "")\" value=\"\(htmlEscape(value))\">"
-            html += "<div class=\"inline-edit__actions\"><button class=\"inline-edit__check\" aria-label=\"Save\">✓</button><button class=\"inline-edit__pencil\" aria-label=\"Cancel\">✕</button></div></div>"
+            html += "<div class=\"inline-edit__actions\"><button class=\"inline-edit__check\"\(saveID) aria-label=\"Save\">✓</button><button class=\"inline-edit__pencil\"\(cancelID) aria-label=\"Cancel\">✕</button></div></div>"
         }
         html += "</div>"
         return html
@@ -297,8 +369,15 @@ public struct WebUIRating: View {
     public let size: Size
     public let heart: Bool
     public let showValue: Bool
-    public init(_ value: Double, max: Int = 5, size: Size = .md, heart: Bool = false, showValue: Bool = false) {
+    /// stable id; when set with `onChange` the root div self-wires
+    /// (`targetId == "<id>"`, event `.click`); each star gets
+    /// `id == "<id>-star-<index>"` (1-based).
+    public let id: String?
+    public let onChange: EventHandler?
+    public init(_ value: Double, max: Int = 5, size: Size = .md, heart: Bool = false, showValue: Bool = false,
+                id: String? = nil, onChange: EventHandler? = nil) {
         self.value = value; self.max = max; self.size = size; self.heart = heart; self.showValue = showValue
+        self.id = id; self.onChange = onChange
     }
 
     public func render() -> String {
@@ -306,11 +385,13 @@ public struct WebUIRating: View {
         var classes = "rating\(size.rawValue)"
         if heart { classes += " rating--heart" }
         if full > 0 { classes += " rating--filled" }
-        var html = "<div class=\"\(classes)\" role=\"img\" aria-label=\"\(value) of \(max)\">"
+        let rootAttrs = id.map { controlAttributes(id: $0, event: .click, handler: onChange) } ?? ""
+        var html = "<div class=\"\(classes)\"\(rootAttrs) role=\"img\" aria-label=\"\(value) of \(max)\">"
         for i in 1...max {
             let glyph = heart ? "♥" : "★"
             let filled = i <= full
-            html += "<span class=\"rating__star\(filled ? " rating__star--filled" : "")\" aria-hidden=\"true\">\(glyph)</span>"
+            let starID = id.map { " id=\"\(htmlEscape("\($0)-star-\(i)"))\"" } ?? ""
+            html += "<span class=\"rating__star\(filled ? " rating__star--filled" : "")\"\(starID) aria-hidden=\"true\">\(glyph)</span>"
         }
         if showValue { html += "<span class=\"rating__value\">\(value)</span>" }
         html += "</div>"
@@ -329,20 +410,29 @@ public struct WebUITag: View {
     public let clickable: Bool
     public let count: Int?
     public let icon: IconName?
+    /// stable id; when set with `onRemove` the root span self-wires
+    /// (`targetId == "<id>"`, event `.click`); the remove button gets
+    /// `id == "<id>-remove"`.
+    public let id: String?
+    public let onRemove: EventHandler?
     public init(_ label: String, variant: Variant = .solid, removable: Bool = false, clickable: Bool = false,
-                count: Int? = nil, icon: IconName? = nil) {
+                count: Int? = nil, icon: IconName? = nil,
+                id: String? = nil, onRemove: EventHandler? = nil) {
         self.label = label; self.variant = variant; self.removable = removable
         self.clickable = clickable; self.count = count; self.icon = icon
+        self.id = id; self.onRemove = onRemove
     }
 
     public func render() -> String {
         var classes = "tag\(variant.rawValue)"
         if clickable { classes += " tag--clickable" }
-        var html = "<span class=\"\(classes)\">"
+        let rootAttrs = id.map { controlAttributes(id: $0, event: .click, handler: onRemove) } ?? ""
+        let removeID = id.map { " id=\"\(htmlEscape("\($0)-remove"))\"" } ?? ""
+        var html = "<span class=\"\(classes)\"\(rootAttrs)>"
         if let icon { html += "<span class=\"tag__icon\">\(WebUIIcon(icon, size: .small).render())</span>" }
         html += "<span class=\"tag__label\">\(htmlEscape(label))</span>"
         if let count { html += "<span class=\"tag__count\">\(count)</span>" }
-        if removable { html += "<button class=\"tag__remove\" aria-label=\"Remove \(htmlEscape(label))\">×</button>" }
+        if removable { html += "<button class=\"tag__remove\"\(removeID) aria-label=\"Remove \(htmlEscape(label))\">×</button>" }
         html += "</span>"
         return html
     }
@@ -353,12 +443,23 @@ public struct WebUITag: View {
 public struct WebUIChipInput: View {
     public let chips: [String]
     public let placeholder: String
-    public init(chips: [String], placeholder: String = "Type and press enter…") { self.chips = chips; self.placeholder = placeholder }
+    /// stable id; when set with `onChange` the root div self-wires
+    /// (`targetId == "<id>"`, event `.click`); each remove button gets
+    /// `id == "<id>-chip-<index>"`.
+    public let id: String?
+    public let onChange: EventHandler?
+    public init(chips: [String], placeholder: String = "Type and press enter…",
+                id: String? = nil, onChange: EventHandler? = nil) {
+        self.chips = chips; self.placeholder = placeholder
+        self.id = id; self.onChange = onChange
+    }
 
     public func render() -> String {
-        var html = "<div class=\"chip-input\">"
-        for chip in chips {
-            html += "<span class=\"chip chip--sm chip--primary\">\(htmlEscape(chip))<button class=\"chip__remove\" aria-label=\"Remove\">×</button></span>"
+        let rootAttrs = id.map { controlAttributes(id: $0, event: .click, handler: onChange) } ?? ""
+        var html = "<div class=\"chip-input\"\(rootAttrs)>"
+        for (i, chip) in chips.enumerated() {
+            let removeID = id.map { " id=\"\(htmlEscape("\($0)-chip-\(i)"))\"" } ?? ""
+            html += "<span class=\"chip chip--sm chip--primary\">\(htmlEscape(chip))<button class=\"chip__remove\"\(removeID) aria-label=\"Remove\">×</button></span>"
         }
         html += "<input type=\"text\" placeholder=\"\(htmlEscape(placeholder))\">"
         html += "</div>"

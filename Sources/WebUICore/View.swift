@@ -1,5 +1,3 @@
-import Foundation
-
 // MARK: - View Protocol
 public protocol View: Sendable {
     func render() -> String

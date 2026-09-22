@@ -274,22 +274,26 @@ struct RuntimeConfigTests {
 	@Test("default bootstrap is unchanged")
 	func defaultBootstrap() {
 		let page = HTMLDocument(title: "t", body: "").render()
-		#expect(page.contains("WebUIRuntime.init();"))
+		#expect(page.contains("<meta name=\"webui-wasm\""))
+		#expect(!page.contains("WebUIRuntime"))
 	}
 
 	@Test("runtime config emits a bootstrap object with only set keys")
 	func configEmitsInitObject() {
 		let config = RuntimeConfig(wsUrl: "wss://example.com/ws", debounceInputMs: 150, logLevel: "debug")
 		let page = HTMLDocument(title: "t", body: "", runtimeConfig: config).render()
-		#expect(page.contains("WebUIRuntime.init({\"wsUrl\":\"wss://example.com/ws\",\"debounceInputMs\":150,\"logLevel\":\"debug\"});"))
-		#expect(!page.contains("WebUIRuntime.init();\n    WebUIRuntime.init("))
-		#expect(!page.contains("\"wsReconnect\":null"))
+		#expect(page.contains("webui-config"))
+		#expect(page.contains("wss://example.com/ws"))
+		#expect(page.contains("debounceInputMs"))
+		#expect(!page.contains("WebUIRuntime"))
+		#expect(!page.contains("wsReconnect"))
 	}
 
 	@Test("empty config falls back to the plain bootstrap")
 	func emptyConfigDefaults() {
 		let page = HTMLDocument(title: "t", body: "", runtimeConfig: RuntimeConfig()).render()
-		#expect(page.contains("WebUIRuntime.init();"))
+		#expect(page.contains("<meta name=\"webui-wasm\""))
+		#expect(!page.contains("WebUIRuntime"))
 	}
 
 	@Test("runtime config emits the render token for ws replay binding")
@@ -298,16 +302,18 @@ struct RuntimeConfigTests {
 		let json = config.encodedJSON()
 		#expect(json.contains("\"renderToken\":\"tok-123\""))
 		let page = HTMLDocument(title: "t", body: "", runtimeConfig: config).render()
-		#expect(page.contains("\"renderToken\":\"tok-123\""))
-		// a token-only config is still non-empty (must emit the init object).
+		#expect(page.contains("renderToken"))
+		#expect(page.contains("tok-123"))
+		// a token-only config is still non-empty (must emit the config meta).
 		#expect(!config.isEmpty)
-		#expect(!page.contains("WebUIRuntime.init();\n    WebUIRuntime.init("))
+		#expect(!page.contains("WebUIRuntime"))
 	}
 
 	@Test("WebUIDocument passes runtime config through")
 	func webuiDocumentPassesConfig() {
 		let page = WebUIDocument(title: "t", body: "", runtimeConfig: RuntimeConfig(optimisticSettleMs: 1234)).render()
-		#expect(page.contains("\"optimisticSettleMs\":1234"))
+		#expect(page.contains("optimisticSettleMs"))
+		#expect(page.contains("1234"))
 	}
 
 	@Test("runtime config keys use the js DEFAULTS names without suffixes")

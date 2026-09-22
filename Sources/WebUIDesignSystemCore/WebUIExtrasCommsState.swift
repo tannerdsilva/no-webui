@@ -1,4 +1,3 @@
-import Foundation
 import WebUICore
 
 // ============================================================================
@@ -12,15 +11,22 @@ public struct WebUIMention: View {
         public init(_ name: String, handle: String, active: Bool = false) { self.name = name; self.handle = handle; self.active = active } }
     public let text: String
     public let options: [Option]
-    public init(text: String = "", options: [Option] = []) { self.text = text; self.options = options }
+    public let id: String?
+    public let onSelect: EventHandler?
+    public init(text: String = "", options: [Option] = [], id: String? = nil, onSelect: EventHandler? = nil) {
+        self.text = text; self.options = options; self.id = id; self.onSelect = onSelect
+    }
 
     public func render() -> String {
         if options.isEmpty {
             return "<span class=\"mention\">@\(htmlEscape(text))</span>"
         }
-        var html = "<div class=\"mention-dropdown\">"
-        for option in options {
-            html += "<div class=\"mention-option\(option.active ? " mention-option--active" : "")\"><span class=\"mention-option__avatar\"></span><span class=\"mention-option__name\">\(htmlEscape(option.name))</span><span class=\"mention-option__handle\">\(htmlEscape(option.handle))</span></div>"
+        let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onSelect) } ?? ""
+        var html = "<div class=\"mention-dropdown\"\(attrs)>"
+        for (i, option) in options.enumerated() {
+            html += "<div class=\"mention-option\(option.active ? " mention-option--active" : "")\""
+            if let id { html += " id=\"\(htmlEscape(id))-option-\(i)\"" }
+            html += "><span class=\"mention-option__avatar\"></span><span class=\"mention-option__name\">\(htmlEscape(option.name))</span><span class=\"mention-option__handle\">\(htmlEscape(option.handle))</span></div>"
         }
         html += "</div>"
         return html
@@ -33,12 +39,19 @@ public struct WebUIReactions: View {
     public struct Reaction: Sendable { public let emoji: String; public let count: Int; public let active: Bool
         public init(_ emoji: String, count: Int = 0, active: Bool = false) { self.emoji = emoji; self.count = count; self.active = active } }
     public let reactions: [Reaction]
-    public init(reactions: [Reaction]) { self.reactions = reactions }
+    public let id: String?
+    public let onChange: EventHandler?
+    public init(reactions: [Reaction], id: String? = nil, onChange: EventHandler? = nil) {
+        self.reactions = reactions; self.id = id; self.onChange = onChange
+    }
 
     public func render() -> String {
-        var html = "<div class=\"reactions\">"
-        for r in reactions {
-            html += "<button class=\"reactions__emoji\(r.active ? " reactions__emoji--active" : "")\"><span aria-hidden=\"true\">\(htmlEscape(r.emoji))</span><span class=\"reactions__count\">\(r.count)</span></button>"
+        let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onChange) } ?? ""
+        var html = "<div class=\"reactions\"\(attrs)>"
+        for (i, r) in reactions.enumerated() {
+            html += "<button class=\"reactions__emoji\(r.active ? " reactions__emoji--active" : "")\""
+            if let id { html += " id=\"\(htmlEscape(id))-r-\(i)\"" }
+            html += "><span aria-hidden=\"true\">\(htmlEscape(r.emoji))</span><span class=\"reactions__count\">\(r.count)</span></button>"
         }
         html += "<button class=\"reactions__more\" aria-label=\"Add reaction\">＋</button>"
         html += "</div>"
@@ -69,12 +82,15 @@ public struct WebUINotification: View {
     public let time: String
     public let read: Bool
     public let icon: IconName?
-    public init(title: String? = nil, text: String, time: String = "", read: Bool = false, icon: IconName? = nil) {
-        self.title = title; self.text = text; self.time = time; self.read = read; self.icon = icon
+    public let id: String?
+    public let onTap: EventHandler?
+    public init(title: String? = nil, text: String, time: String = "", read: Bool = false, icon: IconName? = nil, id: String? = nil, onTap: EventHandler? = nil) {
+        self.title = title; self.text = text; self.time = time; self.read = read; self.icon = icon; self.id = id; self.onTap = onTap
     }
 
     public func render() -> String {
-        var html = "<div class=\"notification\(read ? " notification--read" : "")\">"
+        let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onTap) } ?? ""
+        var html = "<div class=\"notification\(read ? " notification--read" : "")\"\(attrs)>"
         if let icon { html += "<span class=\"notification__icon\">\(WebUIIcon(icon, size: .medium).render())</span>" }
         else { html += "<span class=\"notification__icon\"><span class=\"notification__unread\"></span></span>" }
         html += "<div class=\"notification__body\">"
@@ -105,10 +121,15 @@ public struct WebUIToastStack: View {
 public struct WebUIBell: View {
     public let count: Int
     public let icon: IconName
-    public init(count: Int = 0, icon: IconName = .bell) { self.count = count; self.icon = icon }
+    public let id: String?
+    public let onTap: EventHandler?
+    public init(count: Int = 0, icon: IconName = .bell, id: String? = nil, onTap: EventHandler? = nil) {
+        self.count = count; self.icon = icon; self.id = id; self.onTap = onTap
+    }
 
     public func render() -> String {
-        var html = "<button class=\"bell\" aria-label=\"Notifications\(count > 0 ? ", \(count) unread" : "")\">"
+        let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onTap) } ?? ""
+        var html = "<button class=\"bell\"\(attrs) aria-label=\"Notifications\(count > 0 ? ", \(count) unread" : "")\">"
         html += "<span class=\"bell__icon\">\(WebUIIcon(icon, size: .medium).render())</span>"
         if count > 0 { html += "<span class=\"bell__badge\">\(count)</span>" }
         html += "</button>"
@@ -205,7 +226,7 @@ public struct WebUICountdown: View {
         if !label.isEmpty { html += "<div class=\"countdown__label\">\(htmlEscape(label))</div>" }
         html += "<div class=\"countdown__units\">"
         for u in units {
-            html += "<div class=\"countdown__unit\"><span class=\"countdown__value\">\(String(format: "%02d", u.value))</span><span class=\"countdown__unit-label\">\(htmlEscape(u.label))</span></div>"
+            html += "<div class=\"countdown__unit\"><span class=\"countdown__value\">\(webuiZeroPad(u.value, width: 2))</span><span class=\"countdown__unit-label\">\(htmlEscape(u.label))</span></div>"
         }
         html += "</div></div>"
         return html
@@ -218,12 +239,16 @@ public struct WebUICookieConsent: View {
     public let title: String?
     public let text: String
     public let children: [any View]
-    public init(title: String? = nil, text: String, @ViewBuilder content: () -> [any View] = { [] }) {
-        self.title = title; self.text = text; self.children = content()
+    public let id: String?
+    public let onSelect: EventHandler?
+    public init(title: String? = nil, text: String, id: String? = nil, onSelect: EventHandler? = nil,
+                @ViewBuilder content: () -> [any View]) {
+        self.title = title; self.text = text; self.children = content(); self.id = id; self.onSelect = onSelect
     }
 
     public func render() -> String {
-        var html = "<div class=\"cookie-consent\" role=\"dialog\" aria-modal=\"false\">"
+        let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onSelect) } ?? ""
+        var html = "<div class=\"cookie-consent\"\(attrs) role=\"dialog\" aria-modal=\"false\">"
         html += "<div class=\"cookie-consent__body\">"
         if let title { html += "<div class=\"cookie-consent__title\">\(htmlEscape(title))</div>" }
         html += "<div class=\"cookie-consent__text\">\(htmlEscape(text))</div>"
@@ -240,10 +265,15 @@ public struct WebUIPullRefresh: View {
     public enum State: String, Sendable { case idle = " pull-refresh--idle", active = " pull-refresh--active" }
     public let state: State
     public let text: String?
-    public init(state: State = .idle, text: String? = nil) { self.state = state; self.text = text }
+    public let id: String?
+    public let onRefresh: EventHandler?
+    public init(state: State = .idle, text: String? = nil, id: String? = nil, onRefresh: EventHandler? = nil) {
+        self.state = state; self.text = text; self.id = id; self.onRefresh = onRefresh
+    }
 
     public func render() -> String {
-        var html = "<div class=\"pull-refresh\(state.rawValue)\" role=\"status\">"
+        let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onRefresh) } ?? ""
+        var html = "<div class=\"pull-refresh\(state.rawValue)\"\(attrs) role=\"status\">"
         html += "<div class=\"pull-refresh__indicator\"><span class=\"pull-refresh__spinner\"></span>"
         if let text { html += "<span class=\"pull-refresh__text\">\(htmlEscape(text))</span>" }
         html += "</div></div>"
@@ -289,7 +319,7 @@ public struct WebUIAvatarStack: View {
 
     public func render() -> String {
         var html = "<div class=\"avatar-stack\">"
-        for (i, initi) in initials.enumerated() {
+        for initi in initials {
             html += "<span class=\"avatar avatar--md avatar--initials\">\(htmlEscape(initi))</span>"
         }
         if more > 0 { html += "<span class=\"avatar avatar--md avatar--more\">+\(more)</span>" }

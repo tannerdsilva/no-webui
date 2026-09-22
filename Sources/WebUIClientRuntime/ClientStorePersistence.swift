@@ -1,4 +1,3 @@
-import Foundation
 import WebUICore
 import Synchronization
 
@@ -38,13 +37,13 @@ public struct LocalStorageClientStateStore: ClientStateStore {
 		storageWrite(prefix + path, [])
 	}
 
-	public func subscribe(_ path: String, _ handler: @escaping @Sendable (JSONValue?) -> Void) -> UUID {
+	public func subscribe(_ path: String, _ handler: @escaping @Sendable (JSONValue?) -> Void) -> UInt64 {
 		// persistence is a leaf backend: callers observe through subscribing on
 		// an in-memory front (e.g. InMemoryClientStateStore) that syncs here.
-		UUID()
+		0
 	}
 
-	public func unsubscribe(_ id: UUID) {}
+	public func unsubscribe(_ id: UInt64) {}
 
 	// MARK: - bridge accessors
 

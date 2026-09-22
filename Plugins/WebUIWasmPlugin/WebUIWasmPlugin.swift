@@ -1,12 +1,12 @@
 import Foundation
 import PackagePlugin
 
-/// a missing artifact is tolerated (present=false carrier — the host build
-/// stays green without a wasm build, matching the runtime's absent → alias
-/// route behavior); a *present but corrupt* artifact is a build failure (it
-/// would ship wrong bytes to every client-mode page). this mirrors the
-/// `WebUIAssetPlugin` discipline: load-bearing generated files never degrade
-/// silently.
+/// a missing artifact is a build failure — wasm is the sole client runtime in
+/// this package, so an absent artifact would ship a page that cannot run (the
+/// serving seam would 404). a *present but corrupt* artifact is likewise a
+/// failure (it would ship wrong bytes to every client-mode page). this mirrors
+/// the `WebUIAssetPlugin` discipline: load-bearing generated files never
+/// degrade silently.
 struct WasmPluginError: Error, CustomStringConvertible {
     let description: String
     init(_ description: String) { self.description = description }
@@ -24,8 +24,8 @@ struct WebUIWasmPlugin: BuildToolPlugin {
         // not guaranteed across host/dependency builds — verified 2026-09).
         // in-repo this finds WebUIClient.wasm after `wasm-client` runs; under
         // a consumer build the checkout has no .build/out remnant, so the
-        // plugin emits the absent carrier and the consumer serves their own
-        // artifact via `WebUIBoot.wasmProductURL(productName:)` at runtime.
+        // consumer must produce their own artifact via `WebUIBoot.wasmProductURL(productName:)`
+        // before the host build.
         let artifactURL = context.package.directoryURL
             .appendingPathComponent(".build")
             .appendingPathComponent("out")
@@ -55,31 +55,13 @@ struct WebUIWasmPlugin: BuildToolPlugin {
                     outputFiles: [outputURL]
                 )
             ]
-        } else if ProcessInfo.processInfo.environment["WEBUI_REQUIRE_WASM"] == "1" {
-            // a consumer that ships client-mode pages can opt into a hard
-            // gate: absent artifact = build failure, never a silent 404 in
-            // production. the env var is read at plugin-execution time, so it
-            // works from the repo and from consumer builds alike.
-            throw WasmPluginError(
-                "WebUIClient.wasm is absent at \(artifactURL.path) and WEBUI_REQUIRE_WASM=1 is set — run `swift package --disable-sandbox plugin wasm-client` (or build with the wasm sdk) before this host build."
-            )
         } else {
-            // artifact absent at build time: emit the absent carrier so the
-            // serving seam routes to the no-store alias (and likely 404s).
-            // the consumer runs `swift package --disable-sandbox plugin
-            // wasm-client` to produce it.
-            return [
-                .buildCommand(
-                    displayName: "WebUIClient.wasm absent — embedding empty carrier (run `swift package --disable-sandbox plugin wasm-client`)",
-                    executable: tool.url,
-                    arguments: [
-                        "--missing",
-                        "--output", outputURL.path,
-                        "--product", "WebUIClient",
-                    ],
-                    outputFiles: [outputURL]
-                )
-            ]
+            // absent artifact = hard build failure, never a silent 404. wasm is
+            // unconditionally the client runtime; the consumer runs
+            // `swift package --disable-sandbox plugin wasm-client` first.
+            throw WasmPluginError(
+                "WebUIClient.wasm is absent at \(artifactURL.path) — run `swift package --disable-sandbox plugin wasm-client` (or build with the wasm sdk) before this host build. client-mode pages require the wasm artifact."
+            )
         }
     }
 }

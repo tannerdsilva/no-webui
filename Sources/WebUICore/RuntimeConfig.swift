@@ -1,5 +1,3 @@
-import Foundation
-
 // MARK: - RuntimeConfig
 
 public struct RuntimeConfig: Sendable, Encodable {
@@ -100,7 +98,9 @@ public struct RuntimeConfig: Sendable, Encodable {
 			case "\0": result += "\\u0000"
 			default:
 				if scalar.value < 0x20 {
-					result += String(format: "\\u%04x", scalar.value)
+					// Foundation-free stand-in for `String(format: "\\u%04x", …)`:
+					// backslash + 4 lowercase zero-padded hex digits.
+					result += "\\u" + Self.hex4LowerCase(scalar.value)
 				} else {
 					result.unicodeScalars.append(scalar)
 				}
@@ -108,5 +108,13 @@ public struct RuntimeConfig: Sendable, Encodable {
 		}
 		result += "\""
 		return result
+	}
+
+	/// 4 lowercase zero-padded hex digits of a unicode scalar value
+	/// (the `%04x` half of the replaced `String(format:)` call).
+	private static func hex4LowerCase(_ value: UInt32) -> String {
+		let digits = Array("0123456789abcdef")
+		func d(_ shift: UInt32) -> Character { digits[Int((value >> shift) & 0xf)] }
+		return String([d(12), d(8), d(4), d(0)])
 	}
 }

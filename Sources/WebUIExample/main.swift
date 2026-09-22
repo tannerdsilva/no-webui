@@ -329,19 +329,21 @@ struct WebUIExample {
 					try await respond405(channel: channel.channel)
 					return
 				}
-				let (text, contentType): (String, String)
-				switch head.uri {
-				case "/__assets/css":
-					text = DesignSystemAssets.minifiedCss; contentType = "text/css; charset=utf-8"
-				case "/__assets/js":
-					text = WebUIAssets.js; contentType = "text/javascript; charset=utf-8"
-				case "/", "/index.html":
-					text = self.pageHTML; contentType = "text/html; charset=utf-8"
-				default:
+				let uri = head.uri
+				if uri == "/__assets/css" {
+					try await respond(channel: channel.channel, body: DesignSystemAssets.minifiedCss, contentType: "text/css; charset=utf-8")
+				} else if uri == "/ui/webui-client.js" {
+					try await respond(channel: channel.channel, body: WebUIAssets.client, contentType: "text/javascript; charset=utf-8")
+				} else if uri == "/ui/webui-app-boot.js" {
+					try await respond(channel: channel.channel, body: WebUIAssets.clientBoot, contentType: "text/javascript; charset=utf-8")
+				} else if uri.hasPrefix("/__assets/webui-client."), uri.hasSuffix(".wasm") {
+					try await respondWasm(channel: channel.channel)
+				} else if uri == "/" || uri == "/index.html" {
+					try await respond(channel: channel.channel, body: self.pageHTML, contentType: "text/html; charset=utf-8")
+				} else {
 					try await respond404(channel: channel.channel)
 					return
 				}
-				try await respond(channel: channel.channel, body: text, contentType: contentType)
 			}
 		}
 	}
@@ -361,6 +363,25 @@ struct WebUIExample {
 		// await write promises, and a response larger than the socket send
 		// buffer would otherwise lose its tail when the connection closes
 		// right after writing (probe-verified truncation).
+		_ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.head(head))
+		_ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.body(buf))
+		try await channel.writeAndFlush(HTTPPart<HTTPResponseHead, ByteBuffer>.end(nil)).get()
+	}
+
+	private func respondWasm(channel: Channel) async throws {
+		guard let url = WebUIBoot.wasmProductURL(productName: "WebUIClient"),
+			  let data = try? Data(contentsOf: url) else {
+			try await respond404(channel: channel)
+			return
+		}
+		var head = HTTPResponseHead(version: .http1_1, status: .ok)
+		head.headers.replaceOrAdd(name: "Content-Type", value: "application/wasm")
+		head.headers.replaceOrAdd(name: "Content-Length", value: "\(data.count)")
+		head.headers.replaceOrAdd(name: "Connection", value: "close")
+		// the artifact is content-addressed by its sha, so it is immutable.
+		head.headers.replaceOrAdd(name: "Cache-Control", value: "public, max-age=31536000, immutable")
+		var buf = ByteBuffer()
+		buf.writeBytes(data)
 		_ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.head(head))
 		_ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.body(buf))
 		try await channel.writeAndFlush(HTTPPart<HTTPResponseHead, ByteBuffer>.end(nil)).get()

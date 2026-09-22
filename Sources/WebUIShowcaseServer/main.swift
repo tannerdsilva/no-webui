@@ -164,24 +164,41 @@ struct WebUIShowcaseServer {
                     try await respond(channel: channel.channel, body: "method not allowed", contentType: "text/plain; charset=utf-8", status: .methodNotAllowed)
                     return
                 }
-                let (text, contentType): (String, String)
-                switch head.uri {
-                case "/", "/index.html":
-                    text = renderShowcasePage()
-                    contentType = "text/html; charset=utf-8"
-                case "/__assets/css":
-                    text = DesignSystemAssets.minifiedCss
-                    contentType = "text/css; charset=utf-8"
-                case "/__assets/js":
-                    text = WebUIAssets.js
-                    contentType = "text/javascript; charset=utf-8"
-                default:
+                let uri = head.uri
+                if uri == "/" || uri == "/index.html" {
+                    try await respond(channel: channel.channel, body: renderShowcasePage(), contentType: "text/html; charset=utf-8", status: .ok)
+                } else if uri == "/__assets/css" {
+                    try await respond(channel: channel.channel, body: DesignSystemAssets.minifiedCss, contentType: "text/css; charset=utf-8", status: .ok)
+                } else if uri == "/ui/webui-client.js" {
+                    try await respond(channel: channel.channel, body: WebUIAssets.client, contentType: "text/javascript; charset=utf-8", status: .ok)
+                } else if uri == "/ui/webui-app-boot.js" {
+                    try await respond(channel: channel.channel, body: WebUIAssets.clientBoot, contentType: "text/javascript; charset=utf-8", status: .ok)
+                } else if uri.hasPrefix("/__assets/webui-client."), uri.hasSuffix(".wasm") {
+                    try await respondWasm(channel: channel.channel)
+                } else {
                     try await respond(channel: channel.channel, body: "not found", contentType: "text/plain; charset=utf-8", status: .notFound)
                     return
                 }
-                try await respond(channel: channel.channel, body: text, contentType: contentType, status: .ok)
             }
         }
+    }
+
+    private static func respondWasm(channel: Channel) async throws {
+        guard let url = WebUIBoot.wasmProductURL(productName: "WebUIClient"),
+              let data = try? Data(contentsOf: url) else {
+            try await respond(channel: channel, body: "not found", contentType: "text/plain; charset=utf-8", status: .notFound)
+            return
+        }
+        var head = HTTPResponseHead(version: .http1_1, status: .ok)
+        head.headers.replaceOrAdd(name: "Content-Type", value: "application/wasm")
+        head.headers.replaceOrAdd(name: "Content-Length", value: "\(data.count)")
+        head.headers.replaceOrAdd(name: "Connection", value: "close")
+        head.headers.replaceOrAdd(name: "Cache-Control", value: "public, max-age=31536000, immutable")
+        var buf = ByteBuffer()
+        buf.writeBytes(data)
+        _ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.head(head))
+        _ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.body(buf))
+        try await channel.writeAndFlush(HTTPPart<HTTPResponseHead, ByteBuffer>.end(nil)).get()
     }
 
     private static func respond(channel: Channel, body: String, contentType: String, status: HTTPResponseStatus) async throws {

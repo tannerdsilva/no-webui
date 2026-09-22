@@ -1,5 +1,3 @@
-import Foundation
-
 // p5-t3: a compact case-insensitive prefix trie over client-resident
 // datasets. built once at boot (single-threaded), then read-only on the hot
 // path — every local-search keystroke in wasm answers from this structure,

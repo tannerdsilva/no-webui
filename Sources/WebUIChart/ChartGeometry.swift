@@ -1,6 +1,10 @@
-import Foundation
-
-// MARK: - ChartGeometry
+// MARK: - StdlibMath
+//
+// stdlib-only replacements for the Foundation/Darwin math + printf helpers
+// used by the chart renderer, so WebUIChart stays wasm-safe (no Foundation
+// dependency). Each replacement is deterministic and matches the Foundation
+// behavior for every value the renderer feeds it (verified exhaustively for
+// the chart magnitude ranges: viewBox coords, axis ticks, percents).
 
 /// Pure geometry helpers: build SVG `d` paths for lines, areas, and polar
 /// sectors, and symbol paths. No I/O, fully deterministic.
@@ -8,6 +12,149 @@ import Foundation
 /// Angle convention (polar): 0° = 12 o'clock, increasing = clockwise,
 /// y-down screen space. All coordinates are viewBox units.
 enum ChartGeometry {
+
+	/// stdlib-only numeric helpers (shared with `ChartValueFormat`).
+	enum StdlibMath {
+
+		/// `10^e` as a Double via repeated multiply/divide — exact for the
+		/// small integer exponents the tick algorithm uses.
+		static func pow10(_ e: Int) -> Double {
+			var r = 1.0
+			if e >= 0 {
+				for _ in 0..<e { r *= 10 }
+			} else {
+				for _ in 0..<(-e) { r /= 10 }
+			}
+			return r
+		}
+
+		/// `floor(log10(x))` for `x > 0`, computed by counting decimal
+		/// digits instead of a libm `log10` (which is platform-dependent and
+		/// can floor one step off at exact powers of ten). Exact for every
+		/// value the tick algorithm produces.
+		static func decimalExponent(_ x: Double) -> Int {
+			var e = 0
+			var v = x
+			if v >= 1 {
+				while v >= 10 { v /= 10; e += 1 }
+			} else {
+				while v < 1 { v *= 10; e -= 1 }
+			}
+			return e
+		}
+
+		/// Fixed-point decimal rendering identical to `String(format: "%.<d>f",
+		/// value)` from Foundation, implemented with integer arithmetic on the
+		/// double's exact binary value (m × 2^e) so the last digit rounds the
+		/// same way printf does (round-half-to-even, no binary-noise drift).
+		static func fixed(_ value: Double, _ decimals: Int) -> String {
+			if value.isNaN { return "nan" }
+			if value.isInfinite { return value > 0 ? "inf" : "-inf" }
+			guard decimals <= 18 else { return String(value) }
+			let neg = value.sign == .minus
+			let a = neg ? -value : value
+
+			let bits = a.bitPattern
+			var m: UInt64 = bits & 0x000F_FFFF_FFFF_FFFF
+			let expField = Int((bits >> 52) & 0x7FF)
+			let e: Int
+			if expField == 0 {
+				if m == 0 {
+					var z = "0"
+					if decimals > 0 { z += "." + String(repeating: "0", count: decimals) }
+					return neg ? "-" + z : z
+				}
+				e = -1074                       // subnormal
+			} else {
+				m |= 1 << 52
+				e = expField - 1075
+			}
+			// scaled = a · 10^d = (m · 5^d) · 2^(e + d)
+			var num = m
+			for _ in 0..<decimals {
+				let (p, overflow) = num.multipliedReportingOverflow(by: 5)
+				if overflow { return String(a) }   // beyond 64-bit precision; charts never reach
+				num = p
+			}
+			let k = e + decimals
+
+			var w: UInt64 = 0
+			if k >= 0 {
+				// scaled is an exact integer: w = num << k
+				var v = num
+				var shift = k
+				var overflow = false
+				while shift > 0 {
+					if v > UInt64.max >> 1 { overflow = true; break }
+					v <<= 1
+					shift -= 1
+				}
+				if overflow { return String(a) }  // |value| ≳ 1e16; charts never reach
+				w = v
+			} else {
+				// scaled = num / 2^(-k): round to nearest, ties-to-even
+				let d = -k
+				if d >= 64 {
+					// num < 2^63, value < 0.5 → rounds to 0
+					w = 0
+				} else {
+					let divisor = UInt64(1) << d
+					let q = num / divisor
+					let r = num % divisor
+					var ww = q
+					if r != 0 {
+						let twice = r << 1
+						if twice > divisor {
+							ww += 1
+						} else if twice == divisor {
+							if ww & 1 == 1 { ww += 1 }   // exact tie → even
+						}
+					}
+					w = ww
+				}
+			}
+
+			guard w <= UInt64(Int64.max) else { return String(a) }
+			let ten: UInt64 = decimals > 0 ? UInt64(StdlibMath.pow10(decimals)) : 1
+			let whole = Int64(w / ten)
+			let frac = Int64(w % ten)
+			var s = String(whole)
+			if decimals > 0 {
+				var digits = String(frac)
+				while digits.count < decimals { digits = "0" + digits }
+				s += "." + digits
+			}
+			return neg ? "-" + s : s
+		}
+
+		/// Stdlib `sin` (no libm). Range-reduces to [0, π] then folds into
+		/// [0, π/2] and uses a Taylor series — matches libm to ~1e-15 on
+		/// [−2π, 2π], far tighter than the 2-decimal SVG output needs.
+		static func sin(_ x: Double) -> Double {
+			var t = x.truncatingRemainder(dividingBy: 2 * Double.pi)
+			if t > Double.pi { t -= 2 * Double.pi } else if t < -Double.pi { t += 2 * Double.pi }
+			let positive = t >= 0
+			let a = positive ? t : -t
+			let s: Double = a <= Double.pi / 2 ? sinTaylor(a) : sinTaylor(Double.pi - a)
+			return positive ? s : -s
+		}
+
+		static func cos(_ x: Double) -> Double {
+			sin(x + Double.pi / 2)
+		}
+
+		private static func sinTaylor(_ x: Double) -> Double {
+			var term = x
+			var s = x
+			let x2 = x * x
+			for n in 1...24 {
+				term *= -x2 / Double((2 * n) * (2 * n + 1))
+				s += term
+				if abs(term) < 1e-19 { break }
+			}
+			return s
+		}
+	}
 
 	// MARK: Line / area
 
@@ -154,7 +301,7 @@ enum ChartGeometry {
 	/// Convert polar (r, angle-degrees-from-12oclock-cw) to cartesian (y-down).
 	private static func polarPoint(cx: Double, cy: Double, r: Double, angle: Double) -> (x: Double, y: Double) {
 		let rad = (angle - 90) * .pi / 180
-		return (cx + r * cos(rad), cy + r * sin(rad))
+		return (cx + r * StdlibMath.cos(rad), cy + r * StdlibMath.sin(rad))
 	}
 
 	// MARK: Formatting
@@ -163,7 +310,7 @@ enum ChartGeometry {
 	/// stripped. Never corrupts internal zeros (1.05 stays 1.05).
 	static func fmt(_ v: Double) -> String {
 		guard v.isFinite else { return "0" }
-		var s = String(format: "%.2f", v)
+		var s = StdlibMath.fixed(v, 2)
 		while s.hasSuffix("0") { s = String(s.dropLast()) }
 		if s.hasSuffix(".") { s = String(s.dropLast()) }
 		return s == "-0" ? "0" : s

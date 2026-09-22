@@ -141,11 +141,12 @@ what is deliberately NOT done (and why):
    build-tool plugin into the wasm-clean target would drag host `.build`
    layout semantics into the wasm graph. consumers building a server against
    `WebUI` already receive the carrier through the existing product boundary.
-3. **gate posture: soft default + `WEBUI_REQUIRE_WASM=1` hard-fail opt-in.**
+3. **gate posture: hard-fail — the wasm artifact is required (wasm is the
+   only client runtime; there is no soft default and no env switch).**
    the default (artifact absent → `present=false` carrier → host builds fine,
    wasm route 404s) keeps a fresh clone without the wasm sdk fully green —
    the same tolerance `WasmIntegrityTests` uses. consumers who ship
-   client-mode pages set `WEBUI_REQUIRE_WASM=1` (read at plugin-execution
+   the plugin hard-fails on an absent artifact at plugin-execution
    time, verified 2026-09 that SwiftPM passes it to build-tool plugins) and
    an absent artifact becomes a build failure with the exact fix command —
    never a silent 404 in production.

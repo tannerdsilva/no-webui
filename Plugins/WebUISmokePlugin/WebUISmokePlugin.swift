@@ -70,7 +70,7 @@ struct WebUISmokePlugin: CommandPlugin {
         let cssSource = context.package.directoryURL
             .appendingPathComponent("designer/assets/design-system.css")
         let jsSource = context.package.directoryURL
-            .appendingPathComponent("designer/assets/webui-runtime.js")
+            .appendingPathComponent("designer/assets/webui-client.js")
 
         if let servedCss = await GET(session, "\(base)/__assets/css"),
            let sourceCss = try? Data(contentsOf: cssSource),
@@ -81,12 +81,12 @@ struct WebUISmokePlugin: CommandPlugin {
             bad("css served is not the minified design sheet")
         }
 
-        if let servedJs = await GET(session, "\(base)/__assets/js"),
+        if let servedJs = await GET(session, "\(base)/ui/webui-client.js"),
            let sourceJs = try? Data(contentsOf: jsSource),
            servedJs == sourceJs {
-            ok("js served bytes == source (\(sourceJs.count) bytes)")
+            ok("wasm chamber served bytes == source (\(sourceJs.count) bytes)")
         } else {
-            bad("js served bytes DIFFER from source")
+            bad("wasm chamber served bytes DIFFER from source")
         }
 
         guard let pageData = await GET(session, "\(base)/"),

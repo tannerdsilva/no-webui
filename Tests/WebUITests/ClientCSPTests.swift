@@ -29,14 +29,14 @@ struct ClientCSPTests {
 		return String(html[r.upperBound...])
 	}
 
-	@Test("prod script-src is nonce-only: no unsafe-inline, no wasm-unsafe-eval")
+	@Test("prod script-src is self + wasm-unsafe-eval: no unsafe-inline")
 	func prodScriptSrcNonceOnly() {
 		let html = Self.renderDocument()
 		let src = Self.scriptSrc(html)
-		#expect(src.contains("'nonce-"))
+		#expect(src.contains("'self'"))
+		#expect(src.contains("'wasm-unsafe-eval'"))
 		#expect(!src.contains("'unsafe-inline'"))
-		#expect(!src.contains("'unsafe-eval'"))
-		#expect(!src.contains("'wasm-unsafe-eval'"))
+		#expect(!src.contains("'nonce-"))
 	}
 
 	@Test("client-mode script-src is self + wasm-unsafe-eval, still no unsafe-inline")
@@ -91,7 +91,7 @@ struct ClientCSPTests {
 		#expect(full.contains("<meta name=\"webui-wasm\" content=\"/ui/app.wasm\">"))
 		#expect(full.contains("'wasm-unsafe-eval'"))
 		#expect(!full.contains("WebUIRuntime.init"))
-		#expect(plain.contains("script-src 'nonce-"))
-		#expect(!plain.contains("'wasm-unsafe-eval'"))
+		#expect(plain.contains("'wasm-unsafe-eval'"))
+		#expect(!plain.contains("script-src 'nonce-"))
 	}
 }

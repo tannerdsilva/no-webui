@@ -15,3 +15,7 @@ node_modules/
 .smoke/
 
 .hermes/
+
+# design-audit / generated preview screenshots
+.audit/
+designer/previews/screenshots/

@@ -69,7 +69,7 @@ be referenced from a reachable root (webui_init → WebUIBridge.install).
 - **absent-artifact posture**: the `WebUIWasmPlugin` build-tool plugin emits
   a `present=false` carrier (soft — host builds stay green, wasm route 404s)
   when the artifact wasn't built. consumers who ship client-mode pages can
-  opt into a hard gate with `WEBUI_REQUIRE_WASM=1`: an absent artifact then
+  require the artifact unconditionally: an absent artifact then
   fails the host build with the exact `wasm-client` command — never a silent
   404 in production.
 - client pages carry `<meta name="webui-wasm" content="/__assets/app.<hash>.wasm">`;

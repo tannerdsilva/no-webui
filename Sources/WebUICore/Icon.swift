@@ -1,5 +1,3 @@
-import Foundation
-
 // MARK: - IconSize
 
 /// Semantic icon sizes. `.medium` maps to the base `1em` (scales with the
@@ -148,6 +146,15 @@ public enum IconSanitizer {
 		"opacity", "transform", "vector-effect", "color",
 	]
 
+	/// Foundation-free stand-in for `localizedCaseInsensitiveContains("url(")`:
+	/// case-insensitive scan of an attribute value for an external
+	/// paint-server / filter reference. for the ASCII `url(` probe,
+	/// `lowercased().contains` is behavior-identical to Foundation's localized
+	/// compare (both match every casing — `URL(`, `Url(`, `uRl(`, …).
+	private static func hasURLReference(_ value: String) -> Bool {
+		value.lowercased().contains("url(")
+	}
+
 	public static func sanitize(_ body: String) -> String {
 		var out = ""
 		var pos = body.startIndex
@@ -251,7 +258,7 @@ public enum IconSanitizer {
 			}
 			out += "<\(lowerName)"
 			for (name, value) in attrs {
-				guard allowedAttributes.contains(name), !value.localizedCaseInsensitiveContains("url(") else {
+				guard allowedAttributes.contains(name), !hasURLReference(value) else {
 					continue
 				}
 				out += " \(name)=\"\(htmlEscape(value))\""
@@ -281,16 +288,37 @@ public struct IconSizeModifier: ViewModifier {
 func replaceIconSuffix(in html: String, with suffix: String) -> String {
 	guard suffix != "icon" else {
 		// strip any explicit size, keep just `icon`
-		if let re = try? NSRegularExpression(pattern: " icon--(?:sm|md|lg|xl)") {
-			return re.stringByReplacingMatches(in: html, range: NSRange(html.startIndex..., in: html), withTemplate: "")
+		return replacingIconSizeToken(in: html, requireLeadingSpace: true, replacement: "")
+	}
+	return replacingIconSizeToken(in: html, requireLeadingSpace: false, replacement: suffix)
+}
+
+/// Foundation-free scan replicating the two `NSRegularExpression` passes the
+/// old impl ran (` icon--(?:sm|md|lg|xl)` when stripping, `icon--(?:sm|md|lg|xl)`
+/// when retargeting): a non-overlapping left-to-right match of the token is
+/// replaced with `replacement`. `requireLeadingSpace` folds the literal space
+/// into the consumed token, matching the strip regex. byte-identical to
+/// `stringByReplacingMatches` for both patterns (the old `replacingOccurrences`
+/// fallback was dead code — those regexes never fail to construct).
+private func replacingIconSizeToken(in html: String, requireLeadingSpace: Bool, replacement: String) -> String {
+	// the four catalog suffixes the `(?:sm|md|lg|xl)` alternation matches.
+	let suffixes: Set<String> = ["sm", "md", "lg", "xl"]
+	var result = ""
+	var index = html.startIndex
+	while index < html.endIndex {
+		let tokenLength = requireLeadingSpace ? 7 : 6 // " icon--" vs "icon--"
+		if let suffixStart = html.index(index, offsetBy: tokenLength, limitedBy: html.endIndex),
+		   let suffixEnd = html.index(suffixStart, offsetBy: 2, limitedBy: html.endIndex),
+		   html[index...].hasPrefix(requireLeadingSpace ? " icon--" : "icon--"),
+		   suffixes.contains(String(html[suffixStart..<suffixEnd])) {
+			result += replacement
+			index = suffixEnd
+		} else {
+			result.append(html[index])
+			index = html.index(after: index)
 		}
-		return html
 	}
-	if let re = try? NSRegularExpression(pattern: "icon--(?:sm|md|lg|xl)") {
-		return re.stringByReplacingMatches(in: html, range: NSRange(html.startIndex..., in: html), withTemplate: suffix)
-	}
-	// bare .slot icon (class="icon"): add the size class
-	return html.replacingOccurrences(of: "class=\"icon\"", with: "class=\"icon \(suffix)\"")
+	return result
 }
 
 extension View where Self == WebUIIcon {

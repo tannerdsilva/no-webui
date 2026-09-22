@@ -1,3 +1,8 @@
+> **SUPERSEDED** — the inline JS runtime described here was retired in the
+> wasm-always migration. Pages now always emit the `webui-wasm` client contract
+> (chamber + content-addressed artifact) and patch the DOM over the `/ws`
+> authority channel; see `ARCHITECTURE.md` and `WASM_BOOTSTRAP.md`.
+
 # JS Runtime
 
 The WebUI JS runtime (`designer/assets/webui-runtime.js`, ~900 lines) is a

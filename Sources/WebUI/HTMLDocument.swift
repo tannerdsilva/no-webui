@@ -47,19 +47,21 @@ public struct HTMLDocument: Sendable {
     /// serve — the browser never issues the request that would otherwise 404,
     /// and every framework csp already permits `img-src data:`.
     public static let defaultIcon = "<link rel=\"icon\" type=\"image/png\" href=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAApklEQVR4nO2XwQ2AIAxF2ahDeWQZb07idkINCQejECgpfDSS/BvQ118C1JhZB1lmsuyVxNLAjiwfynJFkBhcO/BdaYhBwfMQnWzPlgOZ/dOFeFJHA/h3AWy7TKoAzG1SAQjZhM2Wtd7eMDesKTghA5DW+HsA0kOoDtCib5XgB4ADwC4iQl/FVydgj1EnzQWA/ZIZ9KcU4AK0N6jqjjCtWQJkfHM6epyUsxUEgyvS4gAAAABJRU5ErkJggg==\">"
-    private func effectiveCSP(nonce: String) -> String? {
+    /// the default client boot emitted when the caller omits `clientMode`.
+    /// wasm is the only client runtime, so an ordinary page defaults to the
+    /// content-addressed client artifact at `/__assets/webui-client.<sha>.wasm`
+    /// (immutable-cached; the sha is the build-time `WebUIWasmInfo` hash).
+    public static let defaultBoot: ClientBoot = ClientBoot(
+        wasmURL: "/__assets/webui-client.\(WebUIBoot.wasmSHA256).wasm",
+        mode: .app
+    )
+    private func effectiveCSP(nonce: String, clientMode: ClientBoot) -> String? {
         if let csp = contentSecurityPolicy {
             return csp.isEmpty ? nil : csp
         }
-        if clientMode != nil {
-            // client-mode pages must permit wasm compilation; still `'self'`,
-            // still no `'unsafe-inline'` in script-src (trajectory w§3.7).
-            return ClientBoot.defaultCSP
-        }
-        if devMode {
-            return "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:;"
-        }
-        return "default-src 'self'; script-src 'nonce-\(nonce)'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:;"
+        // wasm is the only client runtime, so every page permits wasm
+        // compilation; still `'self'`, still no `'unsafe-inline'` in script-src.
+        return ClientBoot.defaultCSP
     }
     public init(
         title: String = "WebUI",
@@ -96,18 +98,28 @@ public struct HTMLDocument: Sendable {
         self.nonce = Self.generateNonce()
     }
     public func render() -> String {
+        let boot: ClientBoot
+        if let clientMode {
+            boot = clientMode
+        } else {
+            let base = Self.defaultBoot
+            if let cfg = runtimeConfig, !cfg.isEmpty {
+                boot = ClientBoot(wasmURL: base.wasmURL, mode: base.mode, config: cfg, scriptURLs: base.scriptURLs)
+            } else {
+                boot = base
+            }
+        }
         let styleTag: String
         let scriptTag: String
-        let cspValue = effectiveCSP(nonce: nonce)
-        // client-mode pages replace the inline server runtime with the wasm
-        // chamber (the boot head is appended to the caller's head slot).
-        let resolvedHead = head + (clientMode.map { "\n" + $0.headMarkup() } ?? "")
+        let cspValue = effectiveCSP(nonce: nonce, clientMode: boot)
+        // wasm is the only client runtime: the boot head (webui-wasm meta +
+        // chamber/boot scripts) is always appended to the caller's head slot.
+        let resolvedHead = head + "\n" + boot.headMarkup()
 
         if devMode {
             styleTag = "<link rel=\"stylesheet\" href=\"/ui/styles.css\">"
-            let runtimeSrc = (includeRuntime && clientMode == nil) ? "<script src=\"/ui/scripts.js\"></script>" : ""
             let appSrc = scripts.isEmpty ? "" : "<script src=\"/ui/app.js\"></script>"
-            scriptTag = [runtimeSrc, appSrc].filter { !$0.isEmpty }.joined(separator: "\n          ")
+            scriptTag = appSrc
         } else {
             var cssParts: [String] = []
             let cssContent = styles.render()
@@ -117,16 +129,10 @@ public struct HTMLDocument: Sendable {
             let allCSS = preMinifiedStyles ? combinedCSS : minifyCSS(combinedCSS)
             styleTag = allCSS.isEmpty ? "" : "<style>\n\(allCSS)\n</style>"
 
-            var jsParts: [String] = []
-            if includeRuntime, clientMode == nil {
-                jsParts.append(WebUIRuntime.source)
-                jsParts.append(WebUIRuntime.bootstrap(config: runtimeConfig))
-            }
-            if !scripts.isEmpty {
-                jsParts.append(scripts)
-            }
-            let jsContent = jsParts.joined(separator: "\n\n")
-            scriptTag = jsContent.isEmpty ? "" : "<script nonce=\"\(nonce)\">\n\(jsContent)\n</script>"
+            // wasm-only client runtime: no inline server runtime is emitted
+            // (the wasm chamber owns client behavior; caller raw `scripts` do
+            // not run under the client csp).
+            scriptTag = ""
         }
 
         let bodyAttr = bodyAttributes.isEmpty ? "" : " \(bodyAttributes)"

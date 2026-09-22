@@ -1,4 +1,3 @@
-import Foundation
 import Synchronization
 
 // p5-t1: wasm-computed optimistic patching. a local handler renders + ships

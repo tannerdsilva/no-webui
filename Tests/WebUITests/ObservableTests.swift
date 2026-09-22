@@ -339,8 +339,8 @@ func webuiDocumentIncludesRuntime() {
         body: "<p>Hello</p>"
     )
     let html = doc.render()
-    #expect(html.contains("WebUIRuntime"))
-    #expect(html.contains("createWSClient"))
+    #expect(html.contains("<meta name=\"webui-wasm\""))
+    #expect(!html.contains("WebUIRuntime"))
 }
 
 // MARK: - Layout Styles Tests
@@ -422,7 +422,7 @@ func fullPipelineRender() {
     #expect(html.contains(".card {"))
 
     // runtime checks
-    #expect(html.contains("WebUIRuntime.init()"))
+    #expect(html.contains("webui-wasm"))
 }
 
 // MARK: - Helpers

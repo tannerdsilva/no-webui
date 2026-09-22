@@ -1,5 +1,3 @@
-import Foundation
-
 // MARK: - Horizontal Alignment
 public enum HorizontalAlignment: Sendable {
     case leading

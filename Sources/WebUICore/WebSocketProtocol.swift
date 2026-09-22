@@ -1,5 +1,3 @@
-import Foundation
-
 // MARK: - WebSocket Protocol Types
 public struct FragmentUpdate: Sendable, Codable, Equatable, Hashable {
     public let id: String

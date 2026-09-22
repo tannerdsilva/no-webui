@@ -1,4 +1,3 @@
-import Foundation
 import WebUICore
 
 // MARK: - ChartRenderer
@@ -17,7 +16,7 @@ struct ChartRenderer {
 	private var markIdPrefix: String? { safeId.map { "\($0)-mark" } }
 
 	/// HTML5 ids may not contain spaces — sanitize before emitting.
-	private var safeId: String? { id.map { $0.replacingOccurrences(of: " ", with: "") } }
+	private var safeId: String? { id.map { String($0.filter { $0 != " " }) } }
 
 	func render() -> String {
 		guard !marks.isEmpty else {
@@ -293,15 +292,9 @@ struct ChartRenderer {
 	}
 
 	/// The domain pinned by a scale type, if any (`nil` = infer from data).
+	/// (`.date` bounds are converted to reference-date seconds by the scale.)
 	private func explicitDomain(_ scale: ChartScaleType) -> ClosedRange<Double>? {
-		switch scale {
-		case .linear(let d?): return d
-		case .date(let d?):
-			return d.lowerBound.timeIntervalSinceReferenceDate...d.upperBound.timeIntervalSinceReferenceDate
-		case .automatic, .categorical, .normalized,
-			 .linear(nil), .date(nil):
-			return nil
-		}
+		scale.linearDomain()
 	}
 
 	/// A resolved categorical x scale, when the x-axis is categorical.
@@ -706,7 +699,7 @@ struct ChartRenderer {
 		switch v {
 		case .category(let c): return c
 		case .number(let n): return fmt(n)
-		case .date(let d): return String(Int(d.timeIntervalSinceReferenceDate))
+		case .date: return String(Int(v.numericValue ?? 0))
 		}
 	}
 

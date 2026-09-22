@@ -1,5 +1,3 @@
-import Foundation
-
 // MARK: - Typography Tokens
 
 public enum FontWeight: Sendable {
