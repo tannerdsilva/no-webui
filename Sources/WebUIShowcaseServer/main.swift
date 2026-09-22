@@ -173,6 +173,8 @@ struct WebUIShowcaseServer {
                     try await respond(channel: channel.channel, body: WebUIAssets.client, contentType: "text/javascript; charset=utf-8", status: .ok)
                 } else if uri == "/ui/webui-app-boot.js" {
                     try await respond(channel: channel.channel, body: WebUIAssets.clientBoot, contentType: "text/javascript; charset=utf-8", status: .ok)
+                } else if uri == "/ui/webui-engine.js" {
+                    try await respond(channel: channel.channel, body: WebUIAssets.engine, contentType: "text/javascript; charset=utf-8", status: .ok)
                 } else if uri.hasPrefix("/__assets/webui-client."), uri.hasSuffix(".wasm") {
                     try await respondWasm(channel: channel.channel)
                 } else {

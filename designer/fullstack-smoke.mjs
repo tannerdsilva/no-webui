@@ -11,6 +11,7 @@
 
 const BASE = "http://127.0.0.1:9123";
 const WS = "ws://127.0.0.1:9123/ws";
+const ENGINE = process.env.WEBUI_BOOT === "engine";
 
 let pass = 0, fail = 0;
 const ok = (m) => { pass++; console.log(`  PASS ${m}`); };
@@ -23,8 +24,8 @@ if (html.includes("Full-Stack Smoke Test")) ok("page serves full-stack design-sy
 else bad("page title wrong");
 if (html.includes("data-component-id")) ok("event-delegation attributes present");
 else bad("no data-component-id");
-if (html.includes("WebUIRuntime.init")) ok("runtime auto-bootstraps (WebUIRuntime.init)");
-else bad("runtime bootstrap missing");
+if (ENGINE ? html.includes("/ui/webui-engine.js") : html.includes("webui-wasm")) ok(ENGINE ? "engine client contract present (webui-engine.js)" : "wasm client contract present (webui-wasm meta)");
+else bad(ENGINE ? "engine client contract missing" : "wasm client contract missing");
 if (html.includes('id="counter-value"') && html.includes('id="echo-input"')) ok("interactive view ids present");
 else bad("interactive view ids missing");
 if (html.includes("data-optimistic")) ok("optimistic prediction wired on served page");

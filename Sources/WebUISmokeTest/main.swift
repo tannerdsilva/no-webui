@@ -301,10 +301,15 @@ func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
 			}
 		}
 	}
+	// the elaborate engine-mode gate drive boots the same interactive page
+	// through the engine flavor (env WEBUI_BOOT=engine), so fullstack and
+	// browser smoke can run the identical probes against the new runtime.
+	let engineMode = ProcessInfo.processInfo.environment["WEBUI_BOOT"] == "engine"
 		return WebUIDocument(
 			title: "Design System Full-Stack Smoke Test",
 			body: body,
-			head: smokePageStyle
+			head: smokePageStyle,
+			clientMode: engineMode ? ClientBoot(config: RuntimeConfig(), flavor: .engine) : nil
 		).render()
 	}
 
@@ -663,6 +668,8 @@ extension SmokeApp {
 					text = WebUIAssets.client; contentType = "text/javascript; charset=utf-8"
 				case "/ui/webui-app-boot.js":
 					text = WebUIAssets.clientBoot; contentType = "text/javascript; charset=utf-8"
+				case "/ui/webui-engine.js":
+					text = WebUIAssets.engine; contentType = "text/javascript; charset=utf-8"
 				case "/__assets/webui-client.js":
 					text = WebUIAssets.client; contentType = "text/javascript; charset=utf-8"
 				case "/__assets/webui-worker.js":

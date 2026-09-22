@@ -89,6 +89,18 @@ struct WebUISmokePlugin: CommandPlugin {
             bad("wasm chamber served bytes DIFFER from source")
         }
 
+        let engineSource = context.package.directoryURL
+            .appendingPathComponent("designer/assets/webui-engine.js")
+        if let servedEngine = await GET(session, "\(base)/ui/webui-engine.js"),
+           let sourceEngine = try? Data(contentsOf: engineSource),
+           servedEngine == sourceEngine,
+           let engineText = String(data: servedEngine, encoding: .utf8),
+           !engineText.contains("/*") {
+            ok("engine served bytes == source, comment-free (\(sourceEngine.count) bytes)")
+        } else {
+            bad("engine served bytes DIFFER from source or carry comments")
+        }
+
         guard let pageData = await GET(session, "\(base)/"),
               let html = String(data: pageData, encoding: .utf8) else {
             Diagnostics.error("page not reachable at \(base)/")

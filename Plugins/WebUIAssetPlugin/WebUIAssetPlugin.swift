@@ -30,12 +30,14 @@ struct WebUIAssetPlugin: BuildToolPlugin {
         let clientBootFile = assetsDir.appendingPathComponent("client-demo-boot.js")
         let clientSearchBootFile = assetsDir.appendingPathComponent("search-demo-boot.js")
         let workerFile = assetsDir.appendingPathComponent("webui-worker.js")
+        let engineFile = assetsDir.appendingPathComponent("webui-engine.js")
         let cssExists = FileManager.default.fileExists(atPath: cssFile.path)
         let jsExists = FileManager.default.fileExists(atPath: jsFile.path)
         let clientExists = FileManager.default.fileExists(atPath: clientFile.path)
         let clientBootExists = FileManager.default.fileExists(atPath: clientBootFile.path)
         let clientSearchBootExists = FileManager.default.fileExists(atPath: clientSearchBootFile.path)
         let workerExists = FileManager.default.fileExists(atPath: workerFile.path)
+        let engineExists = FileManager.default.fileExists(atPath: engineFile.path)
 
         guard cssExists || jsExists else {
             throw AssetError("no css or js files found in designer/assets/ at \(assetsDir.path) — required to embed the shipped assets")
@@ -92,6 +94,10 @@ struct WebUIAssetPlugin: BuildToolPlugin {
         if workerExists {
             args += ["--worker-input", workerFile.path]
             inputs.append(workerFile)
+        }
+        if engineExists {
+            args += ["--engine-input", engineFile.path]
+            inputs.append(engineFile)
         }
         args += ["--output", outputURL.path]
 

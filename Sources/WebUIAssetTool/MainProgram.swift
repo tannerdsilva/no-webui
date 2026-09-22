@@ -12,6 +12,7 @@ enum WebUIAssetTool {
         var clientBootInput: String?
         var clientSearchBootInput: String?
         var workerInput: String?
+        var engineInput: String?
         var outputPath: String?
         var tokensOutputPath: String?
 
@@ -30,6 +31,8 @@ enum WebUIAssetTool {
                 clientSearchBootInput = iterator.next()
             case "--worker-input":
                 workerInput = iterator.next()
+            case "--engine-input":
+                engineInput = iterator.next()
             case "--output":
                 outputPath = iterator.next()
             case "--tokens-output":
@@ -40,7 +43,7 @@ enum WebUIAssetTool {
         }
 
         guard outputPath != nil || tokensOutputPath != nil else {
-            print("usage: WebUIAssetTool --css-input <path> --js-input <path> --client-input <path> --client-boot-input <path> --client-search-boot-input <path> --worker-input <path> --output <path> [--tokens-output <path>]")
+            print("usage: WebUIAssetTool --css-input <path> --js-input <path> --client-input <path> --client-boot-input <path> --client-search-boot-input <path> --worker-input <path> --engine-input <path> --output <path> [--tokens-output <path>]")
             exit(1)
         }
 
@@ -73,6 +76,11 @@ enum WebUIAssetTool {
             workerContent = try String(contentsOfFile: workerInput, encoding: .utf8)
         }
 
+        var engineContent = ""
+        if let engineInput {
+            engineContent = try String(contentsOfFile: engineInput, encoding: .utf8)
+        }
+
         // the token vocabulary is written to its own output so the wasm-clean
         // design-system core can embed it without the server-bound WebUI target
         // (p5-t7: `DesignToken` is a client-reachable core surface).
@@ -91,7 +99,7 @@ enum WebUIAssetTool {
             let generated = try generateAssetsSource(
                 css: cssContent, js: jsContent, client: clientContent,
                 clientBoot: clientBootContent, clientSearchBoot: clientSearchBootContent,
-                worker: workerContent
+                worker: workerContent, engine: engineContent
             )
 
             try generated.write(toFile: outputPath, atomically: true, encoding: .utf8)
@@ -102,17 +110,19 @@ enum WebUIAssetTool {
             let bootBytes = clientBootContent.utf8.count
             let searchBytes = clientSearchBootContent.utf8.count
             let workerBytes = workerContent.utf8.count
-            print("generated \(outputPath) (\(cssBytes) bytes CSS, \(jsBytes) bytes JS, \(clientBytes) bytes client, \(bootBytes) bytes boot, \(searchBytes) bytes search boot, \(workerBytes) bytes worker)")
+            let engineBytes = engineContent.utf8.count
+            print("generated \(outputPath) (\(cssBytes) bytes CSS, \(jsBytes) bytes JS, \(clientBytes) bytes client, \(bootBytes) bytes boot, \(searchBytes) bytes search boot, \(workerBytes) bytes worker, \(engineBytes) bytes engine)")
         }
     }
 
-    static func generateAssetsSource(css: String, js: String, client: String, clientBoot: String, clientSearchBoot: String, worker: String) throws -> String {
+    static func generateAssetsSource(css: String, js: String, client: String, clientBoot: String, clientSearchBoot: String, worker: String, engine: String) throws -> String {
         let escapedCSS = css.replacingOccurrences(of: "\\", with: "\\\\")
         let escapedJS = js.replacingOccurrences(of: "\\", with: "\\\\")
         let escapedClient = client.replacingOccurrences(of: "\\", with: "\\\\")
         let escapedBoot = clientBoot.replacingOccurrences(of: "\\", with: "\\\\")
         let escapedSearchBoot = clientSearchBoot.replacingOccurrences(of: "\\", with: "\\\\")
         let escapedWorker = worker.replacingOccurrences(of: "\\", with: "\\\\")
+        let escapedEngine = engine.replacingOccurrences(of: "\\", with: "\\\\")
 
         let indentedCSS = escapedCSS
             .split(separator: "\n", omittingEmptySubsequences: false)
@@ -144,6 +154,11 @@ enum WebUIAssetTool {
             .map { "    \($0)" }
             .joined(separator: "\n")
 
+        let indentedEngine = escapedEngine
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map { "    \($0)" }
+            .joined(separator: "\n")
+
         let assets = """
         import Foundation
         public enum WebUIAssets {
@@ -164,6 +179,9 @@ enum WebUIAssetTool {
             \"\"\"
             public static let worker: String = \"\"\"
         \(indentedWorker)
+            \"\"\"
+            public static let engine: String = \"\"\"
+        \(indentedEngine)
             \"\"\"
         }
         """

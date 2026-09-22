@@ -979,6 +979,9 @@ struct WebUIAuthExample {
 		case (.GET, "/ui/webui-app-boot.js"):
 			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/javascript; charset=utf-8")], body: WebUIAssets.clientBoot)
 			return
+		case (.GET, "/ui/webui-engine.js"):
+			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/javascript; charset=utf-8")], body: WebUIAssets.engine)
+			return
 		default:
 			break
 		}

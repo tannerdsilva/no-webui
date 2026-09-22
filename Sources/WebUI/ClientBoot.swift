@@ -20,6 +20,15 @@ public struct ClientBoot: Sendable {
 		case app
 	}
 
+	/// which client runtime the page boots. `.wasm` is the pre-restart
+	/// default (chamber + content-addressed artifact); `.engine` boots the
+	/// framework-owned engine (`webui-engine.js`) as the default client
+	/// runtime of the next-architecture path — see `NEXT_ARCHITECTURE.md`.
+	public enum Flavor: Sendable {
+		case engine
+		case wasm
+	}
+
 	/// the default chamber + boot script routes a client-mode page references.
 	/// hosts that serve under different prefixes (the demo servers use
 	/// `/__assets/…`) pass their own urls.
@@ -27,6 +36,9 @@ public struct ClientBoot: Sendable {
 		"/ui/webui-client.js",
 		"/ui/webui-app-boot.js",
 	]
+
+	/// the route the engine flavor references in place of the chamber.
+	public static let defaultEngineScriptURL = "/ui/webui-engine.js"
 
 	/// the client-mode csp (trajectory w§3.7): `'self'` + `'wasm-unsafe-eval'`,
 	/// never `'unsafe-inline'` in script-src. used when the caller provides no
@@ -37,32 +49,50 @@ public struct ClientBoot: Sendable {
 	public let mode: Mode
 	public let config: RuntimeConfig?
 	public let scriptURLs: [String]
+	public let flavor: Flavor
 
 	public init(
-		wasmURL: String,
+		wasmURL: String = "",
 		mode: Mode = .app,
 		config: RuntimeConfig? = nil,
-		scriptURLs: [String] = ClientBoot.defaultScriptURLs
+		scriptURLs: [String] = ClientBoot.defaultScriptURLs,
+		flavor: Flavor = .wasm
 	) {
 		self.wasmURL = wasmURL
 		self.mode = mode
 		self.config = config
 		self.scriptURLs = scriptURLs
+		self.flavor = flavor
 	}
 
-	/// the `<head>` slot markup a client-mode page carries: `webui-wasm` meta,
-	/// `webui-config` meta (emitted BEFORE the script tags — the chamber's
-	/// boot glue reads it during script execution, so a config meta after the
-	/// scripts would be invisible at boot), then the chamber/boot scripts.
+	/// the `<head>` slot markup a client-mode page carries: for `.wasm` the
+	/// `webui-wasm` meta, `webui-config` meta (emitted BEFORE the script tags
+	/// — the boot glue reads it during script execution, so a config meta
+	/// after the scripts would be invisible at boot), then the chamber/boot
+	/// scripts. for `.engine` the config meta (always emitted, `{}` when empty,
+	/// so the engine's meta-driven auto-boot always fires) then the engine
+	/// script.
 	public func headMarkup() -> String {
-		var parts: [String] = []
-		parts.append("<meta name=\"webui-wasm\" content=\"\(htmlEscape(wasmURL))\">")
-		if let config, !config.isEmpty {
-			parts.append("<meta name=\"webui-config\" content=\"\(htmlEscape(config.encodedJSON()))\">")
+		switch flavor {
+		case .engine:
+			var parts: [String] = []
+			if let config, !config.isEmpty {
+				parts.append("<meta name=\"webui-config\" content=\"\(htmlEscape(config.encodedJSON()))\">")
+			} else {
+				parts.append("<meta name=\"webui-config\" content=\"{}\">")
+			}
+			parts.append("<script src=\"\(htmlEscape(Self.defaultEngineScriptURL))\"></script>")
+			return parts.joined(separator: "\n")
+		case .wasm:
+			var parts: [String] = []
+			parts.append("<meta name=\"webui-wasm\" content=\"\(htmlEscape(wasmURL))\">")
+			if let config, !config.isEmpty {
+				parts.append("<meta name=\"webui-config\" content=\"\(htmlEscape(config.encodedJSON()))\">")
+			}
+			for url in scriptURLs {
+				parts.append("<script src=\"\(htmlEscape(url))\"></script>")
+			}
+			return parts.joined(separator: "\n")
 		}
-		for url in scriptURLs {
-			parts.append("<script src=\"\(htmlEscape(url))\"></script>")
-		}
-		return parts.joined(separator: "\n")
 	}
 }
