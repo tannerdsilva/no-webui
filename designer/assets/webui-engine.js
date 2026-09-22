@@ -262,6 +262,7 @@ window.WebUIEngine = (function () {
           if (dismissBtn) {
             dismissBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
           }
+          restoreModalFocus();
         }
       }
 
@@ -845,6 +846,7 @@ window.WebUIEngine = (function () {
       switch (msg.type) {
         case 'update':
           fragmentPatcher.patch(msg.fragments, msg.seq);
+          restoreModalFocus();
           break;
 
         case 'redirect':
@@ -885,6 +887,45 @@ window.WebUIEngine = (function () {
   }
 
   var instance = null;
+
+  var modalFocus = null;
+  function focusablesIn(root) {
+    var sel = 'button, [href], input, select, textarea, [tabindex], summary';
+    var list = [];
+    var all = root.querySelectorAll(sel);
+    for (var i = 0; i < all.length; i++) {
+      var el = all[i];
+      if (!el.disabled && el.getAttribute('tabindex') !== '-1') list.push(el);
+    }
+    return list;
+  }
+  function restoreModalFocus() {
+    if (!modalFocus) return;
+    var opener = modalFocus;
+    modalFocus = null;
+    if (document.querySelector('.modal-overlay')) return;
+    if (opener && typeof opener.focus === 'function') {
+      try { opener.focus(); } catch (e) { }
+    }
+  }
+  document.addEventListener('focusout', function (e) {
+    var from = e.target;
+    var to = e.relatedTarget;
+    if (!from || !from.closest) return;
+    var fromModal = from.closest('.modal-overlay');
+    var toModal = to && to.closest ? to.closest('.modal-overlay') : null;
+    if (!fromModal && toModal) { modalFocus = from; }
+  }, true);
+  document.addEventListener('keydown', function (e) {
+    if (e.key !== 'Tab') return;
+    if (!e.target || !e.target.closest) return;
+    var modal = e.target.closest('.modal-overlay');
+    if (!modal) return;
+    var f = focusablesIn(modal);
+    if (!f.length) return;
+    if (e.shiftKey && e.target === f[0]) { e.preventDefault(); f[f.length - 1].focus(); }
+    else if (!e.shiftKey && e.target === f[f.length - 1]) { e.preventDefault(); f[0].focus(); }
+  }, true);
 
 
   function init(opts) {

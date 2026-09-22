@@ -1079,8 +1079,8 @@ struct DocumentTests {
         #expect(html.contains("<style>"))
         #expect(html.contains("color: red;"))
         #expect(html.contains("</style>"))
-        #expect(html.contains("<meta name=\"webui-wasm\""))
-        #expect(html.contains("<script src=\"/ui/webui-client.js\">"))
+        #expect(html.contains("<meta name=\"webui-config\""))
+        #expect(html.contains("<script src=\"/ui/webui-engine.js\">"))
         #expect(!html.contains("console.log('test');"))
         #expect(html.contains("<body>"))
         #expect(html.contains("<p>Hello</p>"))
@@ -1100,7 +1100,7 @@ struct DocumentTests {
         )
         let html = doc.render()
         #expect(html.contains("<link rel=\"stylesheet\" href=\"/ui/styles.css\">"))
-        #expect(html.contains("<script src=\"/ui/webui-client.js\">"))
+        #expect(html.contains("<script src=\"/ui/webui-engine.js\">"))
         #expect(!html.contains("<style>"))
         #expect(!html.contains("color: red;"))
         #expect(validateTagBalance(html))
@@ -1149,7 +1149,7 @@ struct DocumentTests {
     func includesRuntimeByDefault() {
         let doc = HTMLDocument(title: "Runtime", body: "<p>Test</p>")
         let html = doc.render()
-        #expect(html.contains("<meta name=\"webui-wasm\""))
+        #expect(html.contains("<meta name=\"webui-config\""))
         #expect(!html.contains("WebUIRuntime"))
         #expect(validateTagBalance(html))
     }
@@ -1513,7 +1513,7 @@ struct IntegrationTests {
         #expect(html.contains("class=\"button button--primary button--lg\""))
         #expect(html.contains("class=\"card card--elevated\""))
         #expect(html.contains("class=\"alert alert--success\""))
-        #expect(html.contains("<meta name=\"webui-wasm\""))
+        #expect(html.contains("<meta name=\"webui-config\""))
         #expect(html.contains("<meta name=\"description\""))
     }
 

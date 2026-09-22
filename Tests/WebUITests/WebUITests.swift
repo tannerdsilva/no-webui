@@ -436,8 +436,8 @@ func htmlDocumentRenders() {
     #expect(html.contains("<p>Hello</p>"))
     #expect(html.contains("<style>"))
     #expect(html.contains("color: red;"))
-    #expect(html.contains("<meta name=\"webui-wasm\""))
-    #expect(html.contains("<script src=\"/ui/webui-client.js\">"))
+    #expect(html.contains("<meta name=\"webui-config\""))
+    #expect(html.contains("<script src=\"/ui/webui-engine.js\">"))
     #expect(!html.contains("console.log('hello');"))
 }
 
@@ -452,7 +452,7 @@ func htmlDocumentDevMode() {
     )
     let html = doc.render()
     #expect(html.contains("<link rel=\"stylesheet\" href=\"/ui/styles.css\">"))
-    #expect(html.contains("<script src=\"/ui/webui-client.js\">"))
+    #expect(html.contains("<script src=\"/ui/webui-engine.js\">"))
     #expect(!html.contains("<script src=\"/ui/scripts.js\">"))
     #expect(!html.contains("<style>"))
 }

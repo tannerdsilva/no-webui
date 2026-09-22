@@ -337,7 +337,7 @@ func documentSurfacePins() {
 		runtimeConfig: RuntimeConfig(renderToken: "rt-1")
 	).render()
 	#expect(doc.contains("<title>T</title>"))
-	#expect(doc.contains("<meta name=\"webui-wasm\""))
+	#expect(doc.contains("<meta name=\"webui-config\""))
 	#expect(doc.contains("renderToken"))
 
 	let themed = WebUIDocument(body: Text("x").render(), theme: WebUITheme(scheme: .dark)).render()

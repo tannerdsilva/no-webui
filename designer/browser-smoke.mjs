@@ -29,7 +29,7 @@ import { chromium } from "playwright";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PORT = 9123;
 const BASE = `http://127.0.0.1:${PORT}`;
-const ENGINE = process.env.WEBUI_BOOT === "engine";
+const WASM = process.env.WEBUI_BOOT === "wasm";
 
 let pass = 0;
 let fail = 0;
@@ -91,10 +91,11 @@ const binPath = await (async () => {
 const sdkOut = await swift(["sdk", "list"]);
 const hasWasmSdk = sdkOut.out.includes("swift-6.4.0-RELEASE_wasm");
 let wasmBuilt = false;
-// engine mode drives the new client runtime: the 55 mb artifact is not on the
-// page's critical path, so skip the sdk build entirely (and the wasm-only
-// probes below are naturally short-circuited by wasmBuilt === false).
-if (!ENGINE && hasWasmSdk) {
+// engine mode (default) drives the next-architecture runtime: the 55 mb
+// artifact is not on the page's critical path, so skip the sdk build
+// entirely (and the wasm-only probes below are naturally short-circuited by
+// wasmBuilt === false). WEBUI_BOOT=wasm restores the old full path.
+if (WASM && hasWasmSdk) {
   const wb = await swift([
     "build", "-c", "release", "--swift-sdk", "swift-6.4.0-RELEASE_wasm", "--product", "WebUIClient",
   ]);
@@ -224,8 +225,8 @@ const chamberPatch = await page.evaluate((runName) => {
   const inst = window[runName]._getInstance();
   inst.patch([{ id: "counter-value", html: '<div id="counter-value" class="counter-value" role="status"><span>9</span></div>' }]);
   return { immediate: document.querySelector("#counter-value").textContent.trim() };
-}, ENGINE ? "WebUIEngine" : "WebUIClient");
-if (chamberPatch.immediate === "9") ok("chamber applies an authoritative fragment patch (counter -> 9)");
+}, WASM ? "WebUIClient" : "WebUIEngine");
+if (chamberPatch.immediate === "9") ok("runtime applies an authoritative fragment patch (counter -> 9)");
 else bad(`chamber patch failed: ${JSON.stringify(chamberPatch)}`);
 
 // 5. Save/restore hardening: a scrollable element inside a patched fragment
@@ -245,7 +246,7 @@ const scrollProbe = await page.evaluate((runName) => {
   const after = document.getElementById("scroll-probe").scrollTop;
   holder.remove();
   return { before, after };
-}, ENGINE ? "WebUIEngine" : "WebUIClient");
+}, WASM ? "WebUIClient" : "WebUIEngine");
 if (scrollProbe.before === 30 && scrollProbe.after === 30) ok("scroll position survives a fragment patch");
 else bad(`scroll not preserved across patch: ${JSON.stringify(scrollProbe)}`);
 
@@ -574,7 +575,15 @@ if (wasmBuilt) {
     const escErrors = [];
     esc.on("pageerror", (e) => escErrors.push(String(e)));
     await esc.waitForTimeout(300);
+    // modal focus contract: an opener outside the modal, then a modal with a
+    // close button. engine mode presses Escape (dismiss + focus return);
+    // wasm mode clicks the dismiss (documented wasm limitation).
     await esc.evaluate(() => {
+      const opener = document.createElement("button");
+      opener.id = "esc-opener";
+      opener.textContent = "open";
+      document.body.appendChild(opener);
+      opener.focus();
       const overlay = document.createElement("div");
       overlay.className = "modal-overlay";
       overlay.setAttribute("data-component-id", "esc-test");
@@ -585,16 +594,24 @@ if (wasmBuilt) {
       overlay.appendChild(btn);
       document.body.appendChild(overlay);
       window.__escClicks = 0;
-      btn.addEventListener("click", function () { window.__escClicks++; });
+      btn.addEventListener("click", function () {
+        window.__escClicks++;
+        overlay.remove();
+      });
       btn.focus();
     });
-    // the wasm chamber does not mirror the Escape-to-dismiss keyboard
-    // affordance (documented wasm limitation) — verify the dismiss click fires.
-    await esc.click("button[data-dismiss]");
-    await esc.waitForTimeout(100);
+    if (WASM) {
+      await esc.click("button[data-dismiss]");
+    } else {
+      await esc.keyboard.press("Escape");
+    }
+    await esc.waitForTimeout(150);
     const escClicks = await esc.evaluate(() => window.__escClicks);
-    if (escClicks === 1) ok("modal dismiss click dispatches (Escape-to-dismiss is a documented wasm limitation)");
-    else bad(`dismiss click count: ${escClicks} (expected 1)`);
+    const escFocus = await esc.evaluate(() => document.activeElement && document.activeElement.id);
+    if (escClicks === 1) ok(WASM ? "modal dismiss click dispatches (Escape-to-dismiss is a documented wasm limitation)" : "Escape-to-dismiss dispatches the close click (engine keyboard parity)");
+    else bad(`dismiss count: ${escClicks} (expected 1)`);
+    if (!WASM && escFocus === "esc-opener") ok("modal close returns focus to the opener (focus trap + return)");
+    else if (!WASM) bad(`focus after close: ${JSON.stringify(escFocus)} (expected esc-opener)`);
     if (escErrors.length === 0) ok("Escape probe has no page errors");
     else bad(`Escape probe page errors: ${JSON.stringify(escErrors)}`);
     await esc.close();

@@ -166,7 +166,7 @@ struct WebUIDocumentThemeTests {
 	@Test("themed document keeps the design sheet and runtime intact")
 	func themedDocumentKeepsSheet() {
 		let html = WebUIDocument(body: "<p>x</p>", theme: WebUITheme(scheme: .dark)).render()
-		#expect(html.contains("<meta name=\"webui-wasm\""))
+		#expect(html.contains("<meta name=\"webui-config\""))
 		#expect(html.contains("--color-neutral-50:"))
 	}
 }

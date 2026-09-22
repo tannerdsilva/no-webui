@@ -274,7 +274,7 @@ struct RuntimeConfigTests {
 	@Test("default bootstrap is unchanged")
 	func defaultBootstrap() {
 		let page = HTMLDocument(title: "t", body: "").render()
-		#expect(page.contains("<meta name=\"webui-wasm\""))
+		#expect(page.contains("<meta name=\"webui-config\""))
 		#expect(!page.contains("WebUIRuntime"))
 	}
 
@@ -292,7 +292,7 @@ struct RuntimeConfigTests {
 	@Test("empty config falls back to the plain bootstrap")
 	func emptyConfigDefaults() {
 		let page = HTMLDocument(title: "t", body: "", runtimeConfig: RuntimeConfig()).render()
-		#expect(page.contains("<meta name=\"webui-wasm\""))
+		#expect(page.contains("<meta name=\"webui-config\""))
 		#expect(!page.contains("WebUIRuntime"))
 	}
 

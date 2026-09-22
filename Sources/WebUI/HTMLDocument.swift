@@ -48,12 +48,12 @@ public struct HTMLDocument: Sendable {
     /// and every framework csp already permits `img-src data:`.
     public static let defaultIcon = "<link rel=\"icon\" type=\"image/png\" href=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAApklEQVR4nO2XwQ2AIAxF2ahDeWQZb07idkINCQejECgpfDSS/BvQ118C1JhZB1lmsuyVxNLAjiwfynJFkBhcO/BdaYhBwfMQnWzPlgOZ/dOFeFJHA/h3AWy7TKoAzG1SAQjZhM2Wtd7eMDesKTghA5DW+HsA0kOoDtCib5XgB4ADwC4iQl/FVydgj1EnzQWA/ZIZ9KcU4AK0N6jqjjCtWQJkfHM6epyUsxUEgyvS4gAAAABJRU5ErkJggg==\">"
     /// the default client boot emitted when the caller omits `clientMode`.
-    /// wasm is the only client runtime, so an ordinary page defaults to the
-    /// content-addressed client artifact at `/__assets/webui-client.<sha>.wasm`
-    /// (immutable-cached; the sha is the build-time `WebUIWasmInfo` hash).
+    /// the engine is the default client runtime for server-rendered pages
+    /// (next architecture, `NEXT_ARCHITECTURE.md`); the wasm client remains
+    /// available via an explicit `ClientBoot(flavor: .wasm, …)` for applet
+    /// and client-mode pages.
     public static let defaultBoot: ClientBoot = ClientBoot(
-        wasmURL: "/__assets/webui-client.\(WebUIBoot.wasmSHA256).wasm",
-        mode: .app
+        flavor: .engine
     )
     private func effectiveCSP(nonce: String, clientMode: ClientBoot) -> String? {
         if let csp = contentSecurityPolicy {
@@ -104,7 +104,7 @@ public struct HTMLDocument: Sendable {
         } else {
             let base = Self.defaultBoot
             if let cfg = runtimeConfig, !cfg.isEmpty {
-                boot = ClientBoot(wasmURL: base.wasmURL, mode: base.mode, config: cfg, scriptURLs: base.scriptURLs)
+                boot = ClientBoot(wasmURL: base.wasmURL, mode: base.mode, config: cfg, scriptURLs: base.scriptURLs, flavor: base.flavor)
             } else {
                 boot = base
             }

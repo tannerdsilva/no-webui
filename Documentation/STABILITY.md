@@ -109,15 +109,23 @@ frozen surface is a mistake:
    holds every live session until expiry; hosts that cap per-identity
    sessions must do so at login (`listSessions` / `invalidateAll` — see
    `ASSEMBLY.md`).
-2. **the wasm client runtime is not a full mirror of the JS runtime.**
-   `sources/WebUIClientRuntime` covers state/sync/search/validation, but the
-   browser-mode keyboard affordances (tree Enter/Space, composer
-   enter-to-send, modal Escape-to-dismiss) live in `webui-runtime.js` and
-   are **not** mirrored yet. `clientMode` is an experimental surface; the
-   wasm product's verification story is browser-hosted + chamber-only.
-3. **modal focus management.** Escape-to-dismiss is implemented; initial
-   focus, focus trapping, and focus return for `WebUIModal` are not. planned
-   for a minor release after 1.0.
+2. **the wasm client is not the default runtime anymore; it is a partial
+   mirror.** the engine (`webui-engine.js`, the next-architecture default
+   client for server-rendered pages, see `NEXT_ARCHITECTURE.md` d2) carries
+   the full browser-mode keyboard surface — tree Enter/Space, composer
+   enter-to-send, modal Escape-to-dismiss — plus modal focus trapping and
+   focus return. the wasm `WebUIClient` remains available via an explicit
+   `ClientBoot(flavor: .wasm, …)` (applet/client-mode pages) and keeps its
+   own limitations: it does **not** mirror the keyboard affordances, and its
+   `sources/WebUIClientRuntime` does not render the server's views. the boot
+   flip rides the `clientMode` experimental-surface carve-out — page-contract
+   pins are test-internal and were retargeted with the flip.
+3. **modal focus management is engine-owned.** initial focus into a
+   `WebUIModal` is still server-driven (the caller renders the modal open
+   with the intended focus within its own markup); trapping and focus return
+   for the engine path are implemented and probed in
+   `designer/browser-smoke.mjs` (Escape probe). the wasm client path keeps
+   none of this (see #2).
 4. **`WebUIChart` pins live in `ChartTests`** and follow the same epoch, but
    charts are the youngest surface — treat them as the least battle-tested.
 5. **phase 6 of the wasm trajectory** (size diet + per-SKU distribution) is

@@ -301,15 +301,18 @@ func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
 			}
 		}
 	}
-	// the elaborate engine-mode gate drive boots the same interactive page
-	// through the engine flavor (env WEBUI_BOOT=engine), so fullstack and
-	// browser smoke can run the identical probes against the new runtime.
-	let engineMode = ProcessInfo.processInfo.environment["WEBUI_BOOT"] == "engine"
+	// the gate-drive mode switch: WEBUI_BOOT=wasm boots the same interactive
+	// page through the explicit wasm client (chamber + artifact); the default
+	// (unset or =engine) boots the engine — the framework default after the
+	// next-architecture flip.
+	let wasmMode = ProcessInfo.processInfo.environment["WEBUI_BOOT"] == "wasm"
 		return WebUIDocument(
 			title: "Design System Full-Stack Smoke Test",
 			body: body,
 			head: smokePageStyle,
-			clientMode: engineMode ? ClientBoot(config: RuntimeConfig(), flavor: .engine) : nil
+			clientMode: wasmMode
+				? ClientBoot(wasmURL: clientWasmURL(WebUIBoot.wasmSHA256), config: RuntimeConfig(), flavor: .wasm)
+				: nil
 		).render()
 	}
 

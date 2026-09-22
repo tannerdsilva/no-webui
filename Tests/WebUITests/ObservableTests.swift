@@ -339,7 +339,7 @@ func webuiDocumentIncludesRuntime() {
         body: "<p>Hello</p>"
     )
     let html = doc.render()
-    #expect(html.contains("<meta name=\"webui-wasm\""))
+    #expect(html.contains("<meta name=\"webui-config\""))
     #expect(!html.contains("WebUIRuntime"))
 }
 
@@ -422,7 +422,7 @@ func fullPipelineRender() {
     #expect(html.contains(".card {"))
 
     // runtime checks
-    #expect(html.contains("webui-wasm"))
+    #expect(html.contains("webui-engine"))
 }
 
 // MARK: - Helpers
