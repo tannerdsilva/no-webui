@@ -319,7 +319,10 @@ window.WebUIEngine = (function () {
       }
 
       var componentEl = findComponent(event);
-      if (!componentEl) return;
+      if (!componentEl) {
+        warnUnwiredControl(event);
+        return;
+      }
 
       var componentId = componentEl.getAttribute('data-component-id');
       if (!componentId) return;
@@ -423,6 +426,19 @@ window.WebUIEngine = (function () {
       if (target && target.id) data.targetId = target.id;
       if (target && typeof target.className === 'string' && target.className) data.targetClass = target.className;
       return data;
+    }
+
+    var UNWIRED_WARNED = (typeof WeakSet !== 'undefined') ? new WeakSet() : null;
+    function warnUnwiredControl(event) {
+      if (event.type !== 'click') return;
+      var el = event.target;
+      if (!el || el.nodeType !== 1) return;
+      var tag = el.tagName;
+      if (tag !== 'BUTTON' && !(el.getAttribute && el.getAttribute('role') === 'button')) return;
+      if (el.closest && el.closest('form[action]')) return;
+      if (UNWIRED_WARNED && UNWIRED_WARNED.has(el)) return;
+      if (UNWIRED_WARNED) UNWIRED_WARNED.add(el);
+      log.warn('click on unwired control' + (el.id ? ' #' + el.id : ' <' + tag.toLowerCase() + '>') + ' — no data-component-id in the path, no server handler. wire it with onTap/onClick/controlAttributes.');
     }
 
     function extractEventData(event, componentEl) {
@@ -1139,6 +1155,7 @@ window.WebUIEngine = (function () {
   var _statusTimer = null;
   function ensureStatus() {
     if (_statusEl || !document.body) { return; }
+    if (document.querySelector('[data-webui-status]')) { return; }
     _statusEl = document.createElement('div');
     _statusEl.className = 'engine-status';
     _statusEl.setAttribute('role', 'status');

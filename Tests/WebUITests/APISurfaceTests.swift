@@ -182,6 +182,16 @@ func componentSurfacePins() {
 	#expect(tabs.contains("role=\"tablist\""))
 	#expect(tabs.contains("aria-selected=\"true\""))
 
+	// wired tabs: each tab carries a derived routing id (stable control id +
+	// DOM id) so a server handler can switch on `me`/tabID.
+	let tabsWired = rendered(WebUITabs(
+		tabs: [TabItem(id: "a", label: "A")], activeTab: "a", id: "t1",
+		onSelect: { _, _ in [] }
+	))
+	#expect(tabsWired.contains("id=\"t1-a\""))
+	#expect(tabsWired.contains("data-component-id=\"t1-a\""))
+	#expect(tabsWired.contains("data-event=\"click\""))
+
 	let alert = rendered(WebUIAlert(variant: .danger, title: "Error", message: "boom", dismissible: true))
 	#expect(alert.contains("alert alert--danger"))
 	#expect(alert.contains("role=\"alert\""))

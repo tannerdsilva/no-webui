@@ -83,7 +83,7 @@ struct HTMLClassValidatorTests {
 		// structural wrapper. anything else is a typo that renders silently
 		// unstyled — so the pin fails.
 		let allowlist: Set<String> = ["demo-section"]
-		let html = ShowcasePage().render()
+		let html = ShowcasePage(state: ShowcaseState()).render()
 		let undefined = HTMLClassValidator.undefinedClasses(in: html, extra: allowlist)
 		#expect(undefined.isEmpty, "undefined classes were: \(undefined)")
 	}

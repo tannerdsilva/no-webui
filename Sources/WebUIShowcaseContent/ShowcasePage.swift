@@ -4,24 +4,29 @@ import WebUIDesignSystem
 import WebUIChart
 
 // MARK: - Showcase Page
-public struct ShowcasePage {
-    public init() {}
+public struct ShowcasePage: Sendable {
+	/// the live demo state. the page renders FROM this state and every wired
+	/// handler mutates it — serve through `WebUIServer` (which injects its own
+	/// router as the render context) or wrap a `RenderContext` yourself for
+	/// the static artifact. rendering without a context emits no handler
+	/// registration (a static snapshot).
+	public let state: ShowcaseState
 
-    public func render() -> String {
-        let router = EventRouter()
-        let ctx = RenderContext(router: router)
-        return RenderContext.$current.withValue(ctx) {
-            VStack(spacing: 0) {
-                topBar()
-                Div(class: "showcase-shell") {
-                    HStack(alignment: .top, spacing: 0) {
-                        sidebar()
-                        mainContent()
-                    }
-                }
-            }.render()
-        }
-    }
+	public init(state: ShowcaseState) {
+		self.state = state
+	}
+
+	public func render() -> String {
+		VStack(spacing: 0) {
+			topBar()
+			Div(class: "showcase-shell") {
+				HStack(alignment: .top, spacing: 0) {
+					sidebar()
+					mainContent()
+				}
+			}
+		}.render()
+	}
 
     // MARK: - Top Bar
     func topBar() -> some View {
@@ -363,31 +368,11 @@ public struct ShowcasePage {
                             )
                         }
                         demoCard("Table — interactive (sortable · selectable · expandable)") {
-                            // Static reference render of the interactive affordances.
-                            // Live round-trips (sort toggle, select-all, expand)
-                            // are proven on the full-stack smoke page — the
-                            // showcase has no WebSocket backend.
-                            WebUITable(
-                                headers: ["Service", "Region", "p95"],
-                                rows: [
-                                    [Text("web"), Text("us-east-1"), Text("42 ms")],
-                                    [Text("api"), Text("eu-west-2"), Text("18 ms")],
-                                    [Text("search"), Text("us-west-2"), Text("61 ms")],
-                                ],
-                                wrapped: true,
-                                alignments: [.leading, .leading, .trailing],
-                                id: "demo-interactive",
-                                sortableColumns: [0, 1, 2],
-                                sort: (column: 2, direction: .descending),
-                                selectable: true,
-                                rowIds: ["web", "api", "search"],
-                                selectedRows: ["search"],
-                                expandedRows: ["web"],
-                                rowDetails: [
-                                    "web": Text("8 instances · 99.98% SLA · canary 10% to v2.14"),
-                                    "api": Text("4 instances · 99.95% SLA · zero-downtime deploys"),
-                                ]
-                            )
+                        	// live round-trips (sort toggle, select-all, row
+                        	// select, expand) — typed handlers mutate the
+                        	// server-side state; the table region is re-patched
+                        	// with post-state markup via the typed `me` ref.
+                        	interactiveTable(state: state)
                         }
                     }
                 }
@@ -412,8 +397,7 @@ public struct ShowcasePage {
                         }
 
                         demoCard("Pagination — windowed, page 5 of 12") {
-                            WebUIPagination(page: 5, pages: 12, id: "demo-pg",
-                                            rowsPerPage: 25)
+                            paginationDemo(state: state)
                         }
 
                         demoCard("Timeline — vertical + horizontal") {
@@ -433,18 +417,7 @@ public struct ShowcasePage {
                         }
 
                         demoCard("Tree — file explorer (server-driven open/selection)") {
-                            WebUITree(nodes: [
-                                WebUITree.Node(id: "src", label: "src", icon: .folder, children: [
-                                    WebUITree.Node(id: "main", label: "main.swift", icon: .fileText),
-                                    WebUITree.Node(id: "ui", label: "ui", icon: .folder, children: [
-                                        WebUITree.Node(id: "view", label: "view.swift", icon: .fileText),
-                                        WebUITree.Node(id: "state", label: "state.swift", icon: .fileText),
-                                    ]),
-                                ]),
-                                WebUITree.Node(id: "tests", label: "tests", icon: .folder, children: [
-                                    WebUITree.Node(id: "smoke", label: "smoke.swift", icon: .fileText),
-                                ]),
-                            ], id: "demo-tree", expanded: ["src", "ui"], selected: "view")
+                            treeDemo(state: state)
                         }
 
                         demoCard("Breadcrumb — collapsed + short trail") {
@@ -701,8 +674,10 @@ public struct ShowcasePage {
                         }
                         demoCard("WebUIAlert — with title and dismissible") {
                             VStack(spacing: 12) {
-                                WebUIAlert(variant: .info, title: "Heads up!", message: "This alert has a title and can be dismissed.", dismissible: true)
-                                WebUIAlert(variant: .warning, title: "Warning", message: "Dismissible warning alert.", dismissible: true)
+                                WebUIAlert(variant: .info, title: "Heads up!", message: "This alert has a title and can be dismissed.", dismissible: true, id: "alert-demo-info")
+                                    .onDismiss { me, _ in [me.remove()] }
+                                WebUIAlert(variant: .warning, title: "Warning", message: "Dismissible warning alert.", dismissible: true, id: "alert-demo-warning")
+                                    .onDismiss { me, _ in [me.remove()] }
                             }
                         }
                         demoCard("WebUITabs") {
@@ -765,6 +740,7 @@ public struct ShowcasePage {
                         }
                         demoCard("WebUIToast — dismissible") {
                             WebUIToast(variant: .info, message: "This toast can be dismissed.", id: "toast-demo", dismissible: true)
+                                .onDismiss { me, _ in [me.remove()] }
                         }
                         demoCard("WebUIModal") {
                             WebUIModal(title: "Example Modal", id: "demo-modal") {
@@ -773,9 +749,12 @@ public struct ShowcasePage {
                                     Paragraph("You can put any views here.")
                                 }
                             } footer: {
-                                WebUIButton("Close", variant: .ghost, size: .sm)
+                                WebUIButton("Close", variant: .ghost, size: .sm, id: "modal-close", onTap: { _ in
+                                    [FragmentUpdate(id: "demo-modal", html: "")]
+                                })
                                 WebUIButton("Save", variant: .primary, size: .sm)
                             }
+                            .onDismiss { me, _ in [me.remove()] }
                         }
                     }
                 }
@@ -864,13 +843,26 @@ public struct ShowcasePage {
                             VStack(spacing: 16) {
                                 Paragraph("Click the buttons below. The counter updates via WebSocket.")
                                 Div(class: "counter-display") {
-                                    Span(id: "counter-value") { Text("0") }.class("counter-number")
+                                    Raw(counterValueHTML(state.count))
                                 }
                                 HStack(spacing: 12) {
-                                    WebUIButton("−", variant: .primary, size: .lg, id: "btn-decrement")
-                                    WebUIButton("+", variant: .primary, size: .lg, id: "btn-increment")
+                                    WebUIButton("−", variant: .primary, size: .lg, id: "btn-decrement", onTap: { _ in
+                                        state.count -= 1
+                                        return [FragmentUpdate(id: "counter-value", html: counterValueHTML(state.count))]
+                                    })
+                                    WebUIButton("+", variant: .primary, size: .lg, id: "btn-increment", onTap: { _ in
+                                        state.count += 1
+                                        return [FragmentUpdate(id: "counter-value", html: counterValueHTML(state.count))]
+                                    })
                                 }
                                 WebUIButton("Reset", variant: .ghost, size: .sm, id: "btn-reset")
+                                    .onOptimisticClick(
+                                        predict: { [FragmentUpdate(id: "counter-value", html: counterValueHTML(0))] },
+                                        perform: { _ in
+                                            state.count = 0
+                                            return [FragmentUpdate(id: "counter-value", html: counterValueHTML(0))]
+                                        }
+                                    )
                             }
                         }
                         demoCard("Form Echo") {
@@ -879,11 +871,15 @@ public struct ShowcasePage {
                                 Form(action: "#", method: "post", id: "echo-form") {
                                     VStack(spacing: 12) {
                                         Label("Your message:").class("demo-label")
-                                        Input(id: "echo-input", placeholder: "Type something...", type: .text)
+                                        Input(id: "echo-input", name: "message", placeholder: "Type something...", type: .text)
                                         WebUIButton("Send", variant: .primary, id: "echo-submit")
                                     }
                                 }
-                                Div(id: "echo-result") { Text("") }
+                                .onSubmit { event in
+                                    state.echo = event.string("message") ?? ""
+                                    return [FragmentUpdate(id: "echo-result", html: echoResultHTML(state.echo))]
+                                }
+                                Raw(echoResultHTML(state.echo))
                             }
                         }
                         demoCard("Live Preview") {
@@ -891,26 +887,20 @@ public struct ShowcasePage {
                                 Paragraph("Type in the input — the preview updates in real time.")
                                 Label("Type here:").class("demo-label")
                                 Input(id: "preview-input", placeholder: "Type to preview...", type: .text)
+                                    .onInput { event in
+                                        state.preview = event.string("value") ?? ""
+                                        return [FragmentUpdate(id: "preview-output", html: previewOutputHTML(state.preview))]
+                                    }
                                 Div(class: "preview-box") {
-                                    Span(id: "preview-output") { Text("") }
+                                    Raw(previewOutputHTML(state.preview))
                                 }
                             }
                         }
                         demoCard("Tab Content Switching") {
                             VStack(spacing: 12) {
                                 Paragraph("Click tabs to switch content via event handlers.")
-                                WebUITabs(
-                                    tabs: [
-                                        TabItem(id: "tab-info", label: "Info"),
-                                        TabItem(id: "tab-stats", label: "Stats"),
-                                        TabItem(id: "tab-log", label: "Log"),
-                                    ],
-                                    activeTab: "tab-info",
-                                    id: "content-tabs"
-                                )
-                                Div(id: "tab-content", class: "tab-content-box") {
-                                    Paragraph("Information tab content. Click other tabs to switch.")
-                                }
+                                contentTabs(state: state)
+                                Raw(tabContentHTML(state.activeTab))
                             }
                         }
                     }

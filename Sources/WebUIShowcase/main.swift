@@ -52,13 +52,17 @@ if let generateIndex = CommandLine.arguments.firstIndex(of: "--generate"),
 
 // MARK: - Page Rendering
 func renderShowcase() -> String {
-    // the showcase is a static design reference — no interactive component
-    // registers a handler, so the js runtime is suppressed. shipping it would
-    // open a websocket the showcase server cannot upgrade (the handler has no
-    // /ws route), logging a failed-handshake console error on every page load.
+    // the static artifact is a compiled snapshot of the live page: it renders
+    // under a throwaway RenderContext (wiring attributes byte-identical to the
+    // live page) and `includeRuntime: false` suppresses the client boot
+    // entirely — no script tag, no config meta — so a bare file host 404s
+    // nothing. for real interactivity open the live WebUIShowcaseServer.
+    let snapshot = RenderContext.$current.withValue(RenderContext(router: EventRouter())) {
+        ShowcasePage(state: ShowcaseState()).render()
+    }
     let doc = WebUIDocument(
         title: "WebUI Showcase",
-        body: ShowcasePage().render(),
+        body: snapshot,
         includeRuntime: false
     )
     return doc.render()

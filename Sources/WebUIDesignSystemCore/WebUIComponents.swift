@@ -410,27 +410,53 @@ public struct WebUITabs: View {
     public let tabs: [TabItem]
     public let activeTab: String
     public let id: String?
+    /// tab-switch handler. receives `(me, tabID)` — `me` is the tablist root
+    /// ref (the stable `id`), `tabID` the clicked tab's id. `nil` (default)
+    /// renders the tabs statically with no routing attributes.
+    public var onSelect: (@Sendable (ElementRef, String) async -> [FragmentUpdate])?
 
     public init(
         tabs: [TabItem],
         activeTab: String,
-        id: String? = nil
+        id: String? = nil,
+        onSelect: (@Sendable (ElementRef, String) async -> [FragmentUpdate])? = nil
     ) {
         self.tabs = tabs
         self.activeTab = activeTab
         self.id = id
+        self.onSelect = onSelect
     }
 
     public func render() -> String {
+        let base = id
+        let wired = onSelect != nil && base != nil
+        let me = base.map { ElementRef.stable($0) } ?? ElementRef.stable("webui-tabs")
         var html = "<nav class=\"tabs\""
         if let id { html += " id=\"\(htmlEscape(id))\"" }
         html += " role=\"tablist\">"
         for tab in tabs {
             let active = tab.id == activeTab ? " tabs__tab--active" : ""
-            html += "<button class=\"tabs__tab\(active)\" role=\"tab\" aria-selected=\"\(tab.id == activeTab ? "true" : "false")\" data-tab=\"\(htmlEscape(tab.id))\">\(htmlEscape(tab.label))</button>"
+            var route = ""
+            if wired, let onSelect, let base {
+                let handler = onSelect
+                let tabID = tab.id
+                route = controlAttributes(id: "\(base)-\(tabID)", handler: { _ in await handler(me, tabID) })
+            }
+            let idAttr = base.map { " id=\"\(htmlEscape($0))-\(htmlEscape(tab.id))\"" } ?? ""
+            html += "<button class=\"tabs__tab\(active)\" role=\"tab\" aria-selected=\"\(tab.id == activeTab ? "true" : "false")\" data-tab=\"\(htmlEscape(tab.id))\"\(idAttr)\(route)>\(htmlEscape(tab.label))</button>"
         }
         html += "</nav>"
         return html
+    }
+}
+
+public extension WebUITabs {
+    /// attach a tab-switch handler (fluent form; same drill as the table's
+    /// typed handlers).
+    func onSelect(_ handler: @escaping @Sendable (ElementRef, String) async -> [FragmentUpdate]) -> Self {
+        var copy = self
+        copy.onSelect = handler
+        return copy
     }
 }
 

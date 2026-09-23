@@ -300,7 +300,7 @@ let doc = WebUIDocument(
 | `WebUICard` | variant (.elevated/.outlined/.flat/.interactive), id, content |
 | `WebUIBadge` | text, variant, size, dot |
 | `WebUIAlert` | variant (.info/.success/.warning/.danger), title, message, dismissible, icon — close button carries `data-dismiss` |
-| `WebUITabs` | tabs: [TabItem(id,label)], activeTab, id |
+| `WebUITabs` | tabs: [TabItem(id,label)], activeTab, id, onSelect (typed `(me, tabID)` handler — each tab self-wires under `<id>-<tabID>`; nil renders statically) |
 | `WebUIAvatar` | initials, size, src, status |
 | `WebUIProgress` | value (0.0–1.0), variant, showLabel, size |
 | `WebUISkeleton` | variant, width, height, count |

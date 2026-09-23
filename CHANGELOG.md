@@ -2,6 +2,42 @@
 
 all notable changes to this project are documented here.
 
+## [unreleased]
+
+### developer experience
+
+- `WebUIServer` now injects its router as the render context around `render()`
+  (`RenderContext.$current.withValue`): handlers a page wires through
+  `.onX`/`controlAttributes` register into the server's router directly, so
+  hosts no longer juggle a page-local `EventRouter` alongside the server's (the
+  classic two-router mismatch). a page that wraps its own context still wins
+  (inner `withValue` takes precedence), so existing hosts are unaffected.
+- engine: a click on an unwired interactive control (a `button`/`role=button`
+  with no `data-component-id` in the path, outside a native `form[action]`)
+  now logs a one-time console warning naming the element — the silent
+  "nothing happens" failure gets a pointer at the cause.
+
+### consumer experience
+
+- showcase is now a **live** page: `WebUIShowcaseServer` wires a shared
+  `ShowcaseState` through the server's router and the interactive demos
+  round-trip for real — click counter (−/+/Reset with optimistic reset), form
+  echo (submit → server echo), live preview (`onInput`), tab content switching
+  (`WebUITabs.onSelect`), sortable/selectable/expandable table, pagination
+  (page + rows-per-page), server-driven tree open/selection, and the
+  dismissible alert/toast/modal close buttons (`me.remove()`). the static
+  `designer/previews/showcase.html` artifact stays a compiled snapshot (no
+  runtime).
+- `WebUITabs` gains `onSelect: (me, tabID)` — a typed self-wiring tab-switch
+  handler (additive parameter, `nil` default keeps the static render
+  byte-identical; each tab emits `data-component-id="<id>-<tabID>"`).
+- engine: when a page already carries a `WebUIEngineStatus` mirror
+  (`data-webui-status`), the engine no longer injects its own duplicated
+  `reconnecting…` chip — one truthful indicator instead of two.
+- `Tests/WebUITests/ShowcaseWiringTests.swift` pins the showcase's wired
+  surface (routing ids + exact handler count) so a wiring migration can never
+  silently leave the showcase static again.
+
 ## [1.0.0] — stability epoch (2026-09-20)
 
 ### stability epoch

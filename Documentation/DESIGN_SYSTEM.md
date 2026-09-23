@@ -353,6 +353,27 @@ WebUITabs(
 CSS classes: `tabs`, `tabs__tab`, `tabs__tab--active`; `role="tablist"` /
 `role="tab"` plus `aria-selected` and a `data-tab` marker on each tab.
 
+**live switching (typed handler):** pass `onSelect` (or chain `.onSelect`)
+and an `id`; the handler receives `(me, tabID)` — `me` refs the tablist root
+(`ElementRef.stable(id)`), `tabID` is the clicked tab's id — and each tab
+button self-wires under the derived control id `<id>-<tabID>` (plus a
+matching DOM id), so routing survives fragment re-renders:
+
+```swift
+WebUITabs(
+    tabs: [TabItem(id: "general", label: "General"), TabItem(id: "settings", label: "Settings")],
+    activeTab: "general",
+    id: "demo-tabs",
+    onSelect: { me, tabID in
+        // mutate server state, then re-render the region
+        [me.update(rebuiltTabs), FragmentUpdate(id: "tab-pane", html: paneHTML(tabID))]
+    }
+)
+```
+
+without `onSelect` (or without `id`) the tabs render statically — no routing
+attributes, no handler.
+
 ### WebUIAvatar
 
 ```swift

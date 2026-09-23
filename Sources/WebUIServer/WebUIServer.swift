@@ -362,9 +362,19 @@ final class Runner: Sendable {
 				} else if uri.hasPrefix("/__assets/webui-client."), uri.hasSuffix(".wasm") {
 					try await respondWasm(channel: channel.channel)
 				} else if uri == config.pagePath || uri == "/index.html" {
+					// the server owns the render context: handlers a page wires
+					// through `.onX`/`controlAttributes` register into THIS
+					// server's router, so hosts never juggle a second router
+					// (the classic page-local vs server-router mismatch). a page
+					// that wraps its own context still wins (the inner
+					// `withValue` takes precedence), so existing hosts are
+					// unaffected.
+					let body = RenderContext.$current.withValue(RenderContext(router: router)) {
+						render()
+					}
 					try await respond(
 						channel: channel.channel,
-						body: render(),
+						body: body,
 						contentType: "text/html; charset=utf-8",
 						gzip: canGzip
 					)

@@ -50,6 +50,10 @@ let html = RenderContext.$current.withValue(context) {
 The `@TaskLocal` `RenderContext` flows through the view tree. Any
 `EventHandlerModifier` in the tree will register its handler with the router.
 
+> serving through `WebUIServer` (step 5) sets this task-local for you from the
+> server's own router — the wrap below is only for hand-rolled NIO hosts. one
+> router, one context, no mismatched-registration bugs.
+
 ## 4. Assemble the Document
 
 ```swift
