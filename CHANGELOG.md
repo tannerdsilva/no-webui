@@ -37,6 +37,12 @@ all notable changes to this project are documented here.
 - `Tests/WebUITests/ShowcaseWiringTests.swift` pins the showcase's wired
   surface (routing ids + exact handler count) so a wiring migration can never
   silently leave the showcase static again.
+- `HTMLDocument.includeRuntime: false` now genuinely suppresses the client
+  boot (no `webui-config` meta, no engine/chamber script tag) and switches
+  the csp to the no-runtime shape (no `wasm-unsafe-eval`, no `ws:` in
+  connect-src); an explicit `clientMode` still wins. the parameter had drifted
+  inert during the engine-first flip and a loose `<script>` pin masked it —
+  the pins are hardened and the static showcase artifact is script-free again.
 
 ## [1.0.0] — stability epoch (2026-09-20)
 

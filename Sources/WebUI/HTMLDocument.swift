@@ -58,12 +58,19 @@ public struct HTMLDocument: Sendable {
     public static let defaultBoot: ClientBoot = ClientBoot(
         flavor: .engine
     )
-    private func effectiveCSP(nonce: String, clientMode: ClientBoot) -> String? {
+    private func effectiveCSP(nonce: String, clientMode: ClientBoot?) -> String? {
         if let csp = contentSecurityPolicy {
             return csp.isEmpty ? nil : csp
         }
-        // wasm is the only client runtime, so every page permits wasm
-        // compilation; still `'self'`, still no `'unsafe-inline'` in script-src.
+        guard clientMode != nil else {
+            // a document with no client runtime needs no wasm-unsafe-eval and
+            // no ws connect-src: scripts are external same-origin only
+            // (default-src 'self'), inline styles stay permitted for the
+            // page-scoped sheet.
+            return "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
+        }
+        // the client runtime needs wasm-unsafe-eval (the chamber compiles the
+        // module); still `'self'`, still no `'unsafe-inline'` in script-src.
         return ClientBoot.defaultCSP
     }
     public init(
@@ -103,23 +110,31 @@ public struct HTMLDocument: Sendable {
         self.nonce = Self.generateNonce()
     }
     public func render() -> String {
-        let boot: ClientBoot
+        let boot: ClientBoot?
         if let clientMode {
+            // an explicit client-mode wins regardless of includeRuntime (its
+            // contract meta + scripts are pinned by the client-surface tests).
             boot = clientMode
-        } else {
+        } else if includeRuntime {
             let base = Self.defaultBoot
             if let cfg = runtimeConfig, !cfg.isEmpty {
                 boot = ClientBoot(wasmURL: base.wasmURL, mode: base.mode, config: cfg, scriptURLs: base.scriptURLs, flavor: base.flavor)
             } else {
                 boot = base
             }
+        } else {
+            // includeRuntime: false = no client at all — no webui-config meta,
+            // no engine/chamber script tag, no wasm permissive csp. this is
+            // the parameter's documented meaning; it is what a static or
+            // third-party-driven document asks for.
+            boot = nil
         }
         let styleTag: String
         let scriptTag: String
         let cspValue = effectiveCSP(nonce: nonce, clientMode: boot)
-        // wasm is the only client runtime: the boot head (webui-wasm meta +
-        // chamber/boot scripts) is always appended to the caller's head slot.
-        let resolvedHead = head + "\n" + boot.headMarkup()
+        // the boot head (webui-config meta + engine/chamber scripts) is
+        // appended to the caller's head slot when a runtime is present.
+        let resolvedHead = head + (boot.map { "\n" + $0.headMarkup() } ?? "")
 
         if devMode {
             styleTag = "<link rel=\"stylesheet\" href=\"/ui/styles.css\">"

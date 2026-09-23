@@ -16,7 +16,6 @@ struct ClientCSPTests {
 			title: "t",
 			body: "<div id=\"app\">x</div>",
 			head: head,
-			includeRuntime: false,
 			contentSecurityPolicy: csp
 		).render()
 	}
@@ -27,6 +26,16 @@ struct ClientCSPTests {
 			return String(html[r.upperBound ..< end])
 		}
 		return String(html[r.upperBound...])
+	}
+
+	@Test("includeRuntime: false ships no client boot and no client csp")
+	func noRuntimeDocumentHasNoClient() {
+		let html = HTMLDocument(title: "t", body: "<p>static</p>", includeRuntime: false).render()
+		#expect(!html.contains("webui-engine"))
+		#expect(!html.contains("webui-config"))
+		#expect(!html.contains("webui-wasm"))
+		#expect(Self.scriptSrc(html) == "")
+		#expect(!html.contains("'wasm-unsafe-eval'"))
 	}
 
 	@Test("prod script-src is self + wasm-unsafe-eval: no unsafe-inline")
@@ -87,11 +96,15 @@ struct ClientCSPTests {
 	func webUIDocumentPassesClientMode() {
 		let boot = ClientBoot(wasmURL: "/ui/app.wasm", mode: .app)
 		let full = WebUIDocument(title: "t", body: "<p>x</p>", clientMode: boot, includeRuntime: false).render()
+		// includeRuntime: false without a client mode means NO runtime at all —
+		// the engine/chamber boot is absent and the csp sheds wasm-unsafe-eval
+		// (no client to compile). an explicit clientMode always wins.
 		let plain = WebUIDocument(title: "t", body: "<p>x</p>", includeRuntime: false).render()
 		#expect(full.contains("<meta name=\"webui-wasm\" content=\"/ui/app.wasm\">"))
 		#expect(full.contains("'wasm-unsafe-eval'"))
 		#expect(!full.contains("WebUIRuntime.init"))
-		#expect(plain.contains("'wasm-unsafe-eval'"))
+		#expect(!plain.contains("webui-engine"))
+		#expect(!plain.contains("'wasm-unsafe-eval'"))
 		#expect(!plain.contains("script-src 'nonce-"))
 	}
 }

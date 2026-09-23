@@ -1141,7 +1141,9 @@ struct DocumentTests {
         let doc = HTMLDocument(title: "Minimal", body: "<p>Hi</p>", includeRuntime: false)
         let html = doc.render()
         #expect(!html.contains("<style>"))
-        #expect(!html.contains("<script>"))
+        #expect(!html.contains("<script"))
+        #expect(!html.contains("webui-config"))
+        #expect(!html.contains("webui-engine"))
         #expect(validateTagBalance(html))
     }
 
