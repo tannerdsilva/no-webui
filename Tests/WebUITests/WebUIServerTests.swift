@@ -68,6 +68,11 @@ struct WebUIServerTests {
 		#expect(cssStatus == 200)
 		#expect(css.contains(".button"))
 
+		// content-addressed route: served immutable, gzip-decodable.
+		let (hashCSS, hashStatus) = try await get("http://127.0.0.1:\(port)\(DesignSystemAssets.stylesheetURL)")
+		#expect(hashStatus == 200)
+		#expect(hashCSS.contains(".button"))
+
 		let (_, missingStatus) = try await get("http://127.0.0.1:\(port)/missing")
 		#expect(missingStatus == 404)
 

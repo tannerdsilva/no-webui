@@ -5,7 +5,26 @@ import NIOHTTP1
 import NIOPosix
 import NIOWebSocket
 import WebUI
+import WebUICompression
 import WebUIDesignSystem
+
+// MARK: - gzip
+
+/// rfc-1952 gzip encoding through the `WebUICompression` C shim. returns nil
+/// on a framework error or empty input; small payloads pass through
+/// uncompressed by the caller.
+enum GzipEncoder {
+	static func encode(_ input: [UInt8]) -> [UInt8]? {
+		var outLen = 0
+		guard let ptr = input.withUnsafeBufferPointer({ src in
+			webui_gzip_compress(src.baseAddress, src.count, &outLen)
+		}) else {
+			return nil
+		}
+		defer { webui_gzip_free(ptr) }
+		return Array(UnsafeBufferPointer(start: ptr, count: outLen))
+	}
+}
 
 // MARK: - Configuration
 
@@ -289,38 +308,56 @@ final class Runner: Sendable {
 					return
 				}
 				let uri = head.uri
+				let canGzip = head.headers["accept-encoding"].contains { $0.lowercased().contains("gzip") }
 				if uri == "/__assets/css" {
+					// legacy stable path (old pages / old cache) — short cache.
 					try await respond(
 						channel: channel.channel,
 						body: DesignSystemAssets.minifiedCss,
 						contentType: "text/css; charset=utf-8",
-						cacheControl: "public, max-age=\(config.assetCacheSeconds)"
+						cacheControl: "public, max-age=\(config.assetCacheSeconds)",
+						gzip: canGzip
+					)
+				} else if uri.hasPrefix("/__assets/css.") {
+					// content-addressed sheet: a rebuilt sheet is a new url, so
+					// the response is immutable — a year-long, revalidation-free
+					// cache with no stale-sheet window.
+					try await respond(
+						channel: channel.channel,
+						body: DesignSystemAssets.minifiedCss,
+						contentType: "text/css; charset=utf-8",
+						cacheControl: "public, max-age=31536000, immutable",
+						gzip: canGzip
 					)
 				} else if uri == "/ui/webui-engine.js" {
 					try await respond(
 						channel: channel.channel,
 						body: WebUIAssets.engine,
 						contentType: "text/javascript; charset=utf-8",
-						cacheControl: "public, max-age=\(config.assetCacheSeconds)"
+						cacheControl: "public, max-age=\(config.assetCacheSeconds)",
+						gzip: canGzip
 					)
 				} else if uri == "/ui/webui-shell.js" {
 					try await respond(
 						channel: channel.channel,
 						body: WebUIAssets.shell,
 						contentType: "text/javascript; charset=utf-8",
-						cacheControl: "public, max-age=\(config.assetCacheSeconds)"
+						cacheControl: "public, max-age=\(config.assetCacheSeconds)",
+						gzip: canGzip
 					)
 				} else if uri == "/ui/webui-client.js" {
 					try await respond(
 						channel: channel.channel,
 						body: WebUIAssets.client,
-						contentType: "text/javascript; charset=utf-8"
+						contentType: "text/javascript; charset=utf-8",
+						gzip: canGzip
 					)
 				} else if uri == "/ui/webui-app-boot.js" {
 					try await respond(
 						channel: channel.channel,
 						body: WebUIAssets.clientBoot,
-						contentType: "text/javascript; charset=utf-8"
+						contentType: "text/javascript; charset=utf-8",
+						gzip: canGzip
 					)
 				} else if uri.hasPrefix("/__assets/webui-client."), uri.hasSuffix(".wasm") {
 					try await respondWasm(channel: channel.channel)
@@ -328,7 +365,8 @@ final class Runner: Sendable {
 					try await respond(
 						channel: channel.channel,
 						body: render(),
-						contentType: "text/html; charset=utf-8"
+						contentType: "text/html; charset=utf-8",
+						gzip: canGzip
 					)
 				} else {
 					try await respond404(channel: channel.channel)
@@ -343,19 +381,28 @@ final class Runner: Sendable {
 		body: String,
 		contentType: String,
 		status: HTTPResponseStatus = .ok,
-		cacheControl: String = "no-store"
+		cacheControl: String = "no-store",
+		gzip: Bool = false
 	) async throws {
+		var payload = Array(body.utf8)
+		if gzip, payload.count > 256, let compressed = GzipEncoder.encode(payload) {
+			payload = compressed
+		}
 		var head = HTTPResponseHead(version: .http1_1, status: status)
 		head.headers.replaceOrAdd(name: "Content-Type", value: contentType)
-		head.headers.replaceOrAdd(name: "Content-Length", value: "\(body.utf8.count)")
+		head.headers.replaceOrAdd(name: "Content-Length", value: "\(payload.count)")
 		head.headers.replaceOrAdd(name: "Connection", value: "close")
+		if gzip, payload.count != body.utf8.count {
+			head.headers.replaceOrAdd(name: "Content-Encoding", value: "gzip")
+			head.headers.replaceOrAdd(name: "Vary", value: "Accept-Encoding")
+		}
 		// security headers — parity with the reference servers.
 		head.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
 		head.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
 		head.headers.replaceOrAdd(name: "Service-Worker-Allowed", value: "/")
 		head.headers.replaceOrAdd(name: "Cache-Control", value: cacheControl)
 		var buf = ByteBuffer()
-		buf.writeString(body)
+		buf.writeBytes(payload)
 		// await the terminal write promise: the async channel writer does not
 		// await write promises, and a response larger than the socket send
 		// buffer would otherwise lose its tail when the connection closes

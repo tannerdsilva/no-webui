@@ -40,7 +40,7 @@ public struct WebUIDocument: View {
         contentSecurityPolicy: String? = nil,
         theme: WebUITheme = .standard,
         rawStyles: [String] = [],
-        stylesheetURL: String? = "/__assets/css",
+        stylesheetURL: String? = DesignSystemAssets.stylesheetURL,
         checkClasses: Bool = false
     ) {
         self.title = title

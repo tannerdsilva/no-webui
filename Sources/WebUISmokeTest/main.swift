@@ -699,6 +699,9 @@ extension SmokeApp {
 				case "/__assets/css":
 					text = DesignSystemAssets.minifiedCss; contentType = "text/css; charset=utf-8"
 					cacheControl = "public, max-age=3600"
+				case let cssURL where cssURL.hasPrefix("/__assets/css."):
+					text = DesignSystemAssets.minifiedCss; contentType = "text/css; charset=utf-8"
+					cacheControl = "public, max-age=31536000, immutable"
 				case "/ui/webui-client.js":
 					text = WebUIAssets.client; contentType = "text/javascript; charset=utf-8"
 				case "/ui/webui-app-boot.js":

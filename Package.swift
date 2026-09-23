@@ -207,12 +207,20 @@ let package = Package(
             dependencies: [
                 "WebUI",
                 "WebUIDesignSystem",
+                "WebUICompression",
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOHTTP1", package: "swift-nio"),
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOWebSocket", package: "swift-nio"),
             ]
+        ),
+        // host-side gzip shim: the C `compression_stream` API is awkward to
+        // drive from Swift (non-optional memberwise init), so the framework's
+        // server target gets a tiny C wrapper. not shipped to clients.
+        .target(
+            name: "WebUICompression",
+            publicHeadersPath: "include"
         ),
         .target(
             name: "WebUIAuth",
@@ -315,11 +323,8 @@ let package = Package(
                 "WebUIDesignSystem",
                 "WebUIChart",
                 "WebUIShowcaseContent",
+                "WebUIServer",
                 .product(name: "Logging", package: "swift-log"),
-                .product(name: "NIOPosix", package: "swift-nio"),
-                .product(name: "NIOHTTP1", package: "swift-nio"),
-                .product(name: "NIOCore", package: "swift-nio"),
-                .product(name: "NIOWebSocket", package: "swift-nio"),
             ]
         ),
 

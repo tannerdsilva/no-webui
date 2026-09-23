@@ -974,6 +974,9 @@ struct WebUIAuthExample {
 			// comments (the first law) and ~6% more bytes on the wire.
 			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/css; charset=utf-8"), ("Cache-Control", "public, max-age=3600")], body: DesignSystemAssets.minifiedCss)
 			return
+		case (.GET, let cssURL) where cssURL.hasPrefix("/__assets/css."):
+			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/css; charset=utf-8"), ("Cache-Control", "public, max-age=31536000, immutable")], body: DesignSystemAssets.minifiedCss)
+			return
 		case (.GET, "/ui/webui-client.js"):
 			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/javascript; charset=utf-8")], body: WebUIAssets.client)
 			return

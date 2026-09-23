@@ -8,10 +8,14 @@ gone; the wasm client remains available via an explicit
 ## Document contract (what every default page emits)
 
 - `WebUIDocument` default boot is engine flavor and **links the design sheet**:
-  `<link rel="stylesheet" href="/__assets/css">` (same bytes as the old inline
-  sheet — `DesignSystemAssets.minifiedCss`; `WebUIDocument(stylesheetURL: nil)`
-  inlines like before, and `HTMLDocument` stays inline by default). the
-  document itself is ~2.6 kb.
+  `<link rel="stylesheet" href="<content-addressed>">` — the default
+  `stylesheetURL` is `DesignSystemAssets.stylesheetURL`
+  (`/__assets/css.<sha256>` of the minified sheet). a rebuilt sheet is a new
+  url, so the route is served `public, max-age=31536000, immutable` and never
+  needs revalidation or invalidation. the legacy `/__assets/css` path (same
+  bytes — `DesignSystemAssets.minifiedCss`) is still served with a short cache
+  for old pages. `WebUIDocument(stylesheetURL: nil)` inlines like before, and
+  `HTMLDocument` stays inline by default. the document itself is ~2.6 kb.
 - `<meta name="webui-config" content="{…}">` first (config-meta ordering
   gotcha: the engine's boot glue reads it during head parse, so the meta must
   precede the script tag), then `<script src="/ui/webui-engine.js">`.
@@ -30,6 +34,11 @@ gone; the wasm client remains available via an explicit
 
 - `/__assets/css` → the design sheet (`DesignSystemAssets.minifiedCss`), with
   `public, max-age=3600` (cacheable — this is the whole point of the link)
+- `/__assets/css.<sha256>` → the same sheet, content-addressed, served
+  `public, max-age=31536000, immutable`; this is what `WebUIDocument` links
+  by default. serve both; gzip (`Content-Encoding: gzip` + `Vary:
+  Accept-Encoding`) — the ~310 kb sheet is ~46 kb on the wire. `WebUIServer`
+  does all of this out of the box
 - `/ui/webui-engine.js` → the engine (`WebUIAssets.engine`), `public, max-age=3600`
 - `/ui/webui-shell.js` → the offline service worker (`WebUIAssets.shell`) —
   register it only when the page declares the `offline` capability, with
