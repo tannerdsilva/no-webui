@@ -295,7 +295,7 @@ let doc = WebUIDocument(
 
 | Component | Key Parameters |
 |---|---|
-| `WebUIButton` | label, variant (.primary/.secondary/.outline/.ghost/.danger/.success/.warning), size (.sm/.md/.lg), disabled, loading, fullWidth |
+| `WebUIButton` | label, variant (.primary/.secondary/.outline/.ghost/.danger/.success/.warning), size (.sm/.md/.lg), disabled, loading, fullWidth, onTap (typed handler — self-wires under `id`, survives re-renders) |
 | `WebUIInput` | placeholder, state (.normal/.error/.success/.warning), disabled, id, type, label, helpText |
 | `WebUICard` | variant (.elevated/.outlined/.flat/.interactive), id, content |
 | `WebUIBadge` | text, variant, size, dot |

@@ -48,21 +48,18 @@ func renderExamplePage(state: ExampleState, router: EventRouter) -> String {
 					Heading("Counter", level: .h3)
 					Raw(counterValueHTML(state.count))
 					Div(class: "app__actions") {
-						WebUIButton("−", variant: .secondary, size: .md, id: "btn-dec")
-							.onClick { _ in
-								state.count -= 1
-								return [FragmentUpdate(id: "counter-value", html: counterValueHTML(state.count))]
-							}
-						WebUIButton("+", variant: .primary, size: .md, id: "btn-inc")
-							.onClick { _ in
-								state.count += 1
-								return [FragmentUpdate(id: "counter-value", html: counterValueHTML(state.count))]
-							}
-						WebUIButton("Reset", variant: .ghost, size: .sm, id: "btn-reset")
-							.onClick { _ in
-								state.count = 0
-								return [FragmentUpdate(id: "counter-value", html: counterValueHTML(0))]
-							}
+						WebUIButton("−", variant: .secondary, size: .md, id: "btn-dec", onTap: { _ in
+							state.count -= 1
+							return [FragmentUpdate(id: "counter-value", html: counterValueHTML(state.count))]
+						})
+						WebUIButton("+", variant: .primary, size: .md, id: "btn-inc", onTap: { _ in
+							state.count += 1
+							return [FragmentUpdate(id: "counter-value", html: counterValueHTML(state.count))]
+						})
+						WebUIButton("Reset", variant: .ghost, size: .sm, id: "btn-reset", onTap: { _ in
+							state.count = 0
+							return [FragmentUpdate(id: "counter-value", html: counterValueHTML(0))]
+						})
 					}
 				}
 				WebUICard(variant: .outlined) {

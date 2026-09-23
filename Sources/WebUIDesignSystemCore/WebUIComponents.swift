@@ -98,6 +98,11 @@ public struct WebUIButton: View {
     public let id: String?
     public let fullWidth: Bool
     public let loading: Bool
+    /// self-wiring tap handler. when set, the button routes its click under
+    /// the stable `id` (a render-context id is minted when `id` is nil) via
+    /// `controlAttributes`, so a re-rendered region keeps routing without the
+    /// `.onClick` modifier dance. nil (default) renders the static button.
+    public let onTap: EventHandler?
 
     public init(
         _ label: String,
@@ -106,7 +111,8 @@ public struct WebUIButton: View {
         disabled: Bool = false,
         id: String? = nil,
         fullWidth: Bool = false,
-        loading: Bool = false
+        loading: Bool = false,
+        onTap: EventHandler? = nil
     ) {
         self.label = label
         self.variant = variant
@@ -115,6 +121,7 @@ public struct WebUIButton: View {
         self.id = id
         self.fullWidth = fullWidth
         self.loading = loading
+        self.onTap = onTap
     }
 
     public func render() -> String {
@@ -122,8 +129,27 @@ public struct WebUIButton: View {
         if fullWidth { classes += " button--full" }
         if loading { classes += " button--loading" }
 
+        // self-wiring: an onTap handler routes the tap under the stable id
+        // (minting one from the render context when the caller left id nil),
+        // so a re-rendered region keeps routing without the .onClick dance.
+        var wireAttrs = ""
+        if onTap != nil {
+            let wireID: String
+            if let id {
+                wireID = id
+            } else if var ctx = RenderContext.current {
+                wireID = ctx.nextComponentID().value
+            } else {
+                wireID = ""
+            }
+            if !wireID.isEmpty {
+                wireAttrs = controlAttributes(id: wireID, event: .click, handler: onTap)
+            }
+        }
+
         var html = "<button"
         if let id { html += " id=\"\(htmlEscape(id))\"" }
+        html += wireAttrs
         html += " class=\"\(classes)\""
         if disabled { html += " disabled" }
         if loading { html += " aria-busy=\"true\"" }

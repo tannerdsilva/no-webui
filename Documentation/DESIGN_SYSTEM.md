@@ -231,11 +231,17 @@ WebUIButton("Submit", variant: .primary, size: .md)
 WebUIButton("Delete", variant: .danger, disabled: true)
 WebUIButton("Save…", variant: .primary, loading: true)
 WebUIButton("Full", fullWidth: true)
+WebUIButton("Retry", id: "btn-retry", onTap: { _ in ... })  // self-wiring tap
 ```
 
 **Variants:** `primary`, `secondary`, `outline`, `ghost`, `danger`, `success`, `warning`
 **Sizes:** `sm`, `md`, `lg`
-**Parameters:** `label`, `variant`, `size`, `disabled`, `id`, `fullWidth`, `loading`
+**Parameters:** `label`, `variant`, `size`, `disabled`, `id`, `fullWidth`, `loading`, `onTap`
+
+`onTap` (an `EventHandler`) self-wires the button: the tap routes under the
+stable `id` (a component id is minted when `id` is nil) and routing survives
+fragment re-renders — no `.onClick` modifier needed. `nil` (default) keeps the
+button presentational.
 
 CSS classes: `button button--{variant} button--{size}` (+ `button--full` when
 `fullWidth`, `button--loading` when `loading`); children `button__spinner`,
