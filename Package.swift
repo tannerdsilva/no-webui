@@ -36,6 +36,10 @@ let package = Package(
             name: "WebUIDesignSystemCore",
             targets: ["WebUIDesignSystemCore"]
         ),
+        .library(
+            name: "WebUIServer",
+            targets: ["WebUIServer"]
+        ),
         .executable(
             name: "WebUIClient",
             targets: ["WebUIClient"]
@@ -199,6 +203,18 @@ let package = Package(
             ]
         ),
         .target(
+            name: "WebUIServer",
+            dependencies: [
+                "WebUI",
+                "WebUIDesignSystem",
+                .product(name: "Logging", package: "swift-log"),
+                .product(name: "NIOPosix", package: "swift-nio"),
+                .product(name: "NIOHTTP1", package: "swift-nio"),
+                .product(name: "NIOCore", package: "swift-nio"),
+                .product(name: "NIOWebSocket", package: "swift-nio"),
+            ]
+        ),
+        .target(
             name: "WebUIAuth",
             dependencies: [
                 "WebUI",
@@ -243,11 +259,7 @@ let package = Package(
             dependencies: [
                 "WebUI",
                 "WebUIDesignSystem",
-                .product(name: "Logging", package: "swift-log"),
-                .product(name: "NIOPosix", package: "swift-nio"),
-                .product(name: "NIOHTTP1", package: "swift-nio"),
-                .product(name: "NIOCore", package: "swift-nio"),
-                .product(name: "NIOWebSocket", package: "swift-nio"),
+                "WebUIServer",
             ]
         ),
         .executableTarget(
@@ -444,6 +456,7 @@ let package = Package(
                 "WebUIChart",
                 "WebUIAuth",
                 "WebUIShowcaseContent",
+                "WebUIServer",
             ]
         ),
         .testTarget(

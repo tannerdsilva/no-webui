@@ -382,6 +382,39 @@ WebUIIconCustom(name: "custom", body: "<path d=\"M12 2l9 10-9 10-9-10z\"/>")
 - **custom:** `WebUIIconCustom` sanitizes caller-supplied geometry (strips
   `<script>`, `on*` handlers, `foreignObject`, `javascript:`/`data:` hrefs).
 
+## WebUIServer
+
+one-call serving of a no-webui page: http page route, the framework asset
+routes (engine, shell, client boot, css, wasm artifact) with cache headers,
+`/ws` upgrade, `EventRouter` dispatch, ping/pong, read-idle reaping, and an
+admission cap — replaces the NIO boilerplate reference hosts used to copy.
+
+```swift
+let router = EventRouter()
+let server = WebUIServer(
+    render: { renderPage(router: router) },   // fresh document per request (new nonce)
+    router: router,
+    config: WebUIServerConfig(port: 9090)
+)
+try await server.start()                       // serves until stop() / process exit
+```
+
+- `render` is called per request (fresh CSP nonce each time — the documented
+  best practice) and registers handlers into the same `router`; re-rendering
+  replaces registrations idempotently (stable ids or auto `c0..` order both
+  work when the tree is deterministic).
+- `WebUIServerConfig` tunes host/port, admission cap, read-idle seconds,
+  asset cache seconds, and the page path (default `/`).
+- routes: page path + `/index.html`, `/__assets/css`, `/ui/webui-engine.js`,
+  `/ui/webui-shell.js`, `/ui/webui-client.js`, `/ui/webui-app-boot.js`,
+  `/__assets/webui-client.<sha>.wasm` (immutable cache); 404/405 elsewhere;
+  `Service-Worker-Allowed: /` + security headers on every response.
+- `WebUIServer` is an actor: `stop()` closes the listener and shuts down the
+  event loop group.
+
+see `Sources/WebUIExample/main.swift` — the reference server is now ~100
+lines of page + state, with the pipeline entirely inside `WebUIServer`.
+
 ## WebUIExample
 
 A SwiftNIO-based HTTP/WebSocket server that serves a live counter + echo page.

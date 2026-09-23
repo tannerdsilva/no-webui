@@ -1,12 +1,8 @@
 import Foundation
-import Logging
-import NIOCore
-import NIOHTTP1
-import NIOPosix
-import NIOWebSocket
 import Synchronization
 import WebUI
 import WebUIDesignSystem
+import WebUIServer
 
 // MARK: - Shared state
 
@@ -103,153 +99,19 @@ extension RenderContext {
 	}
 }
 
-// MARK: - HTTP / WebSocket server
-
-/// close the channel when the read-idle window elapses (guards plain http
-/// keep-alive, slow readers, and websockets alike).
-final class IdleCloseHandler: ChannelInboundHandler {
-	typealias InboundIn = IOData
-	func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
-		if event is IdleStateHandler.IdleStateEvent {
-			context.close(promise: nil)
-		} else {
-			context.fireUserInboundEventTriggered(event)
-		}
-	}
-}
-
-/// refused admission: `--max-connections` reached.
-enum ConnectionGateError: Error { case atCapacity }
-
-/// release a `ConnectionGate` slot when the channel closes. the gate is
-/// acquired in the child channel initializer — before any request or upgrade
-/// negotiation — so bare connect-only sockets count toward the cap.
-final class ConnectionGateReleaser: ChannelInboundHandler {
-	typealias InboundIn = IOData
-	private let gate: ConnectionGate
-	init(gate: ConnectionGate) { self.gate = gate }
-	func channelInactive(context: ChannelHandlerContext) {
-		gate.release()
-		context.fireChannelInactive()
-	}
-}
-
-final class HTTPByteBufferResponsePartHandler: ChannelOutboundHandler {
-	typealias OutboundIn = HTTPPart<HTTPResponseHead, ByteBuffer>
-	typealias OutboundOut = HTTPServerResponsePart
-	func write(context: ChannelHandlerContext, data: NIOAny, promise: EventLoopPromise<Void>?) {
-		let part = Self.unwrapOutboundIn(data)
-		switch part {
-		case .head(let head):
-			context.write(Self.wrapOutboundOut(.head(head)), promise: promise)
-		case .body(let buffer):
-			context.write(Self.wrapOutboundOut(.body(.byteBuffer(buffer))), promise: promise)
-		case .end(let trailers):
-			context.write(Self.wrapOutboundOut(.end(trailers)), promise: promise)
-		}
-	}
-}
-
-enum ExampleUpgradeResult: Sendable {
-	case websocket(NIOAsyncChannel<WebSocketFrame, WebSocketFrame>)
-	case http(NIOAsyncChannel<HTTPServerRequestPart, HTTPPart<HTTPResponseHead, ByteBuffer>>)
-}
+// MARK: - HTTP / WebSocket server (WebUIServer)
 
 @main
 struct WebUIExample {
-	let state: ExampleState
-	let router: EventRouter
-	let pageHTML: String
-	let connectionGate: ConnectionGate
-
 	static func main() async throws {
 		let state = ExampleState()
 		let router = EventRouter()
-		let page = renderExamplePage(state: state, router: router)
-		let connectionGate = ConnectionGate(maximum: intFlag(named: "--max-connections", default: 256))
-		let app = WebUIExample(state: state, router: router, pageHTML: page, connectionGate: connectionGate)
-		let logger = Logger(label: "webui.example")
-		logger.info("example page rendered (\(page.utf8.count) bytes)")
-		// prewarm the hoisted minified sheets so the one-time minify never
-		// lands inside the first request handler.
-		DesignSystemAssets.prewarm()
-
-		let group = MultiThreadedEventLoopGroup(numberOfThreads: intFlag(named: "--event-loops", default: System.coreCount))
-		let bootstrap = ServerBootstrap(group: group)
-			.serverChannelOption(ChannelOptions.backlog, value: 128)
-			.serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
-
-		let channel: NIOAsyncChannel<EventLoopFuture<ExampleUpgradeResult>, Never> = try await bootstrap.bind(
-			host: "0.0.0.0", port: 9090
-		) { channel in
-			channel.eventLoop.makeCompletedFuture { () -> EventLoopFuture<ExampleUpgradeResult> in
-				// admission: every connection — request-bearing or a bare
-				// connect — counts toward the cap (acquired before any
-				// negotiation); at capacity the channel is closed up front.
-				guard app.connectionGate.tryAcquire() else {
-					channel.close(promise: nil)
-					return channel.eventLoop.makeFailedFuture(ConnectionGateError.atCapacity)
-				}
-				// a single idle reaper guards every channel — plain http
-				// (idle keep-alive, slow readers) and websockets alike.
-				try channel.pipeline.syncOperations.addHandler(IdleStateHandler(readTimeout: .seconds(120)))
-				try channel.pipeline.syncOperations.addHandler(IdleCloseHandler())
-				// release the gate slot when this channel finally closes.
-				try channel.pipeline.syncOperations.addHandler(ConnectionGateReleaser(gate: app.connectionGate))
-				let upgrader = NIOTypedWebSocketServerUpgrader<ExampleUpgradeResult>(
-					shouldUpgrade: { channel, head in
-						let ok = head.method == .GET && head.uri == "/ws"
-						return channel.eventLoop.makeSucceededFuture(ok ? HTTPHeaders() : nil)
-					},
-					upgradePipelineHandler: { channel, _ in
-						channel.eventLoop.makeCompletedFuture {
-							let ws = try NIOAsyncChannel<WebSocketFrame, WebSocketFrame>(wrappingChannelSynchronously: channel)
-							return ExampleUpgradeResult.websocket(ws)
-						}
-					}
-				)
-				let config = NIOTypedHTTPServerUpgradeConfiguration(
-					upgraders: [upgrader],
-					notUpgradingCompletionHandler: { channel in
-						channel.eventLoop.makeCompletedFuture {
-							try channel.pipeline.syncOperations.addHandler(HTTPByteBufferResponsePartHandler())
-							let http = try NIOAsyncChannel<HTTPServerRequestPart, HTTPPart<HTTPResponseHead, ByteBuffer>>(wrappingChannelSynchronously: channel)
-							return ExampleUpgradeResult.http(http)
-						}
-					}
-				)
-				let pipelineConfig = NIOUpgradableHTTPServerPipelineConfiguration(upgradeConfiguration: config)
-				let negotiation = try channel.pipeline.syncOperations.configureUpgradableHTTPServerPipeline(configuration: pipelineConfig)
-				return negotiation
-			}
-		}
-
-		logger.info("live demo on http://localhost:9090 (ws://localhost:9090/ws)")
-
-		try await withThrowingDiscardingTaskGroup { group in
-			try await channel.executeThenClose { inbound in
-				for try await negotiationFuture in inbound {
-					group.addTask {
-						await app.handle(negotiationFuture)
-					}
-				}
-			}
-		}
-
-		try await group.shutdownGracefully()
-	}
-
-	func handle(_ negotiationFuture: EventLoopFuture<ExampleUpgradeResult>) async {
-		do {
-			switch try await negotiationFuture.get() {
-			case .websocket(let ws):
-				try await handleWebsocket(ws)
-			case .http(let http):
-				try await handleHTTP(http)
-			}
-		} catch {
-			// connection error or a refused admission (gate failure); ignore.
-		}
+		let server = WebUIServer(
+			render: { renderExamplePage(state: state, router: router) },
+			router: router,
+			config: WebUIServerConfig(port: intFlag(named: "--port", default: 9090))
+		)
+		try await server.start()
 	}
 
 	/// parse a positive-integer flag (`--name N`) with a fallback.
@@ -260,150 +122,5 @@ struct WebUIExample {
 			return v
 		}
 		return fallback
-	}
-
-	private func handleWebsocket(_ channel: NIOAsyncChannel<WebSocketFrame, WebSocketFrame>) async throws {
-		try await channel.executeThenClose { inbound, outbound in
-			try await withThrowingTaskGroup(of: Void.self) { tg in
-				tg.addTask {
-					for try await frame in inbound {
-						switch frame.opcode {
-						case .text:
-							let payload = String(buffer: frame.unmaskedData)
-							await self.dispatch(eventText: payload, outbound: outbound)
-						case .ping:
-							let buf = ByteBuffer()
-							let pong = WebSocketFrame(fin: true, opcode: .pong, data: buf)
-							try await outbound.write(pong)
-						case .connectionClose:
-							var data = frame.unmaskedData
-							let code = data.readSlice(length: 2) ?? ByteBuffer()
-							let close = WebSocketFrame(fin: true, opcode: .connectionClose, data: code)
-							try await outbound.write(close)
-							return
-						default:
-							break
-						}
-					}
-				}
-				try await tg.next()
-				tg.cancelAll()
-			}
-		}
-	}
-
-	private func dispatch(eventText payload: String, outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>) async {
-		do {
-			let msg = try WSIncoming(jsonText: payload)
-			switch msg {
-			case .event(let component, let event, let data, _):
-				let eventData = EventData(component: ComponentID(component), event: event, data: data)
-				let updates = await self.router.handle(eventData)
-				guard !updates.isEmpty else { return }
-				let out = WSOutgoing.update(fragments: updates)
-				try await writeJSON(out, outbound: outbound)
-			case .ping(_):
-				try await writeJSON(WSOutgoing.pong, outbound: outbound)
-			case .navigate:
-				break
-			}
-		} catch {
-			let err = WSOutgoing.error(code: "decode", message: "bad event: \(error)")
-			try? await writeJSON(err, outbound: outbound)
-		}
-	}
-
-	private func writeJSON(_ msg: WSOutgoing, outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>) async throws {
-		let bytes = msg.jsonBytes
-		var buf = ByteBuffer()
-		buf.writeBytes(bytes)
-		let frame = WebSocketFrame(fin: true, opcode: .text, data: buf)
-		try await outbound.write(frame)
-	}
-
-	private func handleHTTP(_ channel: NIOAsyncChannel<HTTPServerRequestPart, HTTPPart<HTTPResponseHead, ByteBuffer>>) async throws {
-		try await channel.executeThenClose { inbound, outbound in
-			for try await part in inbound {
-				guard case .head(let head) = part else { continue }
-				guard head.method == .GET else {
-					try await respond405(channel: channel.channel)
-					return
-				}
-				let uri = head.uri
-				if uri == "/__assets/css" {
-					try await respond(channel: channel.channel, body: DesignSystemAssets.minifiedCss, contentType: "text/css; charset=utf-8", cacheControl: "public, max-age=3600")
-				} else if uri == "/ui/webui-client.js" {
-					try await respond(channel: channel.channel, body: WebUIAssets.client, contentType: "text/javascript; charset=utf-8")
-				} else if uri == "/ui/webui-app-boot.js" {
-					try await respond(channel: channel.channel, body: WebUIAssets.clientBoot, contentType: "text/javascript; charset=utf-8")
-				} else if uri == "/ui/webui-engine.js" {
-					try await respond(channel: channel.channel, body: WebUIAssets.engine, contentType: "text/javascript; charset=utf-8", cacheControl: "public, max-age=3600")
-				} else if uri == "/ui/webui-shell.js" {
-					try await respond(channel: channel.channel, body: WebUIAssets.shell, contentType: "text/javascript; charset=utf-8", cacheControl: "public, max-age=3600")
-				} else if uri.hasPrefix("/__assets/webui-client."), uri.hasSuffix(".wasm") {
-					try await respondWasm(channel: channel.channel)
-				} else if uri == "/" || uri == "/index.html" {
-					try await respond(channel: channel.channel, body: self.pageHTML, contentType: "text/html; charset=utf-8")
-				} else {
-					try await respond404(channel: channel.channel)
-					return
-				}
-			}
-		}
-	}
-
-	private func respond(channel: Channel, body: String, contentType: String, status: HTTPResponseStatus = .ok, cacheControl: String = "no-store") async throws {
-		var head = HTTPResponseHead(version: .http1_1, status: status)
-		head.headers.replaceOrAdd(name: "Content-Type", value: contentType)
-		head.headers.replaceOrAdd(name: "Content-Length", value: "\(body.utf8.count)")
-		head.headers.replaceOrAdd(name: "Connection", value: "close")
-		// security headers — parity with the auth server.
-		head.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
-		head.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
-		head.headers.replaceOrAdd(name: "Service-Worker-Allowed", value: "/")
-		head.headers.replaceOrAdd(name: "Cache-Control", value: cacheControl)
-		var buf = ByteBuffer()
-		buf.writeString(body)
-		// await the terminal write promise: the async channel writer does not
-		// await write promises, and a response larger than the socket send
-		// buffer would otherwise lose its tail when the connection closes
-		// right after writing (probe-verified truncation).
-		_ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.head(head))
-		_ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.body(buf))
-		try await channel.writeAndFlush(HTTPPart<HTTPResponseHead, ByteBuffer>.end(nil)).get()
-	}
-
-	private func respondWasm(channel: Channel) async throws {
-		guard let url = WebUIBoot.wasmProductURL(productName: "WebUIClient"),
-			  let data = try? Data(contentsOf: url) else {
-			try await respond404(channel: channel)
-			return
-		}
-		var head = HTTPResponseHead(version: .http1_1, status: .ok)
-		head.headers.replaceOrAdd(name: "Content-Type", value: "application/wasm")
-		head.headers.replaceOrAdd(name: "Content-Length", value: "\(data.count)")
-		head.headers.replaceOrAdd(name: "Connection", value: "close")
-		// the artifact is content-addressed by its sha, so it is immutable.
-		head.headers.replaceOrAdd(name: "Cache-Control", value: "public, max-age=31536000, immutable")
-		var buf = ByteBuffer()
-		buf.writeBytes(data)
-		_ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.head(head))
-		_ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.body(buf))
-		try await channel.writeAndFlush(HTTPPart<HTTPResponseHead, ByteBuffer>.end(nil)).get()
-	}
-
-	private func respond404(channel: Channel) async throws {
-		try await respond(channel: channel, body: "not found", contentType: "text/plain; charset=utf-8", status: .notFound)
-	}
-
-	private func respond405(channel: Channel) async throws {
-		var head = HTTPResponseHead(version: .http1_1, status: .methodNotAllowed)
-		head.headers.replaceOrAdd(name: "Content-Length", value: "0")
-		head.headers.replaceOrAdd(name: "Connection", value: "close")
-		head.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
-		head.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
-		head.headers.replaceOrAdd(name: "Cache-Control", value: "no-store")
-		_ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.head(head))
-		try await channel.writeAndFlush(HTTPPart<HTTPResponseHead, ByteBuffer>.end(nil)).get()
 	}
 }

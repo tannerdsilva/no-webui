@@ -68,8 +68,22 @@ let pageHTML = doc.render()
 
 ## 5. Serve Over HTTP
 
+the one-call path (`import WebUIServer`) handles the page route, the asset
+routes, the `/ws` upgrade, and event dispatch:
+
 ```swift
-// Using SwiftNIO (see Sources/WebUIExample/main.swift for full code)
+let server = WebUIServer(
+    render: { renderCounterPage(state: state, router: router) },
+    router: router,
+    config: WebUIServerConfig(port: 9090)
+)
+try await server.start()
+```
+
+the raw SwiftNIO path is still available below for hosts that need custom
+HTTP/WS behavior (see `Sources/WebUIExample/main.swift` for the full code):
+
+```swift
 let bootstrap = ServerBootstrap(group: group)
     .childChannelInitializer { channel in
         channel.pipeline.configureHTTPServerPipeline().flatMap {
