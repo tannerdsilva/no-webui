@@ -796,3 +796,11 @@ All classes follow BEM-like naming:
 there are no --bp-* tokens. the css uses raw `min-width` media queries; the
 breakpoint currently in use is 1100px (`@media (min-width: 1100px)`).
 components are mobile-first by default.
+
+a stacked `hstack` (shell row → column at ≤48rem) keeps its `align-items`
+from the row layout — typically `flex-start`, which makes each item sit at its
+min-content width and a wide region (a table card, a chart) blows out past the
+viewport. when stacking a shell, override to `align-items: stretch` in the
+media query (or `width: 100%` on the content item), and let wrapped chrome
+rows `flex-wrap: wrap`. verified: showcase at 320–1440 px has no horizontal
+overflow after exactly these two rules.

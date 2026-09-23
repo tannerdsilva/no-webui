@@ -8130,6 +8130,10 @@ h6 {
 @media (max-width: 48rem) {
   .showcase-shell > .hstack {
     flex-direction: column;
+    align-items: stretch;
+  }
+  .showcase-header .hstack {
+    flex-wrap: wrap;
   }
   .showcase-content {
     padding: var(--space-4);
