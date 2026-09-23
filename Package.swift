@@ -443,6 +443,7 @@ let package = Package(
                 "WebUIDesignSystem",
                 "WebUIChart",
                 "WebUIAuth",
+                "WebUIShowcaseContent",
             ]
         ),
         .testTarget(

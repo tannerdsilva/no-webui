@@ -16,10 +16,16 @@ import WebUIShowcaseContent
 /// it immediately. The runtime is enabled (and served a working `/ws` below),
 /// so the client boots cleanly with no failed-handshake error.
 func renderShowcasePage() -> String {
+    HTMLClassValidator.onUndefined = { className in
+        Logger(label: "webui.showcase-server").warning(
+            "undefined design-system class on showcase: \(className)"
+        )
+    }
     let doc = WebUIDocument(
         title: "WebUI Showcase",
         body: ShowcasePage().render(),
-        includeRuntime: true
+        includeRuntime: true,
+        checkClasses: true
     )
     return doc.render()
 }

@@ -8163,6 +8163,15 @@ h6 {
   border: var(--border-width) solid var(--color-border);
   background: var(--color-bg-subtle);
 }
+.demo-image--sanitized {
+  border-style: dashed;
+  padding: var(--space-4);
+  min-height: 3rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+}
 
 /* Lists, nav, semantic, tables */
 .demo-list {
@@ -8757,3 +8766,22 @@ h6 {
 .panel__body { flex: 1; min-height: 0; overflow: auto; padding: var(--space-2) var(--space-2); display: flex; flex-direction: column; }
 .applet-card { padding: var(--space-4); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-xl); background: var(--color-bg-raised); margin-top: var(--space-4); }
 .applet-card__value { margin: var(--space-2) 0; font-size: var(--font-size-2xl); font-weight: var(--font-weight-semibold); color: var(--color-text); }
+
+/* class contract: components emit these class names, so give each a real
+   rule (also keeps them validator-known — see HTMLClassValidator). the
+   values match what the elements computed via inheritance before, so
+   nothing visual shifts. */
+.progress--md .progress__track { height: 0.5rem; }
+.progress--md[role="progressbar"] { height: 0.5rem; }
+.segmented__label { display: inline-flex; align-items: center; }
+.table th.sort-cell { cursor: pointer; user-select: none; }
+.table th.table__select-col,
+.table td.table__select-col {
+  width: 1.25rem;
+  white-space: nowrap;
+}
+.table th.table__expand-col,
+.table td.table__expand-col {
+  width: 1.75rem;
+  white-space: nowrap;
+}

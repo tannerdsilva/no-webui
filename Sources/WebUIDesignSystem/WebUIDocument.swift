@@ -21,6 +21,11 @@ public struct WebUIDocument: View {
     /// `/__assets/css` — hosts serve the same bytes via
     /// `DesignSystemAssets.minifiedCss`). pass `nil` to inline like before.
     public let stylesheetURL: String?
+    /// dev-time class validation: when true, the rendered document is scanned
+    /// against the shipped sheet and every undefined class is routed through
+    /// `HTMLClassValidator.onUndefined`. catches typo'd class names that
+    /// otherwise render silently unstyled. default false.
+    public let checkClasses: Bool
     public init(
         title: String = "WebUI",
         body: String,
@@ -35,7 +40,8 @@ public struct WebUIDocument: View {
         contentSecurityPolicy: String? = nil,
         theme: WebUITheme = .standard,
         rawStyles: [String] = [],
-        stylesheetURL: String? = "/__assets/css"
+        stylesheetURL: String? = "/__assets/css",
+        checkClasses: Bool = false
     ) {
         self.title = title
         self.body = body
@@ -51,6 +57,7 @@ public struct WebUIDocument: View {
         self.theme = theme
         self.rawStyles = rawStyles
         self.stylesheetURL = stylesheetURL
+        self.checkClasses = checkClasses
     }
 
     /// the design-system sheet (layout rules + embedded css), minified once —
@@ -92,6 +99,10 @@ public struct WebUIDocument: View {
             preMinifiedStyles: true,
             stylesheetURL: stylesheetURL
         )
-        return doc.render()
+        let html = doc.render()
+        if checkClasses {
+            HTMLClassValidator.report(html: html)
+        }
+        return html
     }
 }

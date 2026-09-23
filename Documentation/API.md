@@ -234,6 +234,26 @@ source order wins the cascade for every token the components resolve through
 `var(--…)`. `.standard` (the default) contributes nothing and renders
 byte-identical to the unthemed document.
 
+accepts `checkClasses: Bool = false` — when true the rendered document is
+scanned against the shipped sheet and every undefined class is routed through
+`HTMLClassValidator.onUndefined` (a dev-time guardrail: a typo'd class
+currently renders silently unstyled). see the `HTMLClassValidator` section
+below for registering inline-styled class families (e.g. `chart__*`) and
+allowlisting page-scoped classes.
+
+### HTMLClassValidator
+
+dev-time guardrail for the string seam: answers "which classes on this html
+are not defined in the shipped sheet".
+
+| API | Role |
+|---|---|
+| `HTMLClassValidator.definedClasses(css:)` | every class selector the sheet declares (cached; explicit `css` bypasses the cache) |
+| `HTMLClassValidator.undefinedClasses(in:extra:)` | class tokens on `class="…"` attributes that are neither in the sheet, nor matching a registered prefix, nor in `extra` |
+| `HTMLClassValidator.report(html:extra:)` | run the scan and route each undefined class through `onUndefined` once; returns the report |
+| `HTMLClassValidator.onUndefined` | `@Sendable (String) -> Void` hook hosts wire to their logger or a test assertion |
+| `HTMLClassValidator.registerKnownPrefix(_:)` | mark a family as framework-defined (inline-styled, no sheet rules). the `chart__*` prefix is pre-registered |
+
 ### Theme
 
 per-page custom aesthetics on top of the shipped design system, without a
