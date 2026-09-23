@@ -112,6 +112,14 @@ Receives fragment updates from the server and patches the DOM.
 using `createContextualFragment()` + `replaceChild()`. this preserves the
 element's position and surrounding DOM.
 
+**Routing-anchor guard:** if the replaced element carried `data-component-id`
+(the routing anchor) and the replacement's root element does not, the runtime
+warns once per lost id: `dropped routing anchor data-component-id=… — events on
+this region are no longer delivered`. re-rendered fragments must re-emit the
+anchor (see the stable-id discipline); this turns the classic silent-routing-
+death into a visible console warning during development. removal (empty
+fragment) is exempt — `.onDismiss` clears the control deliberately.
+
 **Removal:** a fragment whose `html` is exactly `""` removes the element from
 the DOM (`el.remove()`) instead of replacing it. this is the pinned contract
 behind `ElementRef.remove()` / `.onDismiss { me in me.remove() }`: the server

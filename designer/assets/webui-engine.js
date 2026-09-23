@@ -20,6 +20,7 @@ window.WebUIEngine = (function () {
 
   var LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3, silent: 4 };
   var EVENT_TYPES = ['click', 'input', 'change', 'submit', 'keydown', 'keyup', 'keypress', 'focus', 'blur', 'focusin', 'focusout', 'mouseover', 'mouseout', 'mousedown', 'mouseup'];
+  var LOST_ANCHOR_WARNED = {};
 
   function createLogger(level) {
     var min = LOG_LEVELS[level] || LOG_LEVELS.warn;
@@ -607,6 +608,17 @@ window.WebUIEngine = (function () {
         el.remove();
         log.debug('Removed #' + id);
         return;
+      }
+
+      if (el.hasAttribute && el.hasAttribute('data-component-id')) {
+        var anchor = null;
+        if (el.nodeType === 1) anchor = el.getAttribute('data-component-id');
+        var nt = fragment.firstChild.nodeType;
+        var wired = nt === 1 && fragment.firstChild.hasAttribute && fragment.firstChild.hasAttribute('data-component-id');
+        if (!wired && anchor && !LOST_ANCHOR_WARNED[anchor]) {
+          LOST_ANCHOR_WARNED[anchor] = true;
+          log.warn('Patch for #' + id + ' dropped routing anchor data-component-id=' + anchor + ' — events on this region are no longer delivered');
+        }
       }
 
       var savedState = saveInputState(el);
