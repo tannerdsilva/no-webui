@@ -694,17 +694,21 @@ extension SmokeApp {
 					return
 				}
 				let (text, contentType): (String, String)
+				var cacheControl = "no-store"
 				switch head.uri {
 				case "/__assets/css":
 					text = DesignSystemAssets.minifiedCss; contentType = "text/css; charset=utf-8"
+					cacheControl = "public, max-age=3600"
 				case "/ui/webui-client.js":
 					text = WebUIAssets.client; contentType = "text/javascript; charset=utf-8"
 				case "/ui/webui-app-boot.js":
 					text = WebUIAssets.clientBoot; contentType = "text/javascript; charset=utf-8"
 				case "/ui/webui-engine.js":
 					text = WebUIAssets.engine; contentType = "text/javascript; charset=utf-8"
+					cacheControl = "public, max-age=3600"
 				case "/ui/webui-shell.js":
 					text = WebUIAssets.shell; contentType = "text/javascript; charset=utf-8"
+					cacheControl = "public, max-age=3600"
 				case "/__assets/webui-client.js":
 					text = WebUIAssets.client; contentType = "text/javascript; charset=utf-8"
 				case "/__assets/webui-worker.js":
@@ -723,12 +727,12 @@ extension SmokeApp {
 					try await respond404(channel: channel.channel)
 					return
 				}
-				try await respond(channel: channel.channel, body: text, contentType: contentType)
+				try await respond(channel: channel.channel, body: text, contentType: contentType, cacheControl: cacheControl)
 			}
 		}
 	}
 
-	private func respond(channel: Channel, body: String, contentType: String, status: HTTPResponseStatus = .ok) async throws {
+	private func respond(channel: Channel, body: String, contentType: String, status: HTTPResponseStatus = .ok, cacheControl: String = "no-store") async throws {
 		var head = HTTPResponseHead(version: .http1_1, status: status)
 		head.headers.replaceOrAdd(name: "Content-Type", value: contentType)
 		head.headers.replaceOrAdd(name: "Content-Length", value: "\(body.utf8.count)")
@@ -741,7 +745,7 @@ extension SmokeApp {
 		// the offline shell registers at '/' from /ui/webui-shell.js; the
 		// header widens the default max scope to allow that.
 		head.headers.replaceOrAdd(name: "Service-Worker-Allowed", value: "/")
-		head.headers.replaceOrAdd(name: "Cache-Control", value: "no-store")
+		head.headers.replaceOrAdd(name: "Cache-Control", value: cacheControl)
 		// when a gate spawned this server it checks its own nonce so it can
 		// never mistake a stale/foreign process for its child.
 		if let nonce = Self.smokeNonce {

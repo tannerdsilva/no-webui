@@ -162,7 +162,7 @@ free core already exists; embedded tier is kB-scale per `WASM_TRAJECTORY.md` §
 | first contentful paint (4g) | < 1 s | domcontentloaded + load ≈ 19 ms on loopback (fcp untracked under headless paint entries) |
 | time-to-interactive | engine byte loaded | engine instance + `/ws` connected ≈ 38 ms after nav start |
 | critical-path javascript | ~30 kb raw / ~10 kb gz | engine 37.4 kb raw (host gzip/brotli is a serving concern — the 9090 example server does not compress; gzipped ≈ 10 kb) |
-| page shell bytes | — | sample page: 310 kb raw incl. inline minified design css (~40 kb gz); island artifact 164 kb (embedded sdk, stripped) |
+| page shell bytes | — | **2.6 kb** document + linked sheet `/__assets/css` 308,930 bytes (`public, max-age=3600`; once per build, not per page — inline mode was 310 kb per navigation); island artifact 164 kb (embedded sdk, stripped) |
 | interaction latency | optimistic same-turn; server confirm | same-turn prediction + confirm over `/ws` (measured by browser-smoke probes) |
 | keyboard parity | full (tree enter/space, escape-dismiss, focus trap + return) | implemented + probed in `designer/browser-smoke.mjs` (engine path) |
 | offline | opt-in island; reconcile on reconnect | offline capability → service-worker shell (cache-first engine/css + `/__assets`, network-first navs); engine reconnects on `online`. indexeddb sync reconcile is deferred (needs the worker/bridge machinery — see p4 note in `NEXT_IMPLEMENTATION_PLAN.md`) |

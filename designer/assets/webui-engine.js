@@ -1074,6 +1074,35 @@ window.WebUIEngine = (function () {
     } catch (e) { }
   }
 
+  var _statusEl = null;
+  var _statusTimer = null;
+  function ensureStatus() {
+    if (_statusEl || !document.body) { return; }
+    _statusEl = document.createElement('div');
+    _statusEl.className = 'engine-status';
+    _statusEl.setAttribute('role', 'status');
+    var dot = document.createElement('span');
+    dot.className = 'engine-status__dot';
+    var text = document.createElement('span');
+    text.className = 'engine-status__text';
+    text.textContent = 'reconnecting\u2026';
+    _statusEl.appendChild(dot);
+    _statusEl.appendChild(text);
+    document.body.appendChild(_statusEl);
+  }
+  document.addEventListener('webui:disconnected', function () {
+    ensureStatus();
+    if (!_statusEl) { return; }
+    if (_statusTimer) { clearTimeout(_statusTimer); }
+    _statusTimer = setTimeout(function () {
+      _statusEl.className = 'engine-status engine-status--visible';
+    }, 400);
+  });
+  document.addEventListener('webui:connected', function () {
+    if (_statusTimer) { clearTimeout(_statusTimer); _statusTimer = null; }
+    if (_statusEl) { _statusEl.className = 'engine-status'; }
+  });
+
 
   function init(opts) {
     if (instance) {
@@ -1110,6 +1139,7 @@ window.WebUIEngine = (function () {
     wsClient.connect();
 
     var bootIslands = function () {
+      ensureStatus();
       if (_islandConfig && _islandConfig.capabilities && _islandConfig.capabilities.indexOf('offline') !== -1 && navigator.serviceWorker) {
         navigator.serviceWorker.register('/ui/webui-shell.js', { scope: '/' }).catch(function () { });
       }

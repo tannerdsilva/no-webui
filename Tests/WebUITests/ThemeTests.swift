@@ -167,7 +167,8 @@ struct WebUIDocumentThemeTests {
 	func themedDocumentKeepsSheet() {
 		let html = WebUIDocument(body: "<p>x</p>", theme: WebUITheme(scheme: .dark)).render()
 		#expect(html.contains("<meta name=\"webui-config\""))
-		#expect(html.contains("--color-neutral-50:"))
+		#expect(html.contains("<link rel=\"stylesheet\" href=\"/__assets/css\">"))
+		#expect(DesignSystemAssets.minifiedCss.contains("--color-neutral-50:"))
 	}
 }
 

@@ -8006,6 +8006,39 @@ h6 {
   ::view-transition-old(root), ::view-transition-new(root) { animation: none; }
 }
 
+/* engine status chip (reconnect indicator) — framework-owned, created by the
+   engine when the /ws transport drops; hidden until then */
+.engine-status {
+  position: fixed;
+  top: var(--space-4);
+  left: 50%;
+  transform: translateX(-50%);
+  display: none;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-raised);
+  border: var(--border-width) solid var(--color-border);
+  color: var(--color-text-secondary);
+  font-size: var(--font-size-sm);
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.12);
+  z-index: 1000;
+  pointer-events: none;
+}
+.engine-status--visible { display: inline-flex; }
+.engine-status__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-warning);
+  animation: engine-status-pulse 1.2s ease-in-out infinite;
+}
+@keyframes engine-status-pulse { 50% { opacity: 0.35; } }
+@media (prefers-reduced-motion: reduce) {
+  .engine-status__dot { animation: none; }
+}
+
 /* ═══════════════════════════════════════════════════════════
    Showcase page chrome
    Layout for the generated reference page (header, sidebar,

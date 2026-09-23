@@ -2,11 +2,15 @@ import WebUI
 
 /// design-system assets derived from the embedded working files.
 public enum DesignSystemAssets {
-	/// `design-system.css`, minified once. the reference servers serve this on
+	/// `design-system.css` + the layout rules, minified once — the exact bytes
+	/// a page inlines today, now served on `/__assets/css` so browsers (and
+	/// the offline shell) can cache them. the reference servers serve this on
 	/// their `/__assets/css` endpoint instead of the raw working file, which
 	/// carries designer comments (the first law: shipped web assets are
 	/// comment-free) and roughly 6% more bytes on a constrained link.
-	public static let minifiedCss: String = minifyCSS(WebUIAssets.css)
+	public static let minifiedCss: String = minifyCSS(
+		CSSStylesheet(LayoutStyles.complete).render() + "\n\n" + WebUIAssets.css
+	)
 
 	/// eagerly initialise the hoisted minified sheets so the one-time minify
 	/// cost (~10 ms) never lands inside a request handler. servers call this

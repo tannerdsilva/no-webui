@@ -331,15 +331,15 @@ struct WebUIExample {
 				}
 				let uri = head.uri
 				if uri == "/__assets/css" {
-					try await respond(channel: channel.channel, body: DesignSystemAssets.minifiedCss, contentType: "text/css; charset=utf-8")
+					try await respond(channel: channel.channel, body: DesignSystemAssets.minifiedCss, contentType: "text/css; charset=utf-8", cacheControl: "public, max-age=3600")
 				} else if uri == "/ui/webui-client.js" {
 					try await respond(channel: channel.channel, body: WebUIAssets.client, contentType: "text/javascript; charset=utf-8")
 				} else if uri == "/ui/webui-app-boot.js" {
 					try await respond(channel: channel.channel, body: WebUIAssets.clientBoot, contentType: "text/javascript; charset=utf-8")
 				} else if uri == "/ui/webui-engine.js" {
-					try await respond(channel: channel.channel, body: WebUIAssets.engine, contentType: "text/javascript; charset=utf-8")
+					try await respond(channel: channel.channel, body: WebUIAssets.engine, contentType: "text/javascript; charset=utf-8", cacheControl: "public, max-age=3600")
 				} else if uri == "/ui/webui-shell.js" {
-					try await respond(channel: channel.channel, body: WebUIAssets.shell, contentType: "text/javascript; charset=utf-8")
+					try await respond(channel: channel.channel, body: WebUIAssets.shell, contentType: "text/javascript; charset=utf-8", cacheControl: "public, max-age=3600")
 				} else if uri.hasPrefix("/__assets/webui-client."), uri.hasSuffix(".wasm") {
 					try await respondWasm(channel: channel.channel)
 				} else if uri == "/" || uri == "/index.html" {
@@ -352,7 +352,7 @@ struct WebUIExample {
 		}
 	}
 
-	private func respond(channel: Channel, body: String, contentType: String, status: HTTPResponseStatus = .ok) async throws {
+	private func respond(channel: Channel, body: String, contentType: String, status: HTTPResponseStatus = .ok, cacheControl: String = "no-store") async throws {
 		var head = HTTPResponseHead(version: .http1_1, status: status)
 		head.headers.replaceOrAdd(name: "Content-Type", value: contentType)
 		head.headers.replaceOrAdd(name: "Content-Length", value: "\(body.utf8.count)")
@@ -361,7 +361,7 @@ struct WebUIExample {
 		head.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
 		head.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
 		head.headers.replaceOrAdd(name: "Service-Worker-Allowed", value: "/")
-		head.headers.replaceOrAdd(name: "Cache-Control", value: "no-store")
+		head.headers.replaceOrAdd(name: "Cache-Control", value: cacheControl)
 		var buf = ByteBuffer()
 		buf.writeString(body)
 		// await the terminal write promise: the async channel writer does not

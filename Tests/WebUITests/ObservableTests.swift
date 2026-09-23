@@ -324,11 +324,13 @@ func webuiDocumentIncludesFullCSS() {
         body: "<p>Hello</p>"
     )
     let html = doc.render()
-    // should contain both design tokens and component styles
-    #expect(html.contains("--color-primary-500"))
-    #expect(html.contains(".button {"))
-    #expect(html.contains(".card {"))
-    #expect(html.contains(".modal {"))
+    // the design sheet is linked (cacheable) now — the same bytes serve on
+    // /__assets/css, so the sheet assertions live on the asset, not the page.
+    #expect(html.contains("<link rel=\"stylesheet\" href=\"/__assets/css\">"))
+    #expect(DesignSystemAssets.minifiedCss.contains("--color-primary-500"))
+    #expect(DesignSystemAssets.minifiedCss.contains(".button {"))
+    #expect(DesignSystemAssets.minifiedCss.contains(".card {"))
+    #expect(DesignSystemAssets.minifiedCss.contains(".modal {"))
     #expect(validateTagBalance(html))
 }
 
@@ -416,10 +418,11 @@ func fullPipelineRender() {
     #expect(html.contains("class=\"card card--elevated\""))
     #expect(html.contains("Card content"))
 
-    // design system checks
-    #expect(html.contains("--color-primary-500"))
-    #expect(html.contains(".button {"))
-    #expect(html.contains(".card {"))
+    // design system checks (linked sheet; the bytes live on the css route)
+    #expect(html.contains("<link rel=\"stylesheet\" href=\"/__assets/css\">"))
+    #expect(DesignSystemAssets.minifiedCss.contains("--color-primary-500"))
+    #expect(DesignSystemAssets.minifiedCss.contains(".button {"))
+    #expect(DesignSystemAssets.minifiedCss.contains(".card {"))
 
     // runtime checks
     #expect(html.contains("webui-engine"))

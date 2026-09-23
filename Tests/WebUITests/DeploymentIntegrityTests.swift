@@ -199,11 +199,13 @@ func runtimeHandlesNoWebSocket() {
 @Test("shipped page carries a single nexus token set (no stale teal block)")
 func shippedPageCarriesOnlyNexusTokens() {
 	let page = WebUIDocument(title: "token pin", body: "").render()
-	#expect(!page.contains("#10b89f"), "stale teal primary shipped on the wire")
-	#expect(!page.contains("#16a34a"), "stale teal success shipped on the wire")
-	#expect(!page.contains("#f6f8fa"), "stale teal surface shipped on the wire")
-	#expect(page.contains("#6366f1"), "nexus primary missing from shipped page")
-	#expect(page.components(separatedBy: "--color-primary-500:").count == 2, "more than one --color-primary-500 definition on the wire")
+	let sheet = DesignSystemAssets.minifiedCss
+	#expect(!sheet.contains("#10b89f"), "stale teal primary shipped on the wire")
+	#expect(!sheet.contains("#16a34a"), "stale teal success shipped on the wire")
+	#expect(!sheet.contains("#f6f8fa"), "stale teal surface shipped on the wire")
+	#expect(sheet.contains("#6366f1"), "nexus primary missing from shipped sheet")
+	#expect(sheet.components(separatedBy: "--color-primary-500:").count == 2, "more than one --color-primary-500 definition on the wire")
+	#expect(page.contains("<link rel=\"stylesheet\" href=\"/__assets/css\">"), "page must link the asset-backed sheet")
 }
 
 @Test("every token documented in DESIGN_SYSTEM.md exists in the shipped css")

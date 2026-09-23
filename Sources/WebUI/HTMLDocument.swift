@@ -32,6 +32,9 @@ public struct HTMLDocument: Sendable {
     /// the 300 kb design-system sheet out of every render removes the
     /// dominant per-request cost (measured ~10 ms in release).
     public let preMinifiedStyles: Bool
+    /// when set, emitted as a cacheable `<link rel="stylesheet">` before the
+    /// inline `<style>` (which keeps custom/page-scoped styles only).
+    public let stylesheetURL: String?
     private static func generateNonce() -> String {
         guard let bytes = SecureRandom.bytes(16) else {
             // fail loud: silently falling back to a weaker nonce source would
@@ -78,7 +81,8 @@ public struct HTMLDocument: Sendable {
         runtimeConfig: RuntimeConfig? = nil,
         contentSecurityPolicy: String? = nil,
         icon: String = Self.defaultIcon,
-        preMinifiedStyles: Bool = false
+        preMinifiedStyles: Bool = false,
+        stylesheetURL: String? = nil
     ) {
         self.title = title
         self.body = body
@@ -95,6 +99,7 @@ public struct HTMLDocument: Sendable {
         self.contentSecurityPolicy = contentSecurityPolicy
         self.icon = icon
         self.preMinifiedStyles = preMinifiedStyles
+        self.stylesheetURL = stylesheetURL
         self.nonce = Self.generateNonce()
     }
     public func render() -> String {
@@ -145,6 +150,12 @@ public struct HTMLDocument: Sendable {
         // the tab icon: a caller-supplied `<link>` wins (override); the
         // default brand mark lands otherwise; an empty string suppresses it.
         let iconTag = icon.isEmpty ? "" : "  \(icon)"
+        let stylesheetTag: String
+        if let url = stylesheetURL {
+            stylesheetTag = "  <link rel=\"stylesheet\" href=\"\(htmlEscape(url))\">\n"
+        } else {
+            stylesheetTag = ""
+        }
 
         return """
         <!DOCTYPE html>
@@ -154,7 +165,7 @@ public struct HTMLDocument: Sendable {
           <meta name="viewport" content="width=device-width, initial-scale=1.0">\(cspTag)\(iconTag)
           <title>\(htmlEscape(title))</title>
           \(resolvedHead)
-          \(styleTag)
+          \(stylesheetTag)\(styleTag)
         </head>
         <body\(bodyAttr)>
           \(body)

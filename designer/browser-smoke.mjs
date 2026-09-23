@@ -336,6 +336,31 @@ if (!WASM) {
   console.log("  SKIP progressive-capability probes (engine-mode only)");
 }
 
+// 6d. reconnect indicator (engine mode): the framework status chip exists
+// hidden, appears on transport disconnect, clears on reconnect.
+if (!WASM) {
+  await page.waitForTimeout(200);
+  const stat0 = await page.evaluate(() => {
+    const el = document.querySelector('.engine-status');
+    return { present: !!el, visible: !!(el && el.classList.contains('engine-status--visible')) };
+  });
+  if (stat0.present && !stat0.visible) ok("engine status chip present + hidden by default");
+  else bad(`status chip state: ${JSON.stringify(stat0)}`);
+  await page.evaluate(() => document.dispatchEvent(new CustomEvent('webui:disconnected', { detail: {} })));
+  await page.waitForTimeout(700);
+  const vis1 = await page.evaluate(() => !!document.querySelector('.engine-status--visible'));
+  if (vis1) ok("status chip appears on transport disconnect");
+  else bad("status chip did not appear on disconnect");
+  await page.evaluate(() => document.dispatchEvent(new CustomEvent('webui:connected', { detail: {} })));
+  await page.waitForTimeout(150);
+  const vis2 = await page.evaluate(() => !!document.querySelector('.engine-status--visible'));
+  if (!vis2) ok("status chip clears on reconnect");
+  else bad("status chip did not clear on reconnect");
+} else {
+  skipped++;
+  console.log("  SKIP reconnect-indicator probes (engine-mode only)");
+}
+
 // 7. Client-mode hydration probe: the chamber fetches + instantiates
 // app.wasm under the client csp (`'wasm-unsafe-eval'`), calls
 // webui_render_page, patches #app, and reports byte-match vs the SSR it

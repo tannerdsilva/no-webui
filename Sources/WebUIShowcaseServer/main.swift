@@ -168,15 +168,15 @@ struct WebUIShowcaseServer {
                 if uri == "/" || uri == "/index.html" {
                     try await respond(channel: channel.channel, body: renderShowcasePage(), contentType: "text/html; charset=utf-8", status: .ok)
                 } else if uri == "/__assets/css" {
-                    try await respond(channel: channel.channel, body: DesignSystemAssets.minifiedCss, contentType: "text/css; charset=utf-8", status: .ok)
+                    try await respond(channel: channel.channel, body: DesignSystemAssets.minifiedCss, contentType: "text/css; charset=utf-8", status: .ok, cacheControl: "public, max-age=3600")
                 } else if uri == "/ui/webui-client.js" {
                     try await respond(channel: channel.channel, body: WebUIAssets.client, contentType: "text/javascript; charset=utf-8", status: .ok)
                 } else if uri == "/ui/webui-app-boot.js" {
                     try await respond(channel: channel.channel, body: WebUIAssets.clientBoot, contentType: "text/javascript; charset=utf-8", status: .ok)
                 } else if uri == "/ui/webui-engine.js" {
-                    try await respond(channel: channel.channel, body: WebUIAssets.engine, contentType: "text/javascript; charset=utf-8", status: .ok)
+                    try await respond(channel: channel.channel, body: WebUIAssets.engine, contentType: "text/javascript; charset=utf-8", status: .ok, cacheControl: "public, max-age=3600")
                 } else if uri == "/ui/webui-shell.js" {
-                    try await respond(channel: channel.channel, body: WebUIAssets.shell, contentType: "text/javascript; charset=utf-8", status: .ok)
+                    try await respond(channel: channel.channel, body: WebUIAssets.shell, contentType: "text/javascript; charset=utf-8", status: .ok, cacheControl: "public, max-age=3600")
                 } else if uri.hasPrefix("/__assets/webui-client."), uri.hasSuffix(".wasm") {
                     try await respondWasm(channel: channel.channel)
                 } else {
@@ -205,7 +205,7 @@ struct WebUIShowcaseServer {
         try await channel.writeAndFlush(HTTPPart<HTTPResponseHead, ByteBuffer>.end(nil)).get()
     }
 
-    private static func respond(channel: Channel, body: String, contentType: String, status: HTTPResponseStatus) async throws {
+    private static func respond(channel: Channel, body: String, contentType: String, status: HTTPResponseStatus, cacheControl: String = "no-store") async throws {
         var head = HTTPResponseHead(version: .http1_1, status: status)
         head.headers.replaceOrAdd(name: "Content-Type", value: contentType)
         head.headers.replaceOrAdd(name: "Content-Length", value: "\(body.utf8.count)")
@@ -214,7 +214,7 @@ struct WebUIShowcaseServer {
         head.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
         head.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
         head.headers.replaceOrAdd(name: "Service-Worker-Allowed", value: "/")
-        head.headers.replaceOrAdd(name: "Cache-Control", value: "no-store")
+        head.headers.replaceOrAdd(name: "Cache-Control", value: cacheControl)
         var buf = ByteBuffer()
         buf.writeString(body)
         _ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.head(head))

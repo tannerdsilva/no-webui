@@ -16,6 +16,11 @@ public struct WebUIDocument: View {
     public let theme: WebUITheme
     public let clientMode: ClientBoot?
     public let rawStyles: [String]
+    /// when set, the design-system sheet is emitted as a cacheable
+    /// `<link rel="stylesheet">` instead of being inlined (default
+    /// `/__assets/css` — hosts serve the same bytes via
+    /// `DesignSystemAssets.minifiedCss`). pass `nil` to inline like before.
+    public let stylesheetURL: String?
     public init(
         title: String = "WebUI",
         body: String,
@@ -29,7 +34,8 @@ public struct WebUIDocument: View {
         runtimeConfig: RuntimeConfig? = nil,
         contentSecurityPolicy: String? = nil,
         theme: WebUITheme = .standard,
-        rawStyles: [String] = []
+        rawStyles: [String] = [],
+        stylesheetURL: String? = "/__assets/css"
     ) {
         self.title = title
         self.body = body
@@ -44,28 +50,31 @@ public struct WebUIDocument: View {
         self.contentSecurityPolicy = contentSecurityPolicy
         self.theme = theme
         self.rawStyles = rawStyles
+        self.stylesheetURL = stylesheetURL
     }
 
-    /// the design-system sheet (layout rules + embedded css), minified once
-    /// and embedded verbatim on every render. previously every page build
-    /// re-minified the full ~300 kb asset (~10 ms in release, per request).
-    public static let minifiedDesignStyles: String = {
-        let combined = CSSStylesheet(LayoutStyles.complete).render() + "\n\n" + WebUIAssets.css
-        return minifyCSS(combined)
-    }()
+    /// the design-system sheet (layout rules + embedded css), minified once —
+    /// the same bytes the servers serve on `/__assets/css` (see
+    /// `DesignSystemAssets.minifiedCss`), so a page that links instead of
+    /// inlining is byte-equivalent.
+    public static let minifiedDesignStyles: String = DesignSystemAssets.minifiedCss
 
     public func render() -> String {
         // the theme block lands after the base sheet, so its `:root`
         // overrides win the cascade. `.standard` contributes nothing and the
         // document stays byte-identical to the unthemed one.
         let themeCSS = theme.stylesheet()
-        var rawStyles = [Self.minifiedDesignStyles]
-        if !themeCSS.isEmpty {
-            rawStyles.append(themeCSS)
+        var rawStyles: [String]
+        if stylesheetURL != nil {
+            // linked sheet mode: only theme + page-scoped styles stay inline.
+            rawStyles = []
+            if !themeCSS.isEmpty { rawStyles.append(themeCSS) }
+            rawStyles.append(contentsOf: self.rawStyles)
+        } else {
+            rawStyles = [Self.minifiedDesignStyles]
+            if !themeCSS.isEmpty { rawStyles.append(themeCSS) }
+            rawStyles.append(contentsOf: self.rawStyles)
         }
-        // page-scoped styles (e.g. the login page's card layout) land after
-        // the sheet so they can extend it without being overridden.
-        rawStyles.append(contentsOf: self.rawStyles)
         let doc = HTMLDocument(
             title: title,
             body: body,
@@ -80,7 +89,8 @@ public struct WebUIDocument: View {
             includeRuntime: includeRuntime,
             runtimeConfig: runtimeConfig,
             contentSecurityPolicy: contentSecurityPolicy,
-            preMinifiedStyles: true
+            preMinifiedStyles: true,
+            stylesheetURL: stylesheetURL
         )
         return doc.render()
     }

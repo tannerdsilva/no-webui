@@ -939,7 +939,8 @@ func webuiDocumentRenders() {
     let html = doc.render()
     #expect(html.hasPrefix("<!DOCTYPE html>"))
     #expect(html.contains("<title>Test</title>"))
-    #expect(html.contains("--color-primary-500"))
+    #expect(html.contains("<link rel=\"stylesheet\" href=\"/__assets/css\">"))
+    #expect(DesignSystemAssets.minifiedCss.contains("--color-primary-500"))
     #expect(html.contains("class=\"button button--primary button--md\""))
 }
 

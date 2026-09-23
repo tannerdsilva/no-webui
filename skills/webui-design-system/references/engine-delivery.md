@@ -7,8 +7,12 @@ gone; the wasm client remains available via an explicit
 
 ## Document contract (what every default page emits)
 
-- `HTMLDocument`/`WebUIDocument` default boot is the engine flavor:
-  `<meta name="webui-config" content="{…}">` first (config-meta ordering
+- `WebUIDocument` default boot is engine flavor and **links the design sheet**:
+  `<link rel="stylesheet" href="/__assets/css">` (same bytes as the old inline
+  sheet — `DesignSystemAssets.minifiedCss`; `WebUIDocument(stylesheetURL: nil)`
+  inlines like before, and `HTMLDocument` stays inline by default). the
+  document itself is ~2.6 kb.
+- `<meta name="webui-config" content="{…}">` first (config-meta ordering
   gotcha: the engine's boot glue reads it during head parse, so the meta must
   precede the script tag), then `<script src="/ui/webui-engine.js">`.
 - `RuntimeConfig` rides the `webui-config` meta. keys are camelCase
@@ -24,7 +28,9 @@ gone; the wasm client remains available via an explicit
 
 ## The server must serve
 
-- `/ui/webui-engine.js` → the engine (`WebUIAssets.engine`)
+- `/__assets/css` → the design sheet (`DesignSystemAssets.minifiedCss`), with
+  `public, max-age=3600` (cacheable — this is the whole point of the link)
+- `/ui/webui-engine.js` → the engine (`WebUIAssets.engine`), `public, max-age=3600`
 - `/ui/webui-shell.js` → the offline service worker (`WebUIAssets.shell`) —
   register it only when the page declares the `offline` capability, with
   `{ scope: '/' }`; the server must send `Service-Worker-Allowed: /` (the

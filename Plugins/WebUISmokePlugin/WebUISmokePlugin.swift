@@ -108,12 +108,6 @@ struct WebUISmokePlugin: CommandPlugin {
         }
 
         let signatures: [(sig: String, label: String)] = [
-            ("color-mix(in srgb, var(--color-neutral-200) 45%, var(--color-bg))", "progress groove color"),
-            ("box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.12)", "progress groove inset shadow"),
-            ("flex-direction: row", "progress left-anchor (row)"),
-            ("grid-area: 1 / 1", "zstack overlap"),
-            ("align-self: stretch", "block-component stretch"),
-            ("margin-top: 1.75rem", "progress label lane"),
             ("role=\"progressbar\"", "progressbars rendered"),
             ("counter-value", "interactive counter rendered"),
             ("echo-out__text", "live input echo rendered"),
@@ -127,6 +121,30 @@ struct WebUISmokePlugin: CommandPlugin {
             } else {
                 bad("fix MISSING: \(entry.label)")
             }
+        }
+
+        // the design-sheet rules ride the /__assets/css route now (the page
+        // links instead of inlining), so the css-level signatures are checked
+        // against the served stylesheet body.
+        if let cssData = await GET(session, "\(base)/__assets/css") {
+            let cssText = String(decoding: cssData, as: UTF8.self)
+            let cssSignatures: [(sig: String, label: String)] = [
+                ("color-mix(in srgb, var(--color-neutral-200) 45%, var(--color-bg))", "progress groove color"),
+                ("box-shadow: inset 0 1px 2px rgba(15, 23, 42, 0.12)", "progress groove inset shadow"),
+                ("flex-direction: row", "progress left-anchor (row)"),
+                ("grid-area: 1 / 1", "zstack overlap"),
+                ("align-self: stretch", "block-component stretch"),
+                ("margin-top: 1.75rem", "progress label lane"),
+            ]
+            for entry in cssSignatures {
+                if cssText.contains(entry.sig) {
+                    ok("css fix present: \(entry.label)")
+                } else {
+                    bad("css fix MISSING: \(entry.label)")
+                }
+            }
+        } else {
+            bad("stylesheets route did not serve for the css-level signatures")
         }
 
         if html.range(of: #"<script[^>]+src="http|<link[^>]+href="http"#, options: .regularExpression) == nil {

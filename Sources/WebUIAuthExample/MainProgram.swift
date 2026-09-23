@@ -972,7 +972,7 @@ struct WebUIAuthExample {
 		case (.GET, "/__assets/css"):
 			// the minified sheet — the raw working file carries designer
 			// comments (the first law) and ~6% more bytes on the wire.
-			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/css; charset=utf-8")], body: DesignSystemAssets.minifiedCss)
+			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/css; charset=utf-8"), ("Cache-Control", "public, max-age=3600")], body: DesignSystemAssets.minifiedCss)
 			return
 		case (.GET, "/ui/webui-client.js"):
 			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/javascript; charset=utf-8")], body: WebUIAssets.client)
@@ -981,10 +981,10 @@ struct WebUIAuthExample {
 			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/javascript; charset=utf-8")], body: WebUIAssets.clientBoot)
 			return
 		case (.GET, "/ui/webui-engine.js"):
-			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/javascript; charset=utf-8")], body: WebUIAssets.engine)
+			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/javascript; charset=utf-8"), ("Cache-Control", "public, max-age=3600")], body: WebUIAssets.engine)
 			return
 		case (.GET, "/ui/webui-shell.js"):
-			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/javascript; charset=utf-8")], body: WebUIAssets.shell)
+			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/javascript; charset=utf-8"), ("Cache-Control", "public, max-age=3600")], body: WebUIAssets.shell)
 			return
 		default:
 			break

@@ -229,36 +229,34 @@ struct CSSMinificationTests {
 		#expect(out.contains("flex-direction: row"))
 	}
 
-	@Test("shipped page css carries no comments")
+	@Test("shipped css carries no comments")
 	func shippedPageHasNoCssComments() {
+		// the shipped sheet lives on the /__assets/css route; the page links it.
+		let sheet = DesignSystemAssets.minifiedCss
+		#expect(!sheet.contains("/*"))
+		#expect(!sheet.contains("*/"))
 		let page = WebUIDocument(title: "t", body: "<p>hi</p>").render()
-		let styleStart = page.range(of: "<style>")
-		let styleEnd = page.range(of: "</style>")
-		if let styleStart, let styleEnd {
-			let css = page[styleStart.upperBound..<styleEnd.lowerBound]
-			#expect(!css.contains("/*"))
-			#expect(!css.contains("*/"))
-		} else {
-			Issue.record("shipped page has no <style> block")
-		}
+		#expect(page.contains("<link rel=\"stylesheet\" href=\"/__assets/css\">"))
 	}
 
 	@Test("layout rules survive minification on a WebUIDocument page")
 	func layoutRulesSurvive() {
+		let sheet = DesignSystemAssets.minifiedCss
+		#expect(sheet.contains(".vstack"))
+		#expect(sheet.contains(".zstack"))
+		#expect(sheet.contains("grid-area: 1 / 1"))
 		let page = WebUIDocument(title: "t", body: "<p>hi</p>").render()
-		#expect(page.contains(".vstack"))
-		#expect(page.contains(".zstack"))
-		#expect(page.contains("grid-area: 1 / 1"))
+		#expect(page.contains("<link rel=\"stylesheet\" href=\"/__assets/css\">"))
 	}
 
-	@Test("the hoisted pre-minified style block matches a fresh manual minify")
+	@Test("the hoisted pre-minified sheet matches a fresh manual minify")
 	func hoistedStyleBlockMatchesManualMinify() {
-		// byte-identity pin: WebUIDocument must render the startup-hoisted
-		// sheet exactly as a fresh minify would — a divergence here means the
-		// hoist path and the canonical minify path have drifted.
-		let page = WebUIDocument(title: "t", body: "<p>hi</p>").render()
+		// byte-identity pin: the route-served sheet and the hoisted constant
+		// must render exactly as a fresh minify would — a divergence here means
+		// the hoist path and the canonical minify path have drifted.
 		let expected = minifyCSS(CSSStylesheet(LayoutStyles.complete).render() + "\n\n" + WebUIAssets.css)
-		#expect(page.contains("<style>\n\(expected)\n</style>"))
+		#expect(DesignSystemAssets.minifiedCss == expected)
+		#expect(WebUIDocument.minifiedDesignStyles == expected)
 	}
 
 	@Test("embedded asset constant still matches the source bytes")
