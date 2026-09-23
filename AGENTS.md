@@ -67,15 +67,19 @@ traces), and copies the artifact to
 `WebUIWasmPlugin` build-tool plugin validates + hashes into `WebUIWasmInfo`
 during every host build.
 
-pages are wasm-always: `HTMLDocument`/`WebUIDocument` emit the `webui-wasm`
-meta contract + external chamber/boot scripts + the client csp automatically
-(for a custom artifact pass `clientMode: ClientBoot(wasmURL: …)`; the default
-serves the build's own content-addressed client). serving those routes is the
-host's job (`WebUIBoot` exposes the build-time hash for the immutable route +
-`wasmProductURL(productName:)` for consumers' own artifacts). the `WebUIWasmPlugin`
-hard-fails on an absent artifact — there is no soft default and no
-`WEBUI_REQUIRE_WASM` switch; the wasm client is the only client runtime, so
-build the wasm product first (`wasm-client` verb).
+pages are engine-first: the default client runtime is `webui-engine.js`
+(`HTMLDocument`/`WebUIDocument` emit the `webui-config` meta + engine script
+automatically; `includeRuntime: false` ships no client at all — no script, no
+config meta). the wasm client is an explicit opt-in via
+`clientMode: ClientBoot(flavor: .wasm, wasmURL: …)` — it emits the `webui-wasm`
+contract + chamber/boot scripts + the client csp, and needs the
+content-addressed artifact built first (`wasm-client` verb). serving those
+routes is the host's job (`WebUIBoot` exposes the build-time hash for the
+immutable route + `wasmProductURL(productName:)` for consumers' own
+artifacts). the `WebUIWasmPlugin` embeds the artifact when present and emits a
+soft absent carrier when not: engine-only hosts build green, and a wasm-mode
+page whose artifact is missing 404s its routes loudly until `wasm-client`
+runs.
 
 all project tooling is command plugins — there are no shell scripts. see
 `Documentation/ASSEMBLY.md` for the full stage map and `designer/README.md`
