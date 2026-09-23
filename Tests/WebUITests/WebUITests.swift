@@ -560,10 +560,10 @@ func webuiShippedCssDefinesTokens() {
     #expect(css.contains("--z-modal"))
 }
 
-@Test("shipped css includes the dark-mode remap")
+@Test("shipped css includes the dark-mode remap (runtime theme contract)")
 func webuiShippedCssIncludesDarkMode() {
     let css = WebUIAssets.css
-    #expect(css.contains("@media (prefers-color-scheme: dark)"))
+    #expect(css.contains(":root[data-theme=\"dark\"]"))
 }
 
 @Test("WebUIButton renders with BEM classes")
@@ -939,7 +939,7 @@ func webuiDocumentRenders() {
     let html = doc.render()
     #expect(html.hasPrefix("<!DOCTYPE html>"))
     #expect(html.contains("<title>Test</title>"))
-    #expect(html.contains("<link rel=\"stylesheet\" href=\"/__assets/css\">"))
+    #expect(html.contains("href=\"\(DesignSystemAssets.stylesheetURL)\""))
     #expect(DesignSystemAssets.minifiedCss.contains("--color-primary-500"))
     #expect(html.contains("class=\"button button--primary button--md\""))
 }

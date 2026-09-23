@@ -231,12 +231,12 @@ struct CSSMinificationTests {
 
 	@Test("shipped css carries no comments")
 	func shippedPageHasNoCssComments() {
-		// the shipped sheet lives on the /__assets/css route; the page links it.
+		// the shipped sheet lives on the content-addressed css route; the page links it.
 		let sheet = DesignSystemAssets.minifiedCss
 		#expect(!sheet.contains("/*"))
 		#expect(!sheet.contains("*/"))
 		let page = WebUIDocument(title: "t", body: "<p>hi</p>").render()
-		#expect(page.contains("<link rel=\"stylesheet\" href=\"/__assets/css\">"))
+		#expect(page.contains("href=\"\(DesignSystemAssets.stylesheetURL)\""))
 	}
 
 	@Test("layout rules survive minification on a WebUIDocument page")
@@ -246,7 +246,7 @@ struct CSSMinificationTests {
 		#expect(sheet.contains(".zstack"))
 		#expect(sheet.contains("grid-area: 1 / 1"))
 		let page = WebUIDocument(title: "t", body: "<p>hi</p>").render()
-		#expect(page.contains("<link rel=\"stylesheet\" href=\"/__assets/css\">"))
+		#expect(page.contains("href=\"\(DesignSystemAssets.stylesheetURL)\""))
 	}
 
 	@Test("the hoisted pre-minified sheet matches a fresh manual minify")

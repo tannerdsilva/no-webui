@@ -132,8 +132,9 @@ func faintAndLinkContrast() {
 	// light: faint text on the page background
 	#expect(wcagRatio(cssTokenValue("color-text-faint", in: css) ?? "000000",
 	                  cssTokenValue("color-bg", in: css) ?? "ffffff") >= 4.5, "light faint text below AA on page bg")
-	// dark: faint text on the raised surface
-	let darkStart = css.range(of: "@media (prefers-color-scheme: dark)")
+	// dark: faint text on the raised surface (the dark rules live under
+	// [data-theme="dark"] — the runtime theme contract).
+	let darkStart = css.range(of: ":root[data-theme=\"dark\"]")
 	let dark = darkStart.map { String(css[$0.lowerBound...]) } ?? css
 	#expect(wcagRatio(cssTokenValue("color-text-faint", in: dark) ?? "000000",
 	                  cssTokenValue("color-bg-raised", in: dark) ?? "000000") >= 4.5, "dark faint text below AA on raised surface")
@@ -142,9 +143,10 @@ func faintAndLinkContrast() {
 @Test("dark-mode solid buttons keep labels legible on the bright fill")
 func darkSolidButtonContrast() {
 	let css = WebUIAssets.css
-	// The dark @media block re-tints success/warning/danger to bright fills;
-	// the label must be the dark on-color ink (not white) to stay legible.
-	let darkStart = css.range(of: "@media (prefers-color-scheme: dark)")
+	// The dark [data-theme="dark"] block re-tints success/warning/danger to
+	// bright fills; the label must be the dark on-color ink (not white) to
+	// stay legible.
+	let darkStart = css.range(of: ":root[data-theme=\"dark\"]")
 	let dark = darkStart.map { String(css[$0.lowerBound...]) } ?? css
 	let ink = cssTokenValue("color-on-color", in: dark) ?? "000000"
 	for token in ["color-success", "color-warning", "color-danger"] {
@@ -205,7 +207,10 @@ func shippedPageCarriesOnlyNexusTokens() {
 	#expect(!sheet.contains("#f6f8fa"), "stale teal surface shipped on the wire")
 	#expect(sheet.contains("#6366f1"), "nexus primary missing from shipped sheet")
 	#expect(sheet.components(separatedBy: "--color-primary-500:").count == 2, "more than one --color-primary-500 definition on the wire")
-	#expect(page.contains("<link rel=\"stylesheet\" href=\"/__assets/css\">"), "page must link the asset-backed sheet")
+	let cssURL = DesignSystemAssets.stylesheetURL
+	#expect(cssURL.hasPrefix("/__assets/css."), "stylesheet url must be content-addressed")
+	#expect(page.contains("href=\"\(cssURL)\""), "page must link the asset-backed sheet")
+	#expect(cssURL.hasSuffix(DesignSystemAssets.cssSHA256), "url must carry the sheet sha256")
 }
 
 @Test("every token documented in DESIGN_SYSTEM.md exists in the shipped css")

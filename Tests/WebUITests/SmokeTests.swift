@@ -1259,12 +1259,12 @@ struct TokenTests {
         #expect(css.contains("--z-toast"))
     }
 
-    @Test("dark mode media query is present in shipped css")
+    @Test("dark mode rules are present in shipped css (runtime theme contract)")
     func darkModePresent() {
         let css = WebUIAssets.css
-        let darkStart = css.range(of: "@media (prefers-color-scheme: dark)")
+        let darkStart = css.range(of: ":root[data-theme=\"dark\"]")
         let dark = darkStart.map { String(css[$0.lowerBound...]) } ?? ""
-        #expect(css.contains("@media (prefers-color-scheme: dark)"))
+        #expect(css.contains(":root[data-theme=\"dark\"]"))
         #expect(cssTokenValue("color-bg", in: dark) == "#060910")
         #expect(cssTokenValue("color-text", in: dark) == "#e7ecf5")
     }
@@ -1272,7 +1272,7 @@ struct TokenTests {
     @Test("dark mode swaps all surface colors")
     func darkModeSurfaceSwap() {
         let css = WebUIAssets.css
-        let darkStart = css.range(of: "@media (prefers-color-scheme: dark)")
+        let darkStart = css.range(of: ":root[data-theme=\"dark\"]")
         let dark = darkStart.map { String(css[$0.lowerBound...]) } ?? css
         #expect(cssTokenValue("color-bg", in: css) == "#f4f6f8")
         #expect(cssTokenValue("color-bg", in: dark) == "#060910")

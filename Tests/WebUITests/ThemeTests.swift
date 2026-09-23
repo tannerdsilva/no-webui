@@ -153,21 +153,23 @@ struct WebUIDocumentThemeTests {
 		#expect(html.contains("--chat-user-bubble: #2a2a2e;"))
 		#expect(html.contains(".user-bubble {"))
 		#expect(html.contains("border-radius: var(--radius-lg);"))
-		// the theme block sits after the design sheet inside the same <style>
+		// the theme block stays inline, after the linked sheet — later source
+		// order wins the cascade.
+		let link = html.range(of: "href=\"\(DesignSystemAssets.stylesheetURL)\"")!
 		let styleOpen = html.range(of: "<style>")!
-		let sheetMarker = html.range(of: "--color-neutral-50:")!
 		let themeMarker = html.range(of: "--color-primary-solid: #6c8cff;")!
-		#expect(styleOpen.lowerBound < sheetMarker.lowerBound)
-		#expect(sheetMarker.lowerBound < themeMarker.lowerBound)
+		#expect(link.lowerBound < styleOpen.lowerBound)
+		#expect(styleOpen.lowerBound < themeMarker.lowerBound)
 		// a theme override token also exists in the base sheet; the override
 		// must appear later in the css so the cascade resolves to it.
+		#expect(DesignSystemAssets.minifiedCss.contains("--color-primary-500:"))
 	}
 
 	@Test("themed document keeps the design sheet and runtime intact")
 	func themedDocumentKeepsSheet() {
 		let html = WebUIDocument(body: "<p>x</p>", theme: WebUITheme(scheme: .dark)).render()
 		#expect(html.contains("<meta name=\"webui-config\""))
-		#expect(html.contains("<link rel=\"stylesheet\" href=\"/__assets/css\">"))
+		#expect(html.contains("href=\"\(DesignSystemAssets.stylesheetURL)\""))
 		#expect(DesignSystemAssets.minifiedCss.contains("--color-neutral-50:"))
 	}
 }

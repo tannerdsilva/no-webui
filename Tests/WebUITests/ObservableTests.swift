@@ -325,8 +325,9 @@ func webuiDocumentIncludesFullCSS() {
     )
     let html = doc.render()
     // the design sheet is linked (cacheable) now — the same bytes serve on
-    // /__assets/css, so the sheet assertions live on the asset, not the page.
-    #expect(html.contains("<link rel=\"stylesheet\" href=\"/__assets/css\">"))
+    // the content-addressed /__assets/css.<sha256>, so the sheet assertions
+    // live on the asset, not the page.
+    #expect(html.contains("href=\"\(DesignSystemAssets.stylesheetURL)\""))
     #expect(DesignSystemAssets.minifiedCss.contains("--color-primary-500"))
     #expect(DesignSystemAssets.minifiedCss.contains(".button {"))
     #expect(DesignSystemAssets.minifiedCss.contains(".card {"))
@@ -419,7 +420,7 @@ func fullPipelineRender() {
     #expect(html.contains("Card content"))
 
     // design system checks (linked sheet; the bytes live on the css route)
-    #expect(html.contains("<link rel=\"stylesheet\" href=\"/__assets/css\">"))
+    #expect(html.contains("href=\"\(DesignSystemAssets.stylesheetURL)\""))
     #expect(DesignSystemAssets.minifiedCss.contains("--color-primary-500"))
     #expect(DesignSystemAssets.minifiedCss.contains(".button {"))
     #expect(DesignSystemAssets.minifiedCss.contains(".card {"))
