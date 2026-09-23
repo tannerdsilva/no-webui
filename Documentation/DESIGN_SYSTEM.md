@@ -224,6 +224,16 @@ turn-transparency components). Each accepts standard modifiers (`.font()`,
 `.padding()`, …) since they conform to `View`. every parameter is validated in
 `Tests/WebUITests/` and every class below exists in the shipped css.
 
+### WebUIEngineStatus
+
+a truthful live-connection indicator. the engine drives any element carrying
+`data-webui-status` (setting `data-webui-state` to `connected` or
+`reconnecting` as the socket state changes); this component renders both
+states up front and the css shows exactly one, so the label can never
+contradict the runtime. the server-rendered default is `reconnecting` — a page
+with no runtime is not connected. used by the showcase header; replace any
+hard-coded "connected" badge with it.
+
 ### WebUIButton
 
 ```swift

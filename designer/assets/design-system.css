@@ -8039,6 +8039,33 @@ h6 {
   .engine-status__dot { animation: none; }
 }
 
+/* the engine-driven status mirror: components render `data-webui-status`
+   and the engine sets `data-webui-state`; the css shows exactly one state,
+   so the label can never contradict the runtime. */
+.engine-status-mirror {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+.engine-status-mirror__dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  background: var(--color-warning);
+  animation: engine-status-pulse 1.2s ease-in-out infinite;
+}
+.engine-status-mirror__state { white-space: nowrap; }
+.engine-status-mirror__state--connected { display: none; }
+.engine-status-mirror__state--reconnecting { display: inline; }
+[data-webui-state="connected"] .engine-status-mirror__state--connected { display: inline; }
+[data-webui-state="connected"] .engine-status-mirror__state--reconnecting { display: none; }
+[data-webui-state="connected"] .engine-status-mirror__dot { background: var(--color-success); animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .engine-status-mirror__dot { animation: none; }
+}
+
 /* ═══════════════════════════════════════════════════════════
    Showcase page chrome
    Layout for the generated reference page (header, sidebar,

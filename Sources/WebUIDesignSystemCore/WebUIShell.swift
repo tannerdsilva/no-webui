@@ -445,3 +445,25 @@ public struct WebUIPanel: View {
         return html
     }
 }
+
+// MARK: - Engine Status
+
+/// a truthful live-connection indicator. the engine drives any element
+/// carrying `data-webui-status` (setting `data-webui-state` to `connected` or
+/// `reconnecting` as its socket state changes); this component renders the
+/// three possible states up front and the css shows exactly one of them, so
+/// the label can never contradict the runtime. server-rendered default is
+/// `reconnecting` — a page with no runtime is not connected.
+public struct WebUIEngineStatus: View {
+    public init() {}
+
+    public func render() -> String {
+        """
+        <span class="engine-status-mirror" data-webui-status data-webui-state="reconnecting" role="status">
+          <span class="engine-status-mirror__dot"></span>
+          <span class="engine-status-mirror__state engine-status-mirror__state--connected">connected</span>
+          <span class="engine-status-mirror__state engine-status-mirror__state--reconnecting">reconnecting…</span>
+        </span>
+        """
+    }
+}

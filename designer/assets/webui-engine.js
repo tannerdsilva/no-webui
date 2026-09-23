@@ -1109,11 +1109,20 @@ window.WebUIEngine = (function () {
     _statusTimer = setTimeout(function () {
       _statusEl.className = 'engine-status engine-status--visible';
     }, 400);
+    updateStatusMirrors('reconnecting');
   });
   document.addEventListener('webui:connected', function () {
     if (_statusTimer) { clearTimeout(_statusTimer); _statusTimer = null; }
     if (_statusEl) { _statusEl.className = 'engine-status'; }
+    updateStatusMirrors('connected');
   });
+
+  function updateStatusMirrors(state) {
+    var els = document.querySelectorAll('[data-webui-status]');
+    for (var i = 0; i < els.length; i++) {
+      els[i].setAttribute('data-webui-state', state);
+    }
+  }
 
 
   function init(opts) {

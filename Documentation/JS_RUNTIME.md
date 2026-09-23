@@ -120,6 +120,12 @@ anchor (see the stable-id discipline); this turns the classic silent-routing-
 death into a visible console warning during development. removal (empty
 fragment) is exempt — `.onDismiss` clears the control deliberately.
 
+**Connection-status contract:** the engine dispatches `webui:connected` /
+`webui:disconnected` on the document as the socket state changes, and also
+drives every `[data-webui-status]` element — setting its `data-webui-state`
+attribute to `connected` or `reconnecting`. `WebUIEngineStatus` renders on
+that contract; page authors should never hard-code connection text.
+
 **Removal:** a fragment whose `html` is exactly `""` removes the element from
 the DOM (`el.remove()`) instead of replacing it. this is the pinned contract
 behind `ElementRef.remove()` / `.onDismiss { me in me.remove() }`: the server

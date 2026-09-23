@@ -17,6 +17,9 @@ import WebUIShowcaseContent
 /// so the client boots cleanly with no failed-handshake error.
 func renderShowcasePage() -> String {
     HTMLClassValidator.onUndefined = { className in
+        // the one page-scoped structural wrapper (documented in the class pin
+        // test) — everything else should be in the sheet.
+        if className == "demo-section" { return }
         Logger(label: "webui.showcase-server").warning(
             "undefined design-system class on showcase: \(className)"
         )
