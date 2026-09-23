@@ -14,7 +14,6 @@
   --color-neutral-900: #0f172a;
   --color-neutral-950: #0a0f1c;
 
-
   --color-primary-50:  #eef2ff;
   --color-primary-100: #e0e7ff;
   --color-primary-200: #c7d2fe;
@@ -27,12 +26,10 @@
   --color-primary-900: #312e81;
   --color-primary-950: #1e1b4b;
 
-
   --color-primary-solid:       var(--color-primary-600);
   --color-primary-solid-hover: var(--color-primary-700);
   --color-primary-solid-active:var(--color-primary-800);
   --color-on-primary-solid:    #ffffff;
-
 
   --color-success:       #10b981;
   --color-success-strong:#047857;
@@ -54,7 +51,6 @@
   --color-info-soft:     #dbeafe;
   --color-info-ring:     #3b82f6;
 
-
   --color-bg:        #f4f6f8;
   --color-bg-raised: #ffffff;
   --color-bg-inset:  #eef2f6;
@@ -68,16 +64,13 @@
   --color-border:        #e2e8f0;
   --color-border-strong: #cbd5e1;
 
-
   --color-focus-ring: rgba(99, 102, 241, 0.40);
   --color-focus-ring-danger: rgba(220, 38, 38, 0.45);
   --color-focus: var(--color-primary-400);
 
-
   --scrollbar-track: transparent;
   --scrollbar-thumb: #cbd5e1;
   --scrollbar-thumb-hover: #94a3b8;
-
 
   --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto,
                "Helvetica Neue", Arial, "Noto Sans", sans-serif;
@@ -111,9 +104,7 @@
   --letter-spacing-wide:    0.02em;
   --letter-spacing-wider:   0.08em;
 
-
   --fs-hero: clamp(2rem, 1.4rem + 2.4vw, 3.25rem);
-
 
   --space-0:   0px;
   --space-1:   0.25rem;
@@ -128,7 +119,6 @@
   --space-16:  4rem;
   --space-20:  5rem;
   --space-24:  6rem;
-
 
   --radius-none: 0px;
   --radius-sm:   0.25rem;
@@ -147,7 +137,6 @@
   --border-width: 1px;
   --border-width-2: 2px;
 
-
   --shadow-sm: 0 1px 2px rgba(15,23,42,0.04), 0 1px 3px rgba(15,23,42,0.06);
   --shadow-md: 0 4px 8px -2px rgba(15,23,42,0.08), 0 2px 4px -2px rgba(15,23,42,0.05);
   --shadow-lg: 0 16px 32px -8px rgba(15,23,42,0.14), 0 8px 16px -8px rgba(15,23,42,0.08);
@@ -155,12 +144,10 @@
   --ring-focus: 0 0 0 3px var(--color-focus-ring);
   --ring-focus-danger: 0 0 0 3px var(--color-focus-ring-danger);
 
-
   --transition-fast: 150ms ease;
   --transition-base: 200ms ease;
   --transition-slow: 300ms ease;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
-
 
   --z-base:      0;
   --z-raised:    1;
@@ -170,7 +157,6 @@
   --z-modal:     1100;
   --z-toast:     1300;
   --z-scrim:     1200;
-
 
   --color-primary: var(--color-primary-500);
   /* Primary semantic aliases. Declared here (in the main :root,
@@ -262,9 +248,6 @@ input[type=checkbox],
 input[type=radio],
 input[type=range] { accent-color: var(--color-primary-500); }
 html { color-scheme: light; }
-@media (prefers-color-scheme: dark) {
-  html { color-scheme: dark; }
-}
 
 button {
   background: none;
@@ -6312,185 +6295,6 @@ code, .inline-code {
 .swipe-stage--revealed-left .swipe-stage__row { transform: translateX(-6rem); }
 .swipe-stage__action svg { width: 1rem; height: 1rem; }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-
-    --color-bg:        #060910;
-    --color-bg-raised: #0c111c;
-    --color-bg-inset:  #0a0e18;
-    --color-bg-subtle: #141b2b;
-
-
-    --color-text:       #e7ecf5;
-    --color-text-muted: #97a3b8;
-    --color-text-faint: #8494ab;
-    --color-on-color:   #060910;
-
-
-    --color-border:        #1c2436;
-    --color-border-strong: #2d3a55;
-
-
-    --color-focus:        var(--color-primary-400);
-    --color-focus-ring:     rgba(129, 140, 248, 0.40);
-    --color-focus-ring-danger: rgba(248, 113, 113, 0.40);
-
-
-    --color-primary-solid:        #4f46e5;
-    --color-primary-solid-hover:  #4338ca;
-    --color-primary-solid-active: #3730a3;
-    --color-on-primary-solid:     #ffffff;
-
-    /* Primary tint aliases — must adapt to dark like the other
-       semantic -soft/-strong tokens (demo chrome, swatches,
-       token samples all key off these). */
-    --color-primary-soft:  rgba(99, 102, 241, 0.16);
-    --color-primary-strong: #a5b4fc;
-    --color-primary-ring:        rgba(129, 140, 248, 0.45);
-
-    /* Primary tint scale 50–400 remapped to dark indigo tints
-       so badges, chips and selections read correctly in dark. */
-    --color-primary-50:          #171a33;
-    --color-primary-100:         #1f2347;
-    --color-primary-200:         #2a2f63;
-    --color-primary-300:         #4048a8;
-    --color-primary-400:         #818cf8;
-
-    --color-success:       #34d399;
-    --color-success-strong:#34d399;
-    --color-success-soft:  rgba(16, 185, 129, 0.15);
-    --color-success-ring:  #34d399;
-
-    --color-warning:       #fbbf24;
-    --color-warning-strong:#fbbf24;
-    --color-warning-soft:  rgba(245, 158, 11, 0.15);
-    --color-warning-ring:  #fbbf24;
-
-    --color-danger:        #f87171;
-    --color-danger-strong: #f87171;
-    --color-danger-soft:   rgba(239, 68, 68, 0.15);
-    --color-danger-ring:   #f87171;
-
-    --color-info:          #60a5fa;
-    --color-info-strong:   #60a5fa;
-    --color-info-soft:     rgba(59, 130, 246, 0.15);
-    --color-info-ring:     #60a5fa;
-
-
-    --scrollbar-thumb:       #2d3a55;
-    --scrollbar-thumb-hover: #42527a;
-
-
-    --shadow-sm: 0 1px 2px rgba(0,0,0,0.40);
-    --shadow-md: 0 4px 10px -2px rgba(0,0,0,0.50);
-    --shadow-lg: 0 16px 32px -8px rgba(0,0,0,0.55);
-    --shadow-xl: 0 24px 48px -12px rgba(0,0,0,0.65);
-  }
-
-
-  .button { --btn-bg-active: var(--color-bg-inset); }
-  .button--secondary,
-  .button--ghost,
-  .button--outline { --btn-bg-active: var(--color-bg-inset); }
-  .button--ghost:hover,
-  .button--outline:hover { background: var(--color-bg-subtle); }
-
-  /* Solid colored buttons: dark ink on the bright fill (matches primary's
-     inverted dark treatment) so labels stay legible in dark mode.
-     Two-class selectors: the base solid rules appear LATER in source
-     order, so equal specificity would lose the cascade. */
-  .button.button--danger,
-  .button.button--success,
-  .button.button--warning { color: var(--color-on-color); }
-
-  a,
-  .button--link { color: var(--color-primary-400); }
-  a:hover,
-  .button--link:hover { color: var(--color-primary-400); }
-
-  .badge--primary { color: var(--color-primary-400); }
-  .badge--neutral { color: var(--color-text-muted); }
-
-  .demo-highlight { color: var(--color-primary-strong); background: var(--color-primary-soft); }
-
-  ::selection {
-    background: rgba(129, 140, 248, 0.35);
-    color: #eef2ff;
-  }
-
-  .inline-code,
-  code {
-    color: var(--color-primary-400);
-  }
-
-
-  .code { background: #0d1220; border-color: #1e2a44; }
-  .code__toolbar { background: #11182b; border-color: #1e2a44; }
-  .terminal { background: #0b0f1c; border-color: #1e2a44; }
-  .json-tree { background: #0b0f1c; border-color: #1e2a44; }
-
-
-  .navbar__link--active { background: rgba(99, 102, 241, 0.14); color: var(--color-primary-strong); }
-  .tabs__tab--active { color: var(--color-primary-400); }
-  .tabs__tab--active::after { background: var(--color-primary-400); }
-  .tabs--bordered .tabs__tab--active { color: var(--color-primary-strong); }
-  .sidebar__item--active { background: rgba(99, 102, 241, 0.14); color: var(--color-primary-strong); }
-  .sidebar__item--active .sidebar__icon { color: var(--color-primary-strong); }
-  .sidebar__item--active .sidebar__item-badge { background: var(--color-primary-100); color: var(--color-primary-strong); }
-  .sidebar__item--active::before { background: var(--color-primary-400); }
-  .toc__link--active { color: var(--color-primary-strong); }
-  .tree__row--selected { background: rgba(99, 102, 241, 0.14); color: var(--color-primary-strong); }
-  .tree__row--selected .tree__icon { color: var(--color-primary-strong); }
-  .breadcrumb__item:hover { color: var(--color-primary-strong); }
-  .wizard__step--current .wizard__dot,
-  .wizard__step--current .wizard__label { color: var(--color-primary-strong); }
-  .bottom-nav__item--active { color: var(--color-primary-strong); }
-  .timeline__event--current { color: var(--color-primary-strong); }
-  .calendar__day--range { color: var(--color-primary-strong); }
-  .date-picker__day--range-start,
-  .date-picker__day--range-end,
-  .date-picker__day--in-range { color: var(--color-primary-strong); }
-  .tag--primary { color: var(--color-primary-strong); }
-  .avatar--initials { color: var(--color-primary-strong); }
-  .table tbody tr.tr--selected { background: rgba(99, 102, 241, 0.14); }
-  .table tbody tr.tr--selected td { color: var(--color-text); }
-  .combo__option--selected { background: rgba(99, 102, 241, 0.14); color: var(--color-primary-strong); }
-  .transfer__item--selected { background: rgba(99, 102, 241, 0.14); color: var(--color-primary-strong); }
-  .multi-select__option--selected { color: var(--color-primary-strong); }
-  .country--selected { background: rgba(99, 102, 241, 0.14); }
-  .tz--selected { background: rgba(99, 102, 241, 0.14); }
-  .notif--unread { background: rgba(99, 102, 241, 0.08); }
-  .notif--unread .notif__icon { background: rgba(99, 102, 241, 0.15); color: var(--color-primary-strong); }
-
-
-  .swatch--selected::before { border-color: #0b1220; }
-
-
-  .donut__center { background: var(--color-bg-raised); }
-
-
-
-
-
-
-
-
-
-
-
-
-  .skeleton { background: var(--color-bg-inset); }
-  .skeleton::after {
-    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
-  }
-
-
-  .toast { background: var(--color-bg-raised); }
-
-
-  .fab { box-shadow: 0 12px 28px -6px rgba(0,0,0,0.7), 0 0 0 1px rgba(45, 212, 191, 0.25); }
-}
-
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior: auto; }
   *,
@@ -6669,9 +6473,6 @@ code, .inline-code {
   float: right;
   color: var(--color-text-faint);
   font-variant-numeric: tabular-nums;
-}
-@media (prefers-color-scheme: dark) {
-  .toc-rail__item--active { background: rgba(99, 102, 241, 0.12); color: var(--color-primary-strong); }
 }
 
 .gallery-main {
@@ -8341,7 +8142,6 @@ h6 {
   }
 }
 
-
 .toast--danger .toast__icon { color: var(--color-danger); }
 
 .avatar__initials {
@@ -8653,37 +8453,11 @@ h6 {
 }
 
 /* dark: brighter categorical palette for contrast on dark surfaces */
-@media (prefers-color-scheme: dark) {
-	:root {
-		--color-chart-1:   #a5b4fc;
-		--color-chart-2:   #34d399;
-		--color-chart-3:   #fbbf24;
-		--color-chart-4:   #f87171;
-		--color-chart-5:   #60a5fa;
-		--color-chart-6:   #a78bfa;
-		--color-chart-7:   #2dd4bf;
-		--color-chart-8:   #fb923c;
-		--color-chart-rule: var(--color-neutral-400);
-	}
-	.chart__point circle,
-	.chart__point rect,
-	.chart__point polygon,
-	.chart__point path {
-		stroke: var(--color-bg-raised);
-	}
-}
 
 /* dark: accent text on tint surfaces stays legible via the self-inverting
    -strong alias (bright lavender in dark, deep indigo in light). these rules
    are defined after the earlier dark block because their base rules live
    later in the file. */
-@media (prefers-color-scheme: dark) {
-	.showcase-badge { color: var(--color-primary-strong); }
-	.demo-highlight { color: var(--color-primary-strong); }
-	.toc-rail__group-label:hover,
-	.toc-rail__group--active > .toc-rail__group-label { color: var(--color-primary-strong); }
-	.state-label--active { color: var(--color-primary-strong); }
-}
 
 /* ── Shell / app-frame components ───────────────────────────────
    the high-level shell building blocks (sidebar rail, list, segmented,
@@ -8794,6 +8568,36 @@ h6 {
 .applet-card { padding: var(--space-4); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-xl); background: var(--color-bg-raised); margin-top: var(--space-4); }
 .applet-card__value { margin: var(--space-2) 0; font-size: var(--font-size-2xl); font-weight: var(--font-weight-semibold); color: var(--color-text); }
 
+/* runtime theme toggle: the engine drives [data-theme-choice] buttons and
+   the sheet's dark rules are also re-keyed on [data-theme="dark"], so this
+   switch works without the prefers-color-scheme media query. */
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-bg-subtle);
+}
+.theme-toggle__btn {
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  padding: var(--space-1) var(--space-2);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+.theme-toggle__btn:hover { color: var(--color-text); }
+.theme-toggle__btn[aria-pressed="true"] {
+  background: var(--color-bg-raised);
+  color: var(--color-text);
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
 /* class contract: components emit these class names, so give each a real
    rule (also keeps them validator-known — see HTMLClassValidator). the
    values match what the elements computed via inheritance before, so
@@ -8811,4 +8615,269 @@ h6 {
 .table td.table__expand-col {
   width: 1.75rem;
   white-space: nowrap;
+}
+
+/* runtime theme override: dark rules re-keyed on [data-theme] */
+
+html[data-theme="dark"] {
+ color-scheme: dark; 
+}
+:root[data-theme="dark"] {
+
+    --color-bg:        #060910;
+    --color-bg-raised: #0c111c;
+    --color-bg-inset:  #0a0e18;
+    --color-bg-subtle: #141b2b;
+
+    --color-text:       #e7ecf5;
+    --color-text-muted: #97a3b8;
+    --color-text-faint: #8494ab;
+    --color-on-color:   #060910;
+
+    --color-border:        #1c2436;
+    --color-border-strong: #2d3a55;
+
+    --color-focus:        var(--color-primary-400);
+    --color-focus-ring:     rgba(129, 140, 248, 0.40);
+    --color-focus-ring-danger: rgba(248, 113, 113, 0.40);
+
+    --color-primary-solid:        #4f46e5;
+    --color-primary-solid-hover:  #4338ca;
+    --color-primary-solid-active: #3730a3;
+    --color-on-primary-solid:     #ffffff;
+
+    /* Primary tint aliases — must adapt to dark like the other
+       semantic -soft/-strong tokens (demo chrome, swatches,
+       token samples all key off these). */
+    --color-primary-soft:  rgba(99, 102, 241, 0.16);
+    --color-primary-strong: #a5b4fc;
+    --color-primary-ring:        rgba(129, 140, 248, 0.45);
+
+    /* Primary tint scale 50–400 remapped to dark indigo tints
+       so badges, chips and selections read correctly in dark. */
+    --color-primary-50:          #171a33;
+    --color-primary-100:         #1f2347;
+    --color-primary-200:         #2a2f63;
+    --color-primary-300:         #4048a8;
+    --color-primary-400:         #818cf8;
+
+    --color-success:       #34d399;
+    --color-success-strong:#34d399;
+    --color-success-soft:  rgba(16, 185, 129, 0.15);
+    --color-success-ring:  #34d399;
+
+    --color-warning:       #fbbf24;
+    --color-warning-strong:#fbbf24;
+    --color-warning-soft:  rgba(245, 158, 11, 0.15);
+    --color-warning-ring:  #fbbf24;
+
+    --color-danger:        #f87171;
+    --color-danger-strong: #f87171;
+    --color-danger-soft:   rgba(239, 68, 68, 0.15);
+    --color-danger-ring:   #f87171;
+
+    --color-info:          #60a5fa;
+    --color-info-strong:   #60a5fa;
+    --color-info-soft:     rgba(59, 130, 246, 0.15);
+    --color-info-ring:     #60a5fa;
+
+    --scrollbar-thumb:       #2d3a55;
+    --scrollbar-thumb-hover: #42527a;
+
+    --shadow-sm: 0 1px 2px rgba(0,0,0,0.40);
+    --shadow-md: 0 4px 10px -2px rgba(0,0,0,0.50);
+    --shadow-lg: 0 16px 32px -8px rgba(0,0,0,0.55);
+    --shadow-xl: 0 24px 48px -12px rgba(0,0,0,0.65);
+  
+}
+[data-theme="dark"] .button {
+ --btn-bg-active: var(--color-bg-inset); 
+}
+[data-theme="dark"] .button--secondary, [data-theme="dark"] .button--ghost, [data-theme="dark"] .button--outline {
+ --btn-bg-active: var(--color-bg-inset); 
+}
+[data-theme="dark"] .button--ghost:hover, [data-theme="dark"] .button--outline:hover {
+ background: var(--color-bg-subtle); 
+}
+[data-theme="dark"] /* Solid colored buttons: dark ink on the bright fill (matches primary's
+     inverted dark treatment) so labels stay legible in dark mode.
+     Two-class selectors: the base solid rules appear LATER in source
+     order, [data-theme="dark"] so equal specificity would lose the cascade. */
+  .button.button--danger, [data-theme="dark"] .button.button--success, [data-theme="dark"] .button.button--warning {
+ color: var(--color-on-color); 
+}
+[data-theme="dark"] a, [data-theme="dark"] .button--link {
+ color: var(--color-primary-400); 
+}
+[data-theme="dark"] a:hover, [data-theme="dark"] .button--link:hover {
+ color: var(--color-primary-400); 
+}
+[data-theme="dark"] .badge--primary {
+ color: var(--color-primary-400); 
+}
+[data-theme="dark"] .badge--neutral {
+ color: var(--color-text-muted); 
+}
+[data-theme="dark"] .demo-highlight {
+ color: var(--color-primary-strong); background: var(--color-primary-soft); 
+}
+[data-theme="dark"] ::selection {
+
+    background: rgba(129, 140, 248, 0.35);
+    color: #eef2ff;
+  
+}
+[data-theme="dark"] .inline-code, [data-theme="dark"] code {
+
+    color: var(--color-primary-400);
+  
+}
+[data-theme="dark"] .code {
+ background: #0d1220; border-color: #1e2a44; 
+}
+[data-theme="dark"] .code__toolbar {
+ background: #11182b; border-color: #1e2a44; 
+}
+[data-theme="dark"] .terminal {
+ background: #0b0f1c; border-color: #1e2a44; 
+}
+[data-theme="dark"] .json-tree {
+ background: #0b0f1c; border-color: #1e2a44; 
+}
+[data-theme="dark"] .navbar__link--active {
+ background: rgba(99, 102, 241, 0.14); color: var(--color-primary-strong); 
+}
+[data-theme="dark"] .tabs__tab--active {
+ color: var(--color-primary-400); 
+}
+[data-theme="dark"] .tabs__tab--active::after {
+ background: var(--color-primary-400); 
+}
+[data-theme="dark"] .tabs--bordered .tabs__tab--active {
+ color: var(--color-primary-strong); 
+}
+[data-theme="dark"] .sidebar__item--active {
+ background: rgba(99, 102, 241, 0.14); color: var(--color-primary-strong); 
+}
+[data-theme="dark"] .sidebar__item--active .sidebar__icon {
+ color: var(--color-primary-strong); 
+}
+[data-theme="dark"] .sidebar__item--active .sidebar__item-badge {
+ background: var(--color-primary-100); color: var(--color-primary-strong); 
+}
+[data-theme="dark"] .sidebar__item--active::before {
+ background: var(--color-primary-400); 
+}
+[data-theme="dark"] .toc__link--active {
+ color: var(--color-primary-strong); 
+}
+[data-theme="dark"] .tree__row--selected {
+ background: rgba(99, 102, 241, 0.14); color: var(--color-primary-strong); 
+}
+[data-theme="dark"] .tree__row--selected .tree__icon {
+ color: var(--color-primary-strong); 
+}
+[data-theme="dark"] .breadcrumb__item:hover {
+ color: var(--color-primary-strong); 
+}
+[data-theme="dark"] .wizard__step--current .wizard__dot, [data-theme="dark"] .wizard__step--current .wizard__label {
+ color: var(--color-primary-strong); 
+}
+[data-theme="dark"] .bottom-nav__item--active {
+ color: var(--color-primary-strong); 
+}
+[data-theme="dark"] .timeline__event--current {
+ color: var(--color-primary-strong); 
+}
+[data-theme="dark"] .calendar__day--range {
+ color: var(--color-primary-strong); 
+}
+[data-theme="dark"] .date-picker__day--range-start, [data-theme="dark"] .date-picker__day--range-end, [data-theme="dark"] .date-picker__day--in-range {
+ color: var(--color-primary-strong); 
+}
+[data-theme="dark"] .tag--primary {
+ color: var(--color-primary-strong); 
+}
+[data-theme="dark"] .avatar--initials {
+ color: var(--color-primary-strong); 
+}
+[data-theme="dark"] .table tbody tr.tr--selected {
+ background: rgba(99, 102, 241, 0.14); 
+}
+[data-theme="dark"] .table tbody tr.tr--selected td {
+ color: var(--color-text); 
+}
+[data-theme="dark"] .combo__option--selected {
+ background: rgba(99, 102, 241, 0.14); color: var(--color-primary-strong); 
+}
+[data-theme="dark"] .transfer__item--selected {
+ background: rgba(99, 102, 241, 0.14); color: var(--color-primary-strong); 
+}
+[data-theme="dark"] .multi-select__option--selected {
+ color: var(--color-primary-strong); 
+}
+[data-theme="dark"] .country--selected {
+ background: rgba(99, 102, 241, 0.14); 
+}
+[data-theme="dark"] .tz--selected {
+ background: rgba(99, 102, 241, 0.14); 
+}
+[data-theme="dark"] .notif--unread {
+ background: rgba(99, 102, 241, 0.08); 
+}
+[data-theme="dark"] .notif--unread .notif__icon {
+ background: rgba(99, 102, 241, 0.15); color: var(--color-primary-strong); 
+}
+[data-theme="dark"] .swatch--selected::before {
+ border-color: #0b1220; 
+}
+[data-theme="dark"] .donut__center {
+ background: var(--color-bg-raised); 
+}
+[data-theme="dark"] .skeleton {
+ background: var(--color-bg-inset); 
+}
+[data-theme="dark"] .skeleton::after {
+
+    background: linear-gradient(90deg, transparent, rgba(255,255,255,0.06), transparent);
+  
+}
+[data-theme="dark"] .toast {
+ background: var(--color-bg-raised); 
+}
+[data-theme="dark"] .fab {
+ box-shadow: 0 12px 28px -6px rgba(0,0,0,0.7), 0 0 0 1px rgba(45, 212, 191, 0.25); 
+}
+[data-theme="dark"] .toc-rail__item--active {
+ background: rgba(99, 102, 241, 0.12); color: var(--color-primary-strong); 
+}
+:root[data-theme="dark"] {
+
+		--color-chart-1:   #a5b4fc;
+		--color-chart-2:   #34d399;
+		--color-chart-3:   #fbbf24;
+		--color-chart-4:   #f87171;
+		--color-chart-5:   #60a5fa;
+		--color-chart-6:   #a78bfa;
+		--color-chart-7:   #2dd4bf;
+		--color-chart-8:   #fb923c;
+		--color-chart-rule: var(--color-neutral-400);
+	
+}
+[data-theme="dark"] .chart__point circle, [data-theme="dark"] .chart__point rect, [data-theme="dark"] .chart__point polygon, [data-theme="dark"] .chart__point path {
+
+		stroke: var(--color-bg-raised);
+	
+}
+[data-theme="dark"] .showcase-badge {
+ color: var(--color-primary-strong); 
+}
+[data-theme="dark"] .demo-highlight {
+ color: var(--color-primary-strong); 
+}
+[data-theme="dark"] .toc-rail__group-label:hover, [data-theme="dark"] .toc-rail__group--active > .toc-rail__group-label {
+ color: var(--color-primary-strong); 
+}
+[data-theme="dark"] .state-label--active {
+ color: var(--color-primary-strong); 
 }

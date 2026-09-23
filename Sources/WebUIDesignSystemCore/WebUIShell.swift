@@ -467,3 +467,25 @@ public struct WebUIEngineStatus: View {
         """
     }
 }
+
+// MARK: - Theme Toggle
+
+/// a system/light/dark switch. the engine drives `[data-theme-choice]`
+/// buttons client-side (no round trip): clicking persists the choice in
+/// `localStorage` (key `webui-theme`), sets/removes `data-theme` on `<html>`,
+/// and updates `aria-pressed` on the group. the sheet's dark rules are also
+/// re-keyed on `[data-theme="dark"]`, so the switch works without the
+/// `prefers-color-scheme` media query.
+public struct WebUIThemeToggle: View {
+    public init() {}
+
+    public func render() -> String {
+        """
+        <div class="theme-toggle" role="group" aria-label="Theme">
+          <button type="button" class="theme-toggle__btn" data-theme-choice="system" aria-pressed="false">System</button>
+          <button type="button" class="theme-toggle__btn" data-theme-choice="light" aria-pressed="false">Light</button>
+          <button type="button" class="theme-toggle__btn" data-theme-choice="dark" aria-pressed="false">Dark</button>
+        </div>
+        """
+    }
+}

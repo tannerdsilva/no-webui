@@ -208,11 +208,15 @@ in the repo for the full build-integration design.
   `#ffffff`; dark bg `#060910`, raised `#0c111c`; primary indigo `#6366f1`
   (light action fill `#4f46e5`; dark link `#818cf8`); radii `--radius-md` 6px
   (buttons/inputs), `--radius-xl` 12px (cards).
-- **Dark mode** is automatic via `@media (prefers-color-scheme: dark)` remapping
-  the semantic tokens — there is **no** runtime toggle. Design and verify **both**
-  themes; never hardcode a theme. On a page-scoped tweak, put it in
-  `WebUIDocument.rawStyles` (lands after the sheet, so it extends without
-  overriding the shared defaults).
+- **Dark mode** is engine-driven at runtime: the sheet's dark rules are
+  re-keyed on `[data-theme="dark"]` and the engine resolves the effective
+  theme at boot (saved `webui-theme` choice, else `prefers-color-scheme`) in
+  `<head>` before the sheet applies — no flash for system default, and a user
+  override beats the OS either way. `WebUIThemeToggle` (System/Light/Dark)
+  drives it client-side with `localStorage` persistence, no round trip.
+  Design and verify **both** themes; never hardcode a theme. On a page-scoped
+  tweak, put it in `WebUIDocument.rawStyles` (lands after the sheet, so it
+  extends without overriding the shared defaults).
 
 ### The `*__body` padding convention (key gotcha)
 

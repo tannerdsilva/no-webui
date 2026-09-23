@@ -22,6 +22,55 @@ window.WebUIEngine = (function () {
   var EVENT_TYPES = ['click', 'input', 'change', 'submit', 'keydown', 'keyup', 'keypress', 'focus', 'blur', 'focusin', 'focusout', 'mouseover', 'mouseout', 'mousedown', 'mouseup'];
   var LOST_ANCHOR_WARNED = {};
 
+  (function () {
+    var mql = null;
+    try { mql = window.matchMedia('(prefers-color-scheme: dark)'); } catch (e) { }
+    var saved = null;
+    try { saved = localStorage.getItem('webui-theme'); } catch (e) { }
+    var choice = (saved === 'light' || saved === 'dark') ? saved : 'system';
+
+    function sysDark() { return mql ? mql.matches : false; }
+    function reflect() {
+      if (choice === 'system' ? sysDark() : choice === 'dark') {
+        document.documentElement.setAttribute('data-theme', 'dark');
+      } else {
+        document.documentElement.removeAttribute('data-theme');
+      }
+    }
+    function press() {
+      var btns = document.querySelectorAll('[data-theme-choice]');
+      for (var i = 0; i < btns.length; i++) {
+        btns[i].setAttribute('aria-pressed', btns[i].getAttribute('data-theme-choice') === choice ? 'true' : 'false');
+      }
+    }
+    function apply(next) {
+      choice = next;
+      try { localStorage.setItem('webui-theme', next); } catch (e) { }
+      reflect();
+      press();
+    }
+    document.addEventListener('click', function (e) {
+      var t = e.target;
+      while (t && t !== document.documentElement && !(t.getAttribute && t.getAttribute('data-theme-choice'))) {
+        t = t.parentNode;
+      }
+      if (!t || t === document.documentElement || !t.getAttribute) { return; }
+      var next = t.getAttribute('data-theme-choice');
+      if (next !== 'light' && next !== 'dark' && next !== 'system') { return; }
+      apply(next);
+    });
+    if (mql && mql.addEventListener) {
+      mql.addEventListener('change', function () { if (choice === 'system') { reflect(); } });
+    }
+    reflect();
+    function pressInitial() { press(); }
+    if (document.readyState === 'loading') {
+      document.addEventListener('DOMContentLoaded', pressInitial);
+    } else {
+      pressInitial();
+    }
+  })();
+
   function createLogger(level) {
     var min = LOG_LEVELS[level] || LOG_LEVELS.warn;
     return {

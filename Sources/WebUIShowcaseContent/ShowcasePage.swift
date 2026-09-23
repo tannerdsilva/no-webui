@@ -29,6 +29,7 @@ public struct ShowcasePage {
             HStack(alignment: .center, spacing: 16) {
                 Heading("WebUI Showcase", level: .h1).class("showcase-title")
                 Span(class: "showcase-badge") { Text("v1.0") }
+                WebUIThemeToggle()
                 Spacer()
                 Span(class: "showcase-status") { WebUIEngineStatus() }
             }.padding(horizontal: 24, vertical: 12)
