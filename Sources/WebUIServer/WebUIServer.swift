@@ -345,19 +345,6 @@ final class Runner: Sendable {
 						cacheControl: "public, max-age=\(config.assetCacheSeconds)",
 						gzip: canGzip
 					)
-					try await respond(
-						channel: channel.channel,
-						body: WebUIAssets.client,
-						contentType: "text/javascript; charset=utf-8",
-						gzip: canGzip
-					)
-				} else if uri == "/ui/webui-app-boot.js" {
-					try await respond(
-						channel: channel.channel,
-						body: WebUIAssets.clientBoot,
-						contentType: "text/javascript; charset=utf-8",
-						gzip: canGzip
-					)
 				} else if uri == config.pagePath || uri == "/index.html" {
 					// the server owns the render context: handlers a page wires
 					// through `.onX`/`controlAttributes` register into THIS

@@ -8,10 +8,6 @@ enum WebUIAssetTool {
 
         var cssInput: String?
         var jsInput: String?
-        var clientInput: String?
-        var clientBootInput: String?
-        var clientSearchBootInput: String?
-        var workerInput: String?
         var engineInput: String?
         var shellInput: String?
         var outputPath: String?
@@ -24,14 +20,6 @@ enum WebUIAssetTool {
                 cssInput = iterator.next()
             case "--js-input":
                 jsInput = iterator.next()
-            case "--client-input":
-                clientInput = iterator.next()
-            case "--client-boot-input":
-                clientBootInput = iterator.next()
-            case "--client-search-boot-input":
-                clientSearchBootInput = iterator.next()
-            case "--worker-input":
-                workerInput = iterator.next()
             case "--engine-input":
                 engineInput = iterator.next()
             case "--shell-input":
@@ -46,7 +34,7 @@ enum WebUIAssetTool {
         }
 
         guard outputPath != nil || tokensOutputPath != nil else {
-            print("usage: WebUIAssetTool --css-input <path> --js-input <path> --client-input <path> --client-boot-input <path> --client-search-boot-input <path> --worker-input <path> --engine-input <path> --shell-input <path> --output <path> [--tokens-output <path>]")
+            print("usage: WebUIAssetTool --css-input <path> --js-input <path> --engine-input <path> --shell-input <path> --output <path> [--tokens-output <path>]")
             exit(1)
         }
 
@@ -58,25 +46,6 @@ enum WebUIAssetTool {
         var jsContent = ""
         if let jsInput {
             jsContent = try String(contentsOfFile: jsInput, encoding: .utf8)
-        }
-
-        var clientContent = ""
-        if let clientInput {
-            clientContent = try String(contentsOfFile: clientInput, encoding: .utf8)
-        }
-
-        var clientBootContent = ""
-        if let clientBootInput {
-            clientBootContent = try String(contentsOfFile: clientBootInput, encoding: .utf8)
-        }
-
-        var clientSearchBootContent = ""
-        if let clientSearchBootInput {
-            clientSearchBootContent = try String(contentsOfFile: clientSearchBootInput, encoding: .utf8)
-        }
-        var workerContent = ""
-        if let workerInput {
-            workerContent = try String(contentsOfFile: workerInput, encoding: .utf8)
         }
 
         var engineContent = ""
@@ -105,32 +74,22 @@ enum WebUIAssetTool {
 
         if let outputPath {
             let generated = try generateAssetsSource(
-                css: cssContent, js: jsContent, client: clientContent,
-                clientBoot: clientBootContent, clientSearchBoot: clientSearchBootContent,
-                worker: workerContent, engine: engineContent, shell: shellContent
+                css: cssContent, js: jsContent, engine: engineContent, shell: shellContent
             )
 
             try generated.write(toFile: outputPath, atomically: true, encoding: .utf8)
 
             let cssBytes = cssContent.utf8.count
             let jsBytes = jsContent.utf8.count
-            let clientBytes = clientContent.utf8.count
-            let bootBytes = clientBootContent.utf8.count
-            let searchBytes = clientSearchBootContent.utf8.count
-            let workerBytes = workerContent.utf8.count
             let engineBytes = engineContent.utf8.count
             let shellBytes = shellContent.utf8.count
-            print("generated \(outputPath) (\(cssBytes) bytes CSS, \(jsBytes) bytes JS, \(clientBytes) bytes client, \(bootBytes) bytes boot, \(searchBytes) bytes search boot, \(workerBytes) bytes worker, \(engineBytes) bytes engine, \(shellBytes) bytes shell)")
+            print("generated \(outputPath) (\(cssBytes) bytes CSS, \(jsBytes) bytes JS, \(engineBytes) bytes engine, \(shellBytes) bytes shell)")
         }
     }
 
-    static func generateAssetsSource(css: String, js: String, client: String, clientBoot: String, clientSearchBoot: String, worker: String, engine: String, shell: String) throws -> String {
+    static func generateAssetsSource(css: String, js: String, engine: String, shell: String) throws -> String {
         let escapedCSS = css.replacingOccurrences(of: "\\", with: "\\\\")
         let escapedJS = js.replacingOccurrences(of: "\\", with: "\\\\")
-        let escapedClient = client.replacingOccurrences(of: "\\", with: "\\\\")
-        let escapedBoot = clientBoot.replacingOccurrences(of: "\\", with: "\\\\")
-        let escapedSearchBoot = clientSearchBoot.replacingOccurrences(of: "\\", with: "\\\\")
-        let escapedWorker = worker.replacingOccurrences(of: "\\", with: "\\\\")
         let escapedEngine = engine.replacingOccurrences(of: "\\", with: "\\\\")
         let escapedShell = shell.replacingOccurrences(of: "\\", with: "\\\\")
 
@@ -140,26 +99,6 @@ enum WebUIAssetTool {
             .joined(separator: "\n")
 
         let indentedJS = escapedJS
-            .split(separator: "\n", omittingEmptySubsequences: false)
-            .map { "    \($0)" }
-            .joined(separator: "\n")
-
-        let indentedClient = escapedClient
-            .split(separator: "\n", omittingEmptySubsequences: false)
-            .map { "    \($0)" }
-            .joined(separator: "\n")
-
-        let indentedBoot = escapedBoot
-            .split(separator: "\n", omittingEmptySubsequences: false)
-            .map { "    \($0)" }
-            .joined(separator: "\n")
-
-        let indentedSearchBoot = escapedSearchBoot
-            .split(separator: "\n", omittingEmptySubsequences: false)
-            .map { "    \($0)" }
-            .joined(separator: "\n")
-
-        let indentedWorker = escapedWorker
             .split(separator: "\n", omittingEmptySubsequences: false)
             .map { "    \($0)" }
             .joined(separator: "\n")
@@ -182,18 +121,6 @@ enum WebUIAssetTool {
             \"\"\"
             public static let js: String = \"\"\"
         \(indentedJS)
-            \"\"\"
-            public static let client: String = \"\"\"
-        \(indentedClient)
-            \"\"\"
-            public static let clientBoot: String = \"\"\"
-        \(indentedBoot)
-            \"\"\"
-            public static let clientSearchBoot: String = \"\"\"
-        \(indentedSearchBoot)
-            \"\"\"
-            public static let worker: String = \"\"\"
-        \(indentedWorker)
             \"\"\"
             public static let engine: String = \"\"\"
         \(indentedEngine)
