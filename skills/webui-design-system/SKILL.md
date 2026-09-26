@@ -154,44 +154,19 @@ and JS runtime embedded, an auto-generated CSP + nonce, and the theme.
 ## Client mode (run the same UI in wasm)
 
 The same `View`/`ViewModifier` core can run **inside the browser** — the
-client-mode page flips with one argument, and the wasm artifact is produced by
-a plugin verb from the no-webui dependency (no raw `swift build --swift-sdk`
-invocation, no memorized flags):
-
-```bash
-# then a normal host build serves client-mode pages
-swift build
-swift run TheirServer
-```
-
-- **`wasm-client`** cross-builds the named client product with the official
-  wasm sdk into an isolated `.build/wasm-client-scratch` (a scratch root is
-  required: the plugin invocation holds the package build lock). it **strips
-  custom sections by default** (name table + DWARF — ~15% smaller artifact,
-  no behavior change); pass `--no-strip` to keep readable stack traces in
-  devtools. requires `--disable-sandbox` (like the serve/smoke verbs).
 - **the client runtime is the engine** (`/ui/webui-engine.js`, shipped by the
-  framework): a consumer app links `WebUICore`,
-  (the published `WebUIClientRuntime` / `.wasm` client product was deleted — the
-  engine plus per-page wasm capability islands is the client architecture now).
-- **flip the page**: `HTMLDocument(…, clientMode: ClientBoot(wasmURL: …))` /
-  `WebUIDocument(…, clientMode: …)`. `wasmURL` is the url your server serves
-  the artifact at (use `WebUIBoot.wasmProductURL(productName: "TheirClient")`
-  to resolve it, and `WebUIBoot.wasmSHA256` for the build-time content hash
-  that feeds the immutable-cached route).
-- **artifact is required**: the framework's `WebUIWasmPlugin` hard-fails if the
-  wasm artifact is absent — wasm is the sole client runtime, so build it first
-  (`wasm-client` verb). there is no soft `present=false` carrier and no
-  `WEBUI_REQUIRE_WASM` switch anymore.
-- **the artifact must exist before the host build** — the plugin validates +
-  hashes it into the carrier during `swift build`, so build `wasm-client`
-  first, then `swift build`. (This is the same two-invocation rule the
-  framework's own gates follow.)
-
-Client mode runs the same render core in wasm: local event routing, optimistic
-patches, client state store, and an auth-presence mirror, with the websocket
-demoted to the authority channel. See `Documentation/WASM_NATIVE_BUILD_SPIKE.md`
-in the repo for the full build-integration design.
+  framework): a consumer app links `WebUICore` and nothing else. the published
+  `WebUIClientRuntime` / `.wasm` client product **was deleted** — the engine plus
+  per-page wasm capability islands is the client architecture now.
+- **capability islands are the wasm path**: cross-build one with
+  `swift package --disable-sandbox plugin wasm-island --product TheirIsland`
+  (isolated scratch root; custom sections stripped by default; needs
+  `--disable-sandbox`), declare the capability on the page, and the engine
+  lazy-loads it — degrading to the base path when the artifact is absent. the
+  repo's `WebUIValidateIsland` is the reference island: one Foundation-free core,
+  compiled to wasm and exercised natively by the same tests.
+- **if you came here for a wasm *client* app: that path is gone.** migrate to the
+  engine, or to an island for the specific local behaviour you needed.
 
 ## Tokens & theming
 
