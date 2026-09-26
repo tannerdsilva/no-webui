@@ -323,6 +323,65 @@ func componentSurfacePins() {
 	]))
 	#expect(unsafeFeed.contains("&lt;script&gt;x&lt;/script&gt;"))
 	#expect(unsafeFeed.contains("&lt;1m"))
+// p2 chat set: the sheet's chat family plus the scroller/marker/attachment.
+	let scroller = rendered(WebUIMessageScroller(height: "18rem", id: "sc", ariaLabel: "Thread") {
+		Text("first")
+		Text("second")
+	})
+	#expect(scroller.contains("scroll-area scroll-area--reverse scroll-area--fade-y"))
+	#expect(scroller.contains("role=\"log\""))
+	#expect(scroller.contains("aria-live=\"polite\""))
+	#expect(scroller.contains("tabindex=\"0\""))
+	#expect(scroller.contains("height: 18rem; max-height: 18rem"))
+	// bottom-anchored layout: children emit in reverse dom order
+	let firstAt = scroller.range(of: "first")!
+	let secondAt = scroller.range(of: "second")!
+	#expect(secondAt.lowerBound < firstAt.lowerBound)
+	#expect(!rendered(WebUIMessageScroller(fade: false) { Text("x") }).contains("scroll-area--fade-y"))
+
+	let marker = rendered(WebUIMarker("Today"))
+	#expect(marker.contains("class=\"marker\""))
+	#expect(marker.contains("role=\"separator\""))
+	#expect(marker.contains("marker__rule"))
+	#expect(marker.contains("marker__label"))
+	#expect(rendered(WebUIMarker("Pinned", icon: .clock, sticky: true)).contains("marker--sticky"))
+	#expect(rendered(WebUIMarker("Pinned", icon: .clock)).contains("marker__glyph"))
+	#expect(!rendered(WebUIMarker("Bare", spread: false)).contains("marker__rule"))
+	#expect(rendered(WebUIMarker("<b>x</b>")).contains("&lt;b&gt;x&lt;/b&gt;"))
+
+	let attachment = rendered(WebUIAttachment(name: "notes.md", meta: "12 KB", removable: true, id: "att"))
+	#expect(attachment.contains("class=\"attachment\""))
+	#expect(attachment.contains("attachment__icon"))
+	#expect(attachment.contains("attachment__name"))
+	#expect(attachment.contains("attachment__meta"))
+	#expect(attachment.contains("attachment__remove"))
+	#expect(attachment.contains("data-dismiss"))
+	#expect(attachment.contains("id=\"att\""))
+	#expect(rendered(WebUIAttachment(name: "x", meta: "y", state: .uploading)).contains("attachment--uploading"))
+	#expect(rendered(WebUIAttachment(name: "x", state: .error)).contains("attachment--error"))
+	#expect(rendered(WebUIAttachment(name: "<script>x</script>")).contains("&lt;script&gt;"))
+
+	let bubble = rendered(WebUIChatBubble("hi there", side: .sent, time: "09:41", receipt: .read))
+	#expect(bubble.contains("chat__bubble chat__bubble--sent"))
+	#expect(bubble.contains("chat__time"))
+	#expect(bubble.contains("chat__receipt chat__receipt--read"))
+	#expect(bubble.contains("aria-label=\"Read\""))
+	#expect(rendered(WebUIChatBubble("x", side: .received)).contains("chat__bubble--received"))
+	let reacted = rendered(WebUIChatBubble("x", reactions: [WebUIChatBubble.Reaction(label: "up", count: 2, active: true)]))
+	#expect(reacted.contains("chat__reactions"))
+	#expect(reacted.contains("chat__reaction chat__reaction--active"))
+	#expect(rendered(WebUIChatBubble("line1\nline2")).contains("line1<br>line2"))
+	#expect(rendered(WebUIChatBubble("<b>x</b>")).contains("&lt;b&gt;x&lt;/b&gt;"))
+	// a received bubble never shows an outgoing receipt
+	#expect(!rendered(WebUIChatBubble("x", side: .received, receipt: .read)).contains("chat__receipt"))
+
+	let thread = rendered(WebUIMessage(name: "Dana", text: "green", time: "09:12"))
+	#expect(thread.contains("class=\"chat__thread\""))
+	#expect(thread.contains("chat__meta"))
+	#expect(thread.contains("class=\"chat__bubble\""))
+	let ownThread = rendered(WebUIMessage(name: "You", text: "ok", own: true))
+	#expect(ownThread.contains("chat__thread chat__thread--own"))
+	#expect(ownThread.contains("chat__bubble chat__bubble--own"))
 }
 
 @Test("composite components pin their surface")

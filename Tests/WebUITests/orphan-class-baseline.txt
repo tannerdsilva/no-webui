@@ -95,18 +95,6 @@ chart__legend--left
 chart__legend--none
 chart__legend--right
 chart__legend--top
-chat__bubble
-chat__bubble--own
-chat__bubble--received
-chat__bubble--sent
-chat__meta
-chat__reaction
-chat__reaction--active
-chat__reactions
-chat__receipt
-chat__thread
-chat__thread--own
-chat__time
 checkbox--label-left
 checkbox--lg
 checkbox--sm
@@ -541,8 +529,6 @@ row--between
 row--center
 row--start
 row--wrap
-scroll-area
-scroll-area--fade-y
 scroll-area__row
 scroll-top
 scroll-top--ring

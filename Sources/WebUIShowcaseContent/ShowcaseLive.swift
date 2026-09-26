@@ -9,6 +9,14 @@ import WebUIDesignSystem
 /// server is the source of truth, every patch re-emits post-state markup.
 /// public so the showcase server can own one instance and share it with
 /// both the render closure and the wired handlers.
+/// one line of the chat demo: which side it renders on, the text, and the label
+/// the bubble shows as a timestamp.
+struct ChatLine: Sendable {
+	var side: String
+	var text: String
+	var time: String
+}
+
 public final class ShowcaseState: Sendable {
 	public init() {}
 
@@ -25,6 +33,11 @@ public final class ShowcaseState: Sendable {
 		var rowsPerPage = 25
 		var treeExpanded: Set<String> = ["src", "ui"]
 		var treeSelected: String? = "view"
+		var chat: [ChatLine] = [
+			ChatLine(side: "received", text: "Deploy went out at 09:12.", time: "09:12"),
+			ChatLine(side: "sent", text: "Watching the dashboards.", time: "09:13"),
+			ChatLine(side: "received", text: "All green on my side.", time: "09:14"),
+		]
 	}
 
 	private let values = Mutex(Values())
@@ -76,6 +89,16 @@ public final class ShowcaseState: Sendable {
 	var treeSelected: String? {
 		get { values.withLock { $0.treeSelected } }
 		set { values.withLock { $0.treeSelected = newValue } }
+	}
+
+	var chat: [ChatLine] {
+		get { values.withLock { $0.chat } }
+		set { values.withLock { $0.chat = newValue } }
+	}
+
+	/// append one outgoing line: the chat demo's server-side mutation.
+	func appendChat(_ text: String) {
+		values.withLock { $0.chat.append(ChatLine(side: "sent", text: text, time: "just now")) }
 	}
 
 	var tableSort: (column: Int, direction: WebUITable.SortDirection)? {
@@ -134,6 +157,24 @@ func contentTabs(state: ShowcaseState) -> WebUITabs {
 			]
 		}
 	)
+}
+
+/// the live chat demo: a bottom-anchored scroller over the server-held lines,
+/// with a typing indicator pinned at the newest edge. the scroller reverses its
+/// children internally, so this list stays chronological.
+func liveChat(state: ShowcaseState) -> WebUIMessageScroller {
+	WebUIMessageScroller(height: "22rem", id: "live-chat", ariaLabel: "Live conversation") {
+		WebUIMarker("Live session")
+		for line in state.chat {
+			WebUIChatBubble(
+				line.text,
+				side: line.side == "sent" ? .sent : .received,
+				time: line.time,
+				receipt: line.side == "sent" ? .delivered : nil
+			)
+		}
+		WebUITypingIndicator(inline: true)
+	}
 }
 
 func interactiveTable(state: ShowcaseState) -> WebUITable {

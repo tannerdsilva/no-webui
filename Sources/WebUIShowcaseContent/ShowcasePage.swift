@@ -978,6 +978,51 @@ public struct ShowcasePage: Sendable {
                                 Raw(tabContentHTML(state.activeTab))
                             }
                         }
+                        demoCard("Chat - live websocket round-trip") {
+                            VStack(spacing: 12) {
+                                Paragraph("Send a message: it round-trips over the websocket and the server appends it.")
+                                liveChat(state: state)
+                                Form(action: "#", method: "post", id: "chat-form") {
+                                    VStack(spacing: 12) {
+                                        Label("Message:").class("demo-label")
+                                        Input(id: "chat-input", name: "message", placeholder: "Say something...", type: .text)
+                                        WebUIButton("Send", variant: .primary, id: "chat-send")
+                                    }
+                                }
+                                .onSubmit { event in
+                                    let text = event.string("message") ?? ""
+                                    guard !text.isEmpty else { return [] }
+                                    state.appendChat(text)
+                                    return [FragmentUpdate(id: "live-chat", html: liveChat(state: state).render())]
+                                }
+                            }
+                        }
+                        demoCard("WebUIMessage, WebUIMarker, WebUIAttachment") {
+                            VStack(spacing: 16) {
+                                WebUIMessage(name: "Dana", text: "Deploy is green.", time: "09:12")
+                                WebUIMessage(
+                                    name: "You",
+                                    text: "Shipping the docs now.",
+                                    time: "09:14",
+                                    own: true,
+                                    reactions: [WebUIChatBubble.Reaction(label: "\u{1F44D}", count: 2, active: true)]
+                                )
+                                WebUIMarker("Yesterday")
+                                WebUIMarker("Pinned", icon: .clock, spread: false)
+                                HStack(alignment: .center, spacing: 12) {
+                                    WebUIAttachment(name: "release-notes.md", meta: "12 KB - markdown")
+                                    WebUIAttachment(name: "screenshot.png", meta: "uploading...", state: .uploading)
+                                }
+                                WebUIAttachment(
+                                    name: "dataset.csv",
+                                    meta: "rejected: over quota",
+                                    state: .error,
+                                    removable: true,
+                                    id: "att-demo"
+                                )
+                                .onDismiss { me, _ in [me.remove()] }
+                            }
+                        }
                     }
                 }
 

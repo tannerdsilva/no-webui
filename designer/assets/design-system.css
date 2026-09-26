@@ -8893,3 +8893,134 @@ html[data-theme="dark"] {
 [data-theme="dark"] .state-label--active {
  color: var(--color-primary-strong); 
 }
+
+/* --- p2 chat extras: bottom-anchored scroller, stream markers, attachments --- */
+
+.scroll-area--reverse {
+  display: flex;
+  flex-direction: column-reverse;
+  gap: var(--space-3);
+  padding: var(--space-3);
+}
+.scroll-area--reverse::before,
+.scroll-area--reverse::after {
+  display: none;
+}
+
+.marker {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text-faint);
+  letter-spacing: var(--letter-spacing-wide);
+  text-transform: uppercase;
+}
+.marker--sticky {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  padding: var(--space-2) 0;
+  background: var(--color-bg-raised);
+}
+.marker__rule {
+  flex: 1;
+  height: 1px;
+  background: var(--color-border);
+}
+.marker__glyph {
+  flex: none;
+  display: inline-grid;
+  place-items: center;
+  width: 1.1em;
+  height: 1.1em;
+}
+.marker__label {
+  flex: none;
+}
+
+.attachment {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-3);
+  max-width: 22rem;
+  font-size: var(--font-size-sm);
+  background: var(--color-bg-raised);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-lg);
+}
+.attachment__icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: var(--radius-md);
+  background: var(--color-bg-inset);
+  color: var(--color-text-muted);
+}
+.attachment__body {
+  flex: 1;
+  min-width: 0;
+}
+.attachment__name {
+  display: block;
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.attachment__meta {
+  display: block;
+  font-size: var(--font-size-xs);
+  color: var(--color-text-muted);
+}
+.attachment__remove {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  border: none;
+  background: transparent;
+  border-radius: var(--radius-sm);
+  color: var(--color-text-muted);
+  cursor: pointer;
+  font-size: var(--font-size-xs);
+}
+.attachment__remove:hover {
+  background: var(--color-bg-inset);
+  color: var(--color-text);
+}
+.attachment--uploading .attachment__icon,
+.attachment--uploading .attachment__meta {
+  color: var(--color-primary-strong);
+}
+.attachment--error {
+  border-color: var(--color-danger);
+}
+.attachment--error .attachment__meta {
+  color: var(--color-danger);
+}
+
+/* the sent/received pair predates the owned-bubble pair further up; on equal
+   specificity the later .chat__bubble rule wins the background, so the sides
+   are restated here or an outgoing bubble paints as an incoming one. */
+.chat__bubble--sent {
+  background: var(--color-primary-solid);
+  border-color: transparent;
+  color: var(--color-on-primary-solid);
+  border-radius: var(--radius-lg) var(--radius-lg) 0.3rem var(--radius-lg);
+}
+.chat__bubble--received {
+  background: var(--color-bg-inset);
+  border-color: var(--color-border);
+  color: var(--color-text);
+  border-radius: var(--radius-lg) var(--radius-lg) var(--radius-lg) 0.3rem;
+}
+.chat__receipt--read {
+  color: var(--color-info);
+}

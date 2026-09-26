@@ -525,3 +525,300 @@ public struct WebUIActivityFeed: View {
         return html
     }
 }
+
+// MARK: WebUI Message Scroller
+/// a bottom-anchored scroller for message streams. the sheet's `.scroll-area`
+/// supplies the viewport and the sticky edge mask; the reverse-column modifier
+/// keeps the view pinned to the newest item with no client javascript. that
+/// layout requirement is why children are emitted in reverse dom order: pass
+/// them chronologically (oldest first) and the newest lands lowest, with the
+/// scroll origin already at the bottom.
+public struct WebUIMessageScroller: View {
+    /// viewport height as a css length, e.g. "20rem" or "60vh".
+    public let height: String
+    public let id: String?
+    /// mask the top and bottom edges as they scroll out of view.
+    public let fade: Bool
+    /// accessible name for the log region.
+    public let ariaLabel: String
+    public let children: [any View]
+
+    public init(
+        height: String = "20rem",
+        id: String? = nil,
+        fade: Bool = true,
+        ariaLabel: String = "Messages",
+        @ViewBuilder content: () -> [any View]
+    ) {
+        self.height = height
+        self.id = id
+        self.fade = fade
+        self.ariaLabel = ariaLabel
+        self.children = content()
+    }
+
+    public func render() -> String {
+        var html = "<div class=\"scroll-area scroll-area--reverse"
+        if fade { html += " scroll-area--fade-y" }
+        html += "\""
+        if let id { html += " id=\"\(htmlEscape(id))\"" }
+        let size = htmlEscape(height)
+        html += " style=\"height: \(size); max-height: \(size)\""
+        html += " role=\"log\" aria-live=\"polite\" aria-label=\"\(htmlEscape(ariaLabel))\" tabindex=\"0\">"
+        for child in children.reversed() {
+            html += child.render()
+        }
+        html += "</div>"
+        return html
+    }
+}
+
+// MARK: WebUI Marker
+/// a labelled break in a stream, e.g. a day divider. sits between two rules by
+/// default; `spread: false` drops the rules for a bare label, and `sticky` pins
+/// the marker to the top of its scroller while the stream moves under it.
+public struct WebUIMarker: View {
+    public let label: String
+    public let icon: IconName?
+    public let sticky: Bool
+    public let spread: Bool
+
+    public init(_ label: String, icon: IconName? = nil, sticky: Bool = false, spread: Bool = true) {
+        self.label = label
+        self.icon = icon
+        self.sticky = sticky
+        self.spread = spread
+    }
+
+    public func render() -> String {
+        var html = "<div class=\"marker\(sticky ? " marker--sticky" : "")\" role=\"separator\">"
+        if spread { html += "<span class=\"marker__rule\"></span>" }
+        if let icon {
+            html += "<span class=\"marker__glyph\">" + WebUIIcon(icon, size: .slot).render() + "</span>"
+        }
+        html += "<span class=\"marker__label\">\(htmlEscape(label))</span>"
+        if spread { html += "<span class=\"marker__rule\"></span>" }
+        html += "</div>"
+        return html
+    }
+}
+
+// MARK: WebUI Attachment
+/// a file chip: glyph, name, a meta line (size, type, or why it failed) and an
+/// optional remove affordance. conforms to `Dismissible`, so the remove button
+/// takes the standard `.onDismiss { me, _ in [me.remove()] }` handler.
+public struct WebUIAttachment: View, Dismissible {
+    public enum State: String, Sendable {
+        case ready = ""
+        case uploading = "attachment--uploading"
+        case error = "attachment--error"
+    }
+
+    public let name: String
+    /// secondary line: size, mime type, or the failure reason.
+    public let meta: String?
+    public let icon: IconName
+    public let state: State
+    public let removable: Bool
+    public let id: String?
+    public var onDismiss: DismissHandler?
+
+    public init(
+        name: String,
+        meta: String? = nil,
+        icon: IconName? = nil,
+        state: State = .ready,
+        removable: Bool = false,
+        id: String? = nil
+    ) {
+        self.name = name
+        self.meta = meta
+        self.icon = icon ?? .fileText
+        self.state = state
+        self.removable = removable
+        self.id = id
+        self.onDismiss = nil
+    }
+
+    public var dismissButtonClass: String { "attachment__remove" }
+    public var dismissMarker: String { "data-dismiss" }
+    public var dismissRootIdentifier: String? { id }
+
+    public func render() -> String {
+        let dismissal = makeDismissal(ariaLabel: "Remove attachment")
+        var html = "<div class=\"attachment"
+        if !state.rawValue.isEmpty { html += " \(state.rawValue)" }
+        html += "\""
+        if let elementID = dismissal.elementID ?? id {
+            html += " id=\"\(htmlEscape(elementID))\""
+        }
+        html += ">"
+        html += "<span class=\"attachment__icon\">" + WebUIIcon(icon, size: .small).render() + "</span>"
+        html += "<span class=\"attachment__body\">"
+        html += "<span class=\"attachment__name\">\(htmlEscape(name))</span>"
+        if let meta {
+            html += "<span class=\"attachment__meta\">\(htmlEscape(meta))</span>"
+        }
+        html += "</span>"
+        if removable || onDismiss != nil {
+            html += dismissal.buttonHTML
+        }
+        html += "</div>"
+        return html
+    }
+}
+
+// MARK: WebUI Chat Bubble
+/// one message bubble. `side` picks the outgoing (solid, right-aligned) or
+/// incoming (inset, left-aligned) treatment; time, receipt and reaction pills
+/// are optional. the sheet carries both a `--sent/--received` pair and an
+/// `--own` pair for the same idea; this component uses the side pair and
+/// `WebUIMessage` uses the owned pair inside a thread.
+public struct WebUIChatBubble: View {
+    public enum Side: String, Sendable {
+        case sent = "chat__bubble--sent"
+        case received = "chat__bubble--received"
+    }
+
+    /// delivery state of an outgoing bubble.
+    public enum Receipt: String, Sendable {
+        case sent
+        case delivered
+        case read
+    }
+
+    public struct Reaction: Sendable {
+        public let label: String
+        public let count: Int
+        public let active: Bool
+        public init(label: String, count: Int = 1, active: Bool = false) {
+            self.label = label
+            self.count = count
+            self.active = active
+        }
+    }
+
+    public let text: String
+    public let side: Side
+    /// timestamp shown at the bubble's trailing edge.
+    public let time: String?
+    /// only meaningful for `.sent`; renders a glyph with an accessible name.
+    public let receipt: Receipt?
+    public let reactions: [Reaction]
+    public let id: String?
+
+    public init(
+        _ text: String,
+        side: Side = .received,
+        time: String? = nil,
+        receipt: Receipt? = nil,
+        reactions: [Reaction] = [],
+        id: String? = nil
+    ) {
+        self.text = text
+        self.side = side
+        self.time = time
+        self.receipt = receipt
+        self.reactions = reactions
+        self.id = id
+    }
+
+    private func receiptHTML(for receipt: Receipt) -> String {
+        let icon: IconName
+        let label: String
+        let extraClass: String
+        switch receipt {
+        case .sent:
+            icon = .check
+            label = "Sent"
+            extraClass = ""
+        case .delivered:
+            icon = .checkCheck
+            label = "Delivered"
+            extraClass = ""
+        case .read:
+            icon = .checkCheck
+            label = "Read"
+            extraClass = " chat__receipt--read"
+        }
+        return "<span class=\"chat__receipt\(extraClass)\" role=\"img\" aria-label=\"\(label)\">"
+            + WebUIIcon(icon, size: .small).render() + "</span>"
+    }
+
+    public func render() -> String {
+        var html = "<div class=\"chat__bubble \(side.rawValue)\""
+        if let id { html += " id=\"\(htmlEscape(id))\"" }
+        html += ">"
+        html += htmlEscape(text).replacingOccurrences(of: "\n", with: "<br>")
+        if let time {
+            html += "<span class=\"chat__time\">\(htmlEscape(time))"
+            if let receipt, side == .sent {
+                html += receiptHTML(for: receipt)
+            }
+            html += "</span>"
+        }
+        html += "</div>"
+        if !reactions.isEmpty {
+            var row = "<div class=\"chat__reactions\">"
+            for reaction in reactions {
+                row += "<span class=\"chat__reaction\(reaction.active ? " chat__reaction--active" : "")\">"
+                row += "<span aria-hidden=\"true\">\(htmlEscape(reaction.label))</span>"
+                row += "<span>\(reaction.count)</span>"
+                row += "</span>"
+            }
+            row += "</div>"
+            html += row
+        }
+        return html
+    }
+}
+
+// MARK: WebUI Message
+/// a threaded message: an author/time meta row above an owned or other bubble.
+/// use it when messages carry an author; the bare `WebUIChatBubble` is enough
+/// for a single-voice stream.
+public struct WebUIMessage: View {
+    public let name: String
+    public let text: String
+    public let time: String?
+    /// true renders the thread (and its bubble) as the local participant.
+    public let own: Bool
+    public let reactions: [WebUIChatBubble.Reaction]
+
+    public init(
+        name: String,
+        text: String,
+        time: String? = nil,
+        own: Bool = false,
+        reactions: [WebUIChatBubble.Reaction] = []
+    ) {
+        self.name = name
+        self.text = text
+        self.time = time
+        self.own = own
+        self.reactions = reactions
+    }
+
+    public func render() -> String {
+        var html = "<div class=\"chat__thread\(own ? " chat__thread--own" : "")\">"
+        html += "<div class=\"chat__meta\"><span>\(htmlEscape(name))</span>"
+        if let time { html += "<span>\(htmlEscape(time))</span>" }
+        html += "</div>"
+        html += "<div class=\"chat__bubble\(own ? " chat__bubble--own" : "")\">"
+        html += htmlEscape(text).replacingOccurrences(of: "\n", with: "<br>")
+        html += "</div>"
+        if !reactions.isEmpty {
+            var row = "<div class=\"chat__reactions\">"
+            for reaction in reactions {
+                row += "<span class=\"chat__reaction\(reaction.active ? " chat__reaction--active" : "")\">"
+                row += "<span aria-hidden=\"true\">\(htmlEscape(reaction.label))</span>"
+                row += "<span>\(reaction.count)</span>"
+                row += "</span>"
+            }
+            row += "</div>"
+            html += row
+        }
+        html += "</div>"
+        return html
+    }
+}

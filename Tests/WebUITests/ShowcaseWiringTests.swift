@@ -47,8 +47,9 @@ struct ShowcaseWiringTests {
 		//
 		// render-time controls are the ones minted as `cN` rather than carrying a
 		// caller id: btn-reset, echo-form, preview-input, toast-dismiss,
-		// modal-dismiss, banner-dismiss (p1 sweep), theme toggle, engine status.
-		let renderTimeControls = 8
+		// modal-dismiss, banner-dismiss (p1 sweep), chat-form and the
+		// attachment remove (p2), theme toggle, engine status.
+		let renderTimeControls = 10
 		let emitted = html.components(separatedBy: "data-component-id=").count - 1
 		#expect(emitted == expectedIds.count + renderTimeControls,
 			"data-component-id count drifted: \(emitted)")
