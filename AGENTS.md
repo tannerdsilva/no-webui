@@ -182,7 +182,10 @@ invocation. gates host their own server, check, and tear down in one call.
   `data-component-id` + `data-event` and register the handler in one step. the
   runtime only delivers the event a component declares — a click-only
   component never receives hover/press noise — and every click carries
-  `targetId`/`targetClass` so a container handler can tell what was clicked.
+  `targetId`/`targetClass` so a container handler can tell what was clicked — `targetId` resolves to the
+  nearest id-bearing element *inside* the component boundary (a click usually
+  lands on a label or icon child, not the item); clicking the component itself
+  reports none.
   `focus`/`blur` are delivered via the bubbling `focusin`/`focusout` and
   normalized to the declared event name.
 - **typed component handlers** — `ElementRef` + `controlAttributes(id:event:handler:)`

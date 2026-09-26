@@ -365,9 +365,13 @@ window.WebUIRuntime = (function () {
       return null;
     }
 
-    function clickTargetData(target) {
+    function clickTargetData(target, componentEl) {
       var data = {};
-      if (target && target.id) data.targetId = target.id;
+      var owner = target;
+      while (owner && owner !== componentEl && owner.nodeType === 1 && !owner.id) {
+        owner = owner.parentNode;
+      }
+      if (owner && owner !== componentEl && owner.nodeType === 1 && owner.id) data.targetId = owner.id;
       if (target && typeof target.className === 'string' && target.className) data.targetClass = target.className;
       return data;
     }
@@ -376,7 +380,7 @@ window.WebUIRuntime = (function () {
       var target = event.target;
       switch (event.type) {
         case 'click':
-          return clickTargetData(target);
+          return clickTargetData(target, componentEl);
 
         case 'input':
         case 'change':
