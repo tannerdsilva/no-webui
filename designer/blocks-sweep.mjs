@@ -62,6 +62,20 @@ for (const name of BLOCKS) {
     continue;
   }
 
+  // precondition: the page we are about to measure must be THIS block. a stray
+  // server holding the port answers happily and every block then measures the
+  // same page - the failure mode that read as "the fix broke three pages".
+  {
+    const probe = await (await fetch("http://127.0.0.1:" + PORT + "/")).text();
+    const want = name === "index" ? "WebUI blocks" : "WebUI block";
+    if (!probe.includes("<title>" + want)) {
+      bad(name + ": port " + PORT + " is serving a different page; kill the stray server and retry");
+      server.kill("SIGTERM");
+      continue;
+    }
+    ok(name + ": served page is this block");
+  }
+
   const context = await browser.newContext();
   const page = await context.newPage();
   const errors = [];

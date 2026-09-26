@@ -321,15 +321,21 @@ public enum WebUIBlocks {
 			}
 		}
 
-		// inset: the shell itself takes the page margin, so the content column
-		// reads as a surface inset from the window edge.no new class needed.
- if mode == .inset {
- return Div(class: "grid") {
- shell
+		// inset: the page margin goes on the shell itself, so the content column
+		// reads as a surface inset from the window edge. an extra wrapper is not
+		// safe here: a bare .grid track sizes to max-content, which pushed the
+		// shell past a 320px viewport (the measured track was 543px). the shell
+		// stays a direct child, like the variants that already pass the sweep.
+		if mode == .inset {
+			return HStack(alignment: .top, spacing: 0) {
+				sidebar
+				Main {
+					content
+				}
 			}
 			.padding(16)
 			.render()
 		}
- return shell.render()
+		return shell.render()
 	}
 }
