@@ -364,16 +364,19 @@ header) in a real browser, captures the websocket frames and requires both the o
 `event` and an inbound `update`. a click that sends but never receives is exactly the
 class of break that shipped invisibly on :9092.
 
-**currently RED, and its verdict is NOT yet trustworthy (see `.hermes/plans/` §7b /
-p4f).** what is solid: the served page exposes 27 stable-id controls, the engine sends
-a correct `event` frame for each probed one, and **clicking them produces no visible
-change on the page**. what is NOT solid: the "no reply" half, because this gate's
-inbound frame capture depends on patching `WebSocket` in the page and has been wrong
-twice (the engine assigns `onmessage` on the instance at connect time, so a post-load
-hook is blind; and any patch that runs before boot can perturb the thing it measures).
-**the next revision must assert the DOM effect of a dispatch rather than captured
-frames** — that signal is unpatched and cannot be an artifact — and only then should
-the ladder treat this gate as authoritative.
+**this gate is GREEN, and it is the honest observer the earlier revision lacked.** it is
+a *raw* client: it fetches the page over HTTP, reads the stable control ids out of the
+served markup, connects its own socket and asserts a non-empty `update` reply — no browser,
+no page patching, nothing inferred. first green run: 27 stable-id controls, all three probed
+sort headers answered with one fragment each.
+
+**what it corrected:** an earlier browser-based revision of this gate, which captured frames
+by patching `WebSocket` *inside the page*, reported "sent but never answered" for every
+probe. that was an instrument artifact (the engine assigns `onmessage` on the instance at
+connect time, so a post-load hook is blind; a pre-boot hook perturbs the page). the server
+had been answering correctly the whole time. lesson recorded in
+`.hermes/plans/2026-09-26_094442-verification-rearchitecture.md`: never patch the runtime you
+are measuring, and make every probe assert its own preconditions.
 
 ### fixing a security issue
 

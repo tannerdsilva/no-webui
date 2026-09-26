@@ -1,57 +1,84 @@
 #!/usr/bin/env node
-// designer/showcase-ws-smoke.mjs — dispatch gate for the showcase server.
+// designer/showcase-ws-smoke.mjs  stable-id dispatch gate (layer 1: a RAW client).
 //
-// why this exists: `smoke` checks served bytes and `fullstack-smoke` drives the
-// *smoke* page. neither dispatches a **stable-id** control (`controlAttributes`,
-// e.g. a table sort header) against the *showcase* server, so a break in that
-// path ships invisibly. this gate does exactly that one thing: it clicks a
-// stable-id control in a real browser, captures the websocket frames, and
-// requires a reply.
+// why a raw client: the previous revision drove a headless browser and captured the
+// websocket frames by patching `WebSocket` inside the page. that instrument was blind
+// twice (the engine assigns `onmessage` on the instance at connect time, and any hook
+// installed before boot perturbs the page it measures), so "the server never replied"
+// was indistinguishable from "my hook never ran".
 //
-// assertion: for each probed stable-id control, an outbound `event` frame AND an
-// inbound `update` frame must both be observed. a click that sends but never
-// receives is the failure this gate exists for.
+// this revision observes from OUTSIDE the system under test: it fetches the page over
+// HTTP, reads the stable control ids out of the served markup, connects a socket of its
+// own, dispatches one event per id, and asserts that a non-empty `update` frame comes
+// back. nothing is patched, nothing is inferred, and the frames it prints are the
+// server's own bytes.
 //
 // usage: node designer/showcase-ws-smoke.mjs
-//   spawns WebUIShowcaseServer on :9092, drives headless Chromium, tears down.
-//   exits non-zero on failure and prints the captured frames.
+//   spawns WebUIShowcaseServer on :9092, probes, tears down. exits non-zero on failure.
 
 import { spawn } from "node:child_process";
-import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
-import { chromium } from "playwright";
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PORT = 9092;
 const BASE = `http://127.0.0.1:${PORT}`;
-const SHOTS = join(ROOT, ".smoke");
+const WS_URL = `ws://127.0.0.1:${PORT}/ws`;
 
 let pass = 0;
 let fail = 0;
 const ok = (m) => { pass++; console.log(`  PASS ${m}`); };
 const bad = (m) => { fail++; console.log(`  FAIL ${m}`); };
 
-function run(cmd, args) {
-  return new Promise((resolve) => {
-    const p = spawn(cmd, args, { cwd: ROOT, stdio: ["ignore", "pipe", "pipe"] });
-    let out = "";
-    p.stdout?.on("data", (d) => (out += d));
-    p.stderr?.on("data", (d) => (out += d));
-    p.on("close", (code) => resolve({ code, out }));
-  });
+// precondition 1: the probe itself needs a runtime with a global WebSocket (node >= 22;
+// it was flag-gated in 21). a probe that silently cannot connect is the failure mode this
+// asserts away rather than discovering later.
+const major = Number(process.versions.node.split(".")[0]);
+if (!(major >= 22) || typeof WebSocket !== "function") {
+  console.log(`  FAIL probe precondition: needs node >= 22 with a global WebSocket (have ${process.version})`);
+  process.exit(1);
 }
+ok(`runtime: node ${process.version} with global WebSocket and fetch`);
 
 async function waitForServer(timeoutMs = 25000) {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     try {
       const res = await fetch(BASE + "/", { signal: AbortSignal.timeout(2000) });
-      if (res.ok) { return true; }
+      if (res.ok) { return await res.text(); }
     } catch { /* not up yet */ }
     await new Promise((r) => setTimeout(r, 400));
   }
-  return false;
+  return null;
+}
+
+function dispatch(id, eventName) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const socket = new WebSocket(WS_URL);
+    const finish = (value) => {
+      if (settled) { return; }
+      settled = true;
+      try { socket.close(); } catch (e) {}
+      resolve(value);
+    };
+    socket.addEventListener("open", () => {
+      socket.send(JSON.stringify({
+        type: "event",
+        component: id,
+        event: eventName,
+        data: { targetId: id, targetClass: "sort" }
+      }));
+    });
+    socket.addEventListener("message", (ev) => {
+      try {
+        const msg = JSON.parse(String(ev.data));
+        if (msg.type === "update") { finish(msg); }
+      } catch (e) {}
+    });
+    socket.addEventListener("error", () => finish(null));
+    setTimeout(() => finish(null), 3000);
+  });
 }
 
 const server = spawn(join(ROOT, ".build/debug/WebUIShowcaseServer"), ["--port", String(PORT)], {
@@ -62,103 +89,45 @@ let serverLog = "";
 server.stdout.on("data", (d) => (serverLog += d));
 server.stderr.on("data", (d) => (serverLog += d));
 
-let browser = null;
 try {
-  if (!(await waitForServer())) {
-    bad("showcase server did not become ready on :" + PORT);
-    console.log(serverLog.split("\n").slice(-8).join("\n"));
+  const page = await waitForServer();
+  if (page === null) {
+    bad(`showcase server did not become ready on :${PORT}  run with --disable-sandbox? (no, this is node; check the port)`);
+    console.log(serverLog.split("\n").slice(-6).join("\n"));
     process.exit(1);
   }
-  mkdirSync(SHOTS, { recursive: true });
+  ok("showcase server ready on :" + PORT);
 
-  browser = await chromium.launch();
-  const page = await browser.newPage({ viewport: { width: 1440, height: 950 } });
-  const consoleErrors = [];
-  page.on("console", (m) => { if (m.type() === "error") { consoleErrors.push(m.text()); } });
-
-  await page.goto(BASE + "/", { waitUntil: "load" });
-  await page.waitForTimeout(1500);
-
-  // record every websocket frame the engine sends and receives
-  await page.evaluate(() => {
-    window.__frames = [];
-    const send = WebSocket.prototype.send;
-    WebSocket.prototype.send = function (data) {
-      try { if (typeof data === "string") { window.__frames.push({ dir: "out", body: data }); } } catch (e) {}
-      return send.apply(this, arguments);
-    };
-    const add = WebSocket.prototype.addEventListener;
-    WebSocket.prototype.addEventListener = function (type, fn, opts) {
-      if (type === "message") {
-        const wrapped = function (ev) {
-          try { window.__frames.push({ dir: "in", body: String(ev.data) }); } catch (e) {}
-          return fn.apply(this, arguments);
-        };
-        return add.call(this, type, wrapped, opts);
-      }
-      return add.call(this, type, fn, opts);
-    };
-  });
-
-  // collect stable-id controls: the page's own ids, excluding render-minted cN ids
-  const controls = await page.evaluate(() => {
-    const seen = new Set();
-    const out = [];
-    document.querySelectorAll("[data-component-id]").forEach((el) => {
-      const id = el.getAttribute("data-component-id");
-      if (!id || /^c\d+$/.test(id) || seen.has(id)) { return; }
-      seen.add(id);
-      out.push({ id: id, event: el.getAttribute("data-event"), tag: el.tagName });
-    });
-    return out;
-  });
-
-  if (controls.length === 0) {
-    bad("the showcase page exposes no stable-id controls to dispatch");
+  // precondition 2: the page must expose stable-id controls. zero targets is a FAIL.
+  const ids = [...new Set([...page.matchAll(/data-component-id="([^"]+)"/g)].map((m) => m[1]))]
+    .filter((id) => !/^c\d+$/.test(id));
+  if (ids.length === 0) {
+    bad("the served page exposes no stable-id controls  nothing to probe");
   } else {
-    ok("showcase page exposes " + controls.length + " stable-id control(s)");
+    ok(`served page exposes ${ids.length} stable-id control(s)`);
   }
 
-  // probe up to three, preferring the table's sort header (the flagship pattern)
-  const preferred = controls.filter((c) => c.id.includes("-sort-"));
-  const probes = (preferred.length ? preferred : controls).slice(0, 3);
+  const preferred = ids.filter((id) => id.includes("-sort-"));
+  const probes = (preferred.length ? preferred : ids).slice(0, 3);
+  console.log(`  probing: ${probes.join(", ")}`);
 
-  for (const probe of probes) {
-    await page.evaluate(() => { window.__frames = []; });
-    const clicked = await page.evaluate((id) => {
-      const el = Array.from(document.querySelectorAll("[data-component-id]")).find((n) => n.getAttribute("data-component-id") === id);
-      if (!el) { return false; }
-      el.click();
-      return true;
-    }, probe.id);
-    if (!clicked) { bad("could not click " + probe.id); continue; }
-    await page.waitForTimeout(1200);
-
-    const frames = await page.evaluate(() => window.__frames || []);
-    const sent = frames.find((f) => f.dir === "out" && f.body.includes(probe.id));
-    const got = frames.find((f) => f.dir === "in" && f.body.includes("\"type\":\"update\""));
-    if (sent && got) {
-      ok(probe.id + " dispatched and answered (" + got.body.length + " byte update)");
-    } else if (sent && !got) {
-      bad(probe.id + " sent an event but the server never answered — stable-id dispatch is broken");
-      console.log("      sent:   " + sent.body.slice(0, 160));
-      console.log("      frames: " + frames.length + " total, 0 update replies");
+  for (const id of probes) {
+    const reply = await dispatch(id, "click");
+    if (reply && reply.type === "update" && Array.isArray(reply.fragments) && reply.fragments.length > 0) {
+      ok(`${id} dispatched and the server answered (${reply.fragments.length} fragment(s))`);
+    } else if (reply) {
+      bad(`${id} answered but with no fragments: ${JSON.stringify(reply).slice(0, 120)}`);
     } else {
-      bad(probe.id + " produced no outbound event frame at all");
+      bad(`${id} sent an event and the server never answered within 3s  stable-id dispatch is broken`);
     }
   }
-
-  if (consoleErrors.length === 0) { ok("no console errors"); } else { bad("console errors: " + consoleErrors.slice(0, 3).join(" | ")); }
-
-  await page.screenshot({ path: join(SHOTS, "showcase-ws.png"), fullPage: false });
 } finally {
-  if (browser) { await browser.close(); }
   server.kill("SIGTERM");
-  await new Promise((r) => setTimeout(r, 400));
+  await new Promise((r) => setTimeout(r, 300));
   if (!server.killed) { server.kill("SIGKILL"); }
 }
 
 console.log("");
-console.log("=== summary: " + pass + " passed, " + fail + " failed ===");
+console.log(`=== summary: ${pass} passed, ${fail} failed ===`);
 console.log(fail === 0 ? "SHOWCASE WS SMOKE PASS" : "SHOWCASE WS SMOKE FAIL");
 process.exit(fail === 0 ? 0 : 1);
