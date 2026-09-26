@@ -148,7 +148,15 @@ struct HTMLClassValidatorTests {
 	}
 
 	private func baselineClasses() -> Set<String> {
-		let text = (try? String(contentsOfFile: Self.baselinePath, encoding: .utf8)) ?? ""
+		// the baseline ships as a test resource (declared in Package.swift); the
+		// package-root path is a fallback for runners that do not vend Bundle.module.
+		var text = ""
+		if let url = Bundle.module.url(forResource: "orphan-class-baseline", withExtension: "txt"),
+		   let bundled = try? String(contentsOf: url, encoding: .utf8) {
+			text = bundled
+		} else {
+			text = (try? String(contentsOfFile: Self.baselinePath, encoding: .utf8)) ?? ""
+		}
 		return Set(text.split(separator: "\n")
 			.map { $0.trimmingCharacters(in: .whitespaces) }
 			.filter { !$0.isEmpty && !$0.hasPrefix("#") })

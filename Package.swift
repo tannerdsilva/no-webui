@@ -462,7 +462,8 @@ let package = Package(
                 "WebUIAuth",
                 "WebUIShowcaseContent",
                 "WebUIServer",
-            ]
+            ],
+            resources: [.copy("orphan-class-baseline.txt")]
         ),
         .testTarget(
             name: "WebUIWasmToolTests",
