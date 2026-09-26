@@ -364,10 +364,16 @@ header) in a real browser, captures the websocket frames and requires both the o
 `event` and an inbound `update`. a click that sends but never receives is exactly the
 class of break that shipped invisibly on :9092.
 
-**currently RED (see `.hermes/plans/` §7b / p4f):** on the showcase server every
-stable-id control dispatches correctly and gets no reply — 27 such controls are exposed
-by the served page, and all probed ones fail. fix p4f and this gate goes green; until
-then it is the honest state of the ladder, not noise.
+**currently RED, and its verdict is NOT yet trustworthy (see `.hermes/plans/` §7b /
+p4f).** what is solid: the served page exposes 27 stable-id controls, the engine sends
+a correct `event` frame for each probed one, and **clicking them produces no visible
+change on the page**. what is NOT solid: the "no reply" half, because this gate's
+inbound frame capture depends on patching `WebSocket` in the page and has been wrong
+twice (the engine assigns `onmessage` on the instance at connect time, so a post-load
+hook is blind; and any patch that runs before boot can perturb the thing it measures).
+**the next revision must assert the DOM effect of a dispatch rather than captured
+frames** — that signal is unpatched and cannot be an artifact — and only then should
+the ladder treat this gate as authoritative.
 
 ### fixing a security issue
 
