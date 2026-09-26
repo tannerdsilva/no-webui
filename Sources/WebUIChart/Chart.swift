@@ -134,6 +134,11 @@ extension Chart {
 	public func chartHeight(_ height: Int) -> Chart {
 		var c = config; c.height = height; return Chart(marks, config: c, id: id, ariaLabel: ariaLabel)
 	}
+	/// The viewBox aspect ratio (width = height * ratio). Defaults to 2; use 1
+	/// for square charts such as a radial gauge.
+	public func chartAspectRatio(_ ratio: Double) -> Chart {
+		var c = config; c.aspectRatio = ratio; return Chart(marks, config: c, id: id, ariaLabel: ariaLabel)
+	}
 	/// A title rendered above the plot.
 	public func chartTitle(_ title: String) -> Chart {
 		var c = config; c.title = title; return Chart(marks, config: c, id: id, ariaLabel: ariaLabel)

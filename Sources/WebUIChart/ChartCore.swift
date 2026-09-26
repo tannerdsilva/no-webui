@@ -364,6 +364,14 @@ public struct MarkSpec: Sendable {
 	public var showsPoint: Bool
 	/// Heatmap cell intensity in 0…1 (nil = solid fill).
 	public var intensity: Double?
+	/// Radar marks: the axis label → value pairs for one series.
+	public var radarValues: [(label: String, value: Double)]?
+	/// Radial (gauge) marks: the value's denominator (0 = 100).
+	public var radialTotal: Double?
+	/// Area fill gradient (t4). nil = the flat token color.
+	public var gradient: ChartGradient?
+	/// Explicit tooltip text for the css-only hover tip (t3).
+	public var tooltip: String?
 
 	public init(
 		kind: MarkKind,
@@ -388,7 +396,11 @@ public struct MarkSpec: Sendable {
 		style: MarkStyle = MarkStyle(),
 		annotation: ChartAnnotation? = nil,
 		showsPoint: Bool = false,
-		intensity: Double? = nil
+		intensity: Double? = nil,
+		radarValues: [(label: String, value: Double)]? = nil,
+		radialTotal: Double? = nil,
+		gradient: ChartGradient? = nil,
+		tooltip: String? = nil
 	) {
 		self.kind = kind
 		self.x = x
@@ -413,6 +425,10 @@ public struct MarkSpec: Sendable {
 		self.annotation = annotation
 		self.showsPoint = showsPoint
 		self.intensity = intensity
+		self.radarValues = radarValues
+		self.radialTotal = radialTotal
+		self.gradient = gradient
+		self.tooltip = tooltip
 	}
 }
 
@@ -425,6 +441,8 @@ public enum MarkKind: Sendable, Hashable {
 	case rectangle
 	case rule
 	case sector
+	case radar
+	case radial
 }
 
 // MARK: - Chart configuration

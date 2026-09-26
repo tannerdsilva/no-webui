@@ -164,7 +164,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 		}
 		let out = chart.render()
 		#expect(out.contains("chart__bar"))
-		#expect(occ(out, "<rect") == 2)
+		#expect(occ(out, "chart__bar\"") == 2, "one bar rect per datum (tips add rects of their own)")
 		// two bars, both inside the plot (viewBox 0 0 640 320, plot x 44…624)
 		for g in out.components(separatedBy: "<g") where g.contains("chart__bar") {
 			let x = Double(capture("x=\"([0-9.]+)\"", in: g)!)!
@@ -233,7 +233,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 			}
 		}
 		let out = chart.render()
-		#expect(occ(out, "<rect") == 3)
+		#expect(occ(out, "chart__bar\"") == 3, "one bar rect per datum")
 	}
 
 	@Test func barsPinYDomainFromZero() {

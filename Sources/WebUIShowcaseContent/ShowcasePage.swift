@@ -1225,6 +1225,60 @@ public struct ShowcasePage: Sendable {
                                     .chartTitle("No data yet")
                             }
                         }
+                        demoCard("Radar") {
+                            VStack(spacing: 0) {
+                                Chart {
+                                    RadarMark([("speed", 8), ("reliability", 6), ("cost", 4), ("support", 7), ("reach", 5)], series: "eu")
+                                        .foregroundStyle(by: "eu")
+                                    RadarMark([("speed", 5), ("reliability", 9), ("cost", 7), ("support", 3), ("reach", 8)], series: "us")
+                                        .foregroundStyle(by: "us")
+                                }
+                                .chartTitle("Service profile")
+                                .chartHeight(320)
+                            }
+                        }
+                        demoCard("Radial gauge") {
+                            VStack(spacing: 0) {
+                                Chart {
+                                    RadialMark(value: 72, of: 100, series: "cpu")
+                                        .foregroundStyle(by: "cpu")
+                                }
+                                .chartTitle("CPU headroom")
+                                .chartHeight(260)
+                                .chartAspectRatio(1)
+                                .chartLegend(position: .hidden)
+                            }
+                        }
+                        demoCard("Area + gradient") {
+                            VStack(spacing: 0) {
+                                Chart {
+                                    ForEach(Array([12.0, 18.0, 15.0, 24.0, 31.0, 27.0, 38.0].enumerated().map { (x: Double($0.offset + 1), y: $0.element) })) { p in
+                                        Group {
+                                            AreaMark(x: .value("Week", p.x), y: .value("Value", p.y))
+                                                .foregroundStyle(by: "signups")
+                                                .areaGradient(.fade(.explicit("var(--color-chart-3)")))
+                                            LineMark(x: .value("Week", p.x), y: .value("Value", p.y))
+                                                .foregroundStyle(by: "signups")
+                                                .interpolation(.catmullRom)
+                                        }
+                                    }
+                                }
+                                .chartTitle("Weekly signups")
+                                .chartLegend(position: .hidden)
+                            }
+                        }
+                        demoCard("Negative values") {
+                            VStack(spacing: 0) {
+                                Chart {
+                                    ForEach([("Jan", -18.0), ("Feb", 12.0), ("Mar", -7.0), ("Apr", 23.0), ("May", -11.0)]) { d in
+                                        BarMark(x: .value("Month", d.0), y: .value("Change", d.1))
+                                            .foregroundStyle(by: "net")
+                                    }
+                                }
+                                .chartTitle("Net change")
+                                .chartLegend(position: .hidden)
+                            }
+                        }
                     }
                 }
                 section("CSS Theme", "theme") {

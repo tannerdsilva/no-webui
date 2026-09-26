@@ -53,6 +53,8 @@ blank box.
 | `RectangleMark(xStart:xEnd:yStart:yEnd:value:)` | data-space cell | heatmaps; `value` (0…1) drives `fill-opacity` heat |
 | `RuleMark(x:y:)` | reference line | horizontal (x nil) or vertical (y nil) |
 | `SectorMark(angle:category:)` | pie / donut | `innerRadiusRatio` → donut (center total overlay); `angularInset` gaps; 12-o'clock start, clockwise |
+| `RadarMark([(label, value)], series:)` | one closed polygon per series | spokes + 4 grid rings + per-vertex hover tips; needs ≥3 axes; scales to the largest value (or the `.chartYDomain` upper bound) |
+| `RadialMark(value:of:series:)` | gauge arc | a *stroked* ring, not a filled wedge: track + value arc (dash offset, round caps) + centered percentage; concentric per mark; clamps over/under 100% |
 
 marks carry a `PlottableValue` per dimension: `.value("label", 42)`,
 `.value("label", "Q1")` (category), `.value("label", Date(...))`, or
@@ -71,6 +73,8 @@ the same plottables through `SectorMark(angle:)`.
 .symbol(.circle | .square | ...)
 .lineStyle(ChartLineStyle(width: 2, dash: [4, 2]))
 .annotation("text", position: .top) // svg <text> label (escaped)
+.areaGradient(.fade("var(--color-chart-3)")) // area fill from a <linearGradient> with a scoped id
+.tooltip("custom text")             // overrides the hover tip's default label
 ```
 
 modifiers return a styled `ChartMark`, so they chain on any `*Mark` and work
@@ -82,8 +86,10 @@ inside `ForEach`.
   order/extend), `.linear(domain:)`, `.date(domain:)` (unix-ref seconds on the
   numeric axis, formatted labels), `.automatic`.
 - **y**: always numeric. bars/areas pin the baseline to `0` when all data is
-  non-negative; a 5% headroom extends the top. override with `.chartYScale` /
-  `.chartYDomain`.
+- **y**: always numeric. bars pin the baseline to `0` **and the bar domain spans zero at
+  both ends**, so negative data draws below the baseline instead of collapsing to a
+  zero-height rect (fixed in p5-t5, pinned in `ChartP5Tests`). line/area get a 5%
+  headroom. override with `.chartYScale` / `.chartYDomain`.
 - **ticks**: nice-number algorithm (`1/2/5 × 10^k`), in-domain filtering, or
   `AxisConfig(explicitValues:)`.
 - **label formats**: `.automatic` `.integer` `.decimal(n)` `.percent`
@@ -147,6 +153,38 @@ the design system owns all chart styling (see `DESIGN_SYSTEM.md → Charts`):
 
 angle convention: `0°` = 12 o'clock, clockwise (matches Swift Charts).
 
+## area gradients (p5-t4)
+
+`AreaMark(...).areaGradient(.fade("var(--color-chart-3)"))` emits a `<defs><linearGradient>`
+and points the area path at it with `fill="url(#chart-grad-…)"`.
+
+- the id is derived from the gradient's own contents (FNV-1a over the color list + series),
+  so it is **stable across renders** and **collision-free across charts** — two charts on
+  one page never fight over a definition;
+- `explicit` colors are filtered to a css-value charset before they reach the
+  `style="stop-color:…"` attribute, so a caller cannot inject css or markup;
+- the flat `.chart__area` fill stays the default; a gradient area adds
+  `.chart__area--fade` so the flat 16% opacity does not mute the fade.
+
+## hover tips (p5-t3) — verdict: LAND
+
+every bar, point, sector and radar vertex carries a sibling `<g class="chart__tip">`
+(a `<rect>` + `<text>`, `aria-hidden="true"`) revealed by
+`.chart__mark:hover + .chart__tip`: **no javascript, and hovering sends no websocket
+frame** (probe-verified at the protocol level: 0 frames on hover).
+
+measured in the showcase at 1280px, both themes: opacity `1` on hover, tip text
+**11 css px**, ~34px wide, positioned inside the svg, label correct (`-18` for that datum).
+
+- **hover-only**: the tip has no keyboard or touch equivalent. points and sectors still
+  carry a native `<title>` for assistive tech;
+- it reads correctly only when the chart renders near 1:1. the svg must carry *intrinsic*
+  `width`/`height` attributes: with only a `viewBox`, a `width:100%` svg inside a flex
+  container falls back to the 300×150 replaced-element default, which rendered every
+  chart — and its axis labels — at ~0.47 scale (found and fixed in p5-t5);
+- no collision handling: a tip near the plot edge can overflow the plot. the svg is
+  `overflow: visible`, so it stays legible rather than clipped.
+
 ## a11y and payload hygiene
 
 - every figure is `<figure role="img" aria-label="…">`; labels, titles and
@@ -163,5 +201,6 @@ angle convention: `0°` = 12 o'clock, clockwise (matches Swift Charts).
   x-axis is not modeled (series stack/group within a category only);
 - linear and categorical scales; log/normalised scales are rejected at render
   time (empty chart, not garbage);
+- the css-only hover tip is hover-only, and assumes an intrinsic-size svg (above);
 - no client-side redraw: every state change re-renders the figure on the
   server (the same model as the interactive table).
