@@ -238,7 +238,9 @@ public struct WebUICard: View {
         case outlined = "card--outlined"
         case flat     = "card--flat"
         case interactive = "card--interactive"
-        /// media beside the body (`.card--horizontal`).
+        /// media beside the body (`.card--horizontal`). the sheet's horizontal
+        /// model is media + body only, so a header here becomes its own middle
+        /// column — prefer media plus body content for this variant.
         case horizontal  = "card--horizontal"
         /// hover-lift without the pointer affordance (`.card--hover`).
         case hover       = "card--hover"

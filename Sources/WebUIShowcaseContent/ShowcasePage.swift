@@ -853,7 +853,7 @@ public struct ShowcasePage: Sendable {
                                     WebUICard(variant: .compact) { Text("compact") }
                                     WebUICard(variant: .disabled) { Text("disabled") }
                                 }
-                                WebUICard(variant: .horizontal, title: "Horizontal", description: "media beside the body", media: .image) {
+                                WebUICard(variant: .horizontal, title: "Horizontal", description: "media beside the body", media: .image, mediaBadge: "PREVIEW") {
                                     Text("card--horizontal moves the media block into the leading column.")
                                 }
                             }
