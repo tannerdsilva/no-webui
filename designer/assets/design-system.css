@@ -7263,6 +7263,19 @@ code, .inline-code {
 .sheet__cell--num { justify-content: flex-end; font-family: var(--font-mono); color: var(--color-info-strong); }
 .sheet__cell--total { background: var(--color-bg-inset); }
 
+/* below the small breakpoint a full sidebar leaves no room for the content
+   column, so it collapses to the rail without any client script. */
+@media (max-width: 900px) {
+  .sidebar { width: 4.5rem; padding: var(--space-4) var(--space-2); }
+  .sidebar__section-label,
+  .sidebar__item-label,
+  .sidebar__sub { display: none; }
+  .sidebar__item { justify-content: center; }
+}
+/* the content column of a shell must be allowed to shrink: a flex child
+   defaults to min-width:auto, which lets its grid overflow the row. */
+main { min-width: 0; }
+
 .sidebar--rail { width: 5rem; padding: var(--space-3) var(--space-2); }
 .sidebar__badge { flex: none; margin-left: auto; font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); font-family: var(--font-mono); color: var(--color-text-muted); background: var(--color-bg-inset); border-radius: var(--radius-full); padding: 0.1rem var(--space-2); }
 
@@ -8285,6 +8298,13 @@ h6 {
 	font-size: var(--font-size-2xs);
 	font-weight: var(--font-weight-medium);
 	fill: var(--color-text-muted);
+}
+/* x tick labels: centred under the plot. the modifier exists so the horizontal
+   labels can be styled apart from the y column, and it keeps their digits
+   tabular so ticks line up. (it was emitted by the renderer with no rule in the
+   sheet until the p6 block pin started checking every class.) */
+.chart__axis-label--x {
+	font-variant-numeric: tabular-nums;
 }
 .chart__axis-title {
 	font-size: 12px;

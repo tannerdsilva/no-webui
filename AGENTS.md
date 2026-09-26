@@ -357,6 +357,7 @@ swift package --disable-sandbox plugin smoke
 swift package --disable-sandbox plugin fullstack-smoke
 node designer/browser-smoke.mjs      # requires node + playwright (chromium)
 node designer/showcase-ws-smoke.mjs  # stable-id dispatch gate against the showcase server
+node designer/blocks-sweep.mjs     # p6 blocks gate: one server per block, 320/768/1440 in both themes, no-overflow + parts assertions
 ```
 
 the dispatch gate exists because the other four steps cannot see this failure: `smoke`

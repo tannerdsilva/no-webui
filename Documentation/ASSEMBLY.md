@@ -133,3 +133,23 @@ edit designer/icons/*.json    →  swift build (stage 1b)
 →  serve (stage 3, optional interactive)  →  smoke + fullstack-smoke + browser-smoke (stage 4)
 →  showcase  (regenerated reference page)
 ```
+
+## blocks (p6)
+
+`WebUIBlocks` is a library product of standalone page scaffolds; `WebUIBlocksServer`
+serves one of them per process (``--block <name>``, default ``index``) on :9093.
+
+the plan proposed routing them on the showcase server at ``/blocks/<name>``. that
+would have required changing ``WebUIServer.Render`` (``@Sendable () -> String``,
+no request argument) — a pinned public API — so the server takes ``--block`` and
+serves that page at ``/`` instead. the exit gate is satisfied more strongly this
+way: a block is served with no showcase dependency at all, and the index page
+links every block.
+
+evidence gate: ``node designer/blocks-sweep.mjs`` (spawns the server per block,
+sweeps 320/768/1440 in both themes, asserts no horizontal overflow and that each
+block renders the parts it claims, writes ``.smoke/blocks-<date>/``).
+
+blocks compose the existing class surface only; the pins assert that every class
+a block emits exists in the sheet, which is what caught the orphan
+``chart__axis-label--x``.

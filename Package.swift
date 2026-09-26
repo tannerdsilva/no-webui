@@ -40,6 +40,10 @@ let package = Package(
             name: "WebUIServer",
             targets: ["WebUIServer"]
         ),
+        .library(
+            name: "WebUIBlocks",
+            targets: ["WebUIBlocks"]
+        ),
         .executable(
             name: "WebUIClient",
             targets: ["WebUIClient"]
@@ -328,6 +332,25 @@ let package = Package(
             ]
         ),
 
+        // ── Blocks: standalone page scaffolds, composed from the existing set ──
+        .target(
+            name: "WebUIBlocks",
+            dependencies: [
+                "WebUI",
+                "WebUIDesignSystem",
+                "WebUIChart",
+            ]
+        ),
+        .executableTarget(
+            name: "WebUIBlocksServer",
+            dependencies: [
+                "WebUI",
+                "WebUIBlocks",
+                "WebUIServer",
+                .product(name: "Logging", package: "swift-log"),
+            ]
+        ),
+
         // ── Plugins ──────────────────────────────────────────────
         .plugin(
             name: "WebUIAssetPlugin",
@@ -462,6 +485,7 @@ let package = Package(
                 "WebUIAuth",
                 "WebUIShowcaseContent",
                 "WebUIServer",
+                "WebUIBlocks",
             ],
             resources: [.copy("orphan-class-baseline.txt")]
         ),
