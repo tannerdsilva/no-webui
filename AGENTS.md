@@ -11,7 +11,7 @@ one Package.swift, one family — the swiftui-for-web stack:
    runtime. the host of the design-system assets (embedded at build time).
    actively developed — this is where most work happens.
 2. **WebUIDesignSystem** — the nexus design system: 257 css custom properties
-   (tokens) and 115 component types. mature, stable. the counts are measured,
+   (tokens) and 133 component types. mature, stable. the counts are measured,
    not asserted — re-measure rather than trust them:
    `grep -oE '^\s*--[a-z0-9-]+:' designer/assets/design-system.css | sort -u | wc -l`,
    `grep -rhoE '^public struct WebUI[A-Za-z]+' Sources/WebUIDesignSystemCore/*.swift | sort -u | wc -l`.
@@ -19,6 +19,12 @@ one Package.swift, one family — the swiftui-for-web stack:
    cookies, in-memory session store behind an `AuthSessionStore` protocol,
    argon2id password verification,
    constant-time compare, `AuthContext`.
+
+4. **WebUIChart / WebUIServer / WebUIBlocks** — the surface around the core: a
+   declarative chart library (`Documentation/CHARTS.md`), the NIO server that
+   hosts a page plus its assets and websocket, and the standalone page
+   scaffolds (dashboard, login, signup, four sidebar variants, patterns),
+   served one per process by `WebUIBlocksServer`.
 
 the low-level core libraries (ip, futures, fifo, pthread) were removed from
 the manifest — the package is web-ui only now.
@@ -42,7 +48,7 @@ inline comments explain code, markdown files explain architecture and APIs.
 
 ```bash
 swift build             # includes the WebUIAssetPlugin + WebUIIconPlugin + WebUIWasmPlugin (auto-generates Assets+Generated.swift + DesignTokens+Generated.swift + IconLibrary.swift + Wasm+Generated.swift)
-swift test              # 842 tests — re-count rather than trust: grep -rc '@Test' Tests/ | awk -F: '{s+=$2} END {print s}'
+swift test              # 866 tests — re-count rather than trust: grep -rc '@Test' Tests/ | awk -F: '{s+=$2} END {print s}'
 swift run WebUIExample  # example server on :9090
 ```
 
@@ -358,6 +364,7 @@ swift package --disable-sandbox plugin fullstack-smoke
 node designer/browser-smoke.mjs      # requires node + playwright (chromium)
 node designer/showcase-ws-smoke.mjs  # stable-id dispatch gate against the showcase server
 node designer/blocks-sweep.mjs     # p6 blocks gate: one server per block, 320/768/1440 in both themes, no-overflow + parts assertions
+node designer/rtl-audit.mjs        # p7 direction gate: both directions x both themes x 3 viewports, mirrored-order assertions with an ltr control
 ```
 
 the dispatch gate exists because the other four steps cannot see this failure: `smoke`

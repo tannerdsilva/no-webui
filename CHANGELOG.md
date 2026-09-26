@@ -44,6 +44,62 @@ all notable changes to this project are documented here.
   inert during the engine-first flip and a loose `<script>` pin masked it —
   the pins are hardened and the static showcase artifact is script-free again.
 
+### charts
+
+- `RadarMark` and `RadialMark`: a closed polygon per series over shared axes, and
+  a *stroked* gauge arc (track + value arc + centered percentage, clamped
+  0...100). `chartAspectRatio` makes the square viewBox a gauge wants expressible.
+- `AreaMark(...).areaGradient(_:)`: an area fill from a `<linearGradient>` whose id
+  is derived from the gradient's own contents, so it is stable across renders and
+  collision-free between charts sharing a page.
+- css-only hover tips on bars, points, sectors and radar vertices (revealed by
+  `:hover + .chart__tip` - no javascript, no new event), with the divergences
+  documented in `Documentation/CHARTS.md`.
+- **negative values render correctly**: bar edges are normalized (a negative datum
+  used to collapse to a zero-height rect) and the bar domain always spans zero.
+  charts also carry intrinsic `width`/`height` now - without them a `viewBox`-only
+  svg fell back to the 300x150 replaced-element default and every chart rendered at
+  ~0.47 scale, axis labels included.
+
+### data table
+
+- `WebUITable.hiddenColumns` (server-owned column visibility), plus the client fix
+  that made composite controls work at all: a click's `targetId` now resolves to
+  the nearest id-bearing element *inside* the component, so a menu item reports
+  itself instead of omitting the id - which had made the server answer nothing.
+
+### blocks
+
+- `WebUIBlocks` (library) and `WebUIBlocksServer`: seven standalone page scaffolds
+  - dashboard, login, signup, four sidebar variants - plus a patterns block
+  (carousel, menubar, questionnaire), served one per process with no showcase
+  dependency. composition only: every class a block emits already exists in the
+  sheet, and a pin proves it.
+
+### direction
+
+- `HTMLDocument`/`WebUIDocument` gain `dir:` (emitted on `<html>`, omitted when
+  unset, invalid values dropped). the sheet's flow-relative rules are logical now
+  (`margin-inline-*`, `padding-inline-*`, `border-inline-*`,
+  `text-align: start|end`); what stays physical is the arrow/chevron geometry,
+  documented and pinned by a ratchet.
+
+### long tail
+
+- `WebUICarousel` (css scroll-snap on a focusable track, so the arrow keys scroll
+  it) and `WebUIMenubar` (panels open on hover and on `:focus-within`, so it is
+  keyboard reachable) - both zero-js, divergences documented. a css-only
+  split-pane was **scrapped**, with the probe recorded: a `flex: 1` pane cannot be
+  resized by `resize`, and css cannot let a handle move a sibling.
+
+### verification
+
+- new gates: `designer/blocks-sweep.mjs` (every block, 320/768/1440, both themes,
+  no-overflow and parts assertions) and `designer/rtl-audit.mjs` (both directions,
+  both themes, with an ltr control). the pin that enumerates every class a block
+  emits has now caught three pre-existing orphan classes - css emitted by shipped
+  components with no rules in the sheet.
+
 ## [1.0.0] — stability epoch (2026-09-20)
 
 ### stability epoch
