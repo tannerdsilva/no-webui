@@ -1,6 +1,7 @@
 # next architecture — clean-slate client/server restart proposal
 
-_status: proposal (not executed) · 2026-09-22 · supersedes the wasm-only client runtime
+_status: executed (p0–p5 landed: engine-first default boot, capability islands,
+progressive capabilities, monolith sunset) · 2026-09-22 · supersedes the wasm-only client runtime
 direction of `WASM_BOOTSTRAP.md` / `WASM_TRAJECTORY.md` phase 5 for the default path;
 the wasm machinery they describe is not lost — it is repackaged as capability islands
 (see d3).

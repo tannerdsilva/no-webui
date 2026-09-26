@@ -571,7 +571,7 @@ public struct ShowcasePage: Sendable {
                 // 9. Design System
                 section("Design System", "design-system") {
                     VStack(spacing: 16) {
-                        Heading("All 16 WebUI components", level: .h2)
+                        Heading("Component catalog", level: .h2)
 
                         demoCard("WebUIButton — all variants") {
                             VStack(spacing: 12) {

@@ -1,7 +1,7 @@
 # no-webui
 
 A SwiftUI-for-web framework: server-rendered HTML with a SwiftUI-like declarative
-API, a design system with 225 CSS tokens and 22 components, and a JS runtime
+API, a design system with 257 CSS tokens and 115 component types, and a JS runtime
 for live UI updates.
 
 ## Modules
@@ -9,7 +9,7 @@ for live UI updates.
 | Module | Description | Dependencies |
 |---|---|---|
 | `WebUI` | View protocol, primitives, layouts, modifiers, CSS system, HTML document assembly, WebSocket protocol, JS runtime | swift-log, rawdog |
-| `WebUIDesignSystem` | design system: 225 CSS custom properties, 22 styled components | WebUI |
+| `WebUIDesignSystem` | design system: 257 CSS custom properties, 115 component types | WebUI |
 | `WebUIAuth` | authentication + sessions: identity model, session tokens, cookies, `AuthSessionStore` protocol + in-memory store, Argon2id password verification, `AuthContext` | WebUI, swift-log, rawdog |
 | `WebUIAssetTool` | build-time executable that embeds CSS + JS as Swift string constants | — |
 | `WebUIExample` | HTTP/WebSocket example server (SwiftNIO) | WebUI, WebUIDesignSystem, swift-nio |
@@ -42,7 +42,7 @@ See `Sources/WebUIExample/main.swift` and `Documentation/GETTING_STARTED.md`.
 
 ```bash
 swift build          # WebUIAssetPlugin auto-generates Assets+Generated.swift
-swift test           # 398 tests, 35 suites
+swift test           # 842 tests
 swift run WebUIExample  # example server on :9090
 ```
 

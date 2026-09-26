@@ -10,8 +10,11 @@ one Package.swift, one family — the swiftui-for-web stack:
    modifiers, css system, html document assembly, websocket protocol, js
    runtime. the host of the design-system assets (embedded at build time).
    actively developed — this is where most work happens.
-2. **WebUIDesignSystem** — the nexus design system: 225 css custom properties
-   (tokens) and 22 styled components. mature, stable.
+2. **WebUIDesignSystem** — the nexus design system: 257 css custom properties
+   (tokens) and 115 component types. mature, stable. the counts are measured,
+   not asserted — re-measure rather than trust them:
+   `grep -oE '^\s*--[a-z0-9-]+:' designer/assets/design-system.css | sort -u | wc -l`,
+   `grep -rhoE '^public struct WebUI[A-Za-z]+' Sources/WebUIDesignSystemCore/*.swift | sort -u | wc -l`.
 3. **WebUIAuth** — authentication + sessions: identity model, session tokens,
    cookies, in-memory session store behind an `AuthSessionStore` protocol,
    argon2id password verification,
@@ -39,7 +42,7 @@ inline comments explain code, markdown files explain architecture and APIs.
 
 ```bash
 swift build             # includes the WebUIAssetPlugin + WebUIIconPlugin + WebUIWasmPlugin (auto-generates Assets+Generated.swift + DesignTokens+Generated.swift + IconLibrary.swift + Wasm+Generated.swift)
-swift test              # 702 tests, 85 suites
+swift test              # 842 tests — re-count rather than trust: grep -rc '@Test' Tests/ | awk -F: '{s+=$2} END {print s}'
 swift run WebUIExample  # example server on :9090
 ```
 

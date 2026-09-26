@@ -6,7 +6,7 @@
           <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">  <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAApklEQVR4nO2XwQ2AIAxF2ahDeWQZb07idkINCQejECgpfDSS/BvQ118C1JhZB1lmsuyVxNLAjiwfynJFkBhcO/BdaYhBwfMQnWzPlgOZ/dOFeFJHA/h3AWy7TKoAzG1SAQjZhM2Wtd7eMDesKTghA5DW+HsA0kOoDtCib5XgB4ADwC4iQl/FVydgj1EnzQWA/ZIZ9KcU4AK0N6jqjjCtWQJkfHM6epyUsxUEgyvS4gAAAABJRU5ErkJggg==">
   <title>WebUI Showcase</title>
   
-    <link rel="stylesheet" href="/__assets/css.83bb2302d1a524d98bf70e67c254d70c9f52273370ed4fdbf771325860266498">
+    <link rel="stylesheet" href="/__assets/css.c2107f8168ea3dae74c87ad62432e4b90c579558db7f3451e3dbe4b2e33689fc">
 
 </head>
 <body>
@@ -85,7 +85,7 @@ Plain text content<span class="text-escaped">&lt;script&gt;alert(&#39;xss&#39;)&
 <label class="demo-label">Country:</label><select id="demo-country"><option value="us" selected>United States</option><option value="ca">Canada</option><option value="uk">United Kingdom</option><option value="de">Germany</option><option value="jp">Japan</option></select>
 </div></div>
 </div></div></div><div class="card card--outlined"><div class="card__body"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
-<h3 class="demo-card-title">Form with CSRF</h3><div class="demo-card-body"><form id="demo-form" action="/submit" method="post"><input type="hidden" name="_csrf" value="ZGVtby1mb3JtOjE3OTAxODI3OTc6Q0QwMEU0RDM2RDkyNDUzQjhGQ0M1MEVCNzJBM0YzRDU6OGUwOTVjMWQ5N2M1YTVmYTFjY2UzNDdiOWQzN2I3YTJiYzE0MjdjNmM2Yjk5OGQ1YWUzZjk0YTM3MDNlY2ViMA=="><div class="vstack spacing-12 align-flex-start">
+<h3 class="demo-card-title">Form with CSRF</h3><div class="demo-card-body"><form id="demo-form" action="/submit" method="post"><input type="hidden" name="_csrf" value="ZGVtby1mb3JtOjE3OTAzODc4OTU6MzRDNDNFMEUyOTEwNEU5RTg5NzYzOTI1NzFCRjFBRjk6N2U3M2FjY2Y0ZjZjMTM3MDIxMGZjNTliYTZmZGM5MGQwYTIyZWM4YmNjZTUxNzM0YTUzMWJkNGQ0ODViZTI3Mg=="><div class="vstack spacing-12 align-flex-start">
 <label class="demo-label">Name:</label><input id="form-name" type="text" placeholder="Your name"><label class="demo-label">Message:</label><textarea id="form-message" rows="3" placeholder="Your message"></textarea><button id="form-submit" type="submit">Submit</button>
 </div></form></div>
 </div></div></div><div class="card card--outlined"><div class="card__body"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
@@ -207,7 +207,7 @@ Plain text content<span class="text-escaped">&lt;script&gt;alert(&#39;xss&#39;)&
 <h3 class="demo-card-title">Chained Modifiers</h3><div class="demo-card-body"><span style="font-size: 18px; font-weight: 600; padding: 16px; background-color: var(--color-info-soft); border: 1px solid var(--color-info-ring); border-radius: 12px; width: 100%; display: block;">Chained: font → padding → background → border → corner radius</span></div>
 </div></div></div>
 </div></section><section class="showcase-section" id="design-system"><div class="vstack spacing-16 align-flex-start">
-<h2>All 16 WebUI components</h2><div class="card card--outlined"><div class="card__body"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
+<h2>Component catalog</h2><div class="card card--outlined"><div class="card__body"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
 <h3 class="demo-card-title">WebUIButton — all variants</h3><div class="demo-card-body"><div class="vstack spacing-12 align-flex-start">
 <div class="hstack spacing-8 align-center">
 <button class="button button--primary button--md"><span class="button__label">Primary</span></button><button class="button button--secondary button--md"><span class="button__label">Secondary</span></button><button class="button button--outline button--md"><span class="button__label">Outline</span></button><button class="button button--ghost button--md"><span class="button__label">Ghost</span></button>
@@ -311,7 +311,7 @@ Plain text content<span class="text-escaped">&lt;script&gt;alert(&#39;xss&#39;)&
 <h3 class="demo-card-title">Click Counter</h3><div class="demo-card-body"><div class="vstack spacing-16 align-flex-start">
 <p>Click the buttons below. The counter updates via WebSocket.</p><div class="counter-display"><span id="counter-value" class="counter-number">0</span></div><div class="hstack spacing-12 align-center">
 <button id="btn-decrement" data-component-id="btn-decrement" data-event="click" class="button button--primary button--lg"><span class="button__label">−</span></button><button id="btn-increment" data-component-id="btn-increment" data-event="click" class="button button--primary button--lg"><span class="button__label">+</span></button>
-</div><button id="btn-reset" class="button button--ghost button--sm" data-component-id="c4" data-event="click" data-optimistic="[{&quot;id&quot;:&quot;counter-value&quot;,&quot;html&quot;:&quot;&lt;span id=\&quot;counter-value\&quot; class=\&quot;counter-number\&quot;&gt;0&lt;/span&gt;&quot;}]"><span class="button__label">Reset</span></button>
+</div><button id="btn-reset" class="button button--ghost button--sm" data-component-id="c4" data-event="click" data-optimistic="[{&quot;html&quot;:&quot;&lt;span id=\&quot;counter-value\&quot; class=\&quot;counter-number\&quot;&gt;0&lt;/span&gt;&quot;,&quot;id&quot;:&quot;counter-value&quot;}]"><span class="button__label">Reset</span></button>
 </div></div>
 </div></div></div><div class="card card--outlined"><div class="card__body"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
 <h3 class="demo-card-title">Form Echo</h3><div class="demo-card-body"><div class="vstack spacing-12 align-flex-start">
