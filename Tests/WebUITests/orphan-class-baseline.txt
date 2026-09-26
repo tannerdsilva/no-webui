@@ -381,17 +381,7 @@ menu--context
 menu-btn
 menu-btn--disabled
 menu-btn--horizontal
-menu__avatar
 menu__chevron
-menu__divider
-menu__header
-menu__hint
-menu__item--active
-menu__item--danger
-menu__item--has-sub
-menu__panel
-menu__search
-menu__section
 mfa__digit--current
 mfa__digit--done
 mfa__row
@@ -425,8 +415,6 @@ multi-select__option--selected
 multi-select__panel
 multi-select__placeholder
 multi-select__trigger
-navbar__hamburger
-navbar__search
 notif
 notif--unread
 notif-panel

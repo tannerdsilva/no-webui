@@ -897,6 +897,33 @@ public struct ShowcasePage: Sendable {
                                 WebUIScrollTop(progress: 0.35, id: "to-top")
                             }
                         }
+                        demoCard("WebUINavbar - search slot and hamburger") {
+                            VStack(spacing: 12) {
+                                WebUINavbar(
+                                    brand: "Acme",
+                                    links: [WebUINavbar.Link("Overview", href: "#", active: true), WebUINavbar.Link("Runs", href: "#")],
+                                    search: WebUINavbar.Search(placeholder: "Search runs", shortcut: "Ctrl K", id: "nav-search"),
+                                    mobileMenu: true
+                                ) {
+                                    WebUIButton("New run", variant: .primary, size: .sm)
+                                }
+                            }
+                        }
+                        demoCard("WebUIMenu - header, search, sections, item chrome") {
+                            HStack(alignment: .top, spacing: 16) {
+                                WebUIMenu(items: [
+                                    WebUIMenu.Item("Profile", icon: .user),
+                                    WebUIMenu.Item("Settings", icon: .settings, hint: "Ctrl ,"),
+                                    WebUIMenu.Item("Invite teammates", icon: .plus, dividerBefore: true),
+                                ], header: "Account", panel: true)
+                                WebUIMenu(items: [
+                                    WebUIMenu.Item("Overview", active: true),
+                                    WebUIMenu.Item("Members", avatar: "DA", section: "Team"),
+                                    WebUIMenu.Item("Billing", submenu: true),
+                                    WebUIMenu.Item("Delete workspace", danger: true, dividerBefore: true),
+                                ], search: "Find a page", panel: true)
+                            }
+                        }
                     }
                 }
 

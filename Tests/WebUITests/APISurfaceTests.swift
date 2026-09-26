@@ -491,6 +491,44 @@ func componentSurfacePins() {
 	let plainTop = rendered(WebUIScrollTop())
 	#expect(!plainTop.contains("scroll-top--ring"))
 	#expect(plainTop.contains("scroll-top__icon"))
+// p3b nav chrome: navbar search + hamburger, menu sections and item states.
+	let nav = rendered(WebUINavbar(
+		brand: "Acme",
+		links: [WebUINavbar.Link("A", href: "#")],
+		search: WebUINavbar.Search(placeholder: "Find", shortcut: "Ctrl K", id: "ns"),
+		mobileMenu: true
+	) {
+		WebUIButton("Go")
+	})
+	#expect(nav.contains("navbar__search"))
+	#expect(nav.contains("<kbd>Ctrl K</kbd>"))
+	#expect(nav.contains("id=\"ns\""))
+	#expect(nav.contains("navbar__hamburger"))
+	#expect(nav.contains("aria-label=\"Menu\""))
+	#expect(!rendered(WebUINavbar { Text("x") }).contains("navbar__hamburger"))
+	#expect(!rendered(WebUINavbar { Text("x") }).contains("navbar__search"))
+	#expect(rendered(WebUINavbar(search: WebUINavbar.Search(id: "s")) { Text("x") }).contains("role=\"search\""))
+
+	let menu = rendered(WebUIMenu(items: [
+		WebUIMenu.Item("One", active: true),
+		WebUIMenu.Item("Two", hint: "Ctrl 2", submenu: true, dividerBefore: true),
+		WebUIMenu.Item("Three", avatar: "DA", section: "Group"),
+		WebUIMenu.Item("Four", danger: true),
+	], header: "Heading", search: "Find", panel: true))
+	#expect(menu.contains("menu menu__panel"))
+	#expect(menu.contains("menu__header"))
+	#expect(menu.contains("menu__search"))
+	#expect(menu.contains("menu__section"))
+	#expect(menu.contains("menu__divider"))
+	#expect(menu.contains("menu__item--active"))
+	#expect(menu.contains("menu__item--has-sub"))
+	#expect(menu.contains("menu__item--danger"))
+	#expect(menu.contains("menu__avatar"))
+	#expect(menu.contains("menu__hint"))
+	let plainMenu = rendered(WebUIMenu(items: [WebUIMenu.Item("Only")]))
+	#expect(!plainMenu.contains("menu__panel"))
+	#expect(!plainMenu.contains("menu__header"))
+	#expect(plainMenu.contains("menu__item"))
 }
 
 @Test("composite components pin their surface")
