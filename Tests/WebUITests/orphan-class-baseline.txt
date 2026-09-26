@@ -271,9 +271,7 @@ gantt__gutter
 gantt__head
 gantt__task
 gantt__today
-grid--2
 grid--3
-grid--4
 grid-12
 grid-12--demo
 grid-12__cell
