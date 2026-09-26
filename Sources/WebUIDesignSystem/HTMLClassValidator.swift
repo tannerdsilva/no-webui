@@ -58,16 +58,34 @@ public enum HTMLClassValidator {
 		let known = definedClasses().union(extra)
 		let prefixes = _prefixes.withLock { $0 }
 		var unknown = Set<String>()
+		for name in classTokens(in: html) {
+			if known.contains(name) { continue }
+			if prefixes.contains(where: { name.hasPrefix($0) }) { continue }
+			unknown.insert(name)
+		}
+		return unknown.sorted()
+	}
+
+	/// class tokens the sheet defines that no supplied html emits — the inverse
+	/// of `undefinedClasses(in:)`. the forward check catches "styled nothing";
+	/// this one catches "styled but unreachable from any api". `extra` carries
+	/// js-toggled and page-scoped names so they never read as orphans.
+	public static func orphanClasses(in htmls: [String], extra: Set<String> = []) -> [String] {
+		var emitted = Set<String>()
+		for html in htmls { emitted.formUnion(classTokens(in: html)) }
+		return definedClasses().subtracting(emitted).subtracting(extra).sorted()
+	}
+
+	/// every class token appearing on a `class="..."` attribute in `html`.
+	private static func classTokens(in html: String) -> Set<String> {
+		var tokens = Set<String>()
 		let attr = /class\s*=\s*["']([^"']*)["']/
 		for match in html.matches(of: attr) {
 			for token in match.output.1.split(whereSeparator: \.isWhitespace) {
-				let name = String(token)
-				if known.contains(name) { continue }
-				if prefixes.contains(where: { name.hasPrefix($0) }) { continue }
-				unknown.insert(name)
+				tokens.insert(String(token))
 			}
 		}
-		return unknown.sorted()
+		return tokens
 	}
 
 	/// run a report and route each undefined class through `onUndefined` once.

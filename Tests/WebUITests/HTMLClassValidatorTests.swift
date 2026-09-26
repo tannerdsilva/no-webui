@@ -1,3 +1,4 @@
+import Foundation
 import Synchronization
 import Testing
 import WebUI
@@ -98,6 +99,81 @@ struct HTMLClassValidatorTests {
 		let doc = WebUIDocument(title: "Bogus", body: html, checkClasses: true).render()
 		#expect(seen.value == ["totally-bogus-42"])
 		#expect(doc.contains("totally-bogus-42"))
+	}
+
+	// MARK: - orphan ratchet (the sheet's inverse check)
+
+	/// class tokens only the client engine writes — `webui-engine.js` builds its
+	/// own status element via `className = ...`, so these can never appear in a
+	/// Swift render. every shipped js mutation was enumerated when this list was
+	/// written; if the engine grows another className write, extend this set in
+	/// the same commit or the ratchet will (correctly) flag the new token.
+	private static let jsOnlyClasses: Set<String> = [
+		"engine-status",
+		"engine-status--visible",
+		"engine-status__dot",
+		"engine-status__text",
+	]
+
+	private static let baselinePath = "Tests/WebUITests/orphan-class-baseline.txt"
+
+	/// the widest emitter surface we have. a class that a component *can* emit
+	/// but the showcase never demos also reads as an orphan — add the demo, or
+	/// accept it into the baseline and keep the count honest.
+	///
+	/// reachability has two signals, unioned on purpose:
+	///   1. the class name appears anywhere in the swift sources — a
+	///      deliberately lenient floor: a token collision can only *under*-
+	///      report an orphan, it can never invent one;
+	///   2. the class is actually emitted by a rendered page (catches names
+	///      composed at render time, which a source scan cannot see).
+	private func measuredOrphans() throws -> Set<String> {
+		let html = ShowcasePage(state: ShowcaseState()).render()
+		let extra = try swiftTokens().union(Self.jsOnlyClasses)
+		return Set(HTMLClassValidator.orphanClasses(in: [html], extra: extra))
+	}
+
+	/// every word token across `Sources/**/*.swift`.
+	private func swiftTokens() throws -> Set<String> {
+		var tokens = Set<String>()
+		let root = "Sources"
+		guard let walker = FileManager.default.enumerator(atPath: root) else { return tokens }
+		for case let path as String in walker where path.hasSuffix(".swift") {
+			let text = (try? String(contentsOfFile: "\(root)/\(path)", encoding: .utf8)) ?? ""
+			for match in text.matches(of: /[A-Za-z0-9_-]+/) {
+				tokens.insert(String(match.output))
+			}
+		}
+		return tokens
+	}
+
+	private func baselineClasses() -> Set<String> {
+		let text = (try? String(contentsOfFile: Self.baselinePath, encoding: .utf8)) ?? ""
+		return Set(text.split(separator: "\n")
+			.map { $0.trimmingCharacters(in: .whitespaces) }
+			.filter { !$0.isEmpty && !$0.hasPrefix("#") })
+	}
+
+	@Test("orphan classes do not grow: every class the sheet defines is reachable")
+	func orphanRatchet() throws {
+		let grown = try measuredOrphans().subtracting(baselineClasses())
+		#expect(grown.isEmpty, """
+			orphan classes with no emitter in swift and none on a rendered page — wire a \
+			component that emits them, or record them in \(Self.baselinePath) in the same commit:
+			ORPHANS-BEGIN
+			\(grown.sorted().joined(separator: "\n"))
+			ORPHANS-END
+			""")
+	}
+
+	@Test("the orphan baseline is tight: no entry lingers after its class becomes reachable")
+	func orphanBaselineIsTight() throws {
+		let stale = baselineClasses().subtracting(try measuredOrphans())
+		#expect(stale.isEmpty, """
+			these classes are now reachable — delete them from \(Self.baselinePath) so the \
+			ratchet cannot silently rot:
+			\(stale.sorted().joined(separator: "\n"))
+			""")
 	}
 }
 
