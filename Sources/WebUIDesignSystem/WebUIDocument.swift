@@ -10,6 +10,8 @@ public struct WebUIDocument: View {
     public let bodyAttributes: String
     public let devMode: Bool
     public let lang: String
+    /// the document's base direction (`ltr` / `rtl`); nil omits the attribute.
+    public let dir: String?
     public let includeRuntime: Bool
     public let runtimeConfig: RuntimeConfig?
     public let contentSecurityPolicy: String?
@@ -35,6 +37,7 @@ public struct WebUIDocument: View {
         clientMode: ClientBoot? = nil,
         devMode: Bool = false,
         lang: String = "en",
+        dir: String? = nil,
         includeRuntime: Bool = true,
         runtimeConfig: RuntimeConfig? = nil,
         contentSecurityPolicy: String? = nil,
@@ -51,6 +54,7 @@ public struct WebUIDocument: View {
         self.clientMode = clientMode
         self.devMode = devMode
         self.lang = lang
+        self.dir = dir
         self.includeRuntime = includeRuntime
         self.runtimeConfig = runtimeConfig
         self.contentSecurityPolicy = contentSecurityPolicy
@@ -93,6 +97,7 @@ public struct WebUIDocument: View {
             clientMode: clientMode,
             devMode: devMode,
             lang: lang,
+            dir: dir,
             includeRuntime: includeRuntime,
             runtimeConfig: runtimeConfig,
             contentSecurityPolicy: contentSecurityPolicy,

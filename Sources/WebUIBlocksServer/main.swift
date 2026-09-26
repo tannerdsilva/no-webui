@@ -36,6 +36,7 @@ struct WebUIBlocksServer {
 		let logger = Logger(label: "webui.blocks")
 		let port = intFlag(named: "--port", default: 9093)
 		let name = stringFlag(named: "--block", default: "index")
+		let dir = stringFlag(named: "--dir", default: "")
 		let block = Block(rawValue: name)
 
 		guard name == "index" || block != nil else {
@@ -50,9 +51,9 @@ struct WebUIBlocksServer {
 		let server = WebUIServer(
 			render: {
 				if let block {
-					return WebUIBlocks.page(for: block)
+					return WebUIBlocks.page(for: block, dir: dir.isEmpty ? nil : dir)
 				}
-				return WebUIBlocks.indexPage()
+				return WebUIBlocks.indexPage(dir: dir.isEmpty ? nil : dir)
 			},
 			router: router,
 			config: WebUIServerConfig(host: "0.0.0.0", port: port)

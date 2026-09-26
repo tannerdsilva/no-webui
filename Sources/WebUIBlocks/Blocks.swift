@@ -63,9 +63,10 @@ public enum WebUIBlocks {
 
 	/// A complete standalone document for one block (its own runtime boot, so
 	/// the socket-backed status chip and the theme toggle behave like a page).
-	public static func page(for block: Block) -> String {
+	public static func page(for block: Block, dir: String? = nil) -> String {
 		WebUIDocument(title: "WebUI block - " + block.title,
  body: body(for: block),
+ dir: dir,
  includeRuntime: true,
  checkClasses: true
 ).render()
@@ -86,7 +87,7 @@ public enum WebUIBlocks {
 	}
 
 	/// The blocks index: one card per block, linking to its standalone page.
-	public static func indexPage() -> String {
+	public static func indexPage(dir: String? = nil) -> String {
  let cards = all.map { block in
 			WebUICard(variant: .outlined) {
 				VStack(alignment: .leading, spacing: 8) {
@@ -108,6 +109,7 @@ public enum WebUIBlocks {
 			}
 			.padding(24)
 			.render(),
+ dir: dir,
  includeRuntime: true,
  checkClasses: true
 ).render()

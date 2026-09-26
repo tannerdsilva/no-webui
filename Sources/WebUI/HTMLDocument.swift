@@ -16,6 +16,9 @@ public struct HTMLDocument: Sendable {
     public let clientMode: ClientBoot?
     public let devMode: Bool
     public let lang: String
+    /// the document's base direction (`ltr` / `rtl`). nil omits the
+    /// attribute entirely, so the default document stays byte-identical.
+    public let dir: String?
     public let includeRuntime: Bool
     public let runtimeConfig: RuntimeConfig?
     public let contentSecurityPolicy: String?
@@ -58,6 +61,15 @@ public struct HTMLDocument: Sendable {
     public static let defaultBoot: ClientBoot = ClientBoot(
         flavor: .engine
     )
+    /// ` dir="rtl"` when a base direction is set. only `ltr`/`rtl` are ever
+    /// emitted: anything else is dropped rather than written into the page.
+    private var dirAttribute: String {
+        guard let dir else { return "" }
+        let value = dir.lowercased()
+        guard value == "ltr" || value == "rtl" else { return "" }
+        return " dir=\"\(value)\""
+    }
+
     private func effectiveCSP(nonce: String, clientMode: ClientBoot?) -> String? {
         if let csp = contentSecurityPolicy {
             return csp.isEmpty ? nil : csp
@@ -84,6 +96,7 @@ public struct HTMLDocument: Sendable {
         clientMode: ClientBoot? = nil,
         devMode: Bool = false,
         lang: String = "en",
+        dir: String? = nil,
         includeRuntime: Bool = true,
         runtimeConfig: RuntimeConfig? = nil,
         contentSecurityPolicy: String? = nil,
@@ -101,6 +114,7 @@ public struct HTMLDocument: Sendable {
         self.clientMode = clientMode
         self.devMode = devMode
         self.lang = lang
+        self.dir = dir
         self.includeRuntime = includeRuntime
         self.runtimeConfig = runtimeConfig
         self.contentSecurityPolicy = contentSecurityPolicy
@@ -174,7 +188,7 @@ public struct HTMLDocument: Sendable {
 
         return """
         <!DOCTYPE html>
-        <html lang="\(lang)">
+        <html lang="\(lang)"\(dirAttribute)>
         <head>
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">\(cspTag)\(iconTag)
