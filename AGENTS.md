@@ -367,6 +367,12 @@ node designer/browser-smoke.mjs     # requires node + playwright (chromium)
 
 ## pitfalls
 
+- **new files inside a target's source dir warn on every build.** swiftpm reports
+  `found 1 file(s) which are unhandled; explicitly declare them as resources or exclude
+  from the target`. for a test fixture (e.g. `Tests/WebUITests/orphan-class-baseline.txt`)
+  declare it in the target's `resources: [.copy("…")]` and read it via `Bundle.module`
+  (keep a package-root-relative fallback for runners that don't vend the bundle). a file
+  placed *outside* every target dir — like `designer/url-payloads.json` — needs neither.
 - **generated files** are auto-generated and live under `.build/` (gitignored):
   `Assets+Generated.swift` (the `WebUI` target's embedded assets), `IconLibrary.swift`
   (the `WebUICore` target's icon catalog), and `DesignTokens+Generated.swift`
