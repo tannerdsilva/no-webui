@@ -159,8 +159,6 @@ a plugin verb from the no-webui dependency (no raw `swift build --swift-sdk`
 invocation, no memorized flags):
 
 ```bash
-# one extra step, per rebuild — replaces the raw wasm-sdk build command
-swift package --disable-sandbox plugin wasm-client --product TheirClient
 # then a normal host build serves client-mode pages
 swift build
 swift run TheirServer
