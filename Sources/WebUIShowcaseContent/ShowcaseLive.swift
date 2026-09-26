@@ -33,6 +33,7 @@ public final class ShowcaseState: Sendable {
 		var rowsPerPage = 25
 		var treeExpanded: Set<String> = ["src", "ui"]
 		var treeSelected: String? = "view"
+		var hiddenColumns: Set<Int> = []
 		var chat: [ChatLine] = [
 			ChatLine(side: "received", text: "Deploy went out at 09:12.", time: "09:12"),
 			ChatLine(side: "sent", text: "Watching the dashboards.", time: "09:13"),
@@ -89,6 +90,11 @@ public final class ShowcaseState: Sendable {
 	var treeSelected: String? {
 		get { values.withLock { $0.treeSelected } }
 		set { values.withLock { $0.treeSelected = newValue } }
+	}
+
+	var hiddenColumns: Set<Int> {
+		get { values.withLock { $0.hiddenColumns } }
+		set { values.withLock { $0.hiddenColumns = newValue } }
 	}
 
 	var chat: [ChatLine] {
@@ -175,6 +181,39 @@ func liveChat(state: ShowcaseState) -> WebUIMessageScroller {
 		}
 		WebUITypingIndicator(inline: true)
 	}
+}
+
+/// the column-visibility control for the interactive table demo. it is a plain
+/// `WebUIMenu` whose selection is dispatched by `targetId` — the container-handler
+/// pattern — and whose effect is host state: toggling an index re-renders the menu
+/// (for the check marks) and the table (which simply stops emitting that column).
+func columnMenu(state: ShowcaseState) -> WebUIMenu {
+	let columns = ["Service", "Region", "p95"]
+	return WebUIMenu(
+		items: columns.enumerated().map { index, name in
+			WebUIMenu.Item(
+				name,
+				icon: state.hiddenColumns.contains(index) ? .xCircle : .checkCircle
+			)
+		},
+		id: "column-menu",
+		onSelect: { event in
+			guard let raw = event.string("targetId"),
+			      let last = raw.split(separator: "-").last,
+			      let index = Int(last) else { return [] }
+			if state.hiddenColumns.contains(index) {
+				state.hiddenColumns.remove(index)
+			} else {
+				state.hiddenColumns.insert(index)
+			}
+			return [
+				FragmentUpdate(id: "column-menu", html: columnMenu(state: state).render()),
+				FragmentUpdate(id: "demo-interactive", html: interactiveTable(state: state).render()),
+			]
+		},
+		header: "Columns",
+		panel: true
+	)
 }
 
 func interactiveTable(state: ShowcaseState) -> WebUITable {

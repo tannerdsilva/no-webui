@@ -530,6 +530,9 @@ func componentSurfacePins() {
 	#expect(!plainMenu.contains("menu__panel"))
 	#expect(!plainMenu.contains("menu__header"))
 	#expect(plainMenu.contains("menu__item"))
+    // a menu with an id must carry it as a dom id, or the root cannot be a
+    // fragment-patch target (the runtime looks the id up in the document)
+    #expect(rendered(WebUIMenu(items: [WebUIMenu.Item("x")], id: "cm")).contains("id=\"cm\""))
 }
 
 @Test("composite components pin their surface")

@@ -743,7 +743,9 @@ public struct WebUIMenu: View {
         } else {
             attrs = ""
         }
-        var html = "<div class=\"menu\(panel ? " menu__panel" : "")\"\(attrs) role=\"menu\">"
+        var html = "<div class=\"menu\(panel ? " menu__panel" : "")\""
+        if let id { html += " id=\"\(htmlEscape(id))\"" }
+        html += "\(attrs) role=\"menu\">"
         if let header { html += "<div class=\"menu__header\">\(htmlEscape(header))</div>" }
         if let search {
             html += "<div class=\"menu__search\">"

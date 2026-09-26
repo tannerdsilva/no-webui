@@ -840,6 +840,11 @@ public struct WebUITable: View {
     public let id: String?
     /// Column indices that may be clicked to sort (emit `.sort` affordance).
     public let sortableColumns: Set<Int>
+    /// columns removed from the render entirely, by index into `headers`. the
+    /// host owns this set (it is a view of the host's state), which is how the
+    /// table stays server-rendered: a visibility toggle mutates host state and
+    /// re-renders, rather than hiding cells in the client.
+    public let hiddenColumns: Set<Int>
     /// The active sort (column + direction), rendered with `aria-sort`.
     public let sort: (column: Int, direction: SortDirection)?
     /// Render a select-all + per-row selection control (server is source of
@@ -878,6 +883,7 @@ public struct WebUITable: View {
         emptyState: EmptyState? = nil,
         id: String? = nil,
         sortableColumns: Set<Int> = [],
+        hiddenColumns: Set<Int> = [],
         sort: (column: Int, direction: SortDirection)? = nil,
         selectable: Bool = false,
         rowIds: [String] = [],
@@ -897,6 +903,7 @@ public struct WebUITable: View {
         self.emptyState = emptyState
         self.id = id
         self.sortableColumns = sortableColumns
+        self.hiddenColumns = hiddenColumns
         self.sort = sort
         self.selectable = selectable
         self.rowIds = rowIds
@@ -920,7 +927,8 @@ public struct WebUITable: View {
         let base = id ?? "webui-table"
         let hasSelect = selectable && !rows.isEmpty && rowIds.count == rows.count
         let hasExpand = !(rowDetails?.isEmpty ?? true) && !rows.isEmpty
-        let totalColumns = headers.count + (hasSelect ? 1 : 0) + (hasExpand ? 1 : 0)
+        let visibleColumnCount = headers.indices.filter { !hiddenColumns.contains($0) }.count
+        let totalColumns = visibleColumnCount + (hasSelect ? 1 : 0) + (hasExpand ? 1 : 0)
 
         let interactiveWanted = onSort != nil || onSelectAll != nil || onSelect != nil || onToggleExpand != nil
         if interactiveWanted, id == nil {
@@ -969,7 +977,7 @@ public struct WebUITable: View {
             if hasExpand {
                 html += "<th class=\"table__expand-col\" aria-hidden=\"true\"></th>"
             }
-            for (i, h) in headers.enumerated() {
+            for (i, h) in headers.enumerated() where !hiddenColumns.contains(i) {
                 let align = alignmentClass(i)
                 let sortPrefix = (align.map { "\($0) " } ?? "") + "sort-cell"
                 var sortHandler: EventHandler? = nil
@@ -1046,7 +1054,7 @@ public struct WebUITable: View {
                         html += "<td class=\"table__expand-col\"><button type=\"button\" class=\"table__expand-btn\" id=\"\(htmlEscape(base))-expand-\(htmlEscape(rowId))\" aria-disabled=\"true\" disabled\(expandAttrs)>\(expandIcon)</button></td>"
                     }
                 }
-                for (i, cell) in row.enumerated() {
+                for (i, cell) in row.enumerated() where !hiddenColumns.contains(i) {
                     var attrs = ""
                     if responsive, i < headers.count {
                         attrs += "data-label=\"\(htmlEscape(headers[i]))\""
