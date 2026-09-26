@@ -756,6 +756,81 @@ public struct ShowcasePage: Sendable {
                             }
                             .onDismiss { me, _ in [me.remove()] }
                         }
+                        demoCard("WebUISeparator - rule, labelled, glyph, vertical") {
+                            VStack(spacing: 8) {
+                                HStack(alignment: .center, spacing: 16) {
+                                    Text("left")
+                                    WebUISeparator(orientation: .vertical)
+                                    Text("right")
+                                }
+                                WebUISeparator()
+                                WebUISeparator("or")
+                                WebUISeparator(icon: .chevronDown)
+                                WebUISeparator(strong: true)
+                            }
+                        }
+                        demoCard("WebUIKbd - key, combo, sizes") {
+                            HStack(alignment: .center, spacing: 16) {
+                                WebUIKbd("K")
+                                WebUIKbd(["Ctrl", "K"])
+                                WebUIKbd(["Ctrl", "Shift", "P"], separator: "+")
+                                WebUIKbd("Esc", size: .small)
+                                WebUIKbd("Enter", size: .large)
+                            }
+                        }
+                        demoCard("WebUIAspectRatio - wide, standard, photo, square, portrait, tall") {
+                            VStack(spacing: 12) {
+                                HStack(alignment: .top, spacing: 12) {
+                                    WebUIAspectRatio(.wide, label: "21 / 9").width("220px")
+                                    WebUIAspectRatio(.standard, label: "16 / 9").width("180px")
+                                    WebUIAspectRatio(.photo, label: "4 / 3").width("130px")
+                                    WebUIAspectRatio(.square, label: "1 / 1").width("90px")
+                                }
+                                HStack(alignment: .top, spacing: 12) {
+                                    WebUIAspectRatio(.portrait, label: "3 / 4").width("90px")
+                                    WebUIAspectRatio(.tall, label: "9 / 16").width("90px")
+                                }
+                            }
+                        }
+                        demoCard("WebUICircularProgress - tones, sizes, indeterminate") {
+                            HStack(alignment: .center, spacing: 24) {
+                                WebUICircularProgress(value: 0.72, label: "72", sublabel: "%", ariaLabel: "Storage used")
+                                WebUICircularProgress(value: 1, label: "100", sublabel: "%", tone: .success, ariaLabel: "Checks passed")
+                                WebUICircularProgress(value: 0.35, tone: .warning, size: .small, ariaLabel: "Warning level")
+                                WebUICircularProgress(value: 0.6, tone: .danger, size: .large, ariaLabel: "Error rate")
+                                WebUICircularProgress(value: 0, indeterminate: true, ariaLabel: "Loading")
+                            }
+                        }
+                        demoCard("WebUIInputGroup - glyph, prefix, suffix, error") {
+                            VStack(spacing: 12) {
+                                WebUIInputGroup(placeholder: "Search", icon: .search, suffix: "Ctrl+K")
+                                WebUIInputGroup(placeholder: "0.00", prefix: "$", suffix: "USD", type: .number)
+                                WebUIInputGroup(placeholder: "you", prefix: "https://", suffix: ".example.com")
+                                WebUIInputGroup(placeholder: "amount", prefix: "$", suffix: "over limit", state: .error)
+                            }
+                        }
+                        demoCard("WebUIBanner - info, success, warning, danger, dismissible") {
+                            VStack(spacing: 12) {
+                                WebUIBanner(variant: .info, message: "A new version is available.")
+                                WebUIBanner(variant: .success, title: "Deploy finished", message: "All 24 checks passed.")
+                                WebUIBanner(variant: .warning, message: "Your session expires in 5 minutes.")
+                                WebUIBanner(variant: .danger, title: "Payment failed", message: "The card was declined.")
+                                WebUIBanner(variant: .info, message: "This banner can be dismissed.", dismissible: true, id: "banner-demo")
+                                    .onDismiss { me, _ in [me.remove()] }
+                            }
+                        }
+                        demoCard("WebUIActivityFeed - grouped, with times") {
+                            WebUIActivityFeed([
+                                WebUIActivityFeed.Group("Today", items: [
+                                    WebUIActivityFeed.Item(icon: .checkCircle, text: "Deploy finished on production", time: "2h"),
+                                    WebUIActivityFeed.Item(icon: .user, text: "Dana joined the workspace", time: "5h"),
+                                ]),
+                                WebUIActivityFeed.Group("Yesterday", items: [
+                                    WebUIActivityFeed.Item(icon: .bell, text: "Alert rule triggered twice", time: "1d"),
+                                    WebUIActivityFeed.Item(icon: .search, text: "Index rebuild completed", time: "1d"),
+                                ]),
+                            ])
+                        }
                     }
                 }
 

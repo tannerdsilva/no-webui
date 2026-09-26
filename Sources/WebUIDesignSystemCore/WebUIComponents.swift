@@ -1712,3 +1712,117 @@ public struct WebUIDescriptionList: View {
         return html
     }
 }
+
+// MARK: - WebUI Aspect Ratio
+/// a box locked to a fixed width:height ratio, for media, embeds and
+/// placeholders. it fills the width its container gives it, so compose it with
+/// a sized parent (grid track, fixed `.width(_:)`, or a full-width block).
+/// the sheet ships the dashed-form variants (`aspect--16-9`); the
+/// older `x` spellings (`16x9-style`) stay in the sheet for legacy call sites
+/// and are not addressable from here.
+public struct WebUIAspectRatio: View {
+    public enum Ratio: String, Sendable {
+        case wide = "aspect--21-9"
+        case standard = "aspect--16-9"
+        case photo = "aspect--4-3"
+        case square = "aspect--1-1"
+        case portrait = "aspect--3x4"
+        case tall = "aspect--9x16"
+    }
+
+    public let ratio: Ratio
+    /// caption drawn inside the box, e.g. "16 / 9".
+    public let label: String?
+
+    public init(_ ratio: Ratio = .standard, label: String? = nil) {
+        self.ratio = ratio
+        self.label = label
+    }
+
+    public func render() -> String {
+        var html = "<div class=\"aspect \(ratio.rawValue)\">"
+        if let label {
+            html += "<span class=\"aspect__label\">\(htmlEscape(label))</span>"
+        }
+        html += "</div>"
+        return html
+    }
+}
+
+// MARK: - WebUI Circular Progress
+/// a radial progress ring with an optional centre label. the arc uses the
+/// sheet's stroke-dashoffset technique on a 36-unit viewBox, so the
+/// circumference is 100 and the dash offset reads directly as a percentage.
+public struct WebUICircularProgress: View {
+    public enum Tone: String, Sendable {
+        case primary = ""
+        case success = "ring--success"
+        case warning = "ring--warning"
+        case danger = "ring--danger"
+    }
+
+    public enum Size: String, Sendable {
+        case small = "ring--sm"
+        case medium = ""
+        case large = "ring--lg"
+    }
+
+    /// completion in 0...1 (clamped). ignored when `indeterminate`.
+    public let value: Double
+    public let label: String?
+    public let sublabel: String?
+    public let tone: Tone
+    public let size: Size
+    public let indeterminate: Bool
+    /// accessible name for the `progressbar` role.
+    public let ariaLabel: String
+
+    public init(
+        value: Double,
+        label: String? = nil,
+        sublabel: String? = nil,
+        tone: Tone = .primary,
+        size: Size = .medium,
+        indeterminate: Bool = false,
+        ariaLabel: String = "progress"
+    ) {
+        self.value = value
+        self.label = label
+        self.sublabel = sublabel
+        self.tone = tone
+        self.size = size
+        self.indeterminate = indeterminate
+        self.ariaLabel = ariaLabel
+    }
+
+    public func render() -> String {
+        let clamped = value < 0 ? 0 : (value > 1 ? 1 : value)
+        var classes = ["ring"]
+        if !size.rawValue.isEmpty { classes.append(size.rawValue) }
+        if !tone.rawValue.isEmpty { classes.append(tone.rawValue) }
+        if indeterminate { classes.append("ring--indeterminate") }
+        var html = "<div class=\"\(classes.joined(separator: " "))\" role=\"progressbar\""
+        html += " aria-label=\"\(htmlEscape(ariaLabel))\""
+        if !indeterminate {
+            html += " aria-valuemin=\"0\" aria-valuemax=\"100\" aria-valuenow=\"\(Int((clamped * 100).rounded()))\""
+        }
+        html += ">"
+        html += "<svg viewBox=\"0 0 36 36\" aria-hidden=\"true\">"
+        html += "<circle class=\"ring__track\" cx=\"18\" cy=\"18\" r=\"15.915\"/>"
+        if indeterminate {
+            html += "<circle class=\"ring__fill\" cx=\"18\" cy=\"18\" r=\"15.915\"/>"
+        } else {
+            let offset = webuiFixedPoint((1 - clamped) * 100, places: 1)
+            html += "<circle class=\"ring__fill\" cx=\"18\" cy=\"18\" r=\"15.915\" stroke-dasharray=\"100\" stroke-dashoffset=\"\(offset)\"/>"
+        }
+        html += "</svg>"
+        if label != nil || sublabel != nil {
+            html += "<span class=\"ring__label\">"
+            if let label { html += htmlEscape(label) }
+            if let sublabel { html += "<span class=\"ring__label-sub\">\(htmlEscape(sublabel))</span>" }
+            html += "</span>"
+        }
+        html += "</div>"
+        return html
+    }
+}

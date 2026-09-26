@@ -711,6 +711,7 @@ code, .inline-code {
   display: inline-flex;
   align-items: center;
   font-size: var(--font-size-sm);
+  white-space: nowrap;
 }
 .input__clear {
   display: inline-flex;

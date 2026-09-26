@@ -487,3 +487,75 @@ public struct WebUICardInput: View {
         return html
     }
 }
+
+// MARK: WebUI Input Group
+/// an input with affixes inside one field box: a leading glyph, a leading text
+/// (currency, protocol) and a trailing text (unit, domain, or the error note).
+/// the sheet styles the container as `input--with-affix` around a bare
+/// `input__el`, so the box, focus ring and state colours come from the shared
+/// `.input` rules rather than a parallel set.
+public struct WebUIInputGroup: View {
+    public let placeholder: String
+    /// text before the field. rendered in the muted prefix tone.
+    public let prefix: String?
+    /// glyph before the field, rendered outside the input itself.
+    public let icon: IconName?
+    /// text after the field. turns danger-coloured in the error state.
+    public let suffix: String?
+    public let type: InputType
+    public let state: WebUIInput.State
+    public let name: String?
+    public let id: String?
+    public let value: String?
+    public let disabled: Bool
+
+    public init(
+        placeholder: String = "",
+        prefix: String? = nil,
+        icon: IconName? = nil,
+        suffix: String? = nil,
+        type: InputType = .text,
+        state: WebUIInput.State = .normal,
+        name: String? = nil,
+        id: String? = nil,
+        value: String? = nil,
+        disabled: Bool = false
+    ) {
+        self.placeholder = placeholder
+        self.prefix = prefix
+        self.icon = icon
+        self.suffix = suffix
+        self.type = type
+        self.state = state
+        self.name = name
+        self.id = id
+        self.value = value
+        self.disabled = disabled
+    }
+
+    public func render() -> String {
+        var html = "<div class=\"input input--with-affix"
+        if !state.rawValue.isEmpty { html += " \(state.rawValue)" }
+        html += "\">"
+        if let icon {
+            html += "<span class=\"input__affix input__affix--left\">" + WebUIIcon(icon, size: .small).render() + "</span>"
+        }
+        if let prefix {
+            html += "<span class=\"input__prefix\">\(htmlEscape(prefix))</span>"
+        }
+        html += "<input class=\"input__el\" type=\"\(type.rawValue)\""
+        if let id { html += " id=\"\(htmlEscape(id))\"" }
+        if let name { html += " name=\"\(htmlEscape(name))\"" }
+        html += " placeholder=\"\(htmlEscape(placeholder))\""
+        if let value { html += " value=\"\(htmlEscape(value))\"" }
+        if state == .error { html += " aria-invalid=\"true\"" }
+        if disabled { html += " disabled" }
+        html += ">"
+        if let suffix {
+            let suffixClass = state == .error ? "input__suffix input__suffix--error" : "input__suffix"
+            html += "<span class=\"\(suffixClass)\">\(htmlEscape(suffix))</span>"
+        }
+        html += "</div>"
+        return html
+    }
+}

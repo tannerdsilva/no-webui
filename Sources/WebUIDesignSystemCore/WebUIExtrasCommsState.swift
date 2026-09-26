@@ -305,7 +305,7 @@ public struct WebUIAppletCard: View {
     public init(title: String, value: String) { self.title = title; self.value = value }
 
     public func render() -> String {
-        var html = "<div class=\"applet-card\"><div class=\"applet-card__label\">\(htmlEscape(title))</div><div class=\"applet-card__value\">\(htmlEscape(value))</div></div>"
+        let html = "<div class=\"applet-card\"><div class=\"applet-card__label\">\(htmlEscape(title))</div><div class=\"applet-card__value\">\(htmlEscape(value))</div></div>"
         return html
     }
 }
@@ -398,6 +398,128 @@ public struct WebUICheckboxGroup: View {
             html += "<input type=\"checkbox\" class=\"checkbox__input\"\(option.checked ? " checked" : "")>"
             html += "<span class=\"checkbox__box\"></span><span class=\"checkbox__label\">\(htmlEscape(option.label))</span>"
             html += "</label>"
+        }
+        html += "</div>"
+        return html
+    }
+}
+
+// MARK: WebUI Banner
+/// a page-level message strip: full-bleed, persistent, dismissible. distinct
+/// from the in-content alert, which is rounded and inset; the sheet gives the
+/// banner a bottom border and no radius, for the top of a page or a section.
+public struct WebUIBanner: View, Dismissible {
+    public enum Variant: String, Sendable {
+        case info = "banner--info"
+        case success = "banner--success"
+        case warning = "banner--warning"
+        case danger = "banner--error"
+    }
+
+    private static func defaultIcon(for variant: Variant) -> IconName {
+        switch variant {
+        case .info: return .info
+        case .success: return .checkCircle
+        case .warning: return .alertTriangle
+        case .danger: return .xCircle
+        }
+    }
+
+    public let variant: Variant
+    public let title: String?
+    public let message: String
+    public let dismissible: Bool
+    public let icon: IconName
+    public let id: String?
+    public var onDismiss: DismissHandler?
+
+    public init(
+        variant: Variant = .info,
+        title: String? = nil,
+        message: String,
+        dismissible: Bool = false,
+        icon: IconName? = nil,
+        id: String? = nil
+    ) {
+        self.variant = variant
+        self.title = title
+        self.message = message
+        self.dismissible = dismissible
+        self.icon = icon ?? Self.defaultIcon(for: variant)
+        self.id = id
+        self.onDismiss = nil
+    }
+
+    public var dismissButtonClass: String { "banner__close" }
+    public var dismissMarker: String { "data-dismiss" }
+    public var dismissRootIdentifier: String? { id }
+
+    public func render() -> String {
+        let dismissal = makeDismissal(ariaLabel: "Dismiss")
+        var html = "<div class=\"banner \(variant.rawValue)\" role=\"status\""
+        if let elementID = dismissal.elementID ?? id {
+            html += " id=\"\(htmlEscape(elementID))\""
+        }
+        html += ">"
+        html += "<div class=\"banner__icon fill-slot\">" + WebUIIcon(icon, size: .slot).render() + "</div>"
+        html += "<div class=\"banner__body\">"
+        if let title {
+            html += "<span class=\"banner__title\">\(htmlEscape(title))</span>"
+        }
+        html += "<div class=\"banner__text\">\(htmlEscape(message))</div>"
+        html += "</div>"
+        if dismissible || onDismiss != nil {
+            html += dismissal.buttonHTML
+        }
+        html += "</div>"
+        return html
+    }
+}
+
+// MARK: WebUI Activity Feed
+/// a grouped activity stream: a group heading, then rows of glyph, text and
+/// relative time. the sheet draws the group rule and the circular icon chip.
+public struct WebUIActivityFeed: View {
+    public struct Item: Sendable {
+        public let icon: IconName
+        public let text: String
+        /// trailing relative time, e.g. "2h".
+        public let time: String?
+        public init(icon: IconName, text: String, time: String? = nil) {
+            self.icon = icon
+            self.text = text
+            self.time = time
+        }
+    }
+
+    public struct Group: Sendable {
+        public let title: String
+        public let items: [Item]
+        public init(_ title: String, items: [Item]) {
+            self.title = title
+            self.items = items
+        }
+    }
+
+    public let groups: [Group]
+
+    public init(_ groups: [Group]) {
+        self.groups = groups
+    }
+
+    public func render() -> String {
+        var html = "<div class=\"activity\">"
+        for group in groups {
+            html += "<div class=\"activity__group\">\(htmlEscape(group.title))</div>"
+            for item in group.items {
+                html += "<div class=\"activity__item\">"
+                html += "<div class=\"activity__icon fill-slot\">" + WebUIIcon(item.icon, size: .slot).render() + "</div>"
+                html += "<div class=\"activity__text\">\(htmlEscape(item.text))</div>"
+                if let time = item.time {
+                    html += "<span class=\"activity__time\">\(htmlEscape(time))</span>"
+                }
+                html += "</div>"
+            }
         }
         html += "</div>"
         return html

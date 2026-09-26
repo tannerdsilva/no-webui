@@ -44,9 +44,15 @@ struct ShowcaseWiringTests {
 
 		// exact pins: every wired control emits one data-component-id and
 		// registers one handler at page build. dump the counts on drift.
+		//
+		// render-time controls are the ones minted as `cN` rather than carrying a
+		// caller id: btn-reset, echo-form, preview-input, toast-dismiss,
+		// modal-dismiss, banner-dismiss (p1 sweep), theme toggle, engine status.
+		let renderTimeControls = 8
 		let emitted = html.components(separatedBy: "data-component-id=").count - 1
-		#expect(emitted == expectedIds.count + 7, "data-component-id count drifted: \(emitted)")
-		#expect(router.handlerCount == expectedIds.count + 7,
+		#expect(emitted == expectedIds.count + renderTimeControls,
+			"data-component-id count drifted: \(emitted)")
+		#expect(router.handlerCount == expectedIds.count + renderTimeControls,
 			"handler count drifted: \(router.handlerCount)")
 	}
 }

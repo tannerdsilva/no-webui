@@ -859,3 +859,92 @@ private extension Array where Element: Hashable {
         return out
     }
 }
+
+// MARK: WebUI Separator
+/// a rule between or across content. the sheet's divider family carries four
+/// shapes: plain, strong, vertical, and a labelled rule. the label form is the
+/// two-line pair (text between the lines, e.g. "or"); the glyph form puts an
+/// icon badge on the line itself.
+public struct WebUISeparator: View {
+    public enum Orientation: Sendable { case horizontal, vertical }
+
+    public let orientation: Orientation
+    /// text rendered between two lines. ignored when `icon` is set.
+    public let label: String?
+    /// glyph rendered on the line. wins over `label`.
+    public let icon: IconName?
+    public let strong: Bool
+
+    public init(
+        _ label: String? = nil,
+        orientation: Orientation = .horizontal,
+        icon: IconName? = nil,
+        strong: Bool = false
+    ) {
+        self.orientation = orientation
+        self.label = label
+        self.icon = icon
+        self.strong = strong
+    }
+
+    public func render() -> String {
+        if orientation == .vertical {
+            return "<div class=\"divider divider--vertical\" role=\"separator\" aria-orientation=\"vertical\"></div>"
+        }
+        if let icon {
+            let glyph = WebUIIcon(icon, size: .slot).render()
+            return "<div class=\"divider divider--icon\(strong ? " divider--strong" : "")\" role=\"separator\"><span class=\"divider__label\">\(glyph)</span></div>"
+        }
+        if let label {
+            return "<div class=\"divider-divider\" role=\"separator\"><span class=\"divider-divider__label\">\(htmlEscape(label))</span></div>"
+        }
+        return "<div class=\"divider\(strong ? " divider--strong" : "")\" role=\"separator\"></div>"
+    }
+}
+
+// MARK: WebUI Kbd
+/// a keyboard key or combination. one key renders bare; several render as a
+/// combo whose keys sit adjacently (the macOS convention, `⌘K`) or with a
+/// separator glyph between them (`separator: "+"`).
+public struct WebUIKbd: View {
+    public enum Size: String, Sendable {
+        case small = "kbd--sm"
+        case medium = ""
+        case large = "kbd--lg"
+    }
+
+    public let keys: [String]
+    public let size: Size
+    /// glyph placed between keys. `nil` places them adjacently without one.
+    public let separator: String?
+
+    public init(_ key: String, size: Size = .medium) {
+        self.keys = [key]
+        self.size = size
+        self.separator = nil
+    }
+
+    public init(_ keys: [String], size: Size = .medium, separator: String? = nil) {
+        self.keys = keys
+        self.size = size
+        self.separator = separator
+    }
+
+    private func keyHTML(_ key: String) -> String {
+        let sizeClass = size.rawValue.isEmpty ? "" : " \(size.rawValue)"
+        return "<kbd class=\"kbd\(sizeClass)\">\(htmlEscape(key))</kbd>"
+    }
+
+    public func render() -> String {
+        guard keys.count > 1 else { return keyHTML(keys.first ?? "") }
+        var html = "<span class=\"kbd-combo\">"
+        for (index, key) in keys.enumerated() {
+            if index > 0, let separator, !separator.isEmpty {
+                html += "<span class=\"kbd-sep\">\(htmlEscape(separator))</span>"
+            }
+            html += keyHTML(key)
+        }
+        html += "</span>"
+        return html
+    }
+}
