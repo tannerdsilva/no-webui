@@ -352,8 +352,22 @@ swift build
 swift test
 swift package --disable-sandbox plugin smoke
 swift package --disable-sandbox plugin fullstack-smoke
-node designer/browser-smoke.mjs     # requires node + playwright (chromium)
+node designer/browser-smoke.mjs      # requires node + playwright (chromium)
+node designer/showcase-ws-smoke.mjs  # stable-id dispatch gate against the showcase server
 ```
+
+the dispatch gate exists because the other four steps cannot see this failure: `smoke`
+checks served bytes, `fullstack-smoke` drives the *smoke* page, and the unit pins count
+handler registrations without ever dispatching one. `showcase-ws-smoke` spawns
+`WebUIShowcaseServer`, clicks a stable-id control (`controlAttributes`, e.g. a table sort
+header) in a real browser, captures the websocket frames and requires both the outbound
+`event` and an inbound `update`. a click that sends but never receives is exactly the
+class of break that shipped invisibly on :9092.
+
+**currently RED (see `.hermes/plans/` §7b / p4f):** on the showcase server every
+stable-id control dispatches correctly and gets no reply — 27 such controls are exposed
+by the served page, and all probed ones fail. fix p4f and this gate goes green; until
+then it is the honest state of the ladder, not noise.
 
 ### fixing a security issue
 
