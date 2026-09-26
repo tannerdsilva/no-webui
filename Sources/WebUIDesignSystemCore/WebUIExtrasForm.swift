@@ -559,3 +559,129 @@ public struct WebUIInputGroup: View {
         return html
     }
 }
+
+
+// MARK: WebUI Field
+/// a labelled form row: a label (with an optional required marker, a
+/// validation note and a counter on its row) above the control, and helper
+/// text below it. the control is whatever the caller passes as content.
+public struct WebUIField: View {
+    public enum Note: String, Sendable {
+        case neutral = ""
+        case error = "field__hint--error"
+        case success = "field__hint--success"
+    }
+
+    public let label: String?
+    /// associates the label with the control (`for=`).
+    public let controlID: String?
+    public let required: Bool
+    /// inline note on the label row.
+    public let note: String?
+    public let noteKind: Note
+    /// right-aligned counter on the label row, e.g. "12 / 80".
+    public let count: String?
+    /// helper text under the control; tinted when `helperIsError`.
+    public let helper: String?
+    public let helperIsError: Bool
+    public let children: [any View]
+
+    public init(
+        label: String? = nil,
+        controlID: String? = nil,
+        required: Bool = false,
+        note: String? = nil,
+        noteKind: Note = .neutral,
+        count: String? = nil,
+        helper: String? = nil,
+        helperIsError: Bool = false,
+        @ViewBuilder content: () -> [any View]
+    ) {
+        self.label = label
+        self.controlID = controlID
+        self.required = required
+        self.note = note
+        self.noteKind = noteKind
+        self.count = count
+        self.helper = helper
+        self.helperIsError = helperIsError
+        self.children = content()
+    }
+
+    public func render() -> String {
+        var html = "<div class=\"field\">"
+        if label != nil || note != nil || count != nil {
+            html += "<div class=\"field__row\">"
+            if let label {
+                html += "<label class=\"field__label\(required ? " field__label--required" : "")\""
+                if let controlID { html += " for=\"\(htmlEscape(controlID))\"" }
+                html += ">\(htmlEscape(label))</label>"
+            }
+            if let note {
+                html += "<span class=\"field__hint\(noteKind.rawValue.isEmpty ? "" : " " + noteKind.rawValue)\">\(htmlEscape(note))</span>"
+            }
+            if let count {
+                html += "<span class=\"field__count\">\(htmlEscape(count))</span>"
+            }
+            html += "</div>"
+        }
+        for child in children { html += child.render() }
+        if let helper {
+            html += "<span class=\"field__helper\(helperIsError ? " field__helper--error" : "")\">\(htmlEscape(helper))</span>"
+        }
+        html += "</div>"
+        return html
+    }
+}
+
+// MARK: WebUI Toggle Group
+/// a row of independently toggleable filter chips (several may be active). single-select
+/// segmentation is `WebUISegmentedControl`'s shape; this is the filter bar: the
+/// sheet's `chip--filter` / `chip--filter-active` pair.
+public struct WebUIToggleGroup: View {
+    public struct Option: Sendable {
+        public let id: String
+        public let label: String
+        public let selected: Bool
+        public init(_ id: String, _ label: String, selected: Bool = false) {
+            self.id = id
+            self.label = label
+            self.selected = selected
+        }
+    }
+
+    public let options: [Option]
+    /// stable container id; when set with `onToggle` the group self-wires and
+    /// each chip carries `id + "-opt-<index>"`, so the handler can tell which
+    /// chip was clicked from `targetId`.
+    public let id: String?
+    public let onToggle: EventHandler?
+
+    public init(options: [Option], id: String? = nil, onToggle: EventHandler? = nil) {
+        self.options = options
+        self.id = id
+        self.onToggle = onToggle
+    }
+
+    public func render() -> String {
+        let attrs: String
+        if let id, let onToggle {
+            attrs = controlAttributes(id: id, event: .click, handler: onToggle)
+        } else {
+            attrs = ""
+        }
+        var html = "<div style=\"display: flex; flex-wrap: wrap; gap: var(--space-2)\""
+        if let id { html += " id=\"\(htmlEscape(id))\"" }
+        html += " role=\"group\"\(attrs)>"
+        for (index, option) in options.enumerated() {
+            var cls = "chip chip--filter"
+            if option.selected { cls += " chip--filter-active" }
+            let chipID = id.map { " id=\"\(htmlEscape("\($0)-opt-\(index)"))\"" } ?? ""
+            html += "<button type=\"button\" class=\"\(cls)\"\(chipID)"
+            if option.selected { html += " aria-pressed=\"true\"" }
+            html += ">\(htmlEscape(option.label))</button>"
+        }
+        html += "</div>"
+        return html
+    }
+}

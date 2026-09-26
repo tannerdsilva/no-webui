@@ -382,6 +382,115 @@ func componentSurfacePins() {
 	let ownThread = rendered(WebUIMessage(name: "You", text: "ok", own: true))
 	#expect(ownThread.contains("chat__thread chat__thread--own"))
 	#expect(ownThread.contains("chat__bubble chat__bubble--own"))
+// p3 composition primitives: card anatomy, field, item, toggle group, scroll top.
+	let tap: EventHandler = { _ in [] }
+	let anatomy = rendered(WebUICard(
+		variant: .outlined,
+		eyebrow: "eyebrow",
+		title: "title",
+		description: "desc",
+		headerIcon: .activity,
+		media: .image,
+		mediaBadge: "badge",
+		text: "text",
+		footerMeta: "meta",
+		actions: { WebUIButton("Go", variant: .primary) }
+	) {
+		Text("body")
+	})
+	#expect(anatomy.contains("card card--outlined"))
+	#expect(anatomy.contains("card__media"))
+	#expect(anatomy.contains("card__media-badge"))
+	#expect(anatomy.contains("card__header"))
+	#expect(anatomy.contains("card__eyebrow"))
+	#expect(anatomy.contains("card__title"))
+	#expect(anatomy.contains("card__icon"))
+	#expect(anatomy.contains("card__desc"))
+	#expect(anatomy.contains("card__text"))
+	#expect(anatomy.contains("card__footer"))
+	#expect(anatomy.contains("card__meta"))
+	#expect(anatomy.contains("card__actions"))
+	// a bare card keeps the old markup: no anatomy slots, just card + body
+	let bare = rendered(WebUICard { Text("x") })
+	#expect(bare.contains("card card--elevated"))
+	#expect(bare.contains("card__body"))
+	#expect(!bare.contains("card__header"))
+	#expect(!bare.contains("card__actions"))
+	#expect(rendered(WebUICard(variant: .horizontal) { Text("x") }).contains("card card--horizontal"))
+	#expect(rendered(WebUICard(variant: .hover) { Text("x") }).contains("card--hover"))
+	#expect(rendered(WebUICard(variant: .compact) { Text("x") }).contains("card--compact"))
+	#expect(rendered(WebUICard(variant: .disabled) { Text("x") }).contains("card--disabled"))
+
+	let field = rendered(WebUIField(
+		label: "Name",
+		controlID: "nm",
+		required: true,
+		note: "taken",
+		noteKind: .error,
+		count: "3 / 20",
+		helper: "Shown on your profile"
+	) {
+		WebUIInput(placeholder: "Name", id: "nm")
+	})
+	#expect(field.contains("class=\"field\""))
+	#expect(field.contains("field__row"))
+	#expect(field.contains("field__label field__label--required"))
+	#expect(field.contains("for=\"nm\""))
+	#expect(field.contains("field__hint field__hint--error"))
+	#expect(field.contains("field__count"))
+	#expect(field.contains("field__helper"))
+	#expect(rendered(WebUIField(label: "x", helper: "bad", helperIsError: true) { Text("y") }).contains("field__helper field__helper--error"))
+	#expect(rendered(WebUIField(label: "x", note: "ok", noteKind: .success) { Text("y") }).contains("field__hint--success"))
+	#expect(rendered(WebUIField(label: "<b>x</b>") { Text("y") }).contains("&lt;b&gt;x&lt;/b&gt;"))
+
+	let row = rendered(WebUIItem(
+		title: "web-01",
+		subtitle: "us-east-1",
+		meta: "42 ms",
+		icon: .server,
+		selected: true,
+		id: "row-1"
+	) {
+		WebUIButton("Open", variant: .ghost, size: .sm)
+	})
+	#expect(row.contains("list__item list__item--selected"))
+	#expect(row.contains("list__icon"))
+	#expect(row.contains("list__title"))
+	#expect(row.contains("list__sub"))
+	#expect(row.contains("list__meta"))
+	#expect(row.contains("list__actions"))
+	#expect(row.contains("list__action"))
+	#expect(row.contains("id=\"row-1\""))
+	#expect(!rendered(WebUIItem(title: "bare")).contains("list__actions"))
+
+	let chips = rendered(WebUIToggleGroup(
+		options: [
+			WebUIToggleGroup.Option("all", "All", selected: true),
+			WebUIToggleGroup.Option("web", "Web"),
+		],
+		id: "filters",
+		onToggle: tap
+	))
+	#expect(chips.contains("chip chip--filter chip--filter-active"))
+	#expect(chips.contains("chip chip--filter\""))
+	#expect(chips.contains("aria-pressed=\"true\""))
+	#expect(chips.contains("id=\"filters-opt-0\""))
+	#expect(chips.contains("data-component-id=\"filters\""))
+	#expect(chips.contains("role=\"group\""))
+	#expect(chips.contains("flex-wrap: wrap"))
+
+	let top = rendered(WebUIScrollTop(progress: 0.4, id: "to-top", onTap: tap))
+	#expect(top.contains("scroll-top scroll-top--ring"))
+	#expect(top.contains("scroll-top__ring"))
+	#expect(top.contains("ring__track"))
+	#expect(top.contains("ring__fill"))
+	#expect(top.contains("stroke-dashoffset=\"60.0\""))
+	#expect(top.contains("scroll-top__icon"))
+	#expect(top.contains("aria-label=\"Back to top\""))
+	#expect(top.contains("data-component-id=\"to-top\""))
+	let plainTop = rendered(WebUIScrollTop())
+	#expect(!plainTop.contains("scroll-top--ring"))
+	#expect(plainTop.contains("scroll-top__icon"))
 }
 
 @Test("composite components pin their surface")

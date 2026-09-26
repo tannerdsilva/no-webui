@@ -227,25 +227,74 @@ public struct WebUIInput: View {
 }
 
 // MARK: - WebUI Card
+/// the card surface plus the anatomy the sheet styles above the body:
+/// an optional media block (with a badge), a header (eyebrow / title / trailing
+/// glyph), the body itself, a footer meta line, and a full-bleed action bar.
+/// every anatomy slot defaults to absent, so a bare `WebUICard { … }` renders
+/// exactly the markup it always has.
 public struct WebUICard: View {
     public enum Variant: String, Sendable {
         case elevated = "card--elevated"
         case outlined = "card--outlined"
         case flat     = "card--flat"
         case interactive = "card--interactive"
+        /// media beside the body (`.card--horizontal`).
+        case horizontal  = "card--horizontal"
+        /// hover-lift without the pointer affordance (`.card--hover`).
+        case hover       = "card--hover"
+        /// tighter body padding (`.card--compact`).
+        case compact     = "card--compact"
+        /// inert treatment (`.card--disabled`).
+        case disabled    = "card--disabled"
     }
 
     public let variant: Variant
     public let id: String?
     public let children: [any View]
+    /// small caps label above the title.
+    public let eyebrow: String?
+    public let title: String?
+    /// muted line under the title.
+    public let description: String?
+    /// glyph in the header's trailing slot.
+    public let headerIcon: IconName?
+    /// leading media block. a glyph placeholder, so the component never has to
+    /// sanitize caller-supplied geometry.
+    public let media: IconName?
+    /// badge text over the media block.
+    public let mediaBadge: String?
+    /// muted copy above the body's own content.
+    public let text: String?
+    /// footer's meta line.
+    public let footerMeta: String?
+    /// full-bleed action bar under the body.
+    public let actions: [any View]
 
     public init(
         variant: Variant = .elevated,
         id: String? = nil,
+        eyebrow: String? = nil,
+        title: String? = nil,
+        description: String? = nil,
+        headerIcon: IconName? = nil,
+        media: IconName? = nil,
+        mediaBadge: String? = nil,
+        text: String? = nil,
+        footerMeta: String? = nil,
+        @ViewBuilder actions: () -> [any View] = { [] },
         @ViewBuilder content: () -> [any View]
     ) {
         self.variant = variant
         self.id = id
+        self.eyebrow = eyebrow
+        self.title = title
+        self.description = description
+        self.headerIcon = headerIcon
+        self.media = media
+        self.mediaBadge = mediaBadge
+        self.text = text
+        self.footerMeta = footerMeta
+        self.actions = actions()
         self.children = content()
     }
 
@@ -253,15 +302,41 @@ public struct WebUICard: View {
         var html = "<div class=\"card \(variant.rawValue)\""
         if let id { html += " id=\"\(htmlEscape(id))\"" }
         html += ">"
+        if let media {
+            html += "<div class=\"card__media\">"
+            if let mediaBadge { html += "<span class=\"card__media-badge\">\(htmlEscape(mediaBadge))</span>" }
+            html += WebUIIcon(media, size: .extraLarge).render()
+            html += "</div>"
+        }
+        if eyebrow != nil || title != nil || headerIcon != nil {
+            html += "<div class=\"card__header\"><div>"
+            if let eyebrow { html += "<span class=\"card__eyebrow\">\(htmlEscape(eyebrow))</span>" }
+            if let title { html += "<div class=\"card__title\">\(htmlEscape(title))</div>" }
+            html += "</div>"
+            if let headerIcon {
+                html += "<span class=\"card__icon\">" + WebUIIcon(headerIcon, size: .medium).render() + "</span>"
+            }
+            html += "</div>"
+        }
         // the padded interior: the design-system `.card__body` rule carries
         // the `--space-4` default, so a consumer can override the padding
         // through the normal cascade (modifier or page-scoped style)
         // without touching this component.
         html += "<div class=\"card__body\">"
+        if let description { html += "<div class=\"card__desc\">\(htmlEscape(description))</div>" }
+        if let text { html += "<div class=\"card__text\">\(htmlEscape(text))</div>" }
         for child in children {
             html += child.render()
         }
+        if let footerMeta {
+            html += "<div class=\"card__footer\"><span class=\"card__meta\">\(htmlEscape(footerMeta))</span></div>"
+        }
         html += "</div>"
+        if !actions.isEmpty {
+            html += "<div class=\"card__actions\">"
+            for action in actions { html += action.render() }
+            html += "</div>"
+        }
         html += "</div>"
         return html
     }

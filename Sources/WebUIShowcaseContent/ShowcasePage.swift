@@ -831,6 +831,72 @@ public struct ShowcasePage: Sendable {
                                 ]),
                             ])
                         }
+                        demoCard("WebUICard - anatomy slots and variants") {
+                            VStack(spacing: 16) {
+                                WebUICard(
+                                    variant: .outlined,
+                                    eyebrow: "Uptime",
+                                    title: "99.98%",
+                                    description: "Rolling 30 days",
+                                    headerIcon: .activity,
+                                    text: "Two incidents, both under five minutes.",
+                                    footerMeta: "updated 2m ago",
+                                    actions: {
+                                        WebUIButton("Inspect", variant: .ghost, size: .sm)
+                                        WebUIButton("Share", variant: .primary, size: .sm)
+                                    }
+                                ) {
+                                    Text("The body keeps its own padding; every anatomy slot is optional.")
+                                }
+                                HStack(alignment: .top, spacing: 16) {
+                                    WebUICard(variant: .hover) { Text("hover") }
+                                    WebUICard(variant: .compact) { Text("compact") }
+                                    WebUICard(variant: .disabled) { Text("disabled") }
+                                }
+                                WebUICard(variant: .horizontal, title: "Horizontal", description: "media beside the body", media: .image) {
+                                    Text("card--horizontal moves the media block into the leading column.")
+                                }
+                            }
+                        }
+                        demoCard("WebUIField - label, note, counter, helper") {
+                            VStack(spacing: 16) {
+                                WebUIField(label: "Workspace name", controlID: "field-name", required: true, count: "4 / 32", helper: "Shown to everyone in the org.") {
+                                    WebUIInput(placeholder: "acme", id: "field-name")
+                                }
+                                WebUIField(label: "API key", note: "invalid", noteKind: .error, helper: "Regenerate it from the console.", helperIsError: true) {
+                                    WebUIInput(placeholder: "key_...", id: "field-key")
+                                }
+                                WebUIField(label: "Domain", note: "available", noteKind: .success) {
+                                    WebUIInput(placeholder: "acme.dev", id: "field-domain")
+                                }
+                            }
+                        }
+                        demoCard("WebUIItem - rows with hover-revealed actions") {
+                            Div {
+                                WebUIItem(title: "web-01", subtitle: "us-east-1", meta: "42 ms", icon: .server, selected: true) {
+                                    WebUIButton("Open", variant: .ghost, size: .sm)
+                                    WebUIButton("Restart", variant: .danger, size: .sm)
+                                }
+                                WebUIItem(title: "api-01", subtitle: "eu-west-2", meta: "18 ms", icon: .server) {
+                                    WebUIButton("Open", variant: .ghost, size: .sm)
+                                }
+                                WebUIItem(title: "search-01", subtitle: "us-west-2", meta: "61 ms", icon: .server)
+                            }
+                        }
+                        demoCard("WebUIToggleGroup - filter chips") {
+                            WebUIToggleGroup(options: [
+                                WebUIToggleGroup.Option("all", "All", selected: true),
+                                WebUIToggleGroup.Option("web", "Web"),
+                                WebUIToggleGroup.Option("api", "API"),
+                                WebUIToggleGroup.Option("search", "Search", selected: true),
+                            ], id: "filter-chips")
+                        }
+                        demoCard("WebUIScrollTop - with progress ring") {
+                            Div(class: "scroll-top-stage") {
+                                Paragraph("The affordance floats over its stage and its ring fills with scroll progress.")
+                                WebUIScrollTop(progress: 0.35, id: "to-top")
+                            }
+                        }
                     }
                 }
 
