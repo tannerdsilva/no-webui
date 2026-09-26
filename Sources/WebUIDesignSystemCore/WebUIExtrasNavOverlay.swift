@@ -760,7 +760,9 @@ public struct WebUIMenu: View {
             if item.submenu { cls += " menu__item--has-sub" }
             let itemID = id.map { " id=\"\(htmlEscape("\($0)-item-\(index)"))\"" } ?? ""
             html += "<button class=\"\(cls)\"\(itemID) role=\"menuitem\"\(item.disabled ? " disabled" : "")>"
-            if let avatar = item.avatar { html += "<span class=\"menu__avatar\">\(htmlEscape(avatar))</span>" }
+            if let avatar = item.avatar {
+                html += "<span class=\"menu__avatar\"><span class=\"avatar avatar--initials avatar--sm\">\(htmlEscape(avatar))</span></span>"
+            }
             if let icon = item.icon { html += "<span class=\"menu__icon\">\(WebUIIcon(icon, size: .small).render())</span>" }
             html += "<span class=\"menu__label\">\(htmlEscape(item.label))</span>"
             if let hint = item.hint { html += "<span class=\"menu__hint\">\(htmlEscape(hint))</span>" }

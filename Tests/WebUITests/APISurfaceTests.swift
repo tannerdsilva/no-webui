@@ -524,6 +524,7 @@ func componentSurfacePins() {
 	#expect(menu.contains("menu__item--has-sub"))
 	#expect(menu.contains("menu__item--danger"))
 	#expect(menu.contains("menu__avatar"))
+    #expect(menu.contains("avatar avatar--initials avatar--sm"))
 	#expect(menu.contains("menu__hint"))
 	let plainMenu = rendered(WebUIMenu(items: [WebUIMenu.Item("Only")]))
 	#expect(!plainMenu.contains("menu__panel"))
