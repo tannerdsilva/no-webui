@@ -172,11 +172,10 @@ swift run TheirServer
   custom sections by default** (name table + DWARF — ~15% smaller artifact,
   no behavior change); pass `--no-strip` to keep readable stack traces in
   devtools. requires `--disable-sandbox` (like the serve/smoke verbs).
-- **products for consumers**: `WebUIClientRuntime`, `WebUICore`,
-  `WebUIDesignSystemCore`, `WebUIClient` are library/executable products of
-  no-webui — your client target links `WebUIClientRuntime` + `WebUICore` and
-  installs the runtime wiring (`ClientExecutor.install()` +
-  `ClientRuntime.boot()`), mirroring the reference `WebUIClient` reactor.
+- **the client runtime is the engine** (`/ui/webui-engine.js`, shipped by the
+  framework): a consumer app links `WebUICore`,
+  (the published `WebUIClientRuntime` / `.wasm` client product was deleted — the
+  engine plus per-page wasm capability islands is the client architecture now).
 - **flip the page**: `HTMLDocument(…, clientMode: ClientBoot(wasmURL: …))` /
   `WebUIDocument(…, clientMode: …)`. `wasmURL` is the url your server serves
   the artifact at (use `WebUIBoot.wasmProductURL(productName: "TheirClient")`

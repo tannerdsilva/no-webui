@@ -48,7 +48,7 @@ inline comments explain code, markdown files explain architecture and APIs.
 
 ```bash
 swift build             # includes the WebUIAssetPlugin + WebUIIconPlugin + WebUIWasmPlugin (auto-generates Assets+Generated.swift + DesignTokens+Generated.swift + IconLibrary.swift + Wasm+Generated.swift)
-swift test              # 866 tests — re-count rather than trust: grep -rc '@Test' Tests/ | awk -F: '{s+=$2} END {print s}'
+swift test              # 805 tests — re-count rather than trust: grep -rc '@Test' Tests/ | awk -F: '{s+=$2} END {print s}'
 swift run WebUIExample  # example server on :9090
 ```
 
@@ -103,7 +103,6 @@ for the designer workflow.
 | `fullstack-smoke` | `swift package --disable-sandbox plugin fullstack-smoke` | self-contained gate: spawns the server, drives live WebSocket round-trips (click/echo/redirect/optimistic) via node, tears down. |
 | `probe` | `swift package plugin probe [port]` | connect-based port check (bind-probe is sandbox-denied). |
 | `showcase` | `swift package plugin showcase --allow-writing-to-package-directory` | regenerates `designer/previews/showcase.html` directly (declared `writeToPackageDirectory`). add `--output <path>` for ad-hoc targets. |
-| `wasm-client` | `swift package --disable-sandbox plugin wasm-client [--product X] [--no-strip]` | cross-builds the wasm client product with the official sdk into `.build/wasm-client-scratch` (isolated root; in-package `.build` would deadlock), strips custom sections by default, copies the artifact to the canonical serving path. |
 
 svg icon toolset (an executable target, not a plugin — the plugin
 `WebUIIconPlugin` runs `generate` automatically during every build):
@@ -235,12 +234,6 @@ invocation. gates host their own server, check, and tear down in one call.
 - **ObserverList** — thread-safe collection of Observable conformers. max 100
   observers by default.
 - **CSRFProtection** — stateless HMAC-SHA256 tokens. no server-side storage.
-- **client-runtime test isolation** — every test that touches the
-  `ClientRuntime` statics (`boot()`/`bootSearch()`/`router`/`nameIndex`) must
-  live in the single `.serialized` `ClientRuntimeTests` suite. a concurrent
-  suite's `bootSearch()` registers a dozen handlers into the shared router,
-  and a read that lands between `boot()` and that registration fails
-  `handlerCount` — a linux-exposed flake, not a logic bug.
 
 ### asset embedding
 

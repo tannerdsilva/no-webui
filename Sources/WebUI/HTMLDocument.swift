@@ -55,12 +55,9 @@ public struct HTMLDocument: Sendable {
     public static let defaultIcon = "<link rel=\"icon\" type=\"image/png\" href=\"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAApklEQVR4nO2XwQ2AIAxF2ahDeWQZb07idkINCQejECgpfDSS/BvQ118C1JhZB1lmsuyVxNLAjiwfynJFkBhcO/BdaYhBwfMQnWzPlgOZ/dOFeFJHA/h3AWy7TKoAzG1SAQjZhM2Wtd7eMDesKTghA5DW+HsA0kOoDtCib5XgB4ADwC4iQl/FVydgj1EnzQWA/ZIZ9KcU4AK0N6jqjjCtWQJkfHM6epyUsxUEgyvS4gAAAABJRU5ErkJggg==\">"
     /// the default client boot emitted when the caller omits `clientMode`.
     /// the engine is the default client runtime for server-rendered pages
-    /// (next architecture, `NEXT_ARCHITECTURE.md`); the wasm client remains
-    /// available via an explicit `ClientBoot(flavor: .wasm, …)` for applet
-    /// and client-mode pages.
-    public static let defaultBoot: ClientBoot = ClientBoot(
-        flavor: .engine
-    )
+    /// (next architecture, `NEXT_ARCHITECTURE.md`). capability islands are
+    /// declared per page.
+    public static let defaultBoot = ClientBoot()
     /// ` dir="rtl"` when a base direction is set. only `ltr`/`rtl` are ever
     /// emitted: anything else is dropped rather than written into the page.
     private var dirAttribute: String {
@@ -132,7 +129,7 @@ public struct HTMLDocument: Sendable {
         } else if includeRuntime {
             let base = Self.defaultBoot
             if let cfg = runtimeConfig, !cfg.isEmpty {
-                boot = ClientBoot(wasmURL: base.wasmURL, mode: base.mode, config: cfg, scriptURLs: base.scriptURLs, flavor: base.flavor)
+                boot = ClientBoot(config: cfg)
             } else {
                 boot = base
             }

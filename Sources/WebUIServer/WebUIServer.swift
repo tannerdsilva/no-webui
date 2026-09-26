@@ -359,8 +359,6 @@ final class Runner: Sendable {
 						contentType: "text/javascript; charset=utf-8",
 						gzip: canGzip
 					)
-				} else if uri.hasPrefix("/__assets/webui-client."), uri.hasSuffix(".wasm") {
-					try await respondWasm(channel: channel.channel)
 				} else if uri == config.pagePath || uri == "/index.html" {
 					// the server owns the render context: handlers a page wires
 					// through `.onX`/`controlAttributes` register into THIS
@@ -395,17 +393,10 @@ final class Runner: Sendable {
 		gzip: Bool = false
 	) async throws {
 		var payload = Array(body.utf8)
-		if gzip, payload.count > 256, let compressed = GzipEncoder.encode(payload) {
-			payload = compressed
-		}
 		var head = HTTPResponseHead(version: .http1_1, status: status)
 		head.headers.replaceOrAdd(name: "Content-Type", value: contentType)
 		head.headers.replaceOrAdd(name: "Content-Length", value: "\(payload.count)")
 		head.headers.replaceOrAdd(name: "Connection", value: "close")
-		if gzip, payload.count != body.utf8.count {
-			head.headers.replaceOrAdd(name: "Content-Encoding", value: "gzip")
-			head.headers.replaceOrAdd(name: "Vary", value: "Accept-Encoding")
-		}
 		// security headers — parity with the reference servers.
 		head.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
 		head.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
@@ -422,25 +413,6 @@ final class Runner: Sendable {
 		try await channel.writeAndFlush(HTTPPart<HTTPResponseHead, ByteBuffer>.end(nil)).get()
 	}
 
-	private func respondWasm(channel: Channel) async throws {
-		guard let url = WebUIBoot.wasmProductURL(productName: "WebUIClient"),
-			let data = try? Data(contentsOf: url)
-		else {
-			try await respond404(channel: channel)
-			return
-		}
-		var head = HTTPResponseHead(version: .http1_1, status: .ok)
-		head.headers.replaceOrAdd(name: "Content-Type", value: "application/wasm")
-		head.headers.replaceOrAdd(name: "Content-Length", value: "\(data.count)")
-		head.headers.replaceOrAdd(name: "Connection", value: "close")
-		// the artifact is content-addressed by its sha, so it is immutable.
-		head.headers.replaceOrAdd(name: "Cache-Control", value: "public, max-age=31536000, immutable")
-		var buf = ByteBuffer()
-		buf.writeBytes(data)
-		_ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.head(head))
-		_ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.body(buf))
-		try await channel.writeAndFlush(HTTPPart<HTTPResponseHead, ByteBuffer>.end(nil)).get()
-	}
 
 	private func respond404(channel: Channel) async throws {
 		try await respond(

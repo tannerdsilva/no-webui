@@ -207,3 +207,8 @@ free core already exists; embedded tier is kB-scale per `WASM_TRAJECTORY.md` §
 | d6 | shell + engine + css cacheable/immutable/brotli; no mandatory binary on any page | design | proposed |
 | d7 | no ci gates; in-repo ladder only | user | stays locked |
 | d8 | p3 diff protocol only if measured payoff on patch bytes | design | open |
+
+> **note (post-deletion):** the wasm monolith client (`WebUIClientRuntime`,
+> `WebUIClient`, the chamber + content-addressed artifact) has been deleted. the
+> engine is the client runtime; wasm survives only as capability islands. any
+> reference to the client boot below is historical.

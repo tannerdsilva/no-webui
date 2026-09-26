@@ -325,3 +325,7 @@ their awaits to quiescence. full detail: `Documentation/WASM_BOOTSTRAP.md` +
 | Per-request render cost | `WebUIDocument` hoists the minified design sheet (layout rules + embedded css) to a startup constant and embeds it verbatim (`HTMLDocument.preMinifiedStyles`) instead of re-minifying ~300 kb of css per request — probe-measured 11 ms → <0.01 ms in release. `/__assets/css` likewise serves the minified sheet (comment-free; the first law now holds on every endpoint) |
 | Event-loop CPU isolation | Argon2id runs on a dedicated `NIOThreadPool` (`--argon2-workers`, default 2), never on a connection's event loop; event handlers are `@Sendable async` and can hop off-loop for heavy work |
 | Memory ceiling on small hosts | `ConnectionGate` caps concurrent connections (`--max-connections`, default 256) with admission enforced in the child channel initializer — bare connect-only sockets count toward the cap, so a connect-flood cannot sidestep it — and a 120 s read-idle reaper guards plain http and websockets alike (`--event-loops` sizes the nio group) |
+> **note (post-deletion):** the wasm monolith client (`WebUIClientRuntime`,
+> `WebUIClient`, the chamber + content-addressed artifact) has been deleted. the
+> engine is the client runtime; wasm survives only as capability islands. any
+> reference to the client boot below is historical.

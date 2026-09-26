@@ -154,3 +154,8 @@ frozen surface is a mistake:
   `swift build` → `swift test` → `swift package --disable-sandbox plugin
   smoke` → `plugin fullstack-smoke` → `node designer/browser-smoke.mjs`,
   each self-contained and runnable by one human.
+
+> **note (post-deletion):** the wasm monolith client (`WebUIClientRuntime`,
+> `WebUIClient`, the chamber + content-addressed artifact) has been deleted. the
+> engine is the client runtime; wasm survives only as capability islands. any
+> reference to the client boot below is historical.

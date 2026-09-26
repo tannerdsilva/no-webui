@@ -100,6 +100,21 @@ all notable changes to this project are documented here.
   emits has now caught three pre-existing orphan classes - css emitted by shipped
   components with no rules in the sheet.
 
+### the wasm monolith client is deleted
+
+- `WebUIClientRuntime`, `WebUIClient` (and their test target), the `WebUIWasmPlugin`
+  artifact carrier, the `wasm-client` plugin verb, the chamber/boot/worker assets and
+  `WebUIBoot` are gone. **the engine is the client runtime**; wasm survives only as
+  capability islands (`WebUIIslandCore`, `WebUIValidateIsland`, the `wasm-island`
+  verb, `WebUIWasmTool`), which share the same toolchain and `WebUISharedCore` leaf.
+- why: the chamber fetched and instantiated a 55 mb module (~12 mb brotli) on every
+  app-mode page for work the ~37 kb engine does, and it could not render server
+  views. `NEXT_ARCHITECTURE.md` records the measurement.
+- `ClientBoot` survives, describing the engine boot only; the smoke<|place_holder_mm_span_0442|> preview's
+  `WEBUI_BOOT=wasm` mode, its client routes and the demo pages are gone with the
+  path. the six `WASM_*.md` design documents were deleted outright (git history
+  keeps them). the consumer skill no longer promises a link-able client product.
+
 ## [1.0.0] — stability epoch (2026-09-20)
 
 ### stability epoch

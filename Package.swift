@@ -17,10 +17,6 @@ let package = Package(
             targets: ["WebUICore"]
         ),
         .library(
-            name: "WebUIClientRuntime",
-            targets: ["WebUIClientRuntime"]
-        ),
-        .library(
             name: "WebUIDesignSystem",
             targets: ["WebUIDesignSystem"]
         ),
@@ -43,18 +39,6 @@ let package = Package(
         .library(
             name: "WebUIBlocks",
             targets: ["WebUIBlocks"]
-        ),
-        .executable(
-            name: "WebUIClient",
-            targets: ["WebUIClient"]
-        ),
-        .plugin(
-            name: "WebUIWasmPlugin",
-            targets: ["WebUIWasmPlugin"]
-        ),
-        .plugin(
-            name: "WebUIWasmClientPlugin",
-            targets: ["WebUIWasmClientPlugin"]
         ),
         .plugin(
             name: "WebUIIslandPlugin",
@@ -122,29 +106,6 @@ let package = Package(
             ],
             plugins: [
                 "WebUIAssetPlugin",
-                "WebUIWasmPlugin",
-            ]
-        ),
-        .target(
-            name: "WebUIClientRuntime",
-            dependencies: [
-                "WebUICore",
-                "WebUISharedCore",
-                "WebUIDesignSystemCore",
-                "WebUIChart",
-            ],
-            swiftSettings: [
-                // the official sdk's wasm import primitive (@_extern(wasm, module:name:))
-                .unsafeFlags(["-enable-experimental-feature", "Extern"]),
-            ]
-        ),
-        .executableTarget(
-            name: "WebUIClient",
-            dependencies: [
-                "WebUIClientRuntime",
-                "WebUISmokeShared",
-                "WebUIDesignSystemCore",
-                "WebUIChart",
             ]
         ),
         // the capability-island core: same-swift logic that compiles to a
@@ -368,25 +329,6 @@ let package = Package(
             ]
         ),
         .plugin(
-            name: "WebUIWasmPlugin",
-            capability: .buildTool(),
-            dependencies: [
-                .target(name: "WebUIWasmTool"),
-            ]
-        ),
-        .plugin(
-            name: "WebUIWasmClientPlugin",
-            capability: .command(
-                intent: .custom(
-                    verb: "wasm-client",
-                    description: "Cross-build the wasm client product with the wasm SDK (requires --disable-sandbox; builds into .build/wasm-client-scratch then copies the stripped artifact to .build/out/…)."
-                )
-            ),
-            dependencies: [
-                .target(name: "WebUIWasmTool"),
-            ]
-        ),
-        .plugin(
             name: "WebUIIslandPlugin",
             capability: .command(
                 intent: .custom(
@@ -501,17 +443,6 @@ let package = Package(
             dependencies: [
                 "WebUIIslandCore",
                 "WebUISharedCore",
-                "WebUIClientRuntime",
-            ]
-        ),
-        .testTarget(
-            name: "WebUIClientTests",
-            dependencies: [
-                "WebUIClientRuntime",
-                "WebUICore",
-                "WebUISharedCore",
-                "WebUIDesignSystemCore",
-                "WebUISmokeShared",
             ]
         ),
         .testTarget(

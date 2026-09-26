@@ -11,7 +11,6 @@
 
 const BASE = "http://127.0.0.1:9123";
 const WS = "ws://127.0.0.1:9123/ws";
-const WASM = process.env.WEBUI_BOOT === "wasm";
 
 let pass = 0, fail = 0;
 const ok = (m) => { pass++; console.log(`  PASS ${m}`); };
@@ -24,8 +23,10 @@ if (html.includes("Full-Stack Smoke Test")) ok("page serves full-stack design-sy
 else bad("page title wrong");
 if (html.includes("data-component-id")) ok("event-delegation attributes present");
 else bad("no data-component-id");
-if (WASM ? html.includes("webui-wasm") : html.includes("/ui/webui-engine.js")) ok(WASM ? "wasm client contract present (webui-wasm meta)" : "engine client contract present (webui-engine.js)");
-else bad(WASM ? "wasm client contract missing" : "engine client contract missing");
+if (html.includes("/ui/webui-engine.js")) ok("engine client contract present (webui-engine.js)");
+else bad("engine client contract missing");
+if (html.includes("/ui/webui-engine.js")) ok("engine client contract present (webui-engine.js)");
+else bad("engine client contract missing");
 if (html.includes('id="counter-value"') && html.includes('id="echo-input"')) ok("interactive view ids present");
 else bad("interactive view ids missing");
 if (html.includes("data-optimistic")) ok("optimistic prediction wired on served page");
@@ -173,43 +174,6 @@ if (t && !t.fragments[0].html.includes("table__detail-row")) ok("table: collapse
 else bad(`collapse wrong: ${t ? "detail row still present" : "no update"}`);
 
 ws.close();
-
-// 8. Client-mode wire probe (p1): the wasm artifact, the chamber, and the
-// client-demo page served with their client-mode markers.
-const wasm = await (await fetch(BASE + "/__assets/app.wasm")).arrayBuffer();
-const magic = new Uint8Array(wasm.slice(0, 4));
-const version = new Uint8Array(wasm.slice(4, 8));
-if (magic.join(",") === "0,97,115,109" && version[0] === 1) ok(`client wasm served with valid magic/version (${wasm.byteLength} bytes)`);
-else bad("client wasm missing or malformed");
-const chamber = await (await fetch(BASE + "/__assets/webui-client.js")).text();
-if (chamber.includes("WebUIClient") && !chamber.includes("/*")) ok("chamber served, comment-free");
-else bad("chamber not served or carries comments");
-const demo = await (await fetch(BASE + "/__assets/client-demo")).text();
-if (
-  demo.includes("'wasm-unsafe-eval'") && demo.includes('id="app"') &&
-  demo.includes("webui-client.js") && !demo.includes("WebUIRuntime.init")
-) ok("client-demo page carries client csp + external scripts");
-else bad("client-demo page missing client-mode markers");
-
-const searchDemo = await (await fetch(BASE + "/__assets/search-demo")).text();
-if (
-  searchDemo.includes("'wasm-unsafe-eval'") && searchDemo.includes('id="search-app"') &&
-  searchDemo.includes("search-demo-boot.js") && !searchDemo.includes("WebUIRuntime.init")
-) ok("search-demo page carries client csp + search boot script");
-else bad("search-demo page missing client-mode markers");
-
-// content-addressed wasm distribution: the page meta points at the immutable
-// route; it must serve the same bytes as the alias, with an immutable cache.
-const demoHtml = await (await fetch(BASE + "/__assets/client-demo")).text();
-const metaMatch = demoHtml.match(/<meta name="webui-wasm" content="([^"]+)"/);
-if (metaMatch && metaMatch[1]) {
-  const hashedResp = await fetch(BASE + metaMatch[1]);
-  const hashed = await hashedResp.arrayBuffer();
-  const alias = await (await fetch(BASE + "/__assets/app.wasm")).arrayBuffer();
-  const cc = (hashedResp.headers.get("cache-control") || "").toLowerCase();
-  if (hashed.byteLength === alias.byteLength && cc.includes("immutable")) ok(`content-addressed wasm route serves identical bytes with immutable cache (${metaMatch[1]})`);
-  else bad(`content-addressed wasm route broken (immutable=${cc.includes("immutable")}, bytes=${hashed.byteLength}/${alias.byteLength})`);
-} else bad("webui-wasm meta missing from client-demo page");
 
 console.log(`\n=== summary: ${pass} passed, ${fail} failed ===`);
 console.log(fail === 0 ? "FULL-STACK SMOKE PASS" : "FULL-STACK SMOKE FAIL");

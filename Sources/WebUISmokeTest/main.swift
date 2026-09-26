@@ -427,18 +427,11 @@ func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
 			}
 		}
 	}
-	// the gate-drive mode switch: WEBUI_BOOT=wasm boots the same interactive
-	// page through the explicit wasm client (chamber + artifact); the default
-	// (unset or =engine) boots the engine — the framework default after the
-	// next-architecture flip.
-	let wasmMode = ProcessInfo.processInfo.environment["WEBUI_BOOT"] == "wasm"
 		return WebUIDocument(
 			title: "Design System Full-Stack Smoke Test",
 			body: body,
 			head: smokePageStyle,
-			clientMode: wasmMode
-				? ClientBoot(wasmURL: clientWasmURL(WebUIBoot.wasmSHA256), config: RuntimeConfig(), flavor: .wasm)
-				: ClientBoot(config: RuntimeConfig(capabilities: ["validate", "never-built", "offline"]), flavor: .engine),
+			clientMode: ClientBoot(config: RuntimeConfig(capabilities: ["validate", "never-built", "offline"])),
 			dir: smokeDir,
 		).render()
 	}
@@ -503,18 +496,15 @@ struct SmokeApp {
 	let router: EventRouter
 	let pageHTML: String
 	let connectionGate: ConnectionGate
-	let clientWasm: [UInt8]
-	let clientWasmHash: String
 	let islandValidate: [UInt8]
-	let clientDemoPage: String
-	let searchDemoPage: String
 }
 
 /// read a release wasm product (built separately with the wasm sdk) so the
 /// smoke server can serve it as a first-class static asset. an absent
 /// artifact yields empty bytes and the route 404s (gates build it first).
 func readWasmArtifact(_ product: String) -> [UInt8] {
-	guard let url = WebUIBoot.wasmProductURL(productName: product) else { return [] }
+	let url = URL(fileURLWithPath: ".build/out/Products/Release-webassembly-wasm32/\(product).wasm")
+	guard FileManager.default.fileExists(atPath: url.path) else { return [] }
 	let path = url.path
 	let fd = open(path, O_RDONLY)
 	guard fd >= 0 else { return [] }
@@ -530,46 +520,13 @@ func readWasmArtifact(_ product: String) -> [UInt8] {
 	return bytes
 }
 
-/// the content-addressed wasm url (immutable-cached) or the no-store alias
-/// when the artifact is absent.
-func clientWasmURL(_ hash: String) -> String {
-	hash.isEmpty ? "/__assets/app.wasm" : "/__assets/app.\(hash).wasm"
-}
 
 /// the client-mode hydration probe page (clientMode contract emitted by the
 /// framework — the smoke server only supplies the artifact url + script urls).
-func makeClientDemoPage(wasmHash: String) -> String {
-	let body = HydrationView().render()
-	let boot = ClientBoot(
-		wasmURL: clientWasmURL(wasmHash),
-		mode: .hydrate,
-		scriptURLs: ["/__assets/webui-client.js", "/__assets/client-demo-boot.js"]
-	)
-	return HTMLDocument(
-		title: "WebUI Client Render — Hydration Probe",
-		body: "<div id=\"app\" class=\"smoke\">\(body)</div>",
-		clientMode: boot,
-		includeRuntime: false
-	).render()
-}
 
 /// the local-search vertical page. the wasm boots the search page (webui_init),
 /// mounts it into `#search-app`, and dispatches delegated events entirely in
 /// wasm — the websocket stays silent on the hot path.
-func makeSearchDemoPage(wasmHash: String) -> String {
-	let boot = ClientBoot(
-		wasmURL: clientWasmURL(wasmHash),
-		mode: .app,
-		config: RuntimeConfig(capabilities: ["focus", "clipboard", "broadcast", "files", "fullscreen", "media"], persistence: "indexeddb"),
-		scriptURLs: ["/__assets/webui-client.js", "/__assets/search-demo-boot.js"]
-	)
-	return HTMLDocument(
-		title: "WebUI Client Render — Local Search",
-		body: "<div id=\"search-app\" class=\"search\"></div>",
-		clientMode: boot,
-		includeRuntime: false
-	).render()
-}
 
 enum SmokeUpgradeResult: Sendable {
 	case websocket(NIOAsyncChannel<WebSocketFrame, WebSocketFrame>)
@@ -592,19 +549,13 @@ extension SmokeApp {
 		let router = EventRouter()
 		let page = renderSmokePage(state: state, router: router)
 		let connectionGate = ConnectionGate(maximum: intFlag(named: "--max-connections", default: 256))
-		let clientWasm = readWasmArtifact("WebUIClient")
-		let wasmHash = WebUIBoot.wasmHash(of: clientWasm)
 		let islandValidate = readWasmArtifact("WebUIValidateIsland")
 		let app = SmokeApp(
 			state: state,
 			router: router,
 			pageHTML: page,
 			connectionGate: connectionGate,
-			clientWasm: clientWasm,
-			clientWasmHash: wasmHash,
 			islandValidate: islandValidate,
-			clientDemoPage: makeClientDemoPage(wasmHash: wasmHash),
-			searchDemoPage: makeSearchDemoPage(wasmHash: wasmHash)
 		)
 		let logger = Logger(label: "webui.smoketest")
 		logger.info("full-stack smoke page rendered (\(page.utf8.count) bytes)")
@@ -761,38 +712,6 @@ extension SmokeApp {
 					try await respond405(channel: channel.channel)
 					return
 				}
-				if head.uri == "/__assets/app.wasm" {
-					guard !self.clientWasm.isEmpty else {
-						try await respond404(channel: channel.channel)
-						return
-					}
-					// the fixed-name alias stays no-store (gates + probes fetch by
-					// name and must never see a stale binary).
-					try await respond(channel: channel.channel, bytes: self.clientWasm, contentType: "application/wasm")
-					return
-				}
-				if !self.clientWasmHash.isEmpty, head.uri == "/__assets/app.\(self.clientWasmHash).wasm" {
-					// the content-addressed timer: immutable cache for a year; the
-					// hash changes with the binary, so this route can never go stale.
-					try await respond(
-						channel: channel.channel,
-						bytes: self.clientWasm,
-						contentType: "application/wasm",
-						cacheControl: "public, max-age=31536000, immutable"
-					)
-					return
-				}
-				if head.uri.hasPrefix("/__assets/webui-client."), head.uri.hasSuffix(".wasm") {
-					// the framework's wasm-always default client route —
-					// content-addressed & immutable.
-					try await respond(
-						channel: channel.channel,
-						bytes: self.clientWasm,
-						contentType: "application/wasm",
-						cacheControl: "public, max-age=31536000, immutable"
-					)
-					return
-				}
 				if head.uri == "/__assets/webui-validate.wasm" {
 					// the validate capability island (next architecture d3);
 					// the engine fetches it lazily when a page declares the
@@ -831,28 +750,12 @@ extension SmokeApp {
 							+ "<p><a href=\"/blocks\">all blocks</a></p></body></html>"
 					}
 					contentType = "text/html; charset=utf-8"
-				case "/ui/webui-client.js":
-					text = WebUIAssets.client; contentType = "text/javascript; charset=utf-8"
-				case "/ui/webui-app-boot.js":
-					text = WebUIAssets.clientBoot; contentType = "text/javascript; charset=utf-8"
 				case "/ui/webui-engine.js":
 					text = WebUIAssets.engine; contentType = "text/javascript; charset=utf-8"
 					cacheControl = "public, max-age=3600"
 				case "/ui/webui-shell.js":
 					text = WebUIAssets.shell; contentType = "text/javascript; charset=utf-8"
 					cacheControl = "public, max-age=3600"
-				case "/__assets/webui-client.js":
-					text = WebUIAssets.client; contentType = "text/javascript; charset=utf-8"
-				case "/__assets/webui-worker.js":
-					text = WebUIAssets.worker; contentType = "text/javascript; charset=utf-8"
-				case "/__assets/client-demo-boot.js":
-					text = WebUIAssets.clientBoot; contentType = "text/javascript; charset=utf-8"
-				case "/__assets/search-demo-boot.js":
-					text = WebUIAssets.clientSearchBoot; contentType = "text/javascript; charset=utf-8"
-				case "/__assets/client-demo":
-					text = self.clientDemoPage; contentType = "text/html; charset=utf-8"
-				case "/__assets/search-demo":
-					text = self.searchDemoPage; contentType = "text/html; charset=utf-8"
 				case "/", "/index.html":
 					text = self.pageHTML; contentType = "text/html; charset=utf-8"
 				default:
@@ -862,8 +765,8 @@ extension SmokeApp {
 				try await respond(channel: channel.channel, body: text, contentType: contentType, cacheControl: cacheControl)
 			}
 		}
-	}
 
+	}
 	private func respond(channel: Channel, body: String, contentType: String, status: HTTPResponseStatus = .ok, cacheControl: String = "no-store") async throws {
 		var head = HTTPResponseHead(version: .http1_1, status: status)
 		head.headers.replaceOrAdd(name: "Content-Type", value: contentType)
@@ -929,6 +832,7 @@ extension SmokeApp {
 		try await channel.writeAndFlush(HTTPPart<HTTPResponseHead, ByteBuffer>.end(nil)).get()
 	}
 }
+
 
 // MARK: - Entry point
 

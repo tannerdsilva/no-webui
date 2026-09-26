@@ -5,7 +5,7 @@ import RAW_sha256
 //
 // the plugin runs this tool during the host build with the artifact as an
 // input file; the tool validates the webassembly structure (magic + version)
-// and emits a presence/sha256/byteCount carrier that `WebUIBoot` and the
+// and emits a presence/sha256/byteCount carrier that the island routes and the
 // serving seam consume — so the content-addressed url is known at build time,
 // not re-derived per request, and a stale/corrupt artifact fails the host
 // build instead of shipping wrong bytes.
