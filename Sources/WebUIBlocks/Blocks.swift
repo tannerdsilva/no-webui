@@ -23,6 +23,7 @@ public enum Block: String, CaseIterable, Sendable {
 	case sidebarCollapsible = "sidebar-collapsible"
 	case sidebarRail = "sidebar-rail"
 	case sidebarInset = "sidebar-inset"
+	case patterns
 
 	/// Human title (document title + index page).
 	public var title: String {
@@ -34,6 +35,7 @@ public enum Block: String, CaseIterable, Sendable {
  case .sidebarCollapsible: return "Sidebar: collapsible"
  case .sidebarRail: return "Sidebar: rail"
  case .sidebarInset: return "Sidebar: inset"
+		case .patterns: return "Patterns"
 		}
 	}
 
@@ -47,6 +49,7 @@ public enum Block: String, CaseIterable, Sendable {
  case .sidebarCollapsible: return "The same shell with a header toggle for the collapsed state."
  case .sidebarRail: return "Icon-only rail (labels and section header hidden)."
  case .sidebarInset: return "Sidebar outside a padded, inset content surface."
+		case .patterns: return "Carousel, menubar and a questionnaire: composition over the existing set."
 		}
 	}
 }
@@ -61,8 +64,7 @@ public enum WebUIBlocks {
 	/// A complete standalone document for one block (its own runtime boot, so
 	/// the socket-backed status chip and the theme toggle behave like a page).
 	public static func page(for block: Block) -> String {
-		WebUIDocument(
- title: "WebUI block - " + block.title,
+		WebUIDocument(title: "WebUI block - " + block.title,
  body: body(for: block),
  includeRuntime: true,
  checkClasses: true
@@ -79,6 +81,7 @@ public enum WebUIBlocks {
  case .sidebarCollapsible: return sidebarBody(mode: .collapsible)
  case .sidebarRail: return sidebarBody(mode: .rail)
  case .sidebarInset: return sidebarBody(mode: .inset)
+		case .patterns: return patternsBody()
 		}
 	}
 
@@ -95,8 +98,7 @@ public enum WebUIBlocks {
 				.padding(16)
 			}
 		}
- return WebUIDocument(
- title: "WebUI blocks",
+ return WebUIDocument(title: "WebUI blocks",
  body: VStack(spacing: 24) {
 				Heading("Blocks", level: .h1)
 				Paragraph("\(all.count) standalone page scaffolds, composed from the existing component set.")
@@ -154,8 +156,7 @@ public enum WebUIBlocks {
 	}
 
 	private static func deployTable() -> some View {
-		WebUITable(
- headers: ["Service", "Region", "p95", "Status"],
+		WebUITable(headers: ["Service", "Region", "p95", "Status"],
  rows: [
 				[Text("web"), Text("us-east-1"), Text("42 ms"), Text("healthy")],
 				[Text("api"), Text("eu-west-2"), Text("18 ms"), Text("healthy")],
@@ -224,8 +225,7 @@ public enum WebUIBlocks {
 
 	private static func loginBody() -> String {
 		VStack(alignment: .center, spacing: 24) {
- authCard(
- title: "Sign in",
+ authCard(title: "Sign in",
  subtitle: "Use your workspace account to continue.",
  fields: [
 					WebUIField(label: "Email", controlID: "block-login-email", required: true) {
@@ -246,8 +246,7 @@ public enum WebUIBlocks {
 
 	private static func signupBody() -> String {
 		VStack(alignment: .center, spacing: 24) {
- authCard(
- title: "Create your account",
+ authCard(title: "Create your account",
  subtitle: "Two minutes, no credit card.",
  fields: [
 					WebUIField(label: "Full name", controlID: "block-signup-name", required: true) {
@@ -277,6 +276,85 @@ public enum WebUIBlocks {
 		.render()
 	}
 
+// MARK: Patterns (p7 long tail)
+
+
+
+	private static func patternsBody() -> String {
+		let slides: [any View] = [
+			WebUICard(variant: .elevated) {
+				VStack(alignment: .leading, spacing: 8) {
+					Heading("Ship faster", level: .h3)
+					Paragraph("Server-owned state means every interaction is a round trip you can log and test.")
+				}
+				.padding(16)
+			},
+			WebUICard(variant: .elevated) {
+				VStack(alignment: .leading, spacing: 8) {
+					Heading("No client script", level: .h3)
+					Paragraph("Scroll-snap, focus-visible and anchor dots: this carousel needs no javascript.")
+				}
+				.padding(16)
+			},
+			WebUICard(variant: .elevated) {
+				VStack(alignment: .leading, spacing: 8) {
+					Heading("Divergences are documented", level: .h3)
+					Paragraph("Where fidelity would need script, the trade is written down instead of hidden.")
+				}
+				.padding(16)
+			},
+		]
+
+		let menu: [WebUIMenubar.Item] = [
+			WebUIMenubar.Item("File", entries: [.init("New"), .init("Open"), .init("Export")]),
+			WebUIMenubar.Item("View", entries: [.init("Zoom in"), .init("Zoom out"), .init("Reset")]),
+			WebUIMenubar.Item("Help", entries: [.init("Blocks index", href: "/blocks"), .init("Shortcuts")]),
+		]
+
+		return VStack(alignment: .leading, spacing: 24) {
+			Heading("Patterns", level: .h1)
+			Paragraph("Three long-tail patterns, composed from the surface that already exists.")
+
+			VStack(alignment: .leading, spacing: 8) {
+				Heading("Carousel", level: .h3)
+				Paragraph("Focus the track and use the arrow keys; the dots are anchors, so they jump but cannot track state.")
+				WebUICarousel(id: "blk-carousel", label: "Release highlights", slides: slides)
+			}
+
+			VStack(alignment: .leading, spacing: 8) {
+				Heading("Menubar", level: .h3)
+				Paragraph("Hover or tab onto a trigger to open its panel; escape-to-close is the documented divergence.")
+				WebUIMenubar(items: menu, id: "blk-menubar")
+			}
+
+			VStack(alignment: .leading, spacing: 8) {
+				Heading("Questionnaire", level: .h3)
+				WebUICard(variant: .outlined) {
+					VStack(alignment: .leading, spacing: 16) {
+						WebUIField(label: "How was the setup?", controlID: "blk-q1", required: true,
+						           helper: "Pick the closest answer.") {
+							WebUIRadioGroup(options: [
+								.init("Effortless"), .init("Fine"), .init("Painful"),
+							], selected: "Fine")
+						}
+						WebUIField(label: "Which surfaces do you use?", controlID: "blk-q2") {
+							WebUICheckboxGroup(options: [
+								.init("Dashboard", checked: true), .init("Blocks"), .init("Charts", checked: true),
+							])
+						}
+						WebUIField(label: "Anything else?", controlID: "blk-q3", count: "0 / 200") {
+							Input(id: "blk-q3", name: "notes", placeholder: "Optional", type: .text)
+						}
+						Button("Submit answers", class: "button button--primary button--md", type: .submit)
+					}
+					.padding(16)
+				}
+			}
+		}
+		.padding(24)
+		.render()
+	}
+
 	// MARK: Sidebar family
 
 	enum SidebarMode {
@@ -288,8 +366,7 @@ public enum WebUIBlocks {
 
 	private static func sidebarBody(mode: SidebarMode) -> String {
  let rail = mode == .rail
- let sidebar = WebUISidebar(
- items: navItems,
+ let sidebar = WebUISidebar(items: navItems,
  activeID: "nav-overview",
  id: "block-sidebar",
  style: rail ? .rail : .full,

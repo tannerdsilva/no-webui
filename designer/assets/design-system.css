@@ -9126,3 +9126,118 @@ html[data-theme="dark"] {
 .chat__receipt--read {
   color: var(--color-info);
 }
+
+/* p7: carousel - pure css. scroll-snap on a focusable track gives native
+   keyboard scrolling (arrows scroll a focused scroll container); the dots are
+   anchors, so they navigate but cannot track state without js. */
+/* a carousel shrink-wraps to max-content inside an align-items:flex-start
+   column (the vstack used by every composed page), which pushed a 320px page to
+   scrollWidth 602: the measured track was 578px. it must fill its container. */
+.carousel {
+  position: relative;
+  width: 100%;
+  min-width: 0;
+}
+.carousel__track {
+  display: flex;
+  gap: var(--space-3);
+  overflow-x: auto;
+  scroll-snap-type: x mandatory;
+  scroll-behavior: smooth;
+  padding-bottom: var(--space-2);
+}
+.carousel__track:focus-visible {
+  outline: 2px solid var(--color-focus);
+  outline-offset: 2px;
+}
+.carousel__slide {
+  flex: none;
+  width: 100%;
+  scroll-snap-align: start;
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-raised);
+  padding: var(--space-4);
+}
+.carousel__dots {
+  display: flex;
+  gap: var(--space-2);
+  justify-content: center;
+  padding-top: var(--space-3);
+}
+.carousel__dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: var(--radius-full);
+  background: var(--color-border);
+}
+.carousel__dot:hover { background: var(--color-text-muted); }
+
+/* p7: menubar - hover and focus-within open the panel, so it is keyboard
+   reachable (tab onto a trigger) without js. escape-to-close is a divergence:
+   that needs a keydown channel the engine does not give non-routed chrome. */
+.menubar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+.menubar__item { position: relative; }
+.menubar__trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  border: 0;
+  border-radius: var(--radius-md);
+  background: none;
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  cursor: pointer;
+}
+.menubar__trigger:hover { background: var(--color-bg-subtle); }
+.menubar__panel {
+  position: absolute;
+  inset-inline-start: 0;
+  top: 100%;
+  z-index: 40;
+  display: none;
+  min-width: 12rem;
+  padding: var(--space-2);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-raised);
+  box-shadow: var(--shadow-md);
+}
+.menubar__item:hover .menubar__panel,
+.menubar__item:focus-within .menubar__panel { display: block; }
+.menubar__link {
+  display: block;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  color: var(--color-text);
+  font-size: var(--font-size-sm);
+  text-decoration: none;
+}
+.menubar__link:hover { background: var(--color-bg-subtle); }
+
+/* the option labels of the two shipped group components: the classes were
+   emitted with no rules in the sheet until the p7 block pin enumerated every
+   class a block renders. (same class of orphan as chart__axis-label--x.) */
+.radio__label,
+.checkbox__label {
+  font-size: var(--font-size-sm);
+  color: var(--color-text);
+  line-height: 1.4;
+}
+
+/* a stack with align-items: flex-start shrink-wraps to its content's
+   max-content, so a wide child (a carousel track, a long unbroken string) makes
+   every ancestor wider than the page: the measured case was a 320px page whose
+   carousel section had grown to 578px. capping the primitives at their container
+   keeps composition safe without every caller having to remember. */
+.vstack,
+.hstack {
+  max-width: 100%;
+  min-width: 0;
+}

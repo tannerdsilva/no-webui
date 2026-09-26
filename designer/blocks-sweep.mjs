@@ -16,7 +16,7 @@ import { chromium } from "playwright";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PORT = 9093;
 const BLOCKS = ["index", "dashboard", "login", "signup",
-                "sidebar-default", "sidebar-collapsible", "sidebar-rail", "sidebar-inset"];
+                "sidebar-default", "sidebar-collapsible", "sidebar-rail", "sidebar-inset", "patterns"];
 const VIEWPORTS = [{ w: 320, h: 900 }, { w: 768, h: 900 }, { w: 1440, h: 900 }];
 const THEMES = ["light", "dark"];
 const expect = {
@@ -28,6 +28,7 @@ const expect = {
   "sidebar-collapsible": [".sidebar", ".sidebar__item-label"],
   "sidebar-rail": [".sidebar--collapsed"],
   "sidebar-inset": [".sidebar"],
+  patterns: [".carousel__track", ".menubar__trigger", ".radio-group", ".checkbox-group"],
 };
 
 const stamp = new Date().toISOString().slice(0, 10);
