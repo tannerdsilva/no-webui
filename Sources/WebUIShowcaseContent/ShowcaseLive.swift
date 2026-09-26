@@ -231,6 +231,7 @@ func interactiveTable(state: ShowcaseState) -> WebUITable {
 		alignments: [.leading, .leading, .trailing],
 		id: "demo-interactive",
 		sortableColumns: [0, 1, 2],
+		hiddenColumns: state.hiddenColumns,
 		sort: state.tableSort,
 		selectable: true,
 		rowIds: ["web", "api", "search"],

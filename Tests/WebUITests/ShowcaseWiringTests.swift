@@ -29,6 +29,7 @@ struct ShowcaseWiringTests {
 			"demo-pagination-page-5", "demo-pagination-page-6", "demo-pagination-page-11",
 			"demo-pagination-page-12", "demo-pagination-rows",
 			"demo-tree", "modal-close",
+			"column-menu",
 		]
 		for id in expectedIds {
 			#expect(html.contains("data-component-id=\"\(id)\""), "missing wiring for \(id)")

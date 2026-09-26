@@ -174,7 +174,7 @@ public struct ShowcasePage: Sendable {
                                 Label("Email:").class("demo-label")
                                 Input(id: "demo-email", placeholder: "user@example.com", type: .email)
                                 Label("Password:").class("demo-label")
-                                Input(id: "demo-password", placeholder: "••••••••", type: .password)
+                                Input(id: "demo-password", placeholder: "", type: .password)
                                 Label("Number:").class("demo-label")
                                 Input(id: "demo-number", placeholder: "0", type: .number)
                                 Label("Search:").class("demo-label")
@@ -372,7 +372,10 @@ public struct ShowcasePage: Sendable {
                         	// select, expand) — typed handlers mutate the
                         	// server-side state; the table region is re-patched
                         	// with post-state markup via the typed `me` ref.
-                        	interactiveTable(state: state)
+                        	VStack(spacing: 12) {
+                        		columnMenu(state: state)
+                        		interactiveTable(state: state)
+                        	}
                         }
                     }
                 }
@@ -556,7 +559,7 @@ public struct ShowcasePage: Sendable {
                                 .backgroundColor("var(--color-warning-soft)")
                         }
                         demoCard("Chained Modifiers") {
-                            Text("Chained: font → padding → background → border → corner radius")
+                            Text("Chained: font  padding  background  border  corner radius")
                                 .font(size: 18, weight: "600")
                                 .padding(16)
                                 .backgroundColor("var(--color-info-soft)")
@@ -969,7 +972,7 @@ public struct ShowcasePage: Sendable {
                         }
 
                         demoCard("WebUISearchField") {
-                            WebUISearchField(placeholder: "Filter conversations…", id: "showcase-search")
+                            WebUISearchField(placeholder: "Filter conversations", id: "showcase-search")
                         }
 
                         demoCard("WebUIListView") {
@@ -984,12 +987,12 @@ public struct ShowcasePage: Sendable {
                         }
 
                         demoCard("WebUIComposer") {
-                            WebUIComposer(placeholder: "Message…", inputID: "showcase-input", id: "showcase-composer")
+                            WebUIComposer(placeholder: "Message", inputID: "showcase-input", id: "showcase-composer")
                         }
 
                         demoCard("WebUIPanel") {
                             WebUIPanel(title: "Workspace", subtitle: "2", edge: .leading) {
-                                WebUISearchField(placeholder: "Filter…", id: "showcase-panel-search")
+                                WebUISearchField(placeholder: "Filter", id: "showcase-panel-search")
                                 WebUITree(
                                     nodes: [WebUITree.Node(id: "a", label: "arc-agent", icon: .folder, children: [
                                         WebUITree.Node(id: "s", label: "Sources", icon: .folder, children: [
@@ -1014,7 +1017,7 @@ public struct ShowcasePage: Sendable {
                                     Raw(counterValueHTML(state.count))
                                 }
                                 HStack(spacing: 12) {
-                                    WebUIButton("−", variant: .primary, size: .lg, id: "btn-decrement", onTap: { _ in
+                                    WebUIButton("", variant: .primary, size: .lg, id: "btn-decrement", onTap: { _ in
                                         state.count -= 1
                                         return [FragmentUpdate(id: "counter-value", html: counterValueHTML(state.count))]
                                     })
@@ -1213,7 +1216,7 @@ public struct ShowcasePage: Sendable {
                         demoCard("Heatmap") {
                             VStack(spacing: 0) {
                                 Chart(heatmapCells())
-                                    .chartTitle("Activity by hour × day")
+                                    .chartTitle("Activity by hour  day")
                             }
                         }
                         demoCard("Empty state") {
@@ -1470,7 +1473,7 @@ public struct ShowcasePage: Sendable {
           <rect width="240" height="150" rx="10" fill="url(#bg)"/>
           <circle cx="58" cy="52" r="16" fill="#6366f1"/>
           <path d="M24 118 L78 74 L112 104 L150 66 L216 118 Z" fill="#6366f1" opacity="0.85"/>
-          <text x="120" y="138" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="12" fill="#3730a3">240 × 150 — inline svg</text>
+          <text x="120" y="138" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="12" fill="#3730a3">240  150 — inline svg</text>
         </svg>
         """
         return svg
