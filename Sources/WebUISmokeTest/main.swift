@@ -298,6 +298,69 @@ func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
 						Text("Click a bar to toggle its selection.")
 					}
 				}
+				// p5 surface: the polar marks and the gradient fill, shown so the
+				// preview reflects the whole chart library. static — no handlers,
+				// so no data-component-id and the interactive-count pin is
+				// unaffected by this card (the routed chart is the one above).
+				WebUICard(variant: .elevated) {
+					Heading("Charts (radar · radial · gradient)", level: .h3)
+					Div(class: "grid grid--2") {
+						Chart {
+							RadarMark([("speed", 8), ("reliability", 6), ("cost", 4), ("support", 7), ("reach", 5)], series: "eu")
+								.foregroundStyle(by: "eu")
+							RadarMark([("speed", 5), ("reliability", 9), ("cost", 7), ("support", 3), ("reach", 8)], series: "us")
+								.foregroundStyle(by: "us")
+						}
+						.chartTitle("Radar")
+						.chartHeight(260)
+						.chartAspectRatio(1)
+						Chart {
+							RadialMark(value: 72, of: 100, series: "cpu")
+								.foregroundStyle(by: "cpu")
+						}
+						.chartTitle("Radial gauge")
+						.chartHeight(260)
+						.chartAspectRatio(1)
+						.chartLegend(position: .hidden)
+					}
+					Chart {
+						ForEach(Array([12.0, 18.0, 15.0, 24.0, 31.0, 27.0, 38.0].enumerated().map { (x: Double($0.offset + 1), y: $0.element) })) { p in
+							Group {
+								AreaMark(x: .value("Week", p.x), y: .value("Requests", p.y))
+									.foregroundStyle(by: "requests")
+									.areaGradient(.fade(.explicit("var(--color-chart-3)")))
+								LineMark(x: .value("Week", p.x), y: .value("Requests", p.y))
+									.foregroundStyle(by: "requests")
+									.interpolation(.catmullRom)
+							}
+						}
+					}
+					.chartTitle("Area with a gradient fill")
+					.chartHeight(240)
+					.chartLegend(position: .hidden)
+				}
+				// p7 surface: the zero-js long tail. the entries carry no href, so
+				// they render as plain rows — nothing interactive, nothing to wire.
+				WebUICard(variant: .elevated) {
+					Heading("Carousel · Menubar (no client script)", level: .h3)
+					WebUIMenubar(items: [
+						WebUIMenubar.Item("File", entries: [.init("New"), .init("Open"), .init("Export")]),
+						WebUIMenubar.Item("View", entries: [.init("Zoom in"), .init("Zoom out"), .init("Reset")]),
+						WebUIMenubar.Item("Help", entries: [.init("Shortcuts")]),
+					], id: "smoke-menubar")
+					WebUICarousel(id: "smoke-carousel", label: "Smoke slides", slides: [
+						VStack(alignment: .leading, spacing: 8) {
+							Heading("Scroll-snap", level: .h3)
+							Paragraph("Focus the track and press the arrow keys — it scrolls natively, with no script.")
+						}
+						.padding(16),
+						VStack(alignment: .leading, spacing: 8) {
+							Heading("Dots are anchors", level: .h3)
+							Paragraph("They jump to a slide; tracking the current one would need script, so it is not claimed.")
+						}
+						.padding(16),
+						])
+				}
 				WebUICard(variant: .elevated) {
 					Heading("Island validation (same Swift in wasm)", level: .h3)
 					Div(class: "smoke__island-row") {
