@@ -55,7 +55,8 @@ for (const block of BLOCKS) {
     }
     // precondition: is this the page and the direction we asked for?
     const probe = await (await fetch("http://127.0.0.1:" + PORT + "/")).text();
-    const wanted = dir === "rtl" ? '<html lang="en" dir="rtl">' : '<html lang="en">';
+    // the server always receives --dir, so ltr is explicitly declared too
+    const wanted = '<html lang="en" dir="' + dir + '">';
     if (!probe.includes(wanted)) {
       bad(block + "/" + dir + ": served html does not carry " + wanted);
       server.kill("SIGTERM");
