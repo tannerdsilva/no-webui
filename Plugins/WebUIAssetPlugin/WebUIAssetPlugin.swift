@@ -26,18 +26,10 @@ struct WebUIAssetPlugin: BuildToolPlugin {
 
         let cssFile = assetsDir.appendingPathComponent("design-system.css")
         let jsFile = assetsDir.appendingPathComponent("webui-runtime.js")
-        let clientFile = assetsDir.appendingPathComponent("webui-client.js")
-        let clientBootFile = assetsDir.appendingPathComponent("client-demo-boot.js")
-        let clientSearchBootFile = assetsDir.appendingPathComponent("search-demo-boot.js")
-        let workerFile = assetsDir.appendingPathComponent("webui-worker.js")
         let engineFile = assetsDir.appendingPathComponent("webui-engine.js")
         let shellFile = assetsDir.appendingPathComponent("webui-shell.js")
         let cssExists = FileManager.default.fileExists(atPath: cssFile.path)
         let jsExists = FileManager.default.fileExists(atPath: jsFile.path)
-        let clientExists = FileManager.default.fileExists(atPath: clientFile.path)
-        let clientBootExists = FileManager.default.fileExists(atPath: clientBootFile.path)
-        let clientSearchBootExists = FileManager.default.fileExists(atPath: clientSearchBootFile.path)
-        let workerExists = FileManager.default.fileExists(atPath: workerFile.path)
         let engineExists = FileManager.default.fileExists(atPath: engineFile.path)
         let shellExists = FileManager.default.fileExists(atPath: shellFile.path)
 
@@ -80,22 +72,6 @@ struct WebUIAssetPlugin: BuildToolPlugin {
         if jsExists {
             args += ["--js-input", jsFile.path]
             inputs.append(jsFile)
-        }
-        if clientExists {
-            args += ["--client-input", clientFile.path]
-            inputs.append(clientFile)
-        }
-        if clientBootExists {
-            args += ["--client-boot-input", clientBootFile.path]
-            inputs.append(clientBootFile)
-        }
-        if clientSearchBootExists {
-            args += ["--client-search-boot-input", clientSearchBootFile.path]
-            inputs.append(clientSearchBootFile)
-        }
-        if workerExists {
-            args += ["--worker-input", workerFile.path]
-            inputs.append(workerFile)
         }
         if engineExists {
             args += ["--engine-input", engineFile.path]

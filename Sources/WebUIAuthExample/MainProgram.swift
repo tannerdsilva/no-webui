@@ -977,26 +977,6 @@ struct WebUIAuthExample {
 		case (.GET, let cssURL) where cssURL.hasPrefix("/__assets/css."):
 			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/css; charset=utf-8"), ("Cache-Control", "public, max-age=31536000, immutable")], body: DesignSystemAssets.minifiedCss)
 			return
-		case (.GET, "/ui/webui-client.js"):
-			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/javascript; charset=utf-8")], body: WebUIAssets.client)
-			return
-		case (.GET, "/ui/webui-app-boot.js"):
-			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/javascript; charset=utf-8")], body: WebUIAssets.clientBoot)
-			return
-		case (.GET, "/ui/webui-engine.js"):
-			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/javascript; charset=utf-8"), ("Cache-Control", "public, max-age=3600")], body: WebUIAssets.engine)
-			return
-		case (.GET, "/ui/webui-shell.js"):
-			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/javascript; charset=utf-8"), ("Cache-Control", "public, max-age=3600")], body: WebUIAssets.shell)
-			return
-		default:
-			break
-		}
-
-		// the wasm client artifact — content-addressed & immutable (wasm is the
-		// only client runtime; there is no js runtime to serve anymore).
-
-		switch (head.method, head.uri) {
 		case (.GET, "/login"):
 			// the mint page is throttled (separate, more generous budget) and
 			// every issued token is reserved under the caller's outstanding

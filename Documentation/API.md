@@ -152,27 +152,17 @@ string values are hand-escaped into safe json string literals.
 client-mode pages flip with one argument:
 
 - `ClientBoot(wasmURL:mode:config:scriptURLs:)` — the boot configuration.
-  `wasmURL` is the content-addressed artifact url the host serves; `mode`
-  selects `.hydrate` (ssr-compat render probe) or `.app` (full interactive
-  boot); `config` carries only-set `RuntimeConfig` knobs (transport knobs stay
-  js-owned; behavior knobs ride the emitted `webui-config` meta); `scriptURLs`
-  default to `ClientBoot.defaultScriptURLs` (`/ui/webui-client.js`,
-  `/ui/webui-app-boot.js`) — hosts under other prefixes pass their own.
-  `ClientBoot.defaultCSP` is the client policy (`'self'` + `'wasm-unsafe-eval'`,
-  never `'unsafe-inline'` in script-src).
+  `config` carries only-set `RuntimeConfig` knobs (transport knobs stay
+  js-owned; behavior knobs ride the emitted `webui-config` meta).
+  `ClientBoot.defaultCSP` is the policy (`'self'` + `'wasm-unsafe-eval'` for
+  capability islands, never `'unsafe-inline'` in script-src).
+  `ClientBoot.defaultEngineScriptURL` is `/ui/webui-engine.js`.
 - `HTMLDocument(…, clientMode: ClientBoot?)` and
   `WebUIDocument(…, clientMode: ClientBoot?)` — `.none` (default) is
-  byte-identical to legacy output; `.client` emits the `webui-wasm` meta
-  contract + external chamber/boot scripts, substitutes the client csp (an
-  explicit `contentSecurityPolicy` still wins), and suppresses the inline
-  server runtime.
-- `WebUIBoot.wasmProductURL()` / `WebUIBoot.wasmHash(of:)` — server-side
-  helpers: locate the release `WebUIClient.wasm` product and content-address
-  it (`sha256` hex) for the immutable-cache route. serving the artifact is the
-  host server's job; the framework only emits bytes.
-- the chamber is served by the host and hosted by the browser
-  (`designer/assets/webui-client.js`); the wasm client is built separately with
-  the wasm sdk (`swift build -c release --swift-sdk … --product WebUIClient`).
+  byte-identical to legacy output; a boot emits the `webui-config` meta plus the
+  engine script and suppresses the inline server runtime (an explicit
+  `contentSecurityPolicy` still wins). the wasm *client* mode this parameter
+  also described was deleted; wasm is per-page capability islands now.
 
 ### CSS
 
@@ -406,8 +396,8 @@ try await server.start()                       // serves until stop() / process 
 - `WebUIServerConfig` tunes host/port, admission cap, read-idle seconds,
   asset cache seconds, and the page path (default `/`).
 - routes: page path + `/index.html`, `/__assets/css`, `/ui/webui-engine.js`,
-  `/ui/webui-shell.js`, `/ui/webui-client.js`, `/ui/webui-app-boot.js`,
-  `/__assets/webui-client.<sha>.wasm` (immutable cache); 404/405 elsewhere;
+  `/ui/webui-shell.js`, `/__assets/webui-validate.wasm` (an island artifact);
+  404/405 elsewhere;
   `Service-Worker-Allowed: /` + security headers on every response.
 - `WebUIServer` is an actor: `stop()` closes the listener and shuts down the
   event loop group.

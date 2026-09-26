@@ -56,18 +56,17 @@ the wasm client is a separate product built with the official swift 6.4 wasm sdk
 (the swiftly-hosted `swift-6.4-RELEASE` toolchain — the Xcode frontend cannot
 read the sdk's prebuilt modules and lacks `swift-autolink-extract`; wasm commands
 need the swiftly shim, not `source ~/.swiftly/env.sh`, which is
-PATH-order-dependent in spawn contexts). the *native* way to produce the
-artifact is the `wasm-client` plugin verb (see below) — it wraps the raw
+PATH-order-dependent in spawn contexts). the *native* way to produce an
+island artifact is the `wasm-island` plugin verb (see below) — it wraps the raw
 invocation in an isolated scratch build root:
 
 ```bash
-swift package --disable-sandbox plugin wasm-client [--product TheirClient] [--no-strip]
-# verify modes (browser-hosted once env imports are linked; wasmkit can no
-# longer instantiate the shipped module — it is chamber-only by design)
+swift package --disable-sandbox plugin wasm-island [--product TheirIsland] [--no-strip]
+# verify modes (an island is browser-hosted once its env imports are linked)
 node designer/browser-smoke.mjs
 ```
 
-the `wasm-client` verb cross-builds into `.build/wasm-client-scratch` (an
+the `wasm-island` verb cross-builds into `.build/wasm-island-scratch` (an
 isolated build root — the plugin invocation holds the package `.build` lock,
 so building into the package's own `.build` deadlocks), strips custom sections
 (name table + DWARF) by default (`--no-strip` keeps readable devtools stack
@@ -79,16 +78,8 @@ during every host build.
 pages are engine-first: the default client runtime is `webui-engine.js`
 (`HTMLDocument`/`WebUIDocument` emit the `webui-config` meta + engine script
 automatically; `includeRuntime: false` ships no client at all — no script, no
-config meta). the wasm client is an explicit opt-in via
-`clientMode: ClientBoot(flavor: .wasm, wasmURL: …)` — it emits the `webui-wasm`
-contract + chamber/boot scripts + the client csp, and needs the
-content-addressed artifact built first (`wasm-client` verb). serving those
-routes is the host's job (`WebUIBoot` exposes the build-time hash for the
-immutable route + `wasmProductURL(productName:)` for consumers' own
-artifacts). the `WebUIWasmPlugin` embeds the artifact when present and emits a
-soft absent carrier when not: engine-only hosts build green, and a wasm-mode
-page whose artifact is missing 404s its routes loudly until `wasm-client`
-runs.
+config meta). the wasm monolith client was deleted — the engine is the client runtime, and
+wasm survives as capability islands declared per page (see `NEXT_ARCHITECTURE.md`).
 
 all project tooling is command plugins — there are no shell scripts. see
 `Documentation/ASSEMBLY.md` for the full stage map and `designer/README.md`

@@ -345,7 +345,6 @@ final class Runner: Sendable {
 						cacheControl: "public, max-age=\(config.assetCacheSeconds)",
 						gzip: canGzip
 					)
-				} else if uri == "/ui/webui-client.js" {
 					try await respond(
 						channel: channel.channel,
 						body: WebUIAssets.client,

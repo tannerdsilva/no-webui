@@ -3,7 +3,6 @@
 the default client runtime is the framework-owned **engine** (`webui-engine.js`,
 ~30 kb, shipped asset, no consumer-facing JS). the retired wasm-only default is
 gone; the wasm client remains available via an explicit
-`ClientBoot(flavor: .wasm, …)` provider for applet/client-mode pages.
 
 ## Document contract (what every default page emits)
 
@@ -24,8 +23,6 @@ gone; the wasm client remains available via an explicit
   `renderToken`, `capabilities: ["validate", "offline", …]`, `persistence`).
   tests that read config must decode the entity-escaped meta
   (`&quot;` → `"`), not search for `WebUIRuntime.init`.
-- `ClientBoot(flavor: .wasm, …)` switches a page to the wasm contract
-  (`webui-wasm` meta + `/ui/webui-client.js` + `/ui/webui-app-boot.js`), which
   the chamber/applet path still serves byte-for-byte.
 - CSP is the client csp (no nonce, `script-src 'self' …`); the engine adds no
   inline scripts, so it needs nothing beyond 'self'.
@@ -48,7 +45,6 @@ gone; the wasm client remains available via an explicit
 - `/__assets/webui-<capability>.wasm` → island artifacts, `application/wasm`
 - `/ws` is the authority channel (same envelope as ever: `event`/`ping` →
   `pong`/`update` fragments).
-- the wasm client's routes (`/ui/webui-client.js`, app-boot, content-addressed
   artifact) only matter for explicit wasm-mode pages.
 
 ## Capability islands
@@ -70,7 +66,6 @@ gone; the wasm client remains available via an explicit
 ## Verify (per change)
 
 `swift build` → `swift test` → `plugin smoke` → `plugin fullstack-smoke`
-(default = engine; `WEBUI_BOOT=wasm node designer/browser-smoke.mjs` for the
 wasm regression path). browser-smoke drives engine mode by default with
 `node designer/browser-smoke.mjs`; it also proves the shell, view transitions,
 and the island mount/degrade/re-validate probes. both themes are audited with
