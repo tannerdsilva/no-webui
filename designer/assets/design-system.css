@@ -4215,7 +4215,6 @@ code, .inline-code {
   width: 1.5rem;
   height: 1.5rem;
   border-radius: var(--radius-md);
-  color: var(--color-text-muted);
 }
 .alert__dismiss:hover { background: rgba(0,0,0,0.06); color: var(--color-text); }
 
@@ -6721,7 +6720,7 @@ code, .inline-code {
 
 .alert__content { flex: 1; min-width: 0; }
 .alert__text { margin-top: 0.1rem; line-height: var(--line-height-relaxed); }
-.alert__close { flex: none; margin: -0.25rem -0.5rem -0.25rem 0; width: 1.75rem; height: 1.75rem; display: grid; place-items: center; border: none; background: transparent; color: var(--color-text-muted); border-radius: var(--radius-sm); cursor: pointer; font-size: var(--font-size-xs); }
+.alert__close { flex: none; margin: -0.25rem -0.5rem -0.25rem 0; width: 1.75rem; height: 1.75rem; display: grid; place-items: center; border: none; background: transparent; border-radius: var(--radius-sm); cursor: pointer; font-size: var(--font-size-xs); }
 .alert__close:hover { background: var(--color-bg-inset); color: var(--color-text); }
 .alert--compact { padding: var(--space-2) var(--space-3); font-size: var(--font-size-xs); }
 .alert--danger { background: var(--color-danger-soft); border-color: var(--color-danger-ring); }
@@ -6753,7 +6752,7 @@ code, .inline-code {
 
 .banner__body { flex: 1; min-width: 0; }
 .banner__text { margin-top: var(--space-1); line-height: var(--line-height-relaxed); color: var(--color-text-muted); }
-.banner__close { flex: none; width: 1.6rem; height: 1.6rem; display: grid; place-items: center; border: none; background: transparent; color: var(--color-text-muted); border-radius: var(--radius-sm); cursor: pointer; font-size: var(--font-size-xs); }
+.banner__close { flex: none; width: 1.6rem; height: 1.6rem; display: grid; place-items: center; border: none; background: transparent; border-radius: var(--radius-sm); cursor: pointer; font-size: var(--font-size-xs); }
 .banner__close:hover { background: var(--color-bg-inset); color: var(--color-text); }
 
 .bar-chart { display: flex; align-items: flex-end; gap: var(--space-2); height: 8rem; padding: var(--space-3); background: var(--color-bg-inset); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-lg); }
@@ -8711,6 +8710,14 @@ html[data-theme="dark"] {
  color: var(--color-on-color); 
 }
 [data-theme="dark"] a, [data-theme="dark"] .button--link {
+ color: var(--color-primary-400); 
+}
+[data-theme="dark"] /* Tint-ink pairs: the primary tint scale (50–100) is remapped for dark,
+     the deep inks (700–900) are not — a selected list title and an active
+     segmented count paired a remapped tint with an un-remapped ink. Both
+     inherit the dark link treatment so the pair stays legible. */
+  .list__item--selected .list__title,
+  [data-theme="dark"] .segmented__item--active .segmented__count {
  color: var(--color-primary-400); 
 }
 [data-theme="dark"] a:hover, [data-theme="dark"] .button--link:hover {
