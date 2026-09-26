@@ -311,6 +311,7 @@ let package = Package(
                 "WebUIDesignSystem",
                 "WebUIChart",
                 "WebUISmokeShared",
+                "WebUIBlocks",
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOHTTP1", package: "swift-nio"),

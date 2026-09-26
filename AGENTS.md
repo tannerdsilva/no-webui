@@ -424,9 +424,9 @@ are measuring, and make every probe assert its own preconditions.
   reports `server did not become ready — run with --disable-sandbox`.
 - **the `.build` lock** — a running plugin (e.g. `serve`) blocks every other
   `swift package` command until it exits. never launch a gate while `serve` is up.
-- **smoke pins the interactive count** — the smoke gate asserts exactly 24
+- **smoke pins the interactive count** — the smoke gate asserts exactly 25
   `data-component-id` attributes on the smoke page (3 counter + 2 progress +
-  1 echo + 12 routed table controls + 6 routed chart bars). adding or removing
+  1 echo + 1 column menu + 12 routed table controls + 6 routed chart bars). adding or removing
   an interactive component there means updating the expected count in
   `WebUISmokePlugin.swift` (the fullstack driver's `>=6` check is tolerant).
   the same page is what `browser-smoke` drives for optimistic + scroll

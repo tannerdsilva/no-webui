@@ -156,10 +156,10 @@ struct WebUISmokePlugin: CommandPlugin {
         let interactiveCount = html.components(separatedBy: "data-component-id=\"").count - 1
         // 3 counter + 2 progress + 1 echo + 12 table controls (3 sort + select-all
         // + 4 select + 4 expand) + 6 chart bars = 24 routed components.
-        if interactiveCount == 24 {
-            ok("served page exposes 24 interactive components, incl. per-control table routing (handler wiring intact)")
+        if interactiveCount == 25 {
+            ok("served page exposes 25 interactive components, incl. per-control table routing (handler wiring intact)")
         } else {
-            bad("expected 24 data-component-id attributes, found \(interactiveCount)")
+            bad("expected 25 data-component-id attributes, found \(interactiveCount)")
         }
 
         if html.contains("http-equiv=\"Content-Security-Policy\"") {

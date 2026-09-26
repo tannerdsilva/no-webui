@@ -12,6 +12,7 @@ import NIOWebSocket
 import Synchronization
 import WebUI
 import WebUIDesignSystem
+import WebUIBlocks
 import WebUIChart
 import WebUISmokeShared
 
@@ -28,6 +29,7 @@ final class SmokeState: Sendable {
 		var tableSelected: Set<String> = []
 		var tableExpanded: Set<String> = []
 		// interactive chart demo (chart selection: click a bar → server re-renders)
+		var hiddenColumns: Set<Int> = []
 		var chartSelected: String? = nil
 	}
 	private let values = Mutex(Values())
@@ -60,6 +62,10 @@ final class SmokeState: Sendable {
 		get { values.withLock { $0.tableExpanded } }
 		set { values.withLock { $0.tableExpanded = newValue } }
 	}
+	var hiddenColumns: Set<Int> {
+		get { values.withLock { $0.hiddenColumns } }
+		set { values.withLock { $0.hiddenColumns = newValue } }
+	}
 	var chartSelected: String? {
 		get { values.withLock { $0.chartSelected } }
 		set { values.withLock { $0.chartSelected = newValue } }
@@ -68,12 +74,50 @@ final class SmokeState: Sendable {
 
 // MARK: - Interactive table demo data
 
+/// the base direction for the page: `WEBUI_DIR=rtl` renders every surface
+/// mirrored, which is how the interactive page gets an rtl pass.
+let smokeDir = ProcessInfo.processInfo.environment["WEBUI_DIR"]
+
 let smokeTableRecords: [(id: String, name: String, region: String, ms: Int, detail: String)] = [
 	("web", "web", "us-east-1", 42, "8 instances · 99.98% SLA · canary 10% to v2.14"),
 	("api", "api", "eu-west-2", 18, "4 instances · 99.95% SLA · zero-downtime deploys"),
 	("search", "search", "us-west-2", 61, "12 shards · 99.9% SLA · 3 warm nodes"),
 	("auth", "auth", "ap-south-1", 9, "3 instances · 100% SLA · hardware-backed keys"),
 ]
+
+/// the column-visibility control for the smoke table: a plain `WebUIMenu`
+/// dispatched by `targetId` (the container-handler pattern), whose effect is
+/// host state. the handler re-emits the menu (check marks) and the table
+/// (which stops emitting the hidden column) - the p4 surface, on the page the
+/// full-stack gate drives.
+func smokeColumnMenuHTML(state: SmokeState) -> String {
+	let columns = ["Name", "Region", "p95"]
+	return WebUIMenu(
+		items: columns.enumerated().map { index, name in
+			WebUIMenu.Item(
+				name,
+				icon: state.hiddenColumns.contains(index) ? .xCircle : .checkCircle
+			)
+		},
+		id: "smoke-column-menu",
+		onSelect: { event in
+			guard let raw = event.string("targetId"),
+			      let last = raw.split(separator: "-").last,
+			      let index = Int(last) else { return [] }
+			if state.hiddenColumns.contains(index) {
+				state.hiddenColumns.remove(index)
+			} else {
+				state.hiddenColumns.insert(index)
+			}
+			return [
+				FragmentUpdate(id: "smoke-column-menu", html: smokeColumnMenuHTML(state: state)),
+				FragmentUpdate(id: "interactive-table", html: interactiveTableHTML(state: state)),
+			]
+		},
+		header: "Columns",
+		panel: true
+	).render()
+}
 
 func interactiveTableHTML(state: SmokeState) -> String {
 	let col = state.tableSortColumn
@@ -103,6 +147,7 @@ func interactiveTableHTML(state: SmokeState) -> String {
 		alignments: [.leading, .leading, .trailing],
 		id: "interactive-table",
 		sortableColumns: [0, 1, 2],
+		hiddenColumns: state.hiddenColumns,
 		sort: (col, asc ? .ascending : .descending),
 		selectable: true,
 		rowIds: sorted.map { $0.id },
@@ -277,6 +322,12 @@ func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
 				// truth for sort, selection and expansion.
 				WebUICard(variant: .outlined) {
 					Heading("Table (sort · select · expand)", level: .h3)
+					Div(class: "smoke__columns") {
+						Raw(smokeColumnMenuHTML(state: state))
+						Div(class: "smoke__chart-hint") {
+							Text("Use the Columns menu to hide one - the server owns the state.")
+						}
+					}
 					Div(id: "interactive-table-anchor", class: "table-wrap") {
 						Raw(interactiveTableHTML(state: state))
 					}
@@ -387,7 +438,8 @@ func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
 			head: smokePageStyle,
 			clientMode: wasmMode
 				? ClientBoot(wasmURL: clientWasmURL(WebUIBoot.wasmSHA256), config: RuntimeConfig(), flavor: .wasm)
-				: ClientBoot(config: RuntimeConfig(capabilities: ["validate", "never-built", "offline"]), flavor: .engine)
+				: ClientBoot(config: RuntimeConfig(capabilities: ["validate", "never-built", "offline"]), flavor: .engine),
+			dir: smokeDir,
 		).render()
 	}
 
@@ -765,6 +817,20 @@ extension SmokeApp {
 				case let cssURL where cssURL.hasPrefix("/__assets/css."):
 					text = DesignSystemAssets.minifiedCss; contentType = "text/css; charset=utf-8"
 					cacheControl = "public, max-age=31536000, immutable"
+				case let blocks where blocks == "/blocks" || blocks.hasPrefix("/blocks/"):
+					// the blocks surface, served by this same preview process:
+					// /blocks is the index, /blocks/<name> one standalone scaffold.
+					let name = String(blocks.dropFirst("/blocks".count))
+						.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+					if name.isEmpty {
+						text = WebUIBlocks.indexPage(dir: smokeDir)
+					} else if let block = Block(rawValue: name) {
+						text = WebUIBlocks.page(for: block, dir: smokeDir)
+					} else {
+						text = "<!DOCTYPE html><html><body><h1>unknown block</h1>"
+							+ "<p><a href=\"/blocks\">all blocks</a></p></body></html>"
+					}
+					contentType = "text/html; charset=utf-8"
 				case "/ui/webui-client.js":
 					text = WebUIAssets.client; contentType = "text/javascript; charset=utf-8"
 				case "/ui/webui-app-boot.js":
