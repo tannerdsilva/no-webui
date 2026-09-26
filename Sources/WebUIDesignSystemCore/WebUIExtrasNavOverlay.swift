@@ -948,3 +948,54 @@ public struct WebUIKbd: View {
         return html
     }
 }
+
+
+// MARK: WebUI Scroll Top
+/// a floating back-to-top affordance. `progress` (0...1) adds the ring around
+/// it, reusing the circular-progress classes the sheet already styles for
+/// `scroll-top--ring`. position it against a `position: relative` ancestor.
+public struct WebUIScrollTop: View {
+    /// 0...1 scroll progress; `nil` renders the icon-only button.
+    public let progress: Double?
+    public let icon: IconName
+    public let label: String
+    public let id: String?
+    public let onTap: EventHandler?
+
+    public init(
+        progress: Double? = nil,
+        icon: IconName = .arrowUp,
+        label: String = "Back to top",
+        id: String? = nil,
+        onTap: EventHandler? = nil
+    ) {
+        self.progress = progress
+        self.icon = icon
+        self.label = label
+        self.id = id
+        self.onTap = onTap
+    }
+
+    public func render() -> String {
+        let attrs: String
+        if let id, let onTap {
+            attrs = controlAttributes(id: id, event: .click, handler: onTap)
+        } else {
+            attrs = ""
+        }
+        var html = "<button class=\"scroll-top\(progress != nil ? " scroll-top--ring" : "")\" type=\"button\" aria-label=\"\(htmlEscape(label))\""
+        if let id { html += " id=\"\(htmlEscape(id))\"" }
+        html += attrs + ">"
+        if let progress {
+            let clamped = progress < 0 ? 0 : (progress > 1 ? 1 : progress)
+            let offset = webuiFixedPoint((1 - clamped) * 100, places: 1)
+            html += "<svg class=\"scroll-top__ring\" viewBox=\"0 0 36 36\" aria-hidden=\"true\">"
+            html += "<circle class=\"ring__track\" cx=\"18\" cy=\"18\" r=\"15.915\"/>"
+            html += "<circle class=\"ring__fill\" cx=\"18\" cy=\"18\" r=\"15.915\" stroke-dasharray=\"100\" stroke-dashoffset=\"\(offset)\"/>"
+            html += "</svg>"
+        }
+        html += "<span class=\"scroll-top__icon\">" + WebUIIcon(icon, size: .medium).render() + "</span>"
+        html += "</button>"
+        return html
+    }
+}
