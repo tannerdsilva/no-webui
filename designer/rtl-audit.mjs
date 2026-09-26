@@ -16,6 +16,11 @@ import { mkdirSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { chromium } from "playwright";
+
+const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
+const PORT = 9096;
+const BLOCKS = ["dashboard", "patterns", "sidebar-default"];
+const VIEWPORTS = [{ w: 320, h: 900 }, { w: 768, h: 900 }, { w: 1440, h: 900 }];
 const THEMES = ["light", "dark"];
 const stamp = new Date().toISOString().slice(0, 10);
 const OUT = join(ROOT, ".smoke", "rtl-" + stamp);
