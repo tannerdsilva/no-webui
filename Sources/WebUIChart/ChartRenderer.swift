@@ -112,7 +112,7 @@ struct ChartRenderer {
 	// MARK: Figure / empty state
 
 	private var emptyState: String {
-		let label = htmlEscape(ariaLabel ?? config.accessLabel ?? "Chart")
+		let label = htmlEscape(accessibleName(fallback: "Chart"))
 		var html = "<figure class=\"chart chart--empty\""
 		if let safeId { html += " id=\"\(htmlEscape(safeId))\"" }
 		html += " role=\"img\" aria-label=\"\(label)\">"
@@ -122,8 +122,22 @@ struct ChartRenderer {
 		return html
 	}
 
+	/// The accessible name for the figure: an explicit
+	/// `chartAccessibilityLabel` wins, then a caller-supplied
+	/// `config.accessLabel`, then the chart's own title — the name a sighted
+	/// reader already has for the chart — and only then `fallback`.
+	/// the title outranks the count because "Revenue by quarter" identifies
+	/// the chart; "6 marks" does not.
+	private func accessibleName(fallback: String) -> String {
+		if let explicit = ariaLabel, !explicit.isEmpty { return explicit }
+		if let caller = config.accessLabel, !caller.isEmpty { return caller }
+		if let title = config.title, title.contains(where: { !$0.isWhitespace }) { return title }
+		return fallback
+	}
+
 	private func ariaDescription() -> String {
-		ariaLabel ?? config.accessLabel ?? "Chart with \(marks.count) marks"
+		let n = marks.count
+		return accessibleName(fallback: "Chart with \(n) \(n == 1 ? "mark" : "marks")")
 	}
 
 	// MARK: Polar (pie / donut)

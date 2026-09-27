@@ -187,9 +187,12 @@ measured in the showcase at 1280px, both themes: opacity `1` on hover, tip text
 
 ## a11y and payload hygiene
 
-- every figure is `<figure role="img" aria-label="…">`; labels, titles and
-  mark ids are `htmlEscape`-ed; `chartID` values are sanitized (spaces
-  stripped) before use in ids;
+- every figure is `<figure role="img" aria-label="…">`; the accessible name is
+  `.chartAccessibilityLabel(…)` when set, otherwise the chart's own
+  `.chartTitle(…)`, otherwise `Chart with N marks` (`Chart` for the empty
+  state) — a titled chart announces as its title, not as a mark count; labels,
+  titles and mark ids are `htmlEscape`-ed; `chartID` values are sanitized
+  (spaces stripped) before use in ids;
 - a visually-hidden data table (`.chart__sr`) mirrors the series values so
   screen readers get the numbers, not just the shapes;
 - the output is deterministic (no random nonces inside the chart) and

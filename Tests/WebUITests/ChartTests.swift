@@ -709,3 +709,89 @@ func capture(_ regex: String, in haystack: String) -> String? {
 		#expect(c.render() == c.render())
 	}
 }
+
+// MARK: - Accessible name precedence
+
+@Suite struct ChartAccessibleNameTests {
+	/// the figure's accessible name is the chart's title by default — before
+	/// this, every titled chart announced as "Chart with N marks" and the
+	/// title reached assistive tech only as stray inner text.
+	@Test func titleBecomesAccessibleNameByDefault() {
+		let out = Chart {
+			ForEach([("A", 1.0)]) { d in
+				BarMark(x: .value("M", d.0), y: .value("V", d.1))
+			}
+		}
+		.chartTitle("Revenue by quarter")
+		.render()
+		#expect(out.contains("aria-label=\"Revenue by quarter\""))
+	}
+
+	@Test func explicitLabelOutranksTitle() {
+		let out = Chart {
+			ForEach([("A", 1.0)]) { d in
+				BarMark(x: .value("M", d.0), y: .value("V", d.1))
+			}
+		}
+		.chartTitle("Revenue by quarter")
+		.chartAccessibilityLabel("Custom accessible name")
+		.render()
+		#expect(out.contains("aria-label=\"Custom accessible name\""))
+		#expect(!out.contains("aria-label=\"Revenue by quarter\""))
+	}
+
+	@Test func untitledChartDescribesItsMarkCount() {
+		let one = Chart {
+			ForEach([("A", 1.0)]) { d in
+				BarMark(x: .value("M", d.0), y: .value("V", d.1))
+			}
+		}
+		.render()
+		#expect(one.contains("aria-label=\"Chart with 1 mark\""))
+
+		let two = Chart {
+			ForEach([("A", 1.0), ("B", 2.0)]) { d in
+				BarMark(x: .value("M", d.0), y: .value("V", d.1))
+			}
+		}
+		.render()
+		#expect(two.contains("aria-label=\"Chart with 2 marks\""))
+	}
+
+	@Test func whitespaceTitleFallsBackToMarkCount() {
+		let out = Chart {
+			ForEach([("A", 1.0)]) { d in
+				BarMark(x: .value("M", d.0), y: .value("V", d.1))
+			}
+		}
+		.chartTitle("   ")
+		.render()
+		#expect(out.contains("aria-label=\"Chart with 1 mark\""))
+	}
+
+	@Test func emptyChartUsesTitleAsAccessibleName() {
+		let out = Chart([]).chartTitle("No data yet").render()
+		#expect(out.contains("chart--empty"))
+		#expect(out.contains("aria-label=\"No data yet\""))
+	}
+
+	@Test func polarFigureUsesTitleAsAccessibleName() {
+		let out = Chart([SectorMark(angle: .value("share", 30), category: "web").makeMark()], id: "pie")
+			.chartTitle("Platform share")
+			.render()
+		#expect(out.contains("aria-label=\"Platform share\""))
+	}
+
+	@Test func titleUsedAsAccessibleNameIsEscaped() {
+		let payload = "x\" onload=\"alert(1)"
+		let out = Chart {
+			ForEach([("A", 1.0)]) { d in
+				BarMark(x: .value("M", d.0), y: .value("V", d.1))
+			}
+		}
+		.chartTitle(payload)
+		.render()
+		#expect(!out.contains("onload=\"alert(1)\""))
+		#expect(out.contains("aria-label=\"x&quot; onload=&quot;alert(1)\""))
+	}
+}
