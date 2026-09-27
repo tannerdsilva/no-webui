@@ -153,6 +153,39 @@ the design system owns all chart styling (see `DESIGN_SYSTEM.md → Charts`):
 
 angle convention: `0°` = 12 o'clock, clockwise (matches Swift Charts).
 
+## responsive layout — text keeps its size, the plot pans
+
+a chart is laid out for a **design width** (`height × aspectRatio`, default
+`320 × 2 = 640`), and the renderer publishes it on the figure as `--chart-w`.
+the stylesheet turns that into three rules:
+
+- the figure renders at its design width, capped by its container
+  (`max-width: 100%`);
+- the plot may **compress to 92%** of that width — 12px text still paints at
+  11.0px, the floor the design system's own smallest steps imply;
+- below 92% the plot **pans** (`.chart__plot` is a horizontal scroll container)
+  instead of shrinking its labels. text never paints below 11px, at any
+  container width.
+
+measured on the showcase across 320/390/480/768/1024/1440 in both themes: worst
+painted text **11.04px**, **zero panning at ≥768px**, panning only at 480px and
+below, no page overflow (`designer/chart-mobile-audit.mjs`, evidence in
+`.smoke/chart-mobile-<date>/`).
+
+authoring notes:
+
+- **phone-first placements declare a smaller design width** — `chartHeight(180)`
+  (× the default aspect 2) lays the plot out 360 units wide, so it fits a 360px
+  container without panning and keeps 12px labels on every screen. the
+  showcase's "Compact design width" card does exactly this;
+- **a chart contributes no intrinsic width** — its plot owns its inline size, so
+  a container sized to its content (a `flex-start` column, a content-sized grid
+  track) will collapse to the width of its text. give chart containers a
+  declared width or an explicit track;
+- the design width is also the *display* width: a chart in a 900px card renders
+  640 wide rather than scaling up, which keeps every chart's text at 12px across
+  a page.
+
 ## area gradients (p5-t4)
 
 `AreaMark(...).areaGradient(.fade("var(--color-chart-3)"))` emits a `<defs><linearGradient>`
@@ -202,8 +235,11 @@ measured in the showcase at 1280px, both themes: opacity `1` on hover, tip text
 
 - one series dimension (`.foregroundStyle(by:)`); multi-series grouping on the
   x-axis is not modeled (series stack/group within a category only);
-- linear and categorical scales; log/normalised scales are rejected at render
-  time (empty chart, not garbage);
+- linear, categorical and date scales; there is no log scale (the
+  `ChartScaleKind` vocabulary has no case for one);
 - the css-only hover tip is hover-only, and assumes an intrinsic-size svg (above);
+- a container narrower than 92% of the design width pans the plot: a phone-first
+  page should declare a smaller design width (`chartHeight`) rather than accept
+  the pan (see *responsive layout* above);
 - no client-side redraw: every state change re-renders the figure on the
   server (the same model as the interactive table).

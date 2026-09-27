@@ -746,9 +746,10 @@ styles `RuleMark` reference lines.
 
 | class | role |
 |-------|------|
-| `.chart` | the `<figure>`; `role="img"` + `aria-label` |
+| `.chart` | the `<figure>`; `role="img"` + `aria-label`; carries the design width as `--chart-w` and is `max-width: 100%` |
 | `.chart__title` | uppercased muted subhead above the plot |
-| `.chart__svg` | the inline svg (`width:100%`, `overflow:visible`) |
+| `.chart__plot` | the plot's scroll container: `overflow-x: auto`, inline-size-contained so a narrow container pans instead of shrinking the text |
+| `.chart__svg` | the inline svg (`width:100%`, `overflow:visible`, `min-width: 92% of --chart-w`) |
 | `.chart__grid` / `.chart__grid--v` / `.chart__baseline` | plot grid |
 | `.chart__axis-label` / `--x` / `.chart__axis-title` | tick + axis text |
 | `.chart__annotation` | mark annotation text |

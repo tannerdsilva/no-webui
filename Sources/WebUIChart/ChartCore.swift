@@ -223,17 +223,6 @@ public struct SelectionConfig: Sendable {
 	}
 }
 
-public struct ChartScrollAxes: OptionSet, Sendable, Hashable {
-	public let rawValue: Int
-	public init(rawValue: Int) { self.rawValue = rawValue }
-	public static let x = ChartScrollAxes(rawValue: 1 << 0)
-	public static let y = ChartScrollAxes(rawValue: 1 << 1)
-	public static let none = ChartScrollAxes([])
-	public static let horizontal = x
-	public static let vertical = y
-	public static let both = ChartScrollAxes([.x, .y])
-}
-
 // MARK: - Mark geometry options
 
 public enum ChartSymbolShape: Sendable, Hashable {
@@ -471,11 +460,10 @@ public struct ChartConfig: Sendable {
 	/// mark click handler; `nil` renders marks statically (no routing).
 	/// wired per-mark under stable ids, so fragment re-renders keep routing.
 	public var onSelectMark: ChartSelectHandler?
-	public var scrollAxes: ChartScrollAxes
-	/// Number of categorical x-units visible in a scrollable chart (0 = all).
-	public var visibleDomain: Int
-	/// Plot height in viewBox units (the layout derives width from the
-	/// container's aspect ratio; the SVG uses `viewBox` + `width:100%`).
+	/// Plot height in viewBox units. The design width derives from it via
+	/// `aspectRatio` and rides to the stylesheet as `--chart-w`: the figure is
+	/// shown at its design width, compressed to 92% at most, and the plot pans
+	/// below that rather than shrinking its text below legibility.
 	public var height: Int
 	/// Aspect ratio of the viewBox (width = height * aspectRatio).
 	public var aspectRatio: Double
@@ -502,8 +490,6 @@ public struct ChartConfig: Sendable {
 		self.foregroundRange = []
 		self.selection = nil
 		self.onSelectMark = nil
-		self.scrollAxes = .none
-		self.visibleDomain = 0
 		self.height = 320
 		self.aspectRatio = 2.0
 		self.accessLabel = nil

@@ -1279,6 +1279,20 @@ public struct ShowcasePage: Sendable {
                                 .chartLegend(position: .hidden)
                             }
                         }
+                        demoCard("Compact design width (chartHeight)") {
+                            VStack(spacing: 8) {
+                                Chart {
+                                    ForEach([("Q1", 42.0), ("Q2", 61.0), ("Q3", 53.0), ("Q4", 48.0)]) { d in
+                                        BarMark(x: .value("Quarter", d.0), y: .value("Value", d.1))
+                                            .foregroundStyle(by: "value")
+                                    }
+                                }
+                                .chartTitle("Compact width")
+                                .chartHeight(180)
+                                .chartLegend(position: .hidden)
+                                Paragraph("chartHeight(180) lays the plot out 360 units wide instead of 640 — the design width should follow the container the chart will live in. A 640-unit plot may compress to 92% of that width, and below that it pans rather than shrinking its labels under 11px.")
+                            }
+                        }
                     }
                 }
                 section("CSS Theme", "theme") {

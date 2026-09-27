@@ -111,6 +111,26 @@ struct ChartRenderer {
 
 	// MARK: Figure / empty state
 
+	/// Open the figure element. `extra` carries the kind class (`chart--pie`,
+	/// `chart--radar`, ...); the design width rides along as `--chart-w` so the
+	/// stylesheet can hold the plot at its laid-out size and pan it rather than
+	/// shrink its text below legibility.
+	private func figureOpen(_ extra: String, label: String, metrics m: Metrics) -> String {
+		var html = "<figure class=\"chart\(extra)\""
+		if let safeId { html += " id=\"\(htmlEscape(safeId))\"" }
+		html += " style=\"--chart-w:\(m.width)px\" role=\"img\" aria-label=\"\(htmlEscape(label))\">"
+		return html
+	}
+
+	/// Open the plot: the scroll container that holds the svg at its design
+	/// width. a container narrower than the design pans it — it never shrinks
+	/// the labels into illegibility (the pre-p6 behaviour: 3.6px at 390px).
+	private func plotOpen(_ m: Metrics) -> String {
+		"<div class=\"chart__plot\"><svg class=\"chart__svg\" viewBox=\"0 0 \(m.width) \(m.height)\" width=\"\(m.width)\" height=\"\(m.height)\" role=\"presentation\">"
+	}
+
+	private var plotClose: String { "</svg></div>" }
+
 	private var emptyState: String {
 		let label = htmlEscape(accessibleName(fallback: "Chart"))
 		var html = "<figure class=\"chart chart--empty\""
@@ -144,17 +164,14 @@ struct ChartRenderer {
 
 	private func renderPolar() -> String {
 		let m = metrics()
-		let label = htmlEscape(ariaDescription())
-		var html = "<figure class=\"chart chart--pie\""
-		if let safeId { html += " id=\"\(htmlEscape(safeId))\"" }
-		html += " role=\"img\" aria-label=\"\(label)\">"
+		var html = figureOpen(" chart--pie", label: ariaDescription(), metrics: m)
 		if let title = config.title { html += "<figcaption class=\"chart__title\">\(htmlEscape(title))</figcaption>" }
 
 		// total
 		let sectors = marks.filter { $0.spec.kind == .sector }
 		let total = sectors.reduce(0.0) { $0 + ($1.spec.angle?.value.numericValue ?? 0) }
 		guard total > 0 else {
-			html += "<svg class=\"chart__svg\" viewBox=\"0 0 \(m.width) \(m.height)\" width=\"\(m.width)\" height=\"\(m.height)\"></svg>"
+			html += plotOpen(m) + plotClose
 			html += "</figure>"
 			return html
 		}
@@ -166,7 +183,7 @@ struct ChartRenderer {
 		let innerR = outerR * holeRatio
 		let gap = sectors.first?.spec.angularInset ?? config.angularInset ?? 0
 
-		html += "<svg class=\"chart__svg\" viewBox=\"0 0 \(m.width) \(m.height)\" width=\"\(m.width)\" height=\"\(m.height)\" role=\"presentation\">"
+		html += plotOpen(m)
 		var startAngle = 0.0  // 0° = 12 o'clock, clockwise (geometry convention)
 		let selectedValue = config.selection?.value
 		for (i, sector) in sectors.enumerated() {
@@ -195,7 +212,7 @@ struct ChartRenderer {
 			html += "</g>"
 			startAngle += sweep
 		}
-		html += "</svg>"
+		html += plotClose
 
 		if holeRatio > 0 {
 			html += "<figcaption class=\"chart__donut-center\">"
@@ -224,7 +241,6 @@ struct ChartRenderer {
 
 	private func renderCartesian() -> String {
 		let m = metrics()
-		let label = htmlEscape(ariaDescription())
 		let xIsCategorical = isCategoricalX
 		let xBands = xAxisCategories
 		let (yLo, yHi) = yDomain
@@ -234,13 +250,10 @@ struct ChartRenderer {
 		let yDomainFinal = config.yDomain ?? explicitDomain(config.yScale) ?? yLo...yHi
 		let yScale = ChartLinearScale(domain: yDomainFinal, rangeStart: Double(m.plotBottom), rangeEnd: Double(m.plotTop), inverted: true)  // inverted: up = high
 
-		var html = "<figure class=\"chart\""
-		if let safeId { html += " id=\"\(htmlEscape(safeId))\"" }
-		html += " role=\"img\" aria-label=\"\(label)\">"
+		var html = figureOpen("", label: ariaDescription(), metrics: m)
 		if let title = config.title { html += "<figcaption class=\"chart__title\">\(htmlEscape(title))</figcaption>" }
 
-		html += "<div class=\"chart__plot\">"
-		html += "<svg class=\"chart__svg\" viewBox=\"0 0 \(m.width) \(m.height)\" width=\"\(m.width)\" height=\"\(m.height)\" role=\"presentation\">"
+		html += plotOpen(m)
 
 		let defs = gradientDefs()
 		if !defs.isEmpty { html += "<defs>\(defs)</defs>" }
@@ -259,7 +272,7 @@ struct ChartRenderer {
 		// axis labels (front)
 		html += renderAxisLabels(m: m, yScale: yScale, xLinear: xLinear, xBanded: xBanded, xIsCategorical: xIsCategorical, xBands: xBands)
 
-		html += "</svg></div>"
+		html += plotClose
 
 		// legend
 		if config.legend.position != .hidden {
@@ -852,15 +865,12 @@ struct ChartRenderer {
 
 	private func renderRadar() -> String {
 		let m = metrics()
-		let label = htmlEscape(ariaDescription())
 		let radar = marks.filter { $0.spec.kind == .radar }
 		let axes = radar.first?.spec.radarValues?.map { $0.label } ?? []
-		var html = "<figure class=\"chart chart--radar\""
-		if let safeId { html += " id=\"\(htmlEscape(safeId))\"" }
-		html += " role=\"img\" aria-label=\"\(label)\">"
+		var html = figureOpen(" chart--radar", label: ariaDescription(), metrics: m)
 		if let title = config.title { html += "<figcaption class=\"chart__title\">\(htmlEscape(title))</figcaption>" }
 		guard axes.count >= 3 else {
-			html += "<svg class=\"chart__svg\" viewBox=\"0 0 \(m.width) \(m.height)\" width=\"\(m.width)\" height=\"\(m.height)\"></svg></figure>"
+			html += plotOpen(m) + plotClose + "</figure>"
 			return html
 		}
 		let cx = Double(m.width) / 2
@@ -869,7 +879,7 @@ struct ChartRenderer {
 		let allValues = radar.flatMap { $0.spec.radarValues?.map { $0.value } ?? [] }
 		let maxValue = config.yDomain?.upperBound ?? max(1, allValues.max() ?? 1)
 
-		html += "<svg class=\"chart__svg\" viewBox=\"0 0 \(m.width) \(m.height)\" width=\"\(m.width)\" height=\"\(m.height)\" role=\"presentation\">"
+		html += plotOpen(m)
 		for level in 1...4 {
 			let r = rOuter * Double(level) / 4
 			let points = (0..<axes.count).map { i -> String in
@@ -905,7 +915,7 @@ struct ChartRenderer {
 				html += "</g>"
 			}
 		}
-		html += "</svg>"
+		html += plotClose
 		if config.legend.position != .hidden && seriesOrder.count > 1 {
 			html += legendForCartesian(position: config.legend.position)
 		}
@@ -917,16 +927,13 @@ struct ChartRenderer {
 
 	private func renderRadial() -> String {
 		let m = metrics()
-		let label = htmlEscape(ariaDescription())
 		let radial = marks.filter { $0.spec.kind == .radial }
-		var html = "<figure class=\"chart chart--radial\""
-		if let safeId { html += " id=\"\(htmlEscape(safeId))\"" }
-		html += " role=\"img\" aria-label=\"\(label)\">"
+		var html = figureOpen(" chart--radial", label: ariaDescription(), metrics: m)
 		if let title = config.title { html += "<figcaption class=\"chart__title\">\(htmlEscape(title))</figcaption>" }
 		let cx = Double(m.width) / 2
 		let cy = Double(m.height) / 2
 		let rOuter = Double(min(m.width, m.height)) / 2 - 18
-		html += "<svg class=\"chart__svg\" viewBox=\"0 0 \(m.width) \(m.height)\" width=\"\(m.width)\" height=\"\(m.height)\" role=\"presentation\">"
+		html += plotOpen(m)
 		for (i, mark) in radial.enumerated() {
 			let value = mark.spec.y?.value.numericValue ?? 0
 			let total = mark.spec.radialTotal ?? 100
@@ -946,7 +953,7 @@ struct ChartRenderer {
 			let pct = total > 0 ? Int((min(1, max(0, value / total)) * 100).rounded()) : 0
 			html += "<text class=\"chart__radial-value\" x=\"\(fmt(cx))\" y=\"\(fmt(cy))\">\(htmlEscape("\(pct)%"))</text>"
 		}
-		html += "</svg></figure>"
+		html += plotClose + "</figure>"
 		return html
 	}
 
@@ -970,7 +977,7 @@ struct ChartRenderer {
 
 	private func tipSVG(x: Double, y: Double, text: String) -> String? {
 		guard !text.isEmpty else { return nil }
-		let w = max(28, Double(text.count) * 6.1 + 16)
+		let w = max(30, Double(text.count) * 6.65 + 16)
 		let bx = x - w / 2
 		let by = y - 30
 		return "<g class=\"chart__tip\" aria-hidden=\"true\">"

@@ -795,3 +795,57 @@ func capture(_ regex: String, in haystack: String) -> String? {
 		#expect(out.contains("aria-label=\"x&quot; onload=&quot;alert(1)\""))
 	}
 }
+
+// MARK: - Layout contract (responsive width)
+
+@Suite struct ChartLayoutContractTests {
+	/// the figure publishes the width the plot was laid out for; the stylesheet
+	/// shows the plot at that width, compresses it to 92% at most, and pans
+	/// below that instead of shrinking its labels under 11px.
+	@Test func figureCarriesItsDesignWidth() {
+		let out = Chart {
+			ForEach([("A", 1.0)]) { d in
+				BarMark(x: .value("M", d.0), y: .value("V", d.1))
+			}
+		}
+		.render()
+		#expect(out.contains("style=\"--chart-w:640px\""))
+	}
+
+	@Test func designWidthFollowsHeightAndAspect() {
+		let out = Chart {
+			ForEach([("A", 1.0)]) { d in
+				BarMark(x: .value("M", d.0), y: .value("V", d.1))
+			}
+		}
+		.chartHeight(180)
+		.render()
+		#expect(out.contains("style=\"--chart-w:360px\""))
+	}
+
+	/// every render path wraps its svg in the scroll container — a kind that
+	/// forgot the wrapper would silently lose the pan behaviour.
+	@Test func everyKindWrapsItsPlot() {
+		let bar = Chart {
+			ForEach([("A", 1.0)]) { d in
+				BarMark(x: .value("M", d.0), y: .value("V", d.1))
+			}
+		}
+		.render()
+		let pie = Chart([SectorMark(angle: .value("share", 30), category: "web").makeMark()], id: "pie").render()
+		let radar = Chart([RadarMark([("speed", 3.0), ("cost", 5.0), ("reach", 4.0)], series: "s").makeMark()],
+			id: "radar").render()
+		let radial = Chart([RadialMark(value: 72, of: 100, series: "cpu").makeMark()],
+			id: "gauge").render()
+		#expect(occ(bar, "class=\"chart__plot\"") == 1, "bar plot is wrapped")
+		#expect(occ(pie, "class=\"chart__plot\"") == 1, "pie plot is wrapped")
+		#expect(occ(radar, "class=\"chart__plot\"") == 1, "radar plot is wrapped")
+		#expect(occ(radial, "class=\"chart__plot\"") == 1, "radial plot is wrapped")
+	}
+
+	@Test func emptyStateRendersNoPlot() {
+		let out = Chart([]).render()
+		#expect(out.contains("chart--empty"))
+		#expect(!out.contains("chart__plot"))
+	}
+}

@@ -8257,6 +8257,9 @@ h6 {
 .chart {
 	margin: 0;
 	position: relative;
+	width: var(--chart-w, auto);
+	max-width: 100%;
+	min-width: 0;
 	font-family: var(--font-sans);
 	color: var(--color-text);
 }
@@ -8272,12 +8275,18 @@ h6 {
 
 .chart__plot {
 	position: relative;
+	overflow-x: auto;
+	overflow-y: hidden;
+	container-type: inline-size;
+	min-width: 0;
+	max-width: 100%;
 }
 
 .chart__svg {
 	display: block;
 	width: 100%;
 	height: auto;
+	min-width: calc(var(--chart-w, 0px) * 0.92);
 	overflow: visible;
 }
 
@@ -8296,7 +8305,7 @@ h6 {
 
 /* axis text */
 .chart__axis-label {
-	font-size: var(--font-size-2xs);
+	font-size: var(--font-size-xs);
 	font-weight: var(--font-weight-medium);
 	fill: var(--color-text-muted);
 }
@@ -8308,13 +8317,13 @@ h6 {
 	font-variant-numeric: tabular-nums;
 }
 .chart__axis-title {
-	font-size: 12px;
+	font-size: var(--font-size-xs);
 	font-weight: var(--font-weight-semibold);
 	fill: var(--color-text-muted);
 	letter-spacing: var(--letter-spacing-wide);
 }
 .chart__annotation {
-	font-size: 12px;
+	font-size: var(--font-size-xs);
 	font-weight: var(--font-weight-semibold);
 	fill: var(--color-text);
 }
@@ -8439,7 +8448,7 @@ h6 {
 }
 .chart__tip text {
 	fill: var(--color-bg);
-	font-size: 11px;
+	font-size: var(--font-size-xs);
 	font-variant-numeric: tabular-nums;
 }
 

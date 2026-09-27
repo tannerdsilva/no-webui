@@ -121,15 +121,6 @@ extension Chart {
 	public func chartAngularInset(_ degrees: Double?) -> Chart {
 		var c = config; c.angularInset = degrees; return Chart(marks, config: c, id: id, ariaLabel: ariaLabel)
 	}
-	/// Enable scrolling on the given axes (mirrors `chartScrollableAxes`).
-	public func chartScrollableAxes(_ axes: ChartScrollAxes) -> Chart {
-		var c = config; c.scrollAxes = axes; return Chart(marks, config: c, id: id, ariaLabel: ariaLabel)
-	}
-	/// How many x-units are visible in a horizontal scroll (mirrors
-	/// `chartXVisibleDomain`).
-	public func chartXVisibleDomain(_ count: Int) -> Chart {
-		var c = config; c.visibleDomain = count; return Chart(marks, config: c, id: id, ariaLabel: ariaLabel)
-	}
 	/// Plot height in viewBox units.
 	public func chartHeight(_ height: Int) -> Chart {
 		var c = config; c.height = height; return Chart(marks, config: c, id: id, ariaLabel: ariaLabel)
