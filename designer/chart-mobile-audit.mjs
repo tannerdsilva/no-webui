@@ -105,6 +105,7 @@ const MEASURE = () => {
       svgW: svgR ? Math.round(svgR.width) : null,
       containerW: Math.round(sr.width),
       pans: scroller.scrollWidth > scroller.clientWidth + 1,
+      visiblePct: svgR && svgR.width > 0 ? Math.min(100, Math.round((sr.width / svgR.width) * 100)) : null,
       minPainted: texts.length ? Math.min(...texts.map((t) => t.painted)) : null,
       worstSel: texts.length ? texts.reduce((m, t) => (t.painted < m.painted ? t : m), texts[0]).sel : null,
       collisions,
@@ -168,12 +169,25 @@ for (const theme of THEMES) {
 
     const pans = m.figures.filter((f) => f.pans).length;
     const worst = m.figures.reduce((a, b) => (a.minPainted ?? 99) <= (b.minPainted ?? 99) ? a : b, m.figures[0]);
+    const leastVisible = m.figures.reduce((a, b) => (a.visiblePct ?? 100) <= (b.visiblePct ?? 100) ? a : b, m.figures[0]);
     console.log("  " + slide + ": worst painted " + (worst.minPainted ?? "n/a") + "px (" + worst.worstSel +
-                "), " + pans + "/" + m.figures.length + " pan, overflow " + m.overflow + "px");
+                "), " + pans + "/" + m.figures.length + " pan, least visible " + (leastVisible.visiblePct ?? "n/a") +
+                "%, overflow " + m.overflow + "px");
 
 
     if (m.overflow > 1) { bad(slide + ": page overflows horizontally by " + m.overflow + "px"); }
     else { ok(slide + ": no page overflow"); }
+
+    // fitting is the other half of the contract: from 390px up the page must
+    // give every chart enough room, so nothing hides behind a pan. 320px is
+    // reported, not asserted (that width leaves the page ~256px of arena).
+    if (vp.w >= 390) {
+      const cut = m.figures.filter((f) => f.visiblePct !== null && f.visiblePct < 100);
+      if (cut.length) {
+        bad(slide + ": " + cut.length + " figure(s) not fully visible, e.g. " + cut[0].title.trim() +
+            " shows " + cut[0].visiblePct + "%, container " + cut[0].containerW + "px");
+      } else { ok(slide + ": every chart fully visible"); }
+    }
 
     const thin = m.figures.filter((f) => f.minPainted !== null && f.minPainted < MIN_PAINTED_PX);
     if (thin.length) {
@@ -212,7 +226,7 @@ for (const theme of THEMES) {
     } else { ok(slide + ": hover tips stay within the plot (pan-reachable counts as inside)"); }
 
     const csv = m.figures.map((f) => [vp.w, theme, f.containerW, f.designW, f.viewBoxW, f.svgW, f.pans, f.minPainted,
-      f.worstSel, f.collisions, f.clippedTips, f.pannedTips].join(","));
+      f.worstSel, f.collisions, f.clippedTips, f.pannedTips, f.visiblePct].join(","));
     rows.push(...csv);
   }
 }
@@ -221,7 +235,7 @@ await context.close();
 await browser.close();
 server.kill("SIGTERM");
 
-const header = ["viewport", "theme", "containerW", "designW", "viewBoxW", "svgW", "pans", "minPainted", "worstSel", "collisions", "clippedTips", "pannedTips"];
+const header = ["viewport", "theme", "containerW", "designW", "viewBoxW", "svgW", "pans", "minPainted", "worstSel", "collisions", "clippedTips", "pannedTips", "visiblePct"];
 const csv = [header.join(",")].concat(rows).join("\n");
 writeFileSync(join(OUT, "measurements.csv"), csv + "\n");
 

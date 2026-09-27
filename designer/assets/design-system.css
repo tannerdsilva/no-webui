@@ -7966,7 +7966,11 @@ h6 {
   min-width: 0;
   padding: var(--space-6) var(--space-8);
 }
+.showcase-main {
+  padding: var(--space-8);
+}
 .showcase-section {
+  width: 100%;
   scroll-margin-top: 4.5rem;
 }
 .showcase-section h2 {
@@ -8152,6 +8156,9 @@ h6 {
   }
   .showcase-content {
     padding: var(--space-4);
+  }
+  .showcase-main {
+    padding: 0;
   }
   .showcase-sidebar {
     position: static;

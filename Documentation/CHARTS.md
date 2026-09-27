@@ -168,9 +168,10 @@ the stylesheet turns that into three rules:
   container width.
 
 measured on the showcase across 320/390/480/768/1024/1440 in both themes: worst
-painted text **11.04px**, **zero panning at ≥768px**, panning only at 480px and
-below, no page overflow (`designer/chart-mobile-audit.mjs`, evidence in
-`.smoke/chart-mobile-<date>/`).
+painted text **11.04px**, **every chart fully visible from 390px up**, no page
+overflow (`designer/chart-mobile-audit.mjs`, evidence in
+`.smoke/chart-mobile-<date>/`). the gate asserts both halves — legibility *and*
+the visible fraction — so a page that hides part of a plot behind a pan fails.
 
 authoring notes:
 

@@ -1126,7 +1126,9 @@ public struct ShowcasePage: Sendable {
                 section("Charts", "charts") {
                     VStack(spacing: 16) {
                         Heading("WebUIChart suite", level: .h2)
-                        Paragraph("Server-rendered inline-SVG charts mirroring the SwiftUI Charts API. No JS dependencies — styling comes from the design-system tokens, and it reflows in dark mode automatically.")
+                        Paragraph("Server-rendered inline-SVG charts mirroring the SwiftUI Charts API. No JS dependencies — styling comes from the design-system tokens, and it reflows in dark mode automatically. Each chart declares the width it was designed for (320 units here), so its 12px labels stay 12px and the plot is fully visible at any container width; a container below 92% of that width pans the plot rather than shrinking the text.")
+                    }
+                    Grid(columns: .custom("repeat(auto-fit, minmax(min(100%, 344px), 1fr))"), spacing: 16) {
                         demoCard("Grouped bars") {
                             VStack(spacing: 0) {
                                 Chart {
@@ -1137,6 +1139,7 @@ public struct ShowcasePage: Sendable {
                                     }
                                 }
                                 .chartTitle("Revenue by quarter")
+                                .chartHeight(150)
                             }
                         }
                         demoCard("Stacked bars") {
@@ -1148,6 +1151,7 @@ public struct ShowcasePage: Sendable {
                                     }
                                 }
                                 .chartTitle("Requests by service")
+                                .chartHeight(150)
                             }
                         }
                         demoCard("Line + points + area") {
@@ -1167,6 +1171,7 @@ public struct ShowcasePage: Sendable {
                                     }
                                 }
                                 .chartTitle("Weekly growth")
+                                .chartHeight(150)
                                 .chartYScale(.linear(domain: 0...42))
                             }
                         }
@@ -1180,6 +1185,7 @@ public struct ShowcasePage: Sendable {
                                 }
                                 .chartTitle("Platform share")
                                 .chartHeight(300)
+                                .chartAspectRatio(1)
                             }
                         }
                         demoCard("Donut + selection") {
@@ -1192,6 +1198,7 @@ public struct ShowcasePage: Sendable {
                                 }
                                 .chartTitle("Platform share")
                                 .chartHeight(300)
+                                .chartAspectRatio(1)
                                 .chartInnerRadius(0.55)
                                 .chartAngularInset(1.5)
                                 .chartXSelection(value: .category("iOS"))
@@ -1210,6 +1217,7 @@ public struct ShowcasePage: Sendable {
                                         .lineStyle(ChartLineStyle(width: 2, dash: [6, 4]))
                                 }
                                 .chartTitle("Against target")
+                                .chartHeight(150)
                                 .chartYScale(.linear(domain: 0...30))
                             }
                         }
@@ -1217,6 +1225,7 @@ public struct ShowcasePage: Sendable {
                             VStack(spacing: 0) {
                                 Chart(heatmapCells())
                                     .chartTitle("Activity by hour  day")
+                                .chartHeight(150)
                             }
                         }
                         demoCard("Empty state") {
@@ -1234,7 +1243,8 @@ public struct ShowcasePage: Sendable {
                                         .foregroundStyle(by: "us")
                                 }
                                 .chartTitle("Service profile")
-                                .chartHeight(320)
+                                .chartHeight(300)
+                                .chartAspectRatio(1)
                             }
                         }
                         demoCard("Radial gauge") {
@@ -1264,6 +1274,7 @@ public struct ShowcasePage: Sendable {
                                     }
                                 }
                                 .chartTitle("Weekly signups")
+                                .chartHeight(150)
                                 .chartLegend(position: .hidden)
                             }
                         }
@@ -1276,21 +1287,8 @@ public struct ShowcasePage: Sendable {
                                     }
                                 }
                                 .chartTitle("Net change")
+                                .chartHeight(150)
                                 .chartLegend(position: .hidden)
-                            }
-                        }
-                        demoCard("Compact design width (chartHeight)") {
-                            VStack(spacing: 8) {
-                                Chart {
-                                    ForEach([("Q1", 42.0), ("Q2", 61.0), ("Q3", 53.0), ("Q4", 48.0)]) { d in
-                                        BarMark(x: .value("Quarter", d.0), y: .value("Value", d.1))
-                                            .foregroundStyle(by: "value")
-                                    }
-                                }
-                                .chartTitle("Compact width")
-                                .chartHeight(180)
-                                .chartLegend(position: .hidden)
-                                Paragraph("chartHeight(180) lays the plot out 360 units wide instead of 640 — the design width should follow the container the chart will live in. A 640-unit plot may compress to 92% of that width, and below that it pans rather than shrinking its labels under 11px.")
                             }
                         }
                     }
@@ -1428,7 +1426,7 @@ public struct ShowcasePage: Sendable {
                         }
                     }
                 }
-            }.padding(32)
+            }.class("showcase-main")
         }
 
     // MARK: - Helpers
