@@ -100,6 +100,20 @@ across **one full minor release**: a public `@available(*, deprecated, …)`
 marking (or a docs note for markup contracts) plus a changelog entry naming
 the replacement. removal lands in the next **major**.
 
+### removals that were never functional (unreleased)
+
+three chart symbols were removed outright rather than deprecated —
+`ChartScrollAxes`, `.chartScrollableAxes(_:)`, `.chartXVisibleDomain(_:)` and
+their `ChartConfig` storage. they shipped with **no reader anywhere**: no
+renderer, no client runtime, no css rule, no docs entry. grep `Sources/` and
+`designer/assets/` for `scrollAxes` / `visibleDomain` and nothing matches — the
+only mentions left are this note and the changelog entry. every call was
+therefore already a no-op, so the
+consumer impact is a compile error on a call that did nothing; the replacement
+for the intent is the plot's pan behaviour (`.chart__plot`) or a declared design
+width (`.chartHeight` / `.chartAspectRatio`). this is a corrective, not a
+deprecation cycle — say so here rather than silently breaking a promise.
+
 ## what is not stable (yet) — honest limits
 
 these are real, documented constraints. depending on them as if they were
@@ -127,7 +141,10 @@ frozen surface is a mistake:
    `designer/browser-smoke.mjs` (Escape probe). the wasm client path keeps
    none of this (see #2).
 4. **`WebUIChart` pins live in `ChartTests`** and follow the same epoch, but
-   charts are the youngest surface — treat them as the least battle-tested.
+   charts are the youngest surface — treat them as the least battle-tested. the
+   width/label contract has a second pin outside the unit suite:
+   `designer/chart-mobile-audit.mjs` (six viewports × two themes; painted text
+   ≥ 11px *and* the visible fraction of every plot).
 5. **phase 6 of the wasm trajectory** (size diet + per-SKU distribution) is
    post-1.0 scope; it changes distribution and payload size, never the
    frozen surface.

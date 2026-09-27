@@ -348,6 +348,7 @@ swift package --disable-sandbox plugin fullstack-smoke
 node designer/browser-smoke.mjs      # requires node + playwright (chromium)
 node designer/showcase-ws-smoke.mjs  # stable-id dispatch gate against the showcase server
 node designer/blocks-sweep.mjs     # p6 blocks gate: one server per block, 320/768/1440 in both themes, no-overflow + parts assertions
+node designer/chart-mobile-audit.mjs # chart width gate: 6 viewports x 2 themes; painted text >= 11px AND every plot fully visible from 390px, tips reachable, no page overflow (WEBUI_CHART_AUDIT_SERVER overrides the binary for a scratch build)
 node designer/rtl-audit.mjs        # p7 direction gate: both directions x both themes x 3 viewports, mirrored-order assertions with an ltr control
 ```
 

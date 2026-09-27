@@ -335,19 +335,32 @@ Chart {
 ```
 
 - **marks:** `BarMark`, `LineMark`, `AreaMark`, `PointMark`, `RectangleMark`,
-  `RuleMark`, `SectorMark` (pie/donut via `innerRadiusRatio`).
+  `RuleMark`, `SectorMark` (pie/donut via `innerRadiusRatio`), `RadarMark`
+  (one closed polygon per series, needs ≥3 axes), `RadialMark` (a stroked gauge
+  ring with a centred percentage).
 - **plottables:** `.value("label", Int|Double|String|Date)` — strings/dates
   make the axis categorical (or formatted-numeric); `yStart`/`yEnd` ranges.
 - **modifiers:** `.foregroundStyle(by:)` / `.foregroundStyle("var")`,
   `.opacity`, `.cornerRadius`, `.stacking`, `.interpolation`
   (`.linear`/`.monotone`/`.cardinal(t)`/`.catmullRom`/`.stepStart`/`.stepEnd`),
-  `.symbol`, `.lineStyle`, `.annotation`.
+  `.symbol`, `.lineStyle`, `.annotation`, `.areaGradient(.fade("var")|…)`,
+  `.tooltip("text")`.
 - **chart modifiers:** `.chartTitle`, `.chartID` (stable mark ids for WS
-  interactivity), `.chartSelection(axis:value:)`, `.chartXScale` /
-  `.chartYScale` (`.linear(domain:)`, `.date(domain:)`, `.categorical(domain:)`),
-  `.chartXAxis` / `.chartYAxis` (`AxisConfig`: grid, ticks,
-  `labelFormat`), `.chartLegend(position:)`, `.chartPlotStyle`,
-  `.chartAccessibilityLabel`.
+  interactivity), `.onSelectMark { me, category in … }` (typed mark handler),
+  `.chartSelection(axis:value:)` / `.chartXSelection` / `.chartYSelection`,
+  `.chartXScale` / `.chartYScale`
+  (`.linear(domain:)`, `.date(domain:)`, `.categorical(domain:)`),
+  `.chartXDomain` / `.chartYDomain`, `.chartXAxis` / `.chartYAxis`
+  (`AxisConfig`: grid, ticks, `labelFormat`), `.chartLegend(position:)`,
+  `.chartForegroundStyleScale(domain:range:)`, `.chartInnerRadius`,
+  `.chartAngularInset`, `.chartAccessibilityLabel`, and the layout pair
+  `.chartHeight` / `.chartAspectRatio` (together they set the **design width**).
+- **width:** a chart is laid out for a design width (`height × aspectRatio`,
+  default `320 × 2 = 640`), renders at that width, may compress to 92% of it —
+  12px text still paints 11.04px — and pans below that, so labels never paint
+  under 11px at any container width. a chart contributes no intrinsic width, so
+  a container that sizes to its content needs a declared width or a grid track.
+  `Documentation/CHARTS.md` → *responsive layout* has the recipe.
 - **polar:** all `SectorMark` (or a single `.angle` value per mark) → pie;
   `innerRadiusRatio > 0` → donut with a center total.
 

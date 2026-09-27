@@ -61,6 +61,32 @@ all notable changes to this project are documented here.
   svg fell back to the 300x150 replaced-element default and every chart rendered at
   ~0.47 scale, axis labels included.
 
+- **chart text keeps its size**: the figure publishes the width it was laid out
+  for (`--chart-w`), renders at it, may compress to 92% — 12px labels still paint
+  11.04px — and pans below that. before this, in-svg text multiplied by the
+  container's scale, so a 390px viewport painted 10px axis labels at **3.6px**.
+  the plot is inline-size-contained (so the pan works in any container) and the
+  figure declares its own width (a chart contributes no intrinsic width, so a
+  content-sized container collapses to its text). chart text moves onto
+  `--font-size-xs`.
+- the figure's **accessible name is the chart's title** when one is set
+  (`.chartAccessibilityLabel(_:)` still wins), instead of `Chart with N marks` —
+  and the singular case reads `Chart with 1 mark`.
+- the **inert scroll API is removed**: `ChartScrollAxes`,
+  `ChartConfig.scrollAxes`, `ChartConfig.visibleDomain`, `.chartScrollableAxes(_:)`
+  and `.chartXVisibleDomain(_:)` shipped with no reader anywhere (no renderer, no
+  runtime, no css), so every call was already a no-op — see the note in
+  `Documentation/STABILITY.md`. the replacement for the intent is the plot's pan
+  behaviour or a declared design width via `.chartHeight` / `.chartAspectRatio`.
+- `designer/chart-mobile-audit.mjs`: a gate over six viewports × two themes that
+  asserts painted text ≥ 11px, the **visible fraction** of every plot, label
+  collisions, tip reachability and page overflow (five assertions per slide,
+  six from 390px up).
+- the showcase charts section is a responsive gallery — `chartHeight(150)` plots
+  in `Grid(columns: .custom("repeat(auto-fit, minmax(min(100%, 344px), 1fr))"))`
+  tracks — so every chart is fully visible from a 390px viewport up, 1-up on a
+  phone and 3-up at 1440px.
+
 ### data table
 
 - `WebUITable.hiddenColumns` (server-owned column visibility), plus the client fix

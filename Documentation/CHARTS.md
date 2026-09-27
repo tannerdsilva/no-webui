@@ -1,7 +1,8 @@
 # WebUIChart — charting
 
 server-rendered charts for the swiftui-for-web stack. `WebUIChart` is a
-self-contained Swift target (depends only on `WebUI`): a `Chart` view takes a
+self-contained Swift target whose only dependency is `WebUICore` (the view
+kernel `WebUI` itself builds on): a `Chart` view takes a
 collection of marks, resolves scales, and emits **inline SVG** wrapped in a
 `<figure class="chart">` — no canvas, no client-side chart library, no
 network fetches.
@@ -175,10 +176,12 @@ the visible fraction — so a page that hides part of a plot behind a pan fails.
 
 authoring notes:
 
-- **phone-first placements declare a smaller design width** — `chartHeight(180)`
-  (× the default aspect 2) lays the plot out 360 units wide, so it fits a 360px
-  container without panning and keeps 12px labels on every screen. the
-  showcase's "Compact design width" card does exactly this;
+- **fit beats pan: declare the width the placement can afford.** `chartHeight(150)`
+  (× the default aspect 2) lays the plot out 300 units wide, which fits a
+  phone-width card without panning. the showcase does exactly this — a
+  `Grid(columns: .custom("repeat(auto-fit, minmax(min(100%, 344px), 1fr))"))`
+  gallery of 300-unit plots, 1-up at 390px and 3-up at 1440px. the 640-unit
+  default in a phone-width card *will* pan (a 228px card showed 39% of the plot);
 - **a chart contributes no intrinsic width** — its plot owns its inline size, so
   a container sized to its content (a `flex-start` column, a content-sized grid
   track) will collapse to the width of its text. give chart containers a

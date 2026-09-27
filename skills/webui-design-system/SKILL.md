@@ -1,7 +1,7 @@
 ---
 name: webui-design-system
 description: "Use when BUILDING a frontend in your own Swift project with the no-webui public API: add the dependency, author views/components in Swift, wire live server round-trips, apply design tokens/theming, and serve + verify the page. For any kind of app UI — a shell, a dashboard, a chat-style page, a tool — see the 'Build your UI in Swift' section and the references index. (Maintaining the no-webui package itself — its designer assets, icon pipeline, showcase generation, smoke gates — is repo work documented in the repo's README/AGENTS.md, not this skill.)"
-version: 1.14.0
+version: 1.15.0
 author: Hermes Agent
 license: MIT
 platforms: [macos]
@@ -245,6 +245,30 @@ The live layer: the runtime opens a WebSocket and forwards DOM events as
   growing. Use `stretch()` on fixed-width sidebars/rails, `fill()` on the region
   that should consume the rest. See `references/css-layout-shrink-stretch.md`.
 
+## Charts (`WebUIChart`)
+
+`WebUIChart` is a separate product — add it beside `WebUI` in your dependencies.
+It renders inline SVG inside a `<figure class="chart">`, styled entirely by the
+design-system tokens, with no client charting library.
+
+- **declare the width you designed for.** A chart lays out for
+  `height × aspectRatio` (default `320 × 2 = 640`) and renders at that width: it
+  does not scale up, may compress to 92%, and **pans** below that, so labels
+  never paint under 11px at any container width. Choose the design width from the
+  placement — `chartHeight(150)` = a 300-unit plot that fits a phone card, while
+  the 640-unit default inside a 390px card shows only ~39% of the plot.
+- **a chart contributes no intrinsic width** (its plot owns its inline size), so
+  a container that sizes to its content — a `VStack(.leading)`, a content-sized
+  grid track — collapses to the width of its own text. Give chart containers a
+  declared width or an explicit grid track: the same trap as *Filling the space*,
+  with a bigger blast radius.
+- **interactive marks:** `.chartID("sales")` plus `.onSelectMark { me, category in … }`
+  wires each painted bar/sector as its own routed component and hands you the
+  clicked category with an `ElementRef` to the chart root — no `targetId`
+  string-matching, and re-rendered figures keep routing.
+- deep guide (marks, scales, axes, selection, gradients, the full width
+  contract): `Documentation/CHARTS.md` in the package checkout.
+
 ## Serve your page (your server must do this)
 
 Your server serves the rendered document and assets, and upgrades `/ws`:
@@ -314,6 +338,9 @@ in its `README.md`, `AGENTS.md`, and `Documentation/*`; reach for those (or the
   `__body`, not the container). See the `*__body` section above.
 - **`/ws` console error at load** → the runtime is on but your server doesn't
   upgrade `/ws` / answer pings.
+- **A chart collapses to the width of its own text** → charts contribute no
+  intrinsic width; give the container a declared width or a grid track, and pick
+  the design width (`chartHeight`) for the smallest placement (see *Charts*).
 - **String escaping in Swift HTML literals** — a doubled backslash (`\\`) renders
   a literal `\`; write single `\(…)`. Prefer multiline string literals.
 - **Nested ternary inside interpolation** breaks the parser — compute the
