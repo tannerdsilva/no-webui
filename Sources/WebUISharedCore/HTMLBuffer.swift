@@ -99,17 +99,30 @@ public struct HTMLBuffer {
 		precondition(!frames.isEmpty, "endOpenTag with no open element")
 		precondition(!frames[frames.count - 1].openTagWritten, "endOpenTag called twice")
 		let frame = frames[frames.count - 1]
-		if frame.incoming.isEmpty {
+		writeOpenTag(frame.tag, base: frame.base, incoming: frame.incoming)
+		frames[frames.count - 1].openTagWritten = true
+	}
+
+	/// write an element that has no closing tag — `img`, `input` — as the open
+	/// tag and nothing else. it drains the pending slot exactly like a framed
+	/// element, and it leaves no frame behind: there is no content to close.
+	package mutating func voidElement(_ tag: String, _ attributes: String = "") {
+		writeOpenTag(tag, base: attributes, incoming: takePendingAttributes())
+	}
+
+	/// the one place an opening tag is assembled, so a framed element and a
+	/// void element cannot drift.
+	private mutating func writeOpenTag(_ tag: String, base: String, incoming: String) {
+		if incoming.isEmpty {
 			// a separator space joins the tag to its own attribute text —
 			// callers may pass `id="x"` or ` id="x"`, the same allowance the
 			// merge path makes below
-			append(frame.base.isEmpty
-				? "<" + frame.tag + ">"
-				: "<" + frame.tag + (frame.base.hasPrefix(" ") ? frame.base : " " + frame.base) + ">")
+			append(base.isEmpty
+				? "<" + tag + ">"
+				: "<" + tag + (base.hasPrefix(" ") ? base : " " + base) + ">")
 		} else {
-			append("<" + frame.tag + mergedAttributeText(base: frame.base, incoming: frame.incoming) + ">")
+			append("<" + tag + mergedAttributeText(base: base, incoming: incoming) + ">")
 		}
-		frames[frames.count - 1].openTagWritten = true
 	}
 
 	/// write the closing tag and pop the element.

@@ -103,7 +103,13 @@ public struct Spacer: View {
     }
 
     public func render() -> String {
-        "<div class=\"spacer\" style=\"flex:1;min-width:\(minSize)px;min-height:\(minSize)px\"></div>"
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
+        buffer.beginElement("div", " class=\"spacer\" style=\"flex:1;min-width:\(minSize)px;min-height:\(minSize)px\"")
+        buffer.endOpenTag()
+        buffer.endElement()
     }
 }
 
@@ -115,11 +121,18 @@ public struct ScrollView: View {
     }
 
     public func render() -> String {
-        """
-        <div class="scrollview">
-        \(children.map { $0.render() }.joined())
-        </div>
-        """
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
+        buffer.beginElement("div", " class=\"scrollview\"")
+        buffer.endOpenTag()
+        buffer.append("\n")
+        for child in children {
+            child.render(into: &buffer)
+        }
+        buffer.append("\n")
+        buffer.endElement()
     }
 }
 
@@ -228,14 +241,18 @@ public struct Navigation: View {
     }
 
     public func render() -> String {
-        var html = "<nav"
-        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
-        html += ">"
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
+        var attributeText = ""
+        if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
+        buffer.beginElement("nav", attributeText)
+        buffer.endOpenTag()
         for child in children {
-            html += child.render()
+            child.render(into: &buffer)
         }
-        html += "</nav>"
-        return html
+        buffer.endElement()
     }
 }
 
@@ -253,14 +270,18 @@ public struct Header: View {
     }
 
     public func render() -> String {
-        var html = "<header"
-        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
-        html += ">"
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
+        var attributeText = ""
+        if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
+        buffer.beginElement("header", attributeText)
+        buffer.endOpenTag()
         for child in children {
-            html += child.render()
+            child.render(into: &buffer)
         }
-        html += "</header>"
-        return html
+        buffer.endElement()
     }
 }
 
@@ -278,14 +299,18 @@ public struct Footer: View {
     }
 
     public func render() -> String {
-        var html = "<footer"
-        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
-        html += ">"
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
+        var attributeText = ""
+        if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
+        buffer.beginElement("footer", attributeText)
+        buffer.endOpenTag()
         for child in children {
-            html += child.render()
+            child.render(into: &buffer)
         }
-        html += "</footer>"
-        return html
+        buffer.endElement()
     }
 }
 
@@ -303,14 +328,18 @@ public struct Main: View {
     }
 
     public func render() -> String {
-        var html = "<main"
-        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
-        html += ">"
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
+        var attributeText = ""
+        if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
+        buffer.beginElement("main", attributeText)
+        buffer.endOpenTag()
         for child in children {
-            html += child.render()
+            child.render(into: &buffer)
         }
-        html += "</main>"
-        return html
+        buffer.endElement()
     }
 }
 
@@ -328,13 +357,17 @@ public struct Aside: View {
     }
 
     public func render() -> String {
-        var html = "<aside"
-        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
-        html += ">"
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
+        var attributeText = ""
+        if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
+        buffer.beginElement("aside", attributeText)
+        buffer.endOpenTag()
         for child in children {
-            html += child.render()
+            child.render(into: &buffer)
         }
-        html += "</aside>"
-        return html
+        buffer.endElement()
     }
 }
