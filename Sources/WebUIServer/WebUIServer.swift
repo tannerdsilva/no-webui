@@ -5,25 +5,17 @@ import NIOHTTP1
 import NIOPosix
 import NIOWebSocket
 import WebUI
-import WebUICompression
 import WebUIDesignSystem
 
-// MARK: - gzip
+// MARK: - cached assets
 
-/// rfc-1952 gzip encoding through the `WebUICompression` C shim. returns nil
-/// on a framework error or empty input; small payloads pass through
-/// uncompressed by the caller.
-enum GzipEncoder {
-	static func encode(_ input: [UInt8]) -> [UInt8]? {
-		var outLen = 0
-		guard let ptr = input.withUnsafeBufferPointer({ src in
-			webui_gzip_compress(src.baseAddress, src.count, &outLen)
-		}) else {
-			return nil
-		}
-		defer { webui_gzip_free(ptr) }
-		return Array(UnsafeBufferPointer(start: ptr, count: outLen))
-	}
+/// pre-encoded response bytes for the framework's own assets. they are fixed
+/// for the life of the process, and the stylesheet is 320 KB — re-encoding it
+/// per request would copy it twice for nothing.
+private enum CachedAssets {
+	static let css = ByteBuffer(string: DesignSystemAssets.minifiedCss)
+	static let engine = ByteBuffer(string: WebUIAssets.engine)
+	static let shell = ByteBuffer(string: WebUIAssets.shell)
 }
 
 // MARK: - Configuration
@@ -101,6 +93,11 @@ public actor WebUIServer {
 		let bootstrap = ServerBootstrap(group: group)
 			.serverChannelOption(ChannelOptions.backlog, value: 128)
 			.serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
+			// request/response traffic here is small and latency-shaped (a ws frame
+			// is ~60 bytes), so nagle + delayed-ack can add tens of ms on a real
+			// network. nio enables this for client channels but not for accepted
+			// children, so set it explicitly.
+			.childChannelOption(ChannelOptions.tcpOption(.tcp_nodelay), value: 1)
 
 		let channel: NIOAsyncChannel<EventLoopFuture<ServerUpgradeResult>, Never> = try await bootstrap.bind(
 			host: cfg.host,
@@ -308,15 +305,13 @@ final class Runner: Sendable {
 					return
 				}
 				let uri = head.uri
-				let canGzip = head.headers["accept-encoding"].contains { $0.lowercased().contains("gzip") }
 				if uri == "/__assets/css" {
 					// legacy stable path (old pages / old cache) — short cache.
 					try await respond(
 						channel: channel.channel,
-						body: DesignSystemAssets.minifiedCss,
+						bytes: CachedAssets.css,
 						contentType: "text/css; charset=utf-8",
-						cacheControl: "public, max-age=\(config.assetCacheSeconds)",
-						gzip: canGzip
+						cacheControl: "public, max-age=\(config.assetCacheSeconds)"
 					)
 				} else if uri.hasPrefix("/__assets/css.") {
 					// content-addressed sheet: a rebuilt sheet is a new url, so
@@ -324,26 +319,23 @@ final class Runner: Sendable {
 					// cache with no stale-sheet window.
 					try await respond(
 						channel: channel.channel,
-						body: DesignSystemAssets.minifiedCss,
+						bytes: CachedAssets.css,
 						contentType: "text/css; charset=utf-8",
-						cacheControl: "public, max-age=31536000, immutable",
-						gzip: canGzip
+						cacheControl: "public, max-age=31536000, immutable"
 					)
 				} else if uri == "/ui/webui-engine.js" {
 					try await respond(
 						channel: channel.channel,
-						body: WebUIAssets.engine,
+						bytes: CachedAssets.engine,
 						contentType: "text/javascript; charset=utf-8",
-						cacheControl: "public, max-age=\(config.assetCacheSeconds)",
-						gzip: canGzip
+						cacheControl: "public, max-age=\(config.assetCacheSeconds)"
 					)
 				} else if uri == "/ui/webui-shell.js" {
 					try await respond(
 						channel: channel.channel,
-						body: WebUIAssets.shell,
+						bytes: CachedAssets.shell,
 						contentType: "text/javascript; charset=utf-8",
-						cacheControl: "public, max-age=\(config.assetCacheSeconds)",
-						gzip: canGzip
+						cacheControl: "public, max-age=\(config.assetCacheSeconds)"
 					)
 				} else if uri == config.pagePath || uri == "/index.html" {
 					// the server owns the render context: handlers a page wires
@@ -359,8 +351,7 @@ final class Runner: Sendable {
 					try await respond(
 						channel: channel.channel,
 						body: body,
-						contentType: "text/html; charset=utf-8",
-						gzip: canGzip
+						contentType: "text/html; charset=utf-8"
 					)
 				} else {
 					try await respond404(channel: channel.channel)
@@ -375,27 +366,45 @@ final class Runner: Sendable {
 		body: String,
 		contentType: String,
 		status: HTTPResponseStatus = .ok,
-		cacheControl: String = "no-store",
-		gzip: Bool = false
+		cacheControl: String = "no-store"
 	) async throws {
-		var payload = Array(body.utf8)
+		// one copy: the utf-8 view goes straight into the channel's buffer.
+		var buf = channel.allocator.buffer(capacity: body.utf8.count)
+		buf.writeString(body)
+		try await respond(
+			channel: channel,
+			bytes: buf,
+			contentType: contentType,
+			status: status,
+			cacheControl: cacheControl
+		)
+	}
+
+	/// the byte-level responder — cached assets skip the string path entirely.
+	/// http/1.1 keep-alive is the default here (no `Connection: close`): the
+	/// read-idle handler still reaps an abandoned connection after
+	/// `readIdleSeconds`, and the admission gate still bounds the total.
+	private func respond(
+		channel: Channel,
+		bytes: ByteBuffer,
+		contentType: String,
+		status: HTTPResponseStatus = .ok,
+		cacheControl: String = "no-store"
+	) async throws {
 		var head = HTTPResponseHead(version: .http1_1, status: status)
 		head.headers.replaceOrAdd(name: "Content-Type", value: contentType)
-		head.headers.replaceOrAdd(name: "Content-Length", value: "\(payload.count)")
-		head.headers.replaceOrAdd(name: "Connection", value: "close")
+		head.headers.replaceOrAdd(name: "Content-Length", value: "\(bytes.readableBytes)")
 		// security headers — parity with the reference servers.
 		head.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
 		head.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
 		head.headers.replaceOrAdd(name: "Service-Worker-Allowed", value: "/")
 		head.headers.replaceOrAdd(name: "Cache-Control", value: cacheControl)
-		var buf = ByteBuffer()
-		buf.writeBytes(payload)
 		// await the terminal write promise: the async channel writer does not
 		// await write promises, and a response larger than the socket send
 		// buffer would otherwise lose its tail when the connection closes
 		// right after writing (probe-verified truncation).
 		_ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.head(head))
-		_ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.body(buf))
+		_ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.body(bytes))
 		try await channel.writeAndFlush(HTTPPart<HTTPResponseHead, ByteBuffer>.end(nil)).get()
 	}
 
@@ -412,7 +421,6 @@ final class Runner: Sendable {
 	private func respond405(channel: Channel) async throws {
 		var head = HTTPResponseHead(version: .http1_1, status: .methodNotAllowed)
 		head.headers.replaceOrAdd(name: "Content-Length", value: "0")
-		head.headers.replaceOrAdd(name: "Connection", value: "close")
 		head.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
 		head.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
 		head.headers.replaceOrAdd(name: "Cache-Control", value: "no-store")

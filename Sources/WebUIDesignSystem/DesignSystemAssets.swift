@@ -1,5 +1,3 @@
-import CryptoKit
-import Foundation
 import WebUI
 
 /// design-system assets derived from the embedded working files.
@@ -15,11 +13,9 @@ public enum DesignSystemAssets {
 	)
 
 	/// sha-256 (lowercase hex) of the minified sheet — the content address for
-	/// the immutable css route.
-	public static let cssSHA256: String = {
-		let digest = SHA256.hash(data: Data(minifiedCss.utf8))
-		return digest.map { String(format: "%02x", $0) }.joined()
-	}()
+	/// the immutable css route. hashed with the framework's own `SHA256` (not
+	/// `CryptoKit`, which does not exist on linux).
+	public static let cssSHA256: String = SHA256.hex(Array(minifiedCss.utf8))
 
 	/// the content-addressed stylesheet url: `/__assets/css.<sha256>`. pages
 	/// link this by default (`WebUIDocument.stylesheetURL`), so a rebuilt

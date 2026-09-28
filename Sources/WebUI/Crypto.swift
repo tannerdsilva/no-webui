@@ -35,6 +35,38 @@ public enum HMACSHA256 {
 	}
 }
 
+// MARK: - SHA-256
+
+/// plain sha-256 over rawdog's implementation. it exists because `CryptoKit`
+/// is apple-only: the design system hashes its stylesheet into a content
+/// address, and that hash has to be computable on linux too. the digest is
+/// identical to any conforming implementation, so addresses derived from it
+/// are stable across platforms.
+public enum SHA256 {
+	/// lowercase hex of `sha256(bytes)`.
+	public static func hex(_ bytes: [UInt8]) -> String {
+		var hasher = RAW_sha256.Hasher()
+		bytes.withUnsafeBytes { buffer in
+			hasher.update(buffer)
+		}
+		var out = [UInt8](repeating: 0, count: 32)
+		// `finish(into:)` fails only on a buffer-size mismatch, and 32 bytes is
+		// exactly the sha-256 digest size: a failure means the hasher contract
+		// moved underneath us. fail loudly — a silently truncated digest would
+		// mint a wrong content address for the stylesheet.
+		let finished = out.withUnsafeMutableBytes { buffer -> Bool in
+			do {
+				try hasher.finish(into: buffer.baseAddress!)
+				return true
+			} catch {
+				return false
+			}
+		}
+		precondition(finished, "RAW_sha256.finish failed on a 32-byte buffer")
+		return bytesToHex(out)
+	}
+}
+
 // MARK: - Byte helpers
 
 public func bytesToHex(_ bytes: [UInt8]) -> String {

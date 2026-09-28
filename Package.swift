@@ -82,8 +82,15 @@ let package = Package(
     targets: [
 
         // ── Web UI Framework ─────────────────────────────────────
+        // the zero-dep leaf. it still needs libm on linux: `Double.rounded()`
+        // lowers to a plain `round` call, and an island product pulls in no
+        // other target that would bring libm along. apple platforms get their
+        // math from libSystem, so the setting is linux-only.
         .target(
-            name: "WebUISharedCore"
+            name: "WebUISharedCore",
+            linkerSettings: [
+                .linkedLibrary("m", .when(platforms: [.linux])),
+            ]
         ),
         .target(
             name: "WebUICore",
@@ -172,20 +179,12 @@ let package = Package(
             dependencies: [
                 "WebUI",
                 "WebUIDesignSystem",
-                "WebUICompression",
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOHTTP1", package: "swift-nio"),
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOWebSocket", package: "swift-nio"),
             ]
-        ),
-        // host-side gzip shim: the C `compression_stream` API is awkward to
-        // drive from Swift (non-optional memberwise init), so the framework's
-        // server target gets a tiny C wrapper. not shipped to clients.
-        .target(
-            name: "WebUICompression",
-            publicHeadersPath: "include"
         ),
         .target(
             name: "WebUIAuth",

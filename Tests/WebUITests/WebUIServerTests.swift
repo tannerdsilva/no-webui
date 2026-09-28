@@ -1,4 +1,9 @@
 import Foundation
+#if canImport(FoundationNetworking)
+// swift-corelibs-foundation keeps URLSession/URLRequest/HTTPURLResponse in a
+// separate module; without this the test target does not compile on linux.
+import FoundationNetworking
+#endif
 import Testing
 import WebUI
 import WebUIDesignSystem
@@ -68,7 +73,7 @@ struct WebUIServerTests {
 		#expect(cssStatus == 200)
 		#expect(css.contains(".button"))
 
-		// content-addressed route: served immutable, gzip-decodable.
+		// content-addressed route: served immutable.
 		let (hashCSS, hashStatus) = try await get("http://127.0.0.1:\(port)\(DesignSystemAssets.stylesheetURL)")
 		#expect(hashStatus == 200)
 		#expect(hashCSS.contains(".button"))
@@ -76,6 +81,12 @@ struct WebUIServerTests {
 		let (_, missingStatus) = try await get("http://127.0.0.1:\(port)/missing")
 		#expect(missingStatus == 404)
 
+		// `URLSessionWebSocketTask` does not exist in swift-corelibs-foundation,
+		// so the websocket leg of this test is apple-only. the ws dispatch path
+		// is still covered on linux, out of band: the verification workflow's
+		// raw-socket bench drives `ping`/`event` frames against this same server
+		// and asserts the `update` reply (`run-bench.sh`, ws + wsburst modes).
+		#if !os(Linux)
 		let socket = URLSession(configuration: .ephemeral)
 			.webSocketTask(with: URL(string: "ws://127.0.0.1:\(port)/ws")!)
 		socket.resume()
@@ -87,6 +98,7 @@ struct WebUIServerTests {
 		let text = String(decoding: data, as: UTF8.self)
 		#expect(text.contains("\"update\""))
 		#expect(text.contains("round-trip-ok"))
+		#endif
 	}
 
 	private func get(_ url: String) async throws -> (String, Int) {
@@ -96,6 +108,7 @@ struct WebUIServerTests {
 		return (String(decoding: data, as: UTF8.self), (response as? HTTPURLResponse)?.statusCode ?? 0)
 	}
 
+	#if !os(Linux)
 	private func receiveData(_ socket: URLSessionWebSocketTask) async throws -> Data {
 		let message = try await socket.receive()
 		switch message {
@@ -107,6 +120,7 @@ struct WebUIServerTests {
 			return Data()
 		}
 	}
+	#endif
 }
 
 enum ServerTestError: Error {

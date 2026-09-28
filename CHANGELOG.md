@@ -136,10 +136,88 @@ all notable changes to this project are documented here.
 - why: the chamber fetched and instantiated a 55 mb module (~12 mb brotli) on every
   app-mode page for work the ~37 kb engine does, and it could not render server
   views. `NEXT_ARCHITECTURE.md` records the measurement.
-- `ClientBoot` survives, describing the engine boot only; the smoke<|place_holder_mm_span_0442|> preview's
+- `ClientBoot` survives, describing the engine boot only; the smoke preview's
   `WEBUI_BOOT=wasm` mode, its client routes and the demo pages are gone with the
   path. the six `WASM_*.md` design documents were deleted outright (git history
   keeps them). the consumer skill no longer promises a link-able client product.
+
+### public surface
+
+- **three dead public symbols removed** (measured: no non-comment reference
+  outside their own declaration, no conformer, no renderer):
+  - `AnyView` (`WebUICore`) — the framework's erasure idiom is `[any View]`, so
+    the wrapper was both unused and misleading about the intended shape.
+  - `UserStore` and `Authenticator` (`WebUIAuth`) — a never-implemented identity
+    seam: nothing in the repo conformed to either, and no shipped API accepted
+    them. `Credential` and `Identity` stay as the data vocabulary, and a host
+    wires its own verifier directly (as `WebUIAuthExample` does).
+  `Documentation/API.md` (three table rows) and `AUTH_SESSIONS.md` (the protocol
+  sketch, plus a note on why no seam is shipped) were updated in the same
+  commit. the frozen surface is untouched — none of the three was listed.
+- `Documentation/STABILITY.md` now records **measured consumption** of the
+  frozen surface: 9 frozen names have no library and no demo consumer (the
+  `APISurfaceTests` pin is their only exerciser), and 16 showcase-rendered
+  components sit *outside* the promise. the promise itself is unchanged; the
+  mismatch is documented rather than implied, and every name is listed as a
+  candidate for review at the next major.
+- **`CSRFProtection.token(for:…)` no longer leaks the crypto dependency's error
+  type.** it is public and `throws`, but an hmac failure propagated `RAW_hmac`'s
+  error — a caller could not catch it without importing rawdog. the failure is
+  now caught and rethrown as `CSRFError.signingFailed`, a case that was declared
+  and documented but never actually thrown. a caller that previously matched the
+  hmac error must match `CSRFError` instead; the success path is byte-identical.
+  the cause is collapsed on purpose — no caller can act differently on which
+  internal step failed.
+- doc truth: `AUTH_SESSIONS.md`'s login flow named `PasswordAuthenticator` (no
+  such type — now `PasswordVerifier`), and its entropy note described the
+  `.signingFailed` throw before the code produced one. both corrected (the
+  second by fixing the code, above).
+- `Documentation/IMPLEMENTATION_PLAN.md` (688 lines; self-declared "historical
+  plan") removed, matching the wasm-design-doc precedent — git history keeps it.
+  its four inbound references (`Documentation/API.md`, `Documentation/README.md`,
+  `README.md`, `Sources/WebUIAuth/WebUIAuth.swift`) were updated in the same
+  commit.
+- `CHANGELOG.md` itself carried a stray generator placeholder token in the
+  wasm-deletion section (it had swallowed a word); removed.
+
+### server: linux + speed
+
+- **the server runs on linux.** three apple-only dependencies were removed, each
+  verified on a linux box rather than reasoned about: `CryptoKit` (the stylesheet
+  content hash — now the framework's own `SHA256` over rawdog, digest
+  byte-identical, so the content-addressed css url did not move), the
+  `WebUICompression` C target (`compression.h` is apple's libcompression — and it
+  backed `GzipEncoder`, which **no call site ever invoked**: `respond(gzip:)`
+  accepted the flag and ignored it, so every page and asset shipped uncompressed
+  while claiming gzip), and a missing `libm` link for the zero-dep leaf
+  (`Double.rounded()` lowers to a `round` call, which no island product otherwise
+  pulls in). the test target also needed `FoundationNetworking` and a guard for
+  `URLSessionWebSocketTask`, neither of which exists in swift-corelibs-foundation.
+- **class validation is 7.8× faster.** `HTMLClassValidator.classTokens` ran a
+  swift regex over the whole rendered document — 30.7 ms of every 166 KB page.
+  it is now a single-pass byte scanner at 3.9 ms, measured A/B on identical
+  input. the orphan ratchet's guarantees are unchanged (all 816 tests, including
+  the ratchet, still pass).
+- **page latency on the reference box fell 40%** (p50 66.08 → 39.68 ms) and
+  throughput rose 73% (15 → 26 req/s) — the render is the whole cost, and both
+  figures track the validator's speedup. the page is byte-identical (166,167 B).
+- transport: **keep-alive** replaces `Connection: close` (200/200 requests now
+  reuse one socket instead of none), **tcp_nodelay** is set on accepted children
+  (nio sets it for client channels only), `respond` writes the body into the
+  channel's buffer in one copy instead of two, and the framework's own assets
+  (320 KB css, engine, shell) are pre-encoded once at startup instead of per
+  request. the read-idle reaper and the 256-connection admission gate are
+  unchanged, so the bound on live connections still holds.
+- `WebUIShowcaseServer` gains `--render-bench N` (an instrumented render profile:
+  page with/without validation, a synthetic node tree, the id/escape/growth
+  micro-paths, and a scanner A/B) and `--no-class-check`.
+- profiles disproved three plausible micro-optimizations and one attempt:
+  `nextComponentID` (mutex + string alloc) is under 0.5 µs, the `htmlEscape`
+  guard under 3 µs, and `reserveCapacity` changes nothing for 2,850 appends. a
+  utf-8 byte-scan rewrite of `htmlEscape` measured *slower* (4.15% of render cpu
+  against 2.05%) and was reverted, with the result recorded in the code. the
+  render is flat and arc/string-bound: no symbol exceeds 4.5%, and the remaining
+  cost is ~5.7 µs per node — the case for the buffer-based v2 render path.
 
 ## [1.0.0] — stability epoch (2026-09-20)
 
