@@ -125,7 +125,6 @@ See `designer/README.md` for the full designer guide.
 - `Documentation/JS_RUNTIME.md` — JavaScript runtime API
 - `Documentation/LAYOUTS.md` — layout primitives reference
 - `Documentation/AUTH_SESSIONS.md` — authentication + sessions design and decisions
-- `Documentation/IMPLEMENTATION_PLAN.md` — auth/session implementation plan and status
 
 ## Requirements
 

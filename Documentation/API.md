@@ -9,7 +9,6 @@
 | `View` | `func render() -> String` | pure function, no side effects, `Sendable` |
 | `ViewModifier` | `func apply(to html: String) -> String` | wraps rendered html with attributes or styles |
 | `ModifiedView<Content: View, M: ViewModifier>` | `View` | type-preserving wrapper returned by every modifier |
-| `AnyView` | `View` | type-erased wrapper; erases the concrete view type |
 | `EmptyView` | `View` | renders nothing |
 
 ### ViewBuilder
@@ -433,8 +432,7 @@ A SwiftNIO-based HTTP/WebSocket server that serves a live counter + echo page.
 ## WebUIAuth
 
 authentication + sessions foundation for WebUI backends. design rationale and
-threat model live in `Documentation/AUTH_SESSIONS.md`; the execution breakdown
-in `Documentation/IMPLEMENTATION_PLAN.md`.
+threat model live in `Documentation/AUTH_SESSIONS.md`.
 
 ### Identity model
 
@@ -456,8 +454,6 @@ in `Documentation/IMPLEMENTATION_PLAN.md`.
 
 | Protocol | Job |
 |---|---|
-| `UserStore.identity(forUsername:) async throws -> Identity?` | backend resolves a username to an identity |
-| `Authenticator.authenticate(_ credential:) async throws -> Identity?` | verifies credentials; `nil` for invalid OR unknown (never leaks existence) |
 | `AuthSessionStore` | `create` / `find(tokenHash:)` / `touch` / `invalidate(id:)` / `invalidateAll(for:)` / `listSessions(for:)` / `purgeExpired(before:)` — `AuthStoreError` = `.duplicateSession`, `.notFound`, `.malformedRecord` |
 
 ### Stores

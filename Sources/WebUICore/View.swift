@@ -13,16 +13,3 @@ public struct EmptyView: View {
     public init() {}
     public func render() -> String { "" }
 }
-
-// MARK: - AnyView (type-erased wrapper)
-public struct AnyView: View {
-    private let _render: @Sendable () -> String
-
-    public init<V: View>(_ view: V) {
-        self._render = view.render
-    }
-
-    public func render() -> String {
-        _render()
-    }
-}

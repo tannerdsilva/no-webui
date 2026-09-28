@@ -7,7 +7,7 @@ import Foundation
 /// `id` is the backend's stable identifier (member number, email, …). `roles`
 /// is the role set the framework guards on (`"member"`, `"admin"`, and any
 /// backend-defined role); the backend owns the mapping from stored credentials
-/// to identities via its `UserStore`.
+/// to identities.
 public struct Identity: Sendable, Codable, Hashable {
 	public let id: String
 	public let roles: Set<String>

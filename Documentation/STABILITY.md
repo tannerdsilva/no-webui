@@ -78,6 +78,43 @@ the frozen surface is:
   optimistic rollback, input/scroll/focus restoration) — pinned by the
   client-runtime suites and the byte-identity asset tests.
 
+### measured consumption (2026-09-28)
+
+the frozen list above is a **promise**, not a usage report. a survey of every
+top-level `public` declaration in `Sources/` — non-comment mentions outside the
+declaring file, partitioned by consumer class (library product target / demo
+app / `Tests/`) — found the two lists below. re-measure before trusting the
+counts.
+
+**frozen but unexercised (9).** no library target and no demo page renders these;
+the `APISurfaceTests` pin is their only exerciser. the promise stands — change
+them only through the deprecation cycle — but their shape is unproven, so treat
+any new use as a design review, not a drop-in.
+
+| name | why it reads as unused |
+|---|---|
+| `WebUISelect` | one mention repo-wide (its own pin); `Select` (primitives) and `WebUIComboBox` cover the demos |
+| `WebUISpinner` | no non-test renderer; `WebUIProgress` and `WebUICircularProgress` carry the loading demos |
+| `WebUITooltip` | no non-test renderer |
+| `WebUIChip` | no non-test renderer; `WebUITag` restates it with a parallel variant enum |
+| `WebUIReasoningBlock` · `WebUIToolStep` · `WebUITurnSummary` | the agent-turn trio ships with no page that renders it |
+
+two of the nine read as unused because they are consumed *structurally* rather
+than by name, and no action is implied: `EmptyView` (a `ViewBuilder` sentinel)
+and `Argon2Parameters` (the config type in the frozen `PasswordVerifier`'s
+signature).
+
+**showcase-rendered but not frozen (16).** outside the promise, therefore free
+to change in a minor — which is the opposite of what their demo coverage
+suggests. `WebUIMenu` (15 demo sites) · `WebUIActivityFeed` (8) ·
+`WebUIAspectRatio` (7) · `WebUICircularProgress` · `WebUIBanner` ·
+`WebUIToggleGroup` · `WebUISeparator` · `WebUIKbd` (6 each) · `WebUIInputGroup`
+(5) · `WebUIMarker` · `WebUIAttachment` · `WebUINavbar` · `WebUIItem` (4 each);
+`WebUISidebarItem`, `WebUIField` and `WebUIMenubar` additionally appear in a
+**frozen** type's own signature, so their absence from the frozen list reads as
+an oversight rather than a decision. the `WebUIExtras*` families are the other
+case: unproven by design, deliberately outside.
+
 outside the frozen surface (free to change in any release): example
 apps (`WebUIExample`, `WebUIAuthExample`, `WebUIShowcaseServer`), plugin
 verbs, docs, and internal target layout.

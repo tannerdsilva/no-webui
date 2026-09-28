@@ -51,8 +51,7 @@ Client event → EventRouter.handle() → [FragmentUpdate] → WS send → DOM p
 
 See `Documentation/ARCHITECTURE.md` for the complete flow. For the login page +
 session authentication design (protocols, cookie layer, WebSocket binding,
-hardening deltas), see `Documentation/AUTH_SESSIONS.md`; for the item-by-item
-execution breakdown, see `Documentation/IMPLEMENTATION_PLAN.md`.
+hardening deltas), see `Documentation/AUTH_SESSIONS.md`.
 
 ## Tooling
 
