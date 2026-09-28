@@ -1,7 +1,7 @@
 # no-webui
 
 A SwiftUI-for-web framework: server-rendered HTML with a SwiftUI-like declarative
-API, a design system with 257 CSS tokens and 115 component types, and a JS runtime
+API, a design system with 257 CSS tokens and 133 component types, and a JS runtime
 for live UI updates.
 
 ## Modules
@@ -45,7 +45,7 @@ See `Sources/WebUIExample/main.swift` and `Documentation/GETTING_STARTED.md`.
 
 ```bash
 swift build          # WebUIAssetPlugin auto-generates Assets+Generated.swift
-swift test           # 842 tests
+swift test           # 816 tests
 swift run WebUIExample  # example server on :9090
 ```
 

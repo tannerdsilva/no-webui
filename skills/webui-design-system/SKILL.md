@@ -341,6 +341,11 @@ in its `README.md`, `AGENTS.md`, and `Documentation/*`; reach for those (or the
 - **A chart collapses to the width of its own text** → charts contribute no
   intrinsic width; give the container a declared width or a grid track, and pick
   the design width (`chartHeight`) for the smallest placement (see *Charts*).
+- **`.class("x")` on a component replaces its own classes** → the attribute merge
+  keeps the *later* value, so a `VStack(spacing: 32).class("mine")` loses
+  `vstack spacing-32 align-flex-start` and its layout silently changes. wrap it
+  in `Div(class: "mine") { … }` instead, or scope the rule in css to the classes
+  the component already emits (`.parent > .vstack { … }`).
 - **String escaping in Swift HTML literals** — a doubled backslash (`\\`) renders
   a literal `\`; write single `\(…)`. Prefer multiline string literals.
 - **Nested ternary inside interpolation** breaks the parser — compute the

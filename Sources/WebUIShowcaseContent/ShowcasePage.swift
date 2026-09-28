@@ -1426,7 +1426,7 @@ public struct ShowcasePage: Sendable {
                         }
                     }
                 }
-            }.class("showcase-main")
+            }
         }
 
     // MARK: - Helpers

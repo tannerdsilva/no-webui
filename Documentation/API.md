@@ -73,7 +73,7 @@ every attribute parameter (`id`, `class`, `name`, `for`, `data-status`,
 | `.cornerRadius(_ value: Int)` | `style="border-radius:Npx"` |
 | `.width(_ value: String)` | `style="width:..."` |
 | `.height(_ value: String)` | `style="height:..."` |
-| `.class(_ name: String)` | `class="..."` |
+| `.class(_ name: String)` | `class="..."` — **replaces** classes the view already emits (the later value wins in the attribute merge; `.class` on a `VStack`/`WebUICard` drops its `vstack`/`card__body` classes). wrap the view in `Div(class:)` to add one |
 | `.id(_ id: String)` | `id="..."` |
 | `.attribute(_ key: String, _ value: String)` | emits `key="value"` on the root element (e.g. `data-prevent-enter="false"`) |
 | `.showIf(_ condition: Bool)` | `display:none` when false |
