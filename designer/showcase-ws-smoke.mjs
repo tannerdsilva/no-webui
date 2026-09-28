@@ -52,17 +52,26 @@ async function waitForServer(timeoutMs = 25000) {
   return null;
 }
 
+// a probe whose socket never established is an INSTRUMENT failure, not a dispatch
+// verdict — node's built-in WebSocket client can race a connection torn down
+// moments earlier. measured 2026-09-28: the second of three back-to-back probes
+// errored at ~2ms with zero frames, identically on the pre- and post-render-buffer
+// trees, while a raw tcp client on the identical gapless close→reconnect pattern
+// answered 20/20. `opened` separates "could not connect" from "server never
+// answered"; the caller retries the former once before believing it.
 function dispatch(id, eventName) {
   return new Promise((resolve) => {
     let settled = false;
+    let opened = false;
     const socket = new WebSocket(WS_URL);
     const finish = (value) => {
       if (settled) { return; }
       settled = true;
       try { socket.close(); } catch (e) {}
-      resolve(value);
+      resolve({ value, opened });
     };
     socket.addEventListener("open", () => {
+      opened = true;
       socket.send(JSON.stringify({
         type: "event",
         component: id,
@@ -112,7 +121,17 @@ try {
   console.log(`  probing: ${probes.join(", ")}`);
 
   for (const id of probes) {
-    const reply = await dispatch(id, "click");
+    let { value: reply, opened } = await dispatch(id, "click");
+    if (!reply && !opened) {
+      // the connect itself failed — retry once on a fresh socket before
+      // treating it as evidence (see the note above `dispatch`)
+      await new Promise((r) => setTimeout(r, 250));
+      ({ value: reply, opened } = await dispatch(id, "click"));
+      if (!reply && !opened) {
+        bad(`${id} could not establish a websocket in two attempts  probe precondition failed, not a dispatch verdict`);
+        continue;
+      }
+    }
     if (reply && reply.type === "update" && Array.isArray(reply.fragments) && reply.fragments.length > 0) {
       ok(`${id} dispatched and the server answered (${reply.fragments.length} fragment(s))`);
     } else if (reply) {
@@ -120,6 +139,8 @@ try {
     } else {
       bad(`${id} sent an event and the server never answered within 3s  stable-id dispatch is broken`);
     }
+    // let the previous socket finish tearing down before the next probe opens
+    await new Promise((r) => setTimeout(r, 150));
   }
 } finally {
   server.kill("SIGTERM");
