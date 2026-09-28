@@ -1,74 +1,24 @@
 // MARK: - Attribute Injection
 //
-// the attribute model, its parsers and its merge rules now live in
-// `WebUISharedCore/Attributes.swift`, so the render buffer can share them
-// without a re-parse. `injectAttributes` below is the html-string entry
-// point over that shared model.
+// the attribute model, its parsers and its merge rules live in
+// `WebUISharedCore/Attributes.swift`, and the first-tag application itself now
+// lives in `HTMLBuffer.settlePendingAttributes(from:)` — so the string path and
+// the render path share ONE implementation rather than two that can drift.
+// `injectAttributes` below is the html-string entry point over it, for callers
+// that hold their content as a string (a consumer modifier's `apply`, `Raw`);
+// the framework's own render path contributes through `addAttribute` instead.
 
+/// inject `attributes` into the first html tag of `html`: the span fallback
+/// when there is no tag, comments/doctypes/closing tags left alone, otherwise
+/// the attribute merge. the exact rules live in
+/// `HTMLBuffer.settlePendingAttributes(from:)`.
 public func injectAttributes(into html: String, _ attributes: String) -> String {
-	guard let firstLessThan = html.firstIndex(of: "<") else {
-		return "<span \(attributes)>\(html)</span>"
-	}
-
-	let afterLT = html.index(after: firstLessThan)
-	guard afterLT < html.endIndex else {
-		return "<span \(attributes)>\(html)</span>"
-	}
-
-	let peek = html[afterLT]
-	guard peek != "/" && peek != "!" && peek != "?" else {
-		return html
-	}
-
-	var inQuote = false
-	var quoteChar: Character = "\""
-	var tagEnd: String.Index?
-
-	var i = html.index(after: firstLessThan)
-	while i < html.endIndex {
-		let c = html[i]
-		if inQuote {
-			if c == quoteChar {
-				inQuote = false
-			}
-		} else if c == "\"" || c == "'" {
-			inQuote = true
-			quoteChar = c
-		} else if c == ">" {
-			tagEnd = i
-			break
-		}
-		i = html.index(after: i)
-	}
-
-	guard let end = tagEnd else {
-		return "<span \(attributes)>\(html)</span>"
-	}
-
-	// the opening tag is everything up to `>` (or up to the `/` of `/>`)
-	let beforeEnd = html.index(before: end)
-	let tagRangeEnd: String.Index = (html[beforeEnd] == "/" ? beforeEnd : end)
-	let tag = String(html[..<tagRangeEnd])
-
-	guard let parsed = parseOpeningTag(tag) else {
-		// unparseable tag — preserve the legacy append behaviour byte-for-byte
-		if html[beforeEnd] == "/" {
-			return String(html[..<beforeEnd]) + " " + attributes + String(html[beforeEnd...])
-		}
-		return String(html[..<end]) + " " + attributes + String(html[end...])
-	}
-
-	// the merge rules — duplicate folding, style declaration appending, and
-	// later-value-wins for every other key — live with the implementation in
-	// `WebUISharedCore/Attributes.swift`, so the render buffer applies exactly
-	// these semantics when it merges at open-tag time instead of re-parsing.
-	let merged = mergeAttributes(base: parsed.attrs, incoming: parseAttributeString(attributes))
-
-	var out = "<" + parsed.name
-	for a in merged {
-		out += serializeAttr(a)
-	}
-	return out + String(html[tagRangeEnd...])
+	var buffer = HTMLBuffer()
+	let mark = buffer.mark
+	buffer.append(html)
+	buffer.addAttribute(attributes)
+	buffer.settlePendingAttributes(from: mark)
+	return buffer.finish()
 }
 
 // MARK: - Markdown Rendering

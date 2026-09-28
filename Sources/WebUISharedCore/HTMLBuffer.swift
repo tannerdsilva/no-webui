@@ -173,18 +173,110 @@ public struct HTMLBuffer {
 
 	/// wrap everything written since `mark` in `<span attributes>…</span>`.
 	///
+	/// `attributes` is attribute text; a single separating space is inserted
+	/// unless it already starts with one — the same allowance `endOpenTag`
+	/// makes, so a merged attribute list (which always leads with a space) can
+	/// be passed through unchanged.
+	///
 	/// this is the fallback for content with no element to attach attributes
 	/// to. it moves the content once (`storage.insert`); that cost is bounded
 	/// by the wrapped content, and the case is rare — the string path re-parses
 	/// the whole document for every modifier, which is what this replaces.
 	package mutating func wrapSpan(from mark: Int, attributes: String) {
 		precondition(mark >= 0 && mark <= storage.count, "wrapSpan mark out of range")
-		storage.insert(contentsOf: "<span \(attributes)>".utf8, at: mark)
+		let separator = attributes.isEmpty || attributes.hasPrefix(" ") ? "" : " "
+		storage.insert(contentsOf: ("<span" + separator + attributes + ">").utf8, at: mark)
 		append("</span>")
 	}
 
 	/// the rendered bytes.
 	package var bytes: [UInt8] { storage }
+
+	// MARK: the string-path fallback
+
+	/// apply contributions that no element drained to the bytes written since
+	/// `mark`, in place — the buffer-side twin of `injectAttributes(into:_:)`,
+	/// byte-for-byte:
+	///
+	/// - content with no `<` is wrapped as `<span attributes>…</span>`, the
+	///   contributions folded exactly as sequential applications would have
+	///   folded them (two styles become one declaration list, not two
+	///   attributes);
+	/// - content whose first tag is a closing tag, a declaration (`<!` — markup
+	///   notes and doctypes), or a processing instruction (`<?`) keeps its bytes
+	///   and the contributions are dropped;
+	/// - otherwise the contributions merge into the first opening tag with the
+	///   same `mergeAttributes` rules the string path used.
+	///
+	/// no content string is built and the rewrite moves only the bytes after the
+	/// insertion point. a contribution reaches this fallback when the content it
+	/// wrapped opened no element — because that content renders through the
+	/// string path.
+	///
+	/// it reproduces `injectAttributes` down to its known wart: content that
+	/// starts with two or more characters of text before its first tag reads the
+	/// preamble as a tag name (`hi<div>…` → `<i <div …>`). that is
+	/// bug-compatibility on purpose — this migration's contract is byte-identity,
+	/// and the wart is pinned by tests; fixing it is its own decision.
+	package mutating func settlePendingAttributes(from mark: Int) {
+		precondition(mark >= 0 && mark <= storage.count, "settle mark out of range")
+		let attributes = takePendingAttributes()
+		guard !attributes.isEmpty else { return }
+
+		guard let firstLessThan = storage[mark...].firstIndex(of: UInt8(ascii: "<")) else {
+			wrapSpan(from: mark, attributes: mergedAttributeText(base: "", incoming: attributes))
+			return
+		}
+		let afterLT = firstLessThan + 1
+		guard afterLT < storage.count else {
+			wrapSpan(from: mark, attributes: mergedAttributeText(base: "", incoming: attributes))
+			return
+		}
+		let peek = storage[afterLT]
+		guard peek != UInt8(ascii: "/"), peek != UInt8(ascii: "!"), peek != UInt8(ascii: "?") else {
+			return
+		}
+
+		// quote-aware scan for the end of the opening tag
+		var inQuote = false
+		var quoteChar = UInt8(ascii: "\"")
+		var tagEnd: Int?
+		var i = afterLT
+		while i < storage.count {
+			let c = storage[i]
+			if inQuote {
+				if c == quoteChar { inQuote = false }
+			} else if c == UInt8(ascii: "\"") || c == UInt8(ascii: "'") {
+				inQuote = true
+				quoteChar = c
+			} else if c == UInt8(ascii: ">") {
+				tagEnd = i
+				break
+			}
+			i += 1
+		}
+		guard let end = tagEnd else {
+			wrapSpan(from: mark, attributes: mergedAttributeText(base: "", incoming: attributes))
+			return
+		}
+
+		// the tag runs from `mark` to `>` (or to the `/` of `/>`) — preamble
+		// included, which is what the string path sliced
+		let beforeEnd = end - 1
+		let tagRangeEnd = storage[beforeEnd] == UInt8(ascii: "/") ? beforeEnd : end
+		let tag = String(decoding: storage[mark..<tagRangeEnd], as: UTF8.self)
+
+		guard let parsed = parseOpeningTag(tag) else {
+			// unparseable tag — the legacy append, byte-for-byte
+			storage.insert(contentsOf: (" " + attributes).utf8, at: tagRangeEnd)
+			return
+		}
+
+		let merged = mergeAttributes(base: parsed.attrs, incoming: parseAttributeString(attributes))
+		var out = "<" + parsed.name
+		for a in merged { out += serializeAttr(a) }
+		storage.replaceSubrange(mark..<tagRangeEnd, with: out.utf8)
+	}
 
 	/// the rendered html.
 	package func finish() -> String {
