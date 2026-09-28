@@ -422,6 +422,7 @@ let package = Package(
             name: "WebUITests",
             dependencies: [
                 "WebUI",
+                "WebUISharedCore",
                 "WebUIDesignSystem",
                 "WebUIChart",
                 "WebUIAuth",
