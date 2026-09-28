@@ -283,6 +283,16 @@ public func injectAttributes(into html: String, _ attributes: String) -> String 
 	}
 	merged = merged.filter { $0.key != "\0" }
 
+	// rebuild the index: the map above holds positions in the PRE-filter array,
+	// and compaction shifts every position after the first dropped duplicate —
+	// so a target key whose first occurrence followed a tombstone used to
+	// address past the end (crash) or at the wrong attribute. after filtering,
+	// each key occurs exactly once, so this rebuild is exact.
+	firstIndex.removeAll(keepingCapacity: true)
+	for (idx, a) in merged.enumerated() {
+		firstIndex[a.keyLower] = idx
+	}
+
 	// apply incoming attributes: merge into an existing first-occurrence or append
 	for inc in parseAttributeString(attributes) {
 		if let first = firstIndex[inc.keyLower] {
