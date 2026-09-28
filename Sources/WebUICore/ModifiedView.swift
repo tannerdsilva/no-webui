@@ -1,5 +1,14 @@
 import Logging
 
+extension ViewModifier {
+    /// the fallback for a modifier that has not migrated: apply to the
+    /// content's string render, which re-parses that html — the cost S2
+    /// removes for the migrated modifier set.
+    public func decorate<C: View>(_ content: C, into buffer: inout HTMLBuffer) {
+        buffer.append(apply(to: content.render()))
+    }
+}
+
 // MARK: - ModifiedView
 public struct ModifiedView<Content: View, M: ViewModifier>: View {
     public let content: Content
@@ -9,8 +18,15 @@ public struct ModifiedView<Content: View, M: ViewModifier>: View {
         self.modifier = modifier
     }
 
+    /// route the wrapped content through the modifier's buffered decoration.
+    /// the call below is a requirement, so a migrated modifier's own
+    /// `decorate(_:into:)` runs even though `M` is generic.
+    public func render(into buffer: inout HTMLBuffer) {
+        modifier.decorate(content, into: &buffer)
+    }
+
     public func render() -> String {
-        modifier.apply(to: content.render())
+        renderThroughBuffer()
     }
 }
 

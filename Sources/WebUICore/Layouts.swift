@@ -14,12 +14,19 @@ public struct VStack: View {
     }
 
     public func render() -> String {
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
         let alignClass = "align-\(alignment.cssValue)"
-        return """
-        <div class="vstack spacing-\(spacing) \(alignClass)">
-        \(children.map { $0.render() }.joined())
-        </div>
-        """
+        buffer.beginElement("div", " class=\"vstack spacing-\(spacing) \(alignClass)\"")
+        buffer.endOpenTag()
+        buffer.append("\n")
+        for child in children {
+            child.render(into: &buffer)
+        }
+        buffer.append("\n")
+        buffer.endElement()
     }
 }
 
@@ -39,12 +46,19 @@ public struct HStack: View {
     }
 
     public func render() -> String {
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
         let alignClass = "align-\(alignment.cssValue)"
-        return """
-        <div class="hstack spacing-\(spacing) \(alignClass)">
-        \(children.map { $0.render() }.joined())
-        </div>
-        """
+        buffer.beginElement("div", " class=\"hstack spacing-\(spacing) \(alignClass)\"")
+        buffer.endOpenTag()
+        buffer.append("\n")
+        for child in children {
+            child.render(into: &buffer)
+        }
+        buffer.append("\n")
+        buffer.endElement()
     }
 }
 
@@ -64,13 +78,20 @@ public struct ZStack: View {
     }
 
     public func render() -> String {
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
         let hAlign = alignment.cssValue
         let vAlign = verticalAlignment.cssValue
-        return """
-        <div class="zstack" style="display:grid;place-items:\(hAlign) \(vAlign);">
-        \(children.map { $0.render() }.joined())
-        </div>
-        """
+        buffer.beginElement("div", " class=\"zstack\" style=\"display:grid;place-items:\(hAlign) \(vAlign);\"")
+        buffer.endOpenTag()
+        buffer.append("\n")
+        for child in children {
+            child.render(into: &buffer)
+        }
+        buffer.append("\n")
+        buffer.endElement()
     }
 }
 
@@ -145,11 +166,18 @@ public struct Grid: View {
     }
 
     public func render() -> String {
-        """
-        <div class="grid" style="display:grid;grid-template-columns:\(columns.cssValue);gap:\(spacing)px;">
-        \(children.map { $0.render() }.joined())
-        </div>
-        """
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
+        buffer.beginElement("div", " class=\"grid\" style=\"display:grid;grid-template-columns:\(columns.cssValue);gap:\(spacing)px;\"")
+        buffer.endOpenTag()
+        buffer.append("\n")
+        for child in children {
+            child.render(into: &buffer)
+        }
+        buffer.append("\n")
+        buffer.endElement()
     }
 }
 
@@ -170,15 +198,19 @@ public struct Section: View {
     }
 
     public func render() -> String {
-        var html = "<section"
-        if let id { html += " id=\"\(htmlEscape(id))\"" }
-        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
-        html += ">"
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
+        var attributes = ""
+        if let id { attributes += " id=\"\(htmlEscape(id))\"" }
+        if let `class` { attributes += " class=\"\(htmlEscape(`class`))\"" }
+        buffer.beginElement("section", attributes)
+        buffer.endOpenTag()
         for child in children {
-            html += child.render()
+            child.render(into: &buffer)
         }
-        html += "</section>"
-        return html
+        buffer.endElement()
     }
 }
 

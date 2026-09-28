@@ -64,15 +64,19 @@ public struct Div: View {
     }
 
     public func render() -> String {
-        var html = "<div"
-        if let id { html += " id=\"\(htmlEscape(id))\"" }
-        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
-        html += ">"
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
+        var attributes = ""
+        if let id { attributes += " id=\"\(htmlEscape(id))\"" }
+        if let `class` { attributes += " class=\"\(htmlEscape(`class`))\"" }
+        buffer.beginElement("div", attributes)
+        buffer.endOpenTag()
         for child in children {
-            html += child.render()
+            child.render(into: &buffer)
         }
-        html += "</div>"
-        return html
+        buffer.endElement()
     }
 }
 
@@ -92,15 +96,19 @@ public struct Span: View {
     }
 
     public func render() -> String {
-        var html = "<span"
-        if let id { html += " id=\"\(htmlEscape(id))\"" }
-        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
-        html += ">"
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
+        var attributes = ""
+        if let id { attributes += " id=\"\(htmlEscape(id))\"" }
+        if let `class` { attributes += " class=\"\(htmlEscape(`class`))\"" }
+        buffer.beginElement("span", attributes)
+        buffer.endOpenTag()
         for child in children {
-            html += child.render()
+            child.render(into: &buffer)
         }
-        html += "</span>"
-        return html
+        buffer.endElement()
     }
 }
 
@@ -390,14 +398,21 @@ public struct UnorderedList: View {
     }
 
     public func render() -> String {
-        var html = "<ul"
-        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
-        html += ">"
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
+        var attributes = ""
+        if let `class` { attributes += " class=\"\(htmlEscape(`class`))\"" }
+        buffer.beginElement("ul", attributes)
+        buffer.endOpenTag()
         for item in items {
-            html += "<li>\(item.render())</li>"
+            buffer.beginElement("li")
+            buffer.endOpenTag()
+            item.render(into: &buffer)
+            buffer.endElement()
         }
-        html += "</ul>"
-        return html
+        buffer.endElement()
     }
 }
 public struct OrderedList: View {
@@ -410,14 +425,21 @@ public struct OrderedList: View {
     }
 
     public func render() -> String {
-        var html = "<ol"
-        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
-        html += ">"
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
+        var attributes = ""
+        if let `class` { attributes += " class=\"\(htmlEscape(`class`))\"" }
+        buffer.beginElement("ol", attributes)
+        buffer.endOpenTag()
         for item in items {
-            html += "<li>\(item.render())</li>"
+            buffer.beginElement("li")
+            buffer.endOpenTag()
+            item.render(into: &buffer)
+            buffer.endElement()
         }
-        html += "</ol>"
-        return html
+        buffer.endElement()
     }
 }
 
@@ -569,7 +591,15 @@ public struct ForEach<Data: RandomAccessCollection & Sendable>: View {
     }
 
     public func render() -> String {
-        data.map { content($0).map { $0.render() }.joined() }.joined()
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
+        for element in data {
+            for child in content(element) {
+                child.render(into: &buffer)
+            }
+        }
     }
 }
 extension ForEach where Data == Range<Int> {

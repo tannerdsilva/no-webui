@@ -26,7 +26,14 @@
 ///
 /// and the one a modifier performs: `addAttribute(_:)`, which contributes
 /// attribute text to the element that is about to open.
-package struct HTMLBuffer {
+///
+/// the type is `public` only because `View.render(into:)` names it in a
+/// protocol requirement, and a requirement is implicitly as visible as its
+/// protocol. every member stays `package`: this is the framework's own render
+/// path, not yet a consumer API. the members open up with the 2.0 flip, when
+/// `render(into:)` becomes *the* requirement and consumer views must write
+/// into a buffer of their own.
+public struct HTMLBuffer {
 	/// an open element, from `beginElement` to `endElement`.
 	private struct Frame {
 		let tag: String
@@ -81,11 +88,27 @@ package struct HTMLBuffer {
 	}
 
 	/// write the opening tag: `<tag` + the merged attribute list + `>`.
+	///
+	/// with nothing contributed, the element's own attribute text re-emits
+	/// verbatim — which is exactly what the string path wrote after the tag
+	/// name, and it skips the parse/merge/serialize round trip that otherwise
+	/// runs per element (measured on the reference box: that round trip cost
+	/// ~25% of a page render while no contributions existed to merge, and the
+	/// verbatim path is closer to the old bytes, not further from them).
 	package mutating func endOpenTag() {
 		precondition(!frames.isEmpty, "endOpenTag with no open element")
 		precondition(!frames[frames.count - 1].openTagWritten, "endOpenTag called twice")
 		let frame = frames[frames.count - 1]
-		append("<" + frame.tag + mergedAttributeText(base: frame.base, incoming: frame.incoming) + ">")
+		if frame.incoming.isEmpty {
+			// a separator space joins the tag to its own attribute text —
+			// callers may pass `id="x"` or ` id="x"`, the same allowance the
+			// merge path makes below
+			append(frame.base.isEmpty
+				? "<" + frame.tag + ">"
+				: "<" + frame.tag + (frame.base.hasPrefix(" ") ? frame.base : " " + frame.base) + ">")
+		} else {
+			append("<" + frame.tag + mergedAttributeText(base: frame.base, incoming: frame.incoming) + ">")
+		}
 		frames[frames.count - 1].openTagWritten = true
 	}
 
