@@ -145,8 +145,9 @@ public enum HTMLClassValidator {
 		var classes = Set<String>()
 		for match in css.matches(of: candidate) {
 			// the match range is a character index into `css`, so the utf8 view
-			// index init cannot fail (structurally guaranteed) — unwrap.
-			let lower = String.UTF8View.Index(match.range.lowerBound, within: css)!
+			// index init does not fail for this input — but skip the candidate
+			// rather than trap if a future pattern breaks that assumption.
+			guard let lower = String.UTF8View.Index(match.range.lowerBound, within: css) else { continue }
 			let pos = css.utf8.distance(from: css.utf8.startIndex, to: lower)
 			if pos > 0 {
 				let prev = bytes[pos - 1]

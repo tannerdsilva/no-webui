@@ -506,7 +506,7 @@ func readWasmArtifact(_ product: String) -> [UInt8] {
 	let url = URL(fileURLWithPath: ".build/out/Products/Release-webassembly-wasm32/\(product).wasm")
 	guard FileManager.default.fileExists(atPath: url.path) else { return [] }
 	let path = url.path
-	let fd = open(path, O_RDONLY)
+	let fd = open(path, O_RDONLY | O_CLOEXEC)
 	guard fd >= 0 else { return [] }
 	defer { close(fd) }
 	var st = stat()

@@ -137,7 +137,7 @@ func intFlag(named name: String, default fallback: Int) -> Int {
     return fallback
 }
 
-// MARK: - Server (WebUIServer: page + assets + /ws, gzip + content-addressed css)
+// MARK: - Server (WebUIServer: page + assets + /ws, content-addressed css)
 
 @main
 struct WebUIShowcaseServer {

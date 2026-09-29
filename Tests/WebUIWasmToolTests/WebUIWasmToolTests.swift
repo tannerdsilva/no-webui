@@ -92,7 +92,7 @@ struct WebUIWasmToolTests {
 		let (status, out) = try runTool(["--wasm-input", wasmPath, "--output", swiftPath, "--product", "ProbeClient"])
 		#expect(status == 0)
 		#expect(out.contains("validated + hashed"))
-		let text = try! String(contentsOfFile: swiftPath, encoding: .utf8)
+		let text = try String(contentsOfFile: swiftPath, encoding: .utf8)
 		#expect(text.contains("public static let present = true"))
 		#expect(text.contains("public static let byteCount = \(Self.validWasm.count)"))
 		#expect(text.contains("public static let product = \"ProbeClient\""))

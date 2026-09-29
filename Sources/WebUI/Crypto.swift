@@ -91,7 +91,8 @@ public enum SecureRandom {
 		guard count > 0 else { return count == 0 ? [] : nil }
 		var out = [UInt8](repeating: 0, count: count)
 		#if os(Linux)
-		let fd = open("/dev/urandom", O_RDONLY)
+		// O_CLOEXEC: the entropy descriptor must never leak into a spawned child.
+		let fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC)
 		guard fd >= 0 else { return nil }
 		defer { close(fd) }
 		var offset = 0
