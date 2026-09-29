@@ -2207,7 +2207,7 @@ code, .inline-code {
   transition: background var(--transition-fast);
   position: relative;
 }
-.tree__row:where([aria-expanded]) { color: var(--color-text); font-weight: var(--font-weight-medium); }
+.tree__row:where([aria-expanded]) { font-weight: var(--font-weight-medium); }
 .tree__row:hover { background: var(--color-bg-subtle); }
 .tree__row--selected {
   background: var(--color-primary-50);
