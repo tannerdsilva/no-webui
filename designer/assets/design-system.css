@@ -3273,7 +3273,7 @@ code, .inline-code {
 
 .ring {
   --ring-size: 5rem;
-  --ring-stroke: 0.5rem;
+  --ring-stroke: 3.6;
   --ring-color: var(--color-primary-500);
   position: relative;
   display: inline-grid;
@@ -3302,8 +3302,8 @@ code, .inline-code {
   font-variant-numeric: tabular-nums;
 }
 .ring__label-sub { font-size: 0.5em; color: var(--color-text-muted); font-weight: var(--font-weight-medium); }
-.ring--sm { --ring-size: 3rem; --ring-stroke: 0.35rem; }
-.ring--lg { --ring-size: 7rem; --ring-stroke: 0.6rem; }
+.ring--sm { --ring-size: 3rem; }
+.ring--lg { --ring-size: 7rem; }
 .ring--success { --ring-color: var(--color-success); }
 .ring--warning { --ring-color: var(--color-warning); }
 .ring--danger { --ring-color: var(--color-danger); }
@@ -3329,6 +3329,7 @@ code, .inline-code {
 }
 .spinner--xs { --sp-size: 1rem; border-width: 2px; }
 .spinner--sm { --sp-size: 1.5rem; border-width: 2px; }
+.spinner--md { --sp-size: 2rem; border-width: 3px; }
 .spinner--lg { --sp-size: 3rem; border-width: 4px; }
 .spinner--xl { --sp-size: 4rem; border-width: 5px; }
 
