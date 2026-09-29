@@ -6,6 +6,12 @@ all notable changes to this project are documented here.
 
 ### developer experience
 
+- `WebUIServerService` — hosts a `WebUIServer` as a `Service`, so a long-lived
+  page server starts and stops inside a `ServiceGroup` (ordered startup,
+  graceful shutdown) instead of owning its own process lifecycle. a bind
+  failure propagates out of `run()`, so a server that cannot listen fails
+  startup rather than reporting itself ready. `swift-service-lifecycle` is a
+  new dependency of the `WebUIServer` target.
 - `WebUIServer` now injects its router as the render context around `render()`
   (`RenderContext.$current.withValue`): handlers a page wires through
   `.onX`/`controlAttributes` register into the server's router directly, so
@@ -19,6 +25,30 @@ all notable changes to this project are documented here.
 
 ### consumer experience
 
+- `WebUIServer.broadcast(_:)` — server-initiated fragment pushes, with no
+  inbound event to answer. the server tracks its connected pages and writes an
+  `update` to each, which is what streaming a turn, reporting background
+  progress, or refreshing a panel that changed on disk needs.
+  `connectedPages` exposes the live count. a socket whose render token the
+  server rejects is already closed, so a push cannot reach a stale page from a
+  former session.
+- `WebUIServerConfig.assets` — a host can now serve its own assets (vendor
+  css/js, woff2 fonts, app scripts) through the same server that serves the
+  framework's, via `WebUIServerAsset.text(_:_:contentType:cacheSeconds:)` and
+  `.bytes(_:_:contentType:cacheSeconds:)` (the `bytes` case keeps binary
+  payloads off the `String` path). no second http server for asset paths. the
+  framework routes (`/__assets/css*`, the engine, the shell) are matched first,
+  so a host asset can neither shadow nor disable them.
+- `WebUIServer` request-aware render —
+  `init(requestRender:router:config:logger:)` hands the page closure a
+  `WebUIServerRequest` (path + decoded query), so a host can render
+  `/index.html?s=<id>` deep links. the zero-argument `init(render:...)` is
+  unchanged and now simply ignores the request.
+- `WebUIServer` strips the query string before routing. previously the whole
+  `uri` was matched, so `/__assets/css?v=9` — and any query-bearing page url —
+  404'd. cache-busting query strings and deep links now resolve. `+` decodes to
+  a space and `%XX` to its byte; a malformed escape is preserved verbatim
+  rather than dropped.
 - showcase is now a **live** page: `WebUIShowcaseServer` wires a shared
   `ShowcaseState` through the server's router and the interactive demos
   round-trip for real — click counter (−/+/Reset with optimistic reset), form

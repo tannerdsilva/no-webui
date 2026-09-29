@@ -78,6 +78,10 @@ let package = Package(
         // swift-syntax for the @Theme macro implementation (603.x matches the
         // 6.3 toolchain line).
         .package(url: "https://github.com/apple/swift-syntax.git", "603.0.0"..<"604.0.0"),
+        // swift-service-lifecycle: hosts `WebUIServer` inside a `ServiceGroup`
+        // (`WebUIServerService`), so a long-lived server has ordered startup
+        // and graceful shutdown instead of an ad-hoc process lifecycle.
+        .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", "2.6.0"..<"3.0.0"),
     ],
     targets: [
 
@@ -180,6 +184,7 @@ let package = Package(
                 "WebUI",
                 "WebUIDesignSystem",
                 .product(name: "Logging", package: "swift-log"),
+                .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOHTTP1", package: "swift-nio"),
                 .product(name: "NIOCore", package: "swift-nio"),
@@ -429,6 +434,8 @@ let package = Package(
                 "WebUIShowcaseContent",
                 "WebUIServer",
                 "WebUIBlocks",
+                .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
+                .product(name: "Logging", package: "swift-log"),
             ],
             resources: [.copy("orphan-class-baseline.txt")]
         ),

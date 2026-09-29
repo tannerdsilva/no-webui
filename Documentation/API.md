@@ -398,8 +398,8 @@ WebUIIconCustom(name: "custom", body: "<path d=\"M12 2l9 10-9 10-9-10z\"/>")
 ## WebUIServer
 
 one-call serving of a no-webui page: http page route, the framework asset
-routes (engine, shell, client boot, css, wasm artifact) with cache headers,
-`/ws` upgrade, `EventRouter` dispatch, ping/pong, read-idle reaping, and an
+routes (stylesheet, engine, shell) with cache headers, host assets, `/ws`
+upgrade, `EventRouter` dispatch, ping/pong, read-idle reaping, and an
 admission cap — replaces the NIO boilerplate reference hosts used to copy.
 
 ```swift
@@ -415,15 +415,66 @@ try await server.start()                       // serves until stop() / process 
 - `render` is called per request (fresh CSP nonce each time — the documented
   best practice) and registers handlers into the same `router`; re-rendering
   replaces registrations idempotently (stable ids or auto `c0..` order both
-  work when the tree is deterministic).
+  work when the tree is deterministic). the request-aware
+  `WebUIServer(requestRender:router:config:logger:)` instead receives a
+  `WebUIServerRequest` (`path` + decoded `query`), which is what a deep link
+  like `/index.html?s=<id>` needs.
 - `WebUIServerConfig` tunes host/port, admission cap, read-idle seconds,
-  asset cache seconds, and the page path (default `/`).
-- routes: page path + `/index.html`, `/__assets/css`, `/ui/webui-engine.js`,
-  `/ui/webui-shell.js`, `/__assets/webui-validate.wasm` (an island artifact);
-  404/405 elsewhere;
+  asset cache seconds, the page path (default `/`), and `assets` — the host's
+  own served files (see below).
+- routes: page path + `/index.html`, `/__assets/css`,
+  `/__assets/css.<sha256>` (immutable), `/ui/webui-engine.js`,
+  `/ui/webui-shell.js`; then `config.assets`; 404/405 elsewhere.
   `Service-Worker-Allowed: /` + security headers on every response.
-- `WebUIServer` is an actor: `stop()` closes the listener and shuts down the
-  event loop group.
+- the query string is stripped before routing, so `/__assets/css?v=9` and a
+  query-bearing page url both resolve. `+` decodes to a space, `%XX` to its
+  byte, and a malformed escape is preserved verbatim rather than dropped.
+- `broadcast(_ updates:)` pushes fragments to every connected page with no
+  inbound event to answer — streaming turns, background progress, a panel that
+  changed on disk. the engine applies an update by element id, so a page that
+  does not render the id ignores it. `connectedPages` reports the live count.
+  a socket whose render token the server rejects is already closed, so a push
+  cannot reach a stale page from a former session.
+- `WebUIServer` is an actor. `stop()` closes the listener; the accept loop
+  drains the connections already accepted and shuts the event loop group down
+  itself, so a handler never schedules work on a stopped loop.
+
+### host assets
+
+`WebUIServerConfig.assets` serves files the framework does not ship — vendor
+css/js, woff2 fonts, app scripts — without standing up a second http server:
+
+```swift
+let config = WebUIServerConfig(
+    port: 9090,
+    assets: [
+        .text("/ui/app.css", appCSS, contentType: "text/css; charset=utf-8", cacheSeconds: 3600),
+        .bytes("/ui/font.woff2", fontBytes, contentType: "font/woff2", cacheSeconds: 31536000),
+    ]
+)
+```
+
+`WebUIServerAsset.Body.bytes` keeps binary payloads off the `String` path. the
+framework routes are matched first, so a host asset can neither shadow nor
+disable the stylesheet, the engine, or the shell. `cacheSeconds: nil` (the
+default) emits `no-store`.
+
+### hosting as a Service
+
+`WebUIServerService` wraps the server for `swift-service-lifecycle`, so a
+long-lived page server starts and stops inside a `ServiceGroup` instead of
+owning its own process lifecycle:
+
+```swift
+let group = ServiceGroup(
+    services: [WebUIServerService(server: server)],
+    logger: logger
+)
+try await group.run()
+```
+
+a bind failure propagates out of `run()`, so a server that cannot listen fails
+startup rather than reporting itself ready.
 
 see `Sources/WebUIExample/main.swift` — the reference server is now ~100
 lines of page + state, with the pipeline entirely inside `WebUIServer`.

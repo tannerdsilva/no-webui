@@ -4,6 +4,7 @@ import NIOCore
 import NIOHTTP1
 import NIOPosix
 import NIOWebSocket
+import Synchronization
 import WebUI
 import WebUIDesignSystem
 
@@ -18,6 +19,86 @@ private enum CachedAssets {
 	static let shell = ByteBuffer(string: WebUIAssets.shell)
 }
 
+// MARK: - host assets
+
+/// one asset a host serves alongside the framework's own.
+///
+/// `WebUIServer` already serves the design-system stylesheet, the engine, and
+/// the shell. this is the seam for everything else an app ships — vendor
+/// css/js, woff2 fonts, app scripts — so a host never keeps a second http
+/// server just to answer asset paths.
+///
+/// the framework routes win: a host asset whose path collides with
+/// `/__assets/css`, `/__assets/css.<sha>`, `/ui/webui-engine.js`, or
+/// `/ui/webui-shell.js` is never reached.
+public struct WebUIServerAsset: Sendable {
+	/// the response body. `text` covers css/js/html; `bytes` covers binary
+	/// payloads (fonts) that must not round-trip through `String`.
+	public enum Body: Sendable {
+		case text(String)
+		case bytes([UInt8])
+	}
+
+	/// the exact request path, e.g. `/ui/vendor/katex/katex.min.css`. matched
+	/// after the query string is stripped, so a cache-busting `?v=41` still
+	/// resolves.
+	public var path: String
+	public var body: Body
+	/// the `Content-Type` header value.
+	public var contentType: String
+	/// `Cache-Control: max-age=<seconds>`. `nil` emits `no-store`.
+	public var cacheSeconds: Int?
+
+	public init(path: String, body: Body, contentType: String, cacheSeconds: Int? = nil) {
+		self.path = path
+		self.body = body
+		self.contentType = contentType
+		self.cacheSeconds = cacheSeconds
+	}
+
+	/// a utf-8 text asset (css, js, html).
+	public static func text(
+		_ path: String,
+		_ text: String,
+		contentType: String,
+		cacheSeconds: Int? = nil
+	) -> WebUIServerAsset {
+		WebUIServerAsset(path: path, body: .text(text), contentType: contentType, cacheSeconds: cacheSeconds)
+	}
+
+	/// a binary asset (fonts, images).
+	public static func bytes(
+		_ path: String,
+		_ bytes: [UInt8],
+		contentType: String,
+		cacheSeconds: Int? = nil
+	) -> WebUIServerAsset {
+		WebUIServerAsset(path: path, body: .bytes(bytes), contentType: contentType, cacheSeconds: cacheSeconds)
+	}
+}
+
+// MARK: - request
+
+/// the request a page render answers: the path plus the decoded query, so a
+/// host can render different content for `/index.html?s=<id>` (deep links)
+/// without standing up a second server.
+public struct WebUIServerRequest: Sendable {
+	/// the request path, query string already stripped.
+	public var path: String
+	/// the decoded `?a=1&b=2` pairs. a repeated key keeps its first value.
+	public var query: [String: String]
+
+	public init(path: String, query: [String: String] = [:]) {
+		self.path = path
+		self.query = query
+	}
+
+	/// the percent-decoded value for `name`, or `nil`.
+	public func value(_ name: String) -> String? {
+		query[name]
+	}
+}
+
 // MARK: - Configuration
 
 /// tuning for `WebUIServer`. defaults match the reference servers: bind any
@@ -30,6 +111,10 @@ public struct WebUIServerConfig: Sendable {
 	public var readIdleSeconds: Int64
 	public var assetCacheSeconds: Int
 	public var pagePath: String
+	/// extra assets this host serves (see ``WebUIServerAsset``). the framework
+	/// routes and the page route are matched first, so an entry here can
+	/// neither shadow nor disable them. duplicate paths: the last entry wins.
+	public var assets: [WebUIServerAsset]
 
 	public init(
 		host: String = "0.0.0.0",
@@ -37,7 +122,8 @@ public struct WebUIServerConfig: Sendable {
 		maxConnections: Int = 256,
 		readIdleSeconds: Int64 = 120,
 		assetCacheSeconds: Int = 3600,
-		pagePath: String = "/"
+		pagePath: String = "/",
+		assets: [WebUIServerAsset] = []
 	) {
 		self.host = host
 		self.port = port
@@ -45,6 +131,7 @@ public struct WebUIServerConfig: Sendable {
 		self.readIdleSeconds = readIdleSeconds
 		self.assetCacheSeconds = assetCacheSeconds
 		self.pagePath = pagePath
+		self.assets = assets
 	}
 }
 
@@ -63,11 +150,19 @@ public struct WebUIServerConfig: Sendable {
 /// assignment), so a page can re-render with a stable router.
 public actor WebUIServer {
 	public typealias Render = @Sendable () -> String
+	/// the request-aware render: receives the path and decoded query, so a page
+	/// can vary by URL (deep links) as well as by router state.
+	///
+	/// async because a page that reflects live store state has to await it —
+	/// a session store, a database, a filesystem scan. pre-rendering into a
+	/// cache to satisfy a sync signature is how a page goes stale.
+	public typealias RequestRender = @Sendable (WebUIServerRequest) async -> String
 
 	private let config: WebUIServerConfig
 	private let logger: Logger
 	private var lifecycle: Lifecycle?
 
+	/// render one fixed page and let the router carry all variation.
 	public init(
 		render: @escaping Render,
 		router: EventRouter,
@@ -78,17 +173,35 @@ public actor WebUIServer {
 		self.logger = logger
 		self.lifecycle = nil
 		self.router = router
-		self.render = render
+		self.render = { _ in render() }
+	}
+
+	/// render from the request: path-dependent pages and `?s=<id>` deep links.
+	/// distinct label, so the two inits never compete in overload resolution.
+	public init(
+		requestRender: @escaping RequestRender,
+		router: EventRouter,
+		config: WebUIServerConfig = WebUIServerConfig(),
+		logger: Logger = Logger(label: "webui.server")
+	) {
+		self.config = config
+		self.logger = logger
+		self.lifecycle = nil
+		self.router = router
+		self.render = requestRender
 	}
 
 	private let router: EventRouter
-	private let render: Render
+	private let render: RequestRender
+	/// the connected pages a push reaches. created at init, so a broadcast
+	/// issued before `start()` is a no-op rather than a crash.
+	private let sinks = ConnectionSinks()
 
 	/// bind and serve until `stop()` or process exit.
 	public func start() async throws {
 		DesignSystemAssets.prewarm()
 		let cfg = config
-		let runner = Runner(render: render, router: router, config: cfg, logger: logger)
+		let runner = Runner(render: render, router: router, config: cfg, logger: logger, sinks: sinks)
 		let group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
 		let bootstrap = ServerBootstrap(group: group)
 			.serverChannelOption(ChannelOptions.backlog, value: 128)
@@ -151,36 +264,65 @@ public actor WebUIServer {
 			}
 		}
 
-		self.lifecycle = Lifecycle(channel: channel, group: group)
+		self.lifecycle = Lifecycle(channel: channel)
 		logger.info(
 			"WebUIServer serving \(config.pagePath) on http://\(config.host):\(config.port) (ws://\(config.host):\(config.port)/ws)"
 		)
 
-		try await withThrowingDiscardingTaskGroup { group in
-			try await channel.executeThenClose { inbound in
-				for try await negotiationFuture in inbound {
-					group.addTask {
-						await runner.handle(negotiationFuture)
+		// the accept loop owns the loop group's lifetime: the connections
+		// already accepted drain first, and only then does the group stop.
+		// shutting the group down from `stop()` instead races a handler that
+		// is still running — swift-nio answers that with "Cannot schedule
+		// tasks on an EventLoop that has already shut down", and upgrades the
+		// race to a forced crash in a later release.
+		do {
+			try await withThrowingDiscardingTaskGroup { group in
+				try await channel.executeThenClose { inbound in
+					for try await negotiationFuture in inbound {
+						group.addTask {
+							await runner.handle(negotiationFuture)
+						}
 					}
 				}
 			}
+			try await group.shutdownGracefully()
+		} catch {
+			try? await group.shutdownGracefully()
+			throw error
 		}
 	}
 
-	/// close the listener and shut the event loop group down.
+	/// close the listener. the accept loop drains the connections already
+	/// accepted and shuts the event loop group down itself, so a handler never
+	/// schedules work on a loop that has already stopped.
 	public func stop() async {
 		guard let lifecycle else { return }
 		self.lifecycle = nil
-		// the listener is closed first so no new connections arrive.
 		try? await lifecycle.channel.channel.close().get()
-		try? await lifecycle.group.shutdownGracefully()
+	}
+
+	// MARK: - server-initiated push
+
+	/// push fragments to every connected page, with no inbound event to answer.
+	///
+	/// the engine applies an update by element id, so a page that does not
+	/// render the id ignores it and one push reaches every page that does.
+	/// this is how a host streams a turn, reports background progress, or
+	/// refreshes a panel that changed on disk.
+	public func broadcast(_ updates: [FragmentUpdate]) async {
+		guard !updates.isEmpty else { return }
+		await sinks.broadcast(WSOutgoing.update(fragments: updates).jsonBytes)
+	}
+
+	/// how many pages are connected right now (diagnostics and tests).
+	public var connectedPages: Int {
+		sinks.count
 	}
 
 	// MARK: - lifecycle state
 
 	struct Lifecycle: Sendable {
 		let channel: NIOAsyncChannel<EventLoopFuture<ServerUpgradeResult>, Never>
-		let group: MultiThreadedEventLoopGroup
 	}
 }
 
@@ -195,28 +337,114 @@ enum ServerGateError: Error {
 	case atCapacity
 }
 
+// MARK: - connected pages
+
+/// the live websocket outbound writers, keyed by connection id — the targets a
+/// server-initiated push writes to. the accept side registers on upgrade and
+/// removes on close; `Mutex`-backed and `Sendable`, matching the gate.
+///
+/// a socket whose `render` token the server rejects is already closed, so a
+/// push can never reach a stale page from a former session: the render-binding
+/// invariant is enforced when the connection is admitted, not per message.
+final class ConnectionSinks: Sendable {
+	private let state = Mutex<[Int: NIOAsyncChannelOutboundWriter<WebSocketFrame>]>([:])
+	private let counter = Mutex<Int>(0)
+
+	/// register a connection and return its id.
+	func register(_ outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>) -> Int {
+		let id = counter.withLock { value -> Int in
+			value += 1
+			return value
+		}
+		state.withLock { $0[id] = outbound }
+		return id
+	}
+
+	func unregister(_ id: Int) {
+		_ = state.withLock { $0.removeValue(forKey: id) }
+	}
+
+	/// how many pages are connected right now.
+	var count: Int {
+		state.withLock { $0.count }
+	}
+
+	/// push `bytes` to every connected page. a connection that fails to write
+	/// is dropped here rather than in its own read loop.
+	///
+	/// the snapshot is taken under the lock and written outside it: awaiting
+	/// while holding a `Mutex` would deadlock. a page that accepts between the
+	/// snapshot and the writes simply misses this push — it will be rendered
+	/// from current state on its own first request.
+	func broadcast(_ bytes: [UInt8]) async {
+		let targets = state.withLock { Array($0) }
+		guard !targets.isEmpty else { return }
+		for (id, outbound) in targets {
+			var buffer = ByteBufferAllocator().buffer(capacity: bytes.count)
+			buffer.writeBytes(bytes)
+			let frame = WebSocketFrame(fin: true, opcode: .text, data: buffer)
+			do {
+				try await outbound.write(frame)
+			} catch {
+				_ = state.withLock { $0.removeValue(forKey: id) }
+			}
+		}
+	}
+}
+
 // MARK: - request runner
 
 /// the connection-bound logic. `Sendable`: all state is immutable after init
 /// (the gate is the only mutable piece and is Mutex-backed).
 final class Runner: Sendable {
-	private let render: WebUIServer.Render
+	private let render: WebUIServer.RequestRender
 	private let router: EventRouter
 	private let config: WebUIServerConfig
 	private let logger: Logger
 	let gate: ConnectionGate
+	/// the push targets this connection joins for its lifetime.
+	let sinks: ConnectionSinks
+
+	/// host assets, pre-encoded: path → body + content type + cache policy.
+	/// fixed for the life of the process, so each body is built exactly once
+	/// instead of per request.
+	private let assets: [String: HostAsset]
+
+	struct HostAsset: Sendable {
+		let body: ByteBuffer
+		let contentType: String
+		let cacheControl: String
+	}
 
 	init(
-		render: @escaping WebUIServer.Render,
+		render: @escaping WebUIServer.RequestRender,
 		router: EventRouter,
 		config: WebUIServerConfig,
-		logger: Logger
+		logger: Logger,
+		sinks: ConnectionSinks
 	) {
 		self.render = render
 		self.router = router
 		self.config = config
 		self.logger = logger
 		self.gate = ConnectionGate(maximum: config.maxConnections)
+		self.sinks = sinks
+		var encoded: [String: HostAsset] = [:]
+		encoded.reserveCapacity(config.assets.count)
+		for asset in config.assets {
+			let bytes: [UInt8]
+			switch asset.body {
+			case .text(let text): bytes = Array(text.utf8)
+			case .bytes(let raw): bytes = raw
+			}
+			let cacheControl = asset.cacheSeconds.map { "public, max-age=\($0)" } ?? "no-store"
+			encoded[asset.path] = HostAsset(
+				body: ByteBuffer(bytes: bytes),
+				contentType: asset.contentType,
+				cacheControl: cacheControl
+			)
+		}
+		self.assets = encoded
 	}
 
 	func handle(_ negotiationFuture: EventLoopFuture<ServerUpgradeResult>) async {
@@ -236,6 +464,9 @@ final class Runner: Sendable {
 
 	private func handleWebsocket(_ channel: NIOAsyncChannel<WebSocketFrame, WebSocketFrame>) async throws {
 		try await channel.executeThenClose { inbound, outbound in
+			// a connected page is a push target for the life of the socket.
+			let connectionID = sinks.register(outbound)
+			defer { sinks.unregister(connectionID) }
 			try await withThrowingTaskGroup(of: Void.self) { tg in
 				tg.addTask {
 					for try await frame in inbound {
@@ -305,7 +536,13 @@ final class Runner: Sendable {
 					return
 				}
 				let uri = head.uri
-				if uri == "/__assets/css" {
+				// strip the query once: routing and the host-asset table both
+				// key on the bare path, so a cache-busting `?v=41` still
+				// resolves, and the bare page path accepts `?s=<id>`.
+				let path = String(uri.prefix(while: { $0 != "?" }))
+				let queryText = uri.dropFirst(path.count).dropFirst()
+				let request = WebUIServerRequest(path: path, query: parseQuery(String(queryText)))
+				if path == "/__assets/css" {
 					// legacy stable path (old pages / old cache) — short cache.
 					try await respond(
 						channel: channel.channel,
@@ -313,7 +550,7 @@ final class Runner: Sendable {
 						contentType: "text/css; charset=utf-8",
 						cacheControl: "public, max-age=\(config.assetCacheSeconds)"
 					)
-				} else if uri.hasPrefix("/__assets/css.") {
+				} else if path.hasPrefix("/__assets/css.") {
 					// content-addressed sheet: a rebuilt sheet is a new url, so
 					// the response is immutable — a year-long, revalidation-free
 					// cache with no stale-sheet window.
@@ -323,21 +560,31 @@ final class Runner: Sendable {
 						contentType: "text/css; charset=utf-8",
 						cacheControl: "public, max-age=31536000, immutable"
 					)
-				} else if uri == "/ui/webui-engine.js" {
+				} else if path == "/ui/webui-engine.js" {
 					try await respond(
 						channel: channel.channel,
 						bytes: CachedAssets.engine,
 						contentType: "text/javascript; charset=utf-8",
 						cacheControl: "public, max-age=\(config.assetCacheSeconds)"
 					)
-				} else if uri == "/ui/webui-shell.js" {
+				} else if path == "/ui/webui-shell.js" {
 					try await respond(
 						channel: channel.channel,
 						bytes: CachedAssets.shell,
 						contentType: "text/javascript; charset=utf-8",
 						cacheControl: "public, max-age=\(config.assetCacheSeconds)"
 					)
-				} else if uri == config.pagePath || uri == "/index.html" {
+				} else if let asset = assets[path] {
+					// host asset: vendor css/js, fonts, app scripts. the
+					// framework routes above win, so a host asset can never
+					// shadow the stylesheet, the engine, or the shell.
+					try await respond(
+						channel: channel.channel,
+						bytes: asset.body,
+						contentType: asset.contentType,
+						cacheControl: asset.cacheControl
+					)
+				} else if path == config.pagePath || path == "/index.html" {
 					// the server owns the render context: handlers a page wires
 					// through `.onX`/`controlAttributes` register into THIS
 					// server's router, so hosts never juggle a second router
@@ -345,8 +592,8 @@ final class Runner: Sendable {
 					// that wraps its own context still wins (the inner
 					// `withValue` takes precedence), so existing hosts are
 					// unaffected.
-					let body = RenderContext.$current.withValue(RenderContext(router: router)) {
-						render()
+					let body = await RenderContext.$current.withValue(RenderContext(router: router)) {
+						await render(request)
 					}
 					try await respond(
 						channel: channel.channel,
@@ -426,6 +673,57 @@ final class Runner: Sendable {
 		head.headers.replaceOrAdd(name: "Cache-Control", value: "no-store")
 		_ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.head(head))
 		try await channel.writeAndFlush(HTTPPart<HTTPResponseHead, ByteBuffer>.end(nil)).get()
+	}
+}
+
+// MARK: - query parsing
+
+/// parse an `a=1&b=2` query string into decoded pairs. `+` decodes to a space
+/// (form encoding) and `%XX` to its byte; a malformed escape stays verbatim
+/// rather than being dropped, so a bad parameter cannot silently vanish. the
+/// first value wins for a repeated key.
+func parseQuery(_ text: String) -> [String: String] {
+	guard !text.isEmpty else { return [:] }
+	var out: [String: String] = [:]
+	for pair in text.split(separator: "&", omittingEmptySubsequences: true) {
+		let parts = pair.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
+		let name = percentDecode(parts[0])
+		guard !name.isEmpty, out[name] == nil else { continue }
+		out[name] = parts.count == 2 ? percentDecode(parts[1]) : ""
+	}
+	return out
+}
+
+/// percent-decode one url component. invalid escapes pass through unchanged.
+private func percentDecode(_ text: Substring) -> String {
+	guard text.contains("%") || text.contains("+") else { return String(text) }
+	let input = Array(text.utf8)
+	var bytes: [UInt8] = []
+	bytes.reserveCapacity(input.count)
+	var i = 0
+	while i < input.count {
+		let byte = input[i]
+		if byte == 0x2B {                                    // '+'
+			bytes.append(0x20)
+			i += 1
+		} else if byte == 0x25, i + 2 < input.count,         // '%XX'
+			let hi = hexValue(input[i + 1]), let lo = hexValue(input[i + 2]) {
+			bytes.append(hi << 4 | lo)
+			i += 3
+		} else {
+			bytes.append(byte)
+			i += 1
+		}
+	}
+	return String(decoding: bytes, as: UTF8.self)
+}
+
+private func hexValue(_ byte: UInt8) -> UInt8? {
+	switch byte {
+	case 0x30...0x39: return byte - 0x30                 // 0-9
+	case 0x41...0x46: return byte - 0x41 + 10            // A-F
+	case 0x61...0x66: return byte - 0x61 + 10            // a-f
+	default: return nil
 	}
 }
 

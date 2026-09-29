@@ -142,7 +142,10 @@ serves one of them per process (``--block <name>``, default ``index``) on :9093.
 the plan proposed routing them on the showcase server at ``/blocks/<name>``. that
 would have required changing ``WebUIServer.Render`` (``@Sendable () -> String``,
 no request argument) — a pinned public API — so the server takes ``--block`` and
-serves that page at ``/`` instead. the exit gate is satisfied more strongly this
+serves that page at ``/`` instead. ``WebUIServer`` now also offers a
+request-aware render (``requestRender:``, receiving a ``WebUIServerRequest``),
+which removes that constraint for a future revision; ``Render`` itself is
+unchanged, and the ``--block`` arrangement stands. the exit gate is satisfied more strongly this
 way: a block is served with no showcase dependency at all, and the index page
 links every block.
 
