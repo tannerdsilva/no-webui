@@ -891,6 +891,34 @@ window.WebUIRuntime = (function () {
   var instance = null;
 
 
+  // Host extension points.
+  //
+  // The runtime has no opinion about what a host does once the DOM has changed
+  // -- typeset math, restore scroll, enhance tables -- so it exposes the moment
+  // instead of the behaviour. `afterPatch` runs after every applied fragment
+  // batch; `ready` runs once the runtime is live. a throwing hook is caught and
+  // logged, never allowed to break a patch.
+  var afterPatchHooks = [];
+  var readyHooks = [];
+  var readyFired = false;
+
+  function runAfterPatch() {
+    for (var i = 0; i < afterPatchHooks.length; i++) {
+      try { afterPatchHooks[i](); } catch (e) {
+        if (instance && instance.log) instance.log.error('afterPatch hook failed: ' + e);
+      }
+    }
+  }
+
+  function runReady() {
+    readyFired = true;
+    for (var i = 0; i < readyHooks.length; i++) {
+      try { readyHooks[i](); } catch (e) {
+        if (instance && instance.log) instance.log.error('ready hook failed: ' + e);
+      }
+    }
+  }
+
   function init(opts) {
     if (instance) {
       console.warn('[WebUIRuntime] Already initialized');
@@ -918,6 +946,18 @@ window.WebUIRuntime = (function () {
     eventDelegator.reset(config);
     fragmentPatcher.setSettle(config.optimisticSettleMs);
 
+    // expose the post-patch moment to host hooks (see the extension points above).
+    var rawPatch = fragmentPatcher.patch;
+    fragmentPatcher.patch = function (fragments, seq, optimistic) {
+      var result = rawPatch(fragments, seq, optimistic);
+      if (result && typeof result.then === 'function') {
+        result.then(runAfterPatch, runAfterPatch);
+      } else {
+        runAfterPatch();
+      }
+      return result;
+    };
+
     eventDelegator.mount();
 
     wsClient.connect();
@@ -938,6 +978,7 @@ window.WebUIRuntime = (function () {
     };
 
     log.info('WebUI Runtime initialized');
+    runReady();
   }
 
 
@@ -959,6 +1000,17 @@ window.WebUIRuntime = (function () {
   return {
     init: init,
     destroy: destroy,
+
+    /// hook registration: `WebUIRuntime.on.afterPatch(fn)` / `.ready(fn)`.
+    on: {
+      afterPatch: function (fn) { afterPatchHooks.push(fn); },
+      ready: function (fn) {
+        readyHooks.push(fn);
+        // registering after boot still runs once, so a host that loads its
+        // overlay as a second script is not silently skipped.
+        if (readyFired) { try { fn(); } catch (e) { } }
+      },
+    },
 
     _reset: function () { instance = null; },
     _getInstance: function () { return instance; },
