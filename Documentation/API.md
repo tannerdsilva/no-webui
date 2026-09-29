@@ -7,9 +7,20 @@
 | Protocol | Requirement | Notes |
 |---|---|---|
 | `View` | `func render() -> String` | pure function, no side effects, `Sendable` |
+| `View` | `func render(into buffer: inout HTMLBuffer)` | *defaulted* requirement: writes into a shared render buffer; the default falls back to `render()`, so a view that implements only `render()` renders byte-identically |
 | `ViewModifier` | `func apply(to html: String) -> String` | wraps rendered html with attributes or styles |
+| `ViewModifier` | `func decorate<C: View>(_ content: C, into buffer: inout HTMLBuffer)` | *defaulted* requirement: applies the modifier through the buffer; the default applies to `content.render()` |
 | `ModifiedView<Content: View, M: ViewModifier>` | `View` | type-preserving wrapper returned by every modifier |
 | `EmptyView` | `View` | renders nothing |
+
+the buffer route is the framework's own render path, not yet consumer API:
+`HTMLBuffer` is a `public` *type* — a protocol requirement is implicitly as
+visible as its protocol, and the requirements name it — while **every member
+stays `package`**. a consumer can see the type in a signature but cannot
+construct or write through one; the members open up with the 2.0 flip, when
+`render(into:)` becomes the requirement and `render()` a deprecated
+convenience (`STABILITY.md`). both additions are additive in the 1.x sense:
+an existing conformer keeps compiling and rendering identically.
 
 ### ViewBuilder
 

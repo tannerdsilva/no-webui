@@ -678,3 +678,37 @@ func runtimeConfigSurfacePins() {
 	)
 	_ = config
 }
+
+// MARK: - render path additions (the render-buffer arc)
+
+@Test("the render path's additions are additive and byte-identical")
+func renderBufferAdditionsPin() {
+	// `HTMLBuffer` is a public *type* while every member stays `package`; the
+	// test target is inside the package, so both routes are exercised here.
+	// the pin is compile-time for the signatures and byte-level for the
+	// contract — and it is why these additions ride a minor.
+	let view: any View = Div { Text("x") }
+	var buffer = HTMLBuffer()
+	view.render(into: &buffer)
+	#expect(buffer.finish() == "<div>x</div>")
+
+	var styled = HTMLBuffer()
+	Text("y").padding(2).render(into: &styled)
+	#expect(styled.finish() == "<span style=\"padding: 2px;\">y</span>")
+
+	// a conformer implementing only the string requirements still works through
+	// the buffer: that is the defaulted requirement's additive promise
+	struct StringOnly: View {
+		func render() -> String { "s" }
+	}
+	var fallback = HTMLBuffer()
+	StringOnly().render(into: &fallback)
+	#expect(fallback.finish() == "s")
+
+	struct ModifierOnly: ViewModifier {
+		func apply(to html: String) -> String { "<b>\(html)</b>" }
+	}
+	var wrapped = HTMLBuffer()
+	ModifiedView(content: Text("z"), modifier: ModifierOnly()).render(into: &wrapped)
+	#expect(wrapped.finish() == "<b>z</b>")
+}

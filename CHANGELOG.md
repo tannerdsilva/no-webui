@@ -179,6 +179,21 @@ all notable changes to this project are documented here.
   commit.
 - `CHANGELOG.md` itself carried a stray generator placeholder token in the
   wasm-deletion section (it had swallowed a word); removed.
+- **the render path's additive surface** (the render-buffer arc: `S0`–`S4a`):
+  `View` gains `render(into buffer: inout HTMLBuffer)` and `ViewModifier` gains
+  `decorate(_:into:)`, both *defaulted* requirements — a conformer that
+  implements only `render()` / `apply(to:)` keeps rendering byte-identically,
+  which is what keeps this a minor. `HTMLBuffer` is a `public` **type** (a
+  protocol requirement is implicitly as visible as its protocol, and the
+  requirements name it) while **every member stays `package`**: this is the
+  framework's own render path, and the members open with the 2.0 flip, when
+  `render(into:)` becomes the requirement and `render()` a deprecated
+  convenience. pinned by `APISurfaceTests.renderBufferAdditionsPin` and
+  documented in `Documentation/API.md`'s View Protocol table. measured on the
+  reference box (Debug, interleaved passes): page render ≈ -11% against the
+  pre-arc tree, with byte-identity held on every page, every gate, and both
+  platforms. the rest of the design-system migration was scoped, measured
+  neutral, and deliberately deferred to the flip.
 
 ### server: linux + speed
 
