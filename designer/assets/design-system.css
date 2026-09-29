@@ -6826,7 +6826,20 @@ code, .inline-code {
 .card__value { font-size: var(--font-size-2xl); font-weight: var(--font-weight-bold); letter-spacing: var(--letter-spacing-tight); line-height: 1.1; }
 .card__delta { font-size: var(--font-size-xs); font-weight: var(--font-weight-medium); }
 .card__text { font-size: var(--font-size-sm); color: var(--color-text-muted); line-height: var(--line-height-relaxed); }
-.card__media-badge { position: absolute; top: var(--space-3); left: var(--space-3); z-index: 1; }
+.card__media-badge {
+  position: absolute;
+  top: var(--space-3);
+  left: var(--space-3);
+  z-index: 1;
+  padding: 0.15em 0.6em;
+  font-size: var(--font-size-xs);
+  font-weight: var(--font-weight-semibold);
+  line-height: 1.4;
+  color: var(--color-neutral-50);
+  background: color-mix(in srgb, var(--color-neutral-950) 70%, transparent);
+  border-radius: var(--radius-full);
+  white-space: nowrap;
+}
 .card--hover { transition: box-shadow var(--transition-base), border-color var(--transition-base), transform var(--transition-base); }
 .card--hover:hover { box-shadow: var(--shadow-md); border-color: var(--color-border-strong); transform: translateY(-1px); }
 .card--compact { padding: var(--space-3); }
