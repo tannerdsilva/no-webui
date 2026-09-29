@@ -53,7 +53,7 @@ then `swift build`. see `Documentation/ICONS.md`.
 
 ## stage 2 — unit verification
 
-`swift test` — 567 tests across 62 suites covering views, modifiers, event
+`swift test` — 902 tests across 89 suites covering views, modifiers, event
 routing, sanitization, the svg icon catalog + api, design-system components,
 web-ui hardening (url sanitization, escaping, the icon allowlist, the json
 nesting cap), the `ConnectionGate`, and the `WebUIAuth` authentication
