@@ -2199,20 +2199,22 @@ code, .inline-code {
 .tree__row {
   display: flex;
   align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) 0.5rem;
+  gap: var(--space-1);
+  padding: var(--space-1) 0.5rem;
   border-radius: var(--radius-md);
-  color: var(--color-text);
+  color: var(--color-text-muted);
   cursor: pointer;
   transition: background var(--transition-fast);
   position: relative;
 }
+.tree__row:where([aria-expanded]) { color: var(--color-text); font-weight: var(--font-weight-medium); }
 .tree__row:hover { background: var(--color-bg-subtle); }
 .tree__row--selected {
   background: var(--color-primary-50);
   color: var(--color-primary-900);
 }
 .tree__row--selected .tree__icon { color: var(--color-primary-600); }
+.tree__row--selected .tree__caret { color: inherit; }
 .tree__caret {
   width: 0.875rem;
   height: 0.875rem;
@@ -2220,6 +2222,7 @@ code, .inline-code {
   place-items: center;
   color: var(--color-text-muted);
   flex: none;
+  transform: rotate(-90deg);
   transition: transform var(--transition-base);
 }
 .tree__caret::before {
@@ -2231,7 +2234,7 @@ code, .inline-code {
   border-top: none;
   transform: rotate(-45deg) translate(1px,-1px);
 }
-.tree__node--open > .tree__row .tree__caret { transform: rotate(90deg); }
+.tree__node--open > .tree__row .tree__caret { transform: rotate(0deg); }
 .tree__caret--leaf { visibility: hidden; }
 .tree__icon { width: 1rem; height: 1rem; color: var(--color-text-muted); flex: none; }
 .tree__label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -7455,10 +7458,10 @@ main { min-width: 0; }
 .transfer__remove:hover { background: var(--color-danger-soft); color: var(--color-danger); }
 
 .tree__branch { display: flex; flex-direction: column; }
-.tree__row { display: flex; align-items: center; gap: var(--space-1); padding: var(--space-1) 0.5rem; border-radius: var(--radius-md); cursor: pointer; color: var(--color-text-muted); font-size: var(--font-size-sm); transition: background var(--transition-fast); }
-.tree__row:hover { background: var(--color-bg-inset); color: var(--color-text); }
-.tree__row--dir { font-weight: var(--font-weight-medium); }
-.tree__row--selected { background: var(--color-primary-soft); color: var(--color-primary-strong); }
+.tree__branch .tree__row { display: flex; align-items: center; gap: var(--space-1); padding: var(--space-1) 0.5rem; border-radius: var(--radius-md); cursor: pointer; color: var(--color-text-muted); font-size: var(--font-size-sm); transition: background var(--transition-fast); }
+.tree__branch .tree__row:hover { background: var(--color-bg-inset); color: var(--color-text); }
+.tree__branch .tree__row--dir { font-weight: var(--font-weight-medium); }
+.tree__branch .tree__row--selected { background: var(--color-primary-soft); color: var(--color-primary-strong); }
 .tree__spacer { width: 0.9rem; flex: none; }
 .tree__chevron { flex: none; width: 0.55rem; height: 0.55rem; border-right: 1.5px solid currentColor; border-bottom: 1.5px solid currentColor; transform: rotate(45deg); transition: transform var(--transition-fast); }
 .tree__row--open .tree__chevron { transform: rotate(225deg); }
@@ -7492,8 +7495,8 @@ main { min-width: 0; }
 
 .tk { font-family: var(--font-mono); }
 
-.tree__row--file { color: var(--color-text-muted); }
-.tree__row--file:hover { color: var(--color-text); }
+.tree__branch .tree__row--file { color: var(--color-text-muted); }
+.tree__branch .tree__row--file:hover { color: var(--color-text); }
 
 .example { overflow-x: auto; }
 .example::-webkit-scrollbar { height: 8px; }
