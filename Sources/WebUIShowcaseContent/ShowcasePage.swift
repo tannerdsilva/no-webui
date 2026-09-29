@@ -1325,7 +1325,7 @@ public struct ShowcasePage: Sendable {
                         }
                         demoCard("Border Radius Tokens") {
                             HStack(spacing: 8) {
-                                radiusSample("--radius-sm", "2px")
+                                radiusSample("--radius-sm", "4px")
                                 radiusSample("--radius-md", "6px")
                                 radiusSample("--radius-lg", "8px")
                                 radiusSample("--radius-xl", "12px")
@@ -1512,6 +1512,9 @@ public struct ShowcasePage: Sendable {
                 .width("40px").height("40px")
                 .backgroundColor("var(--color-bg-inset)")
                 .border("1px solid var(--color-border-strong)")
+                // the sample must actually wear the token it names — otherwise
+                // five identical squares document nothing
+                .cornerRadius("var(\(token))")
             Text(token).font(size: 10)
             Text(value).font(size: 10)
         }

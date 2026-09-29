@@ -1720,13 +1720,28 @@ struct CompanionPrimitiveTests {
         #expect(html.contains("aria-current=\"page\""))
         #expect(html.contains("href=\"/s1\""))
         #expect(validateTagBalance(html))
-        // short trail => no collapse
+        // short trail => no collapse, AND the current segment still renders
+        // (regression: the tail loop ran zero times when not collapsed, so the
+        // current was dropped and the trail ended in a dangling separator)
         let short = WebUIBreadcrumb(
             items: [WebUIBreadcrumb.Item("Home", href: "/")],
             current: WebUIBreadcrumb.Item("Here")
         ).render()
         #expect(short.range(of: "breadcrumb__ellipsis") == nil)
         #expect(short.contains("class=\"breadcrumb\""))
+        #expect(short.contains(">Here</span>"), "current segment missing: \(short)")
+        #expect(short.contains("aria-current=\"page\""))
+        #expect(validateTagBalance(short))
+    }
+
+    @Test("a breadcrumb with no parent items renders just the current segment")
+    func breadcrumbBareCurrent() {
+        let html = WebUIBreadcrumb(items: [], current: WebUIBreadcrumb.Item("Only")).render()
+        #expect(html.contains(">Only</span>"), "current segment missing: \(html)")
+        #expect(html.contains("breadcrumb__item--current"))
+        // no parent items means nothing to separate
+        #expect(!html.contains("breadcrumb__separator"))
+        #expect(validateTagBalance(html))
     }
 
     @Test("WebUIBreadcrumb slash variant and javascript: href degrade to plain text")

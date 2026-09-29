@@ -1807,7 +1807,10 @@ public struct WebUIBreadcrumb: View {
         // the ellipsis, which render as the tail
         let collapsed = collapse && all.count > maxItems
         let headCount = collapsed ? 1 : all.count - 1
-        let tailCount = collapsed ? 2 : 0
+        // the tail always carries the current segment: the last two entries
+        // when collapsed (last link + current), and just the current otherwise —
+        // a zero-length tail dropped the current entirely on every short trail.
+        let tailCount = collapsed ? 2 : 1
 
         func itemHTML(_ item: Item, index: Int, isCurrent: Bool) -> String {
             let idAttr = isCurrent ? "" : base.map { " id=\"\($0)-item-\(index)\"" } ?? ""
