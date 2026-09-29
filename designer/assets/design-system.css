@@ -5060,11 +5060,11 @@ code, .inline-code {
 }
 .overflow:hover { background: var(--color-bg-subtle); }
 .overflow__dots {
-  display: flex; flex-direction: column; gap: 2px;
+  display: flex; flex-direction: column; gap: 0.125rem;
 }
 .overflow--horizontal .overflow__dots { flex-direction: row; }
 .overflow__dots span {
-  width: 3px; height: 3px; border-radius: var(--radius-full);
+  width: 0.1875rem; height: 0.1875rem; border-radius: var(--radius-full);
   background: currentColor;
 }
 .overflow__panel { margin-top: var(--space-1); }
@@ -5344,10 +5344,10 @@ code, .inline-code {
 }
 .typing__dots {
   display: inline-flex;
-  gap: 3px;
+  gap: 0.1875rem;
 }
 .typing__dots span {
-  width: 5px; height: 5px;
+  width: 0.3125rem; height: 0.3125rem;
   border-radius: var(--radius-full);
   background: var(--color-text-muted);
   animation: br-typing 1.2s infinite;
@@ -7812,7 +7812,7 @@ h6 {
   color: var(--color-text-secondary);
   font-size: var(--font-size-sm);
 }
-.island__dot { width: 8px; height: 8px; border-radius: 999px; background: currentColor; }
+.island__dot { width: 0.5rem; height: 0.5rem; border-radius: 999px; background: currentColor; }
 .island--ok { border-color: var(--color-success); color: var(--color-success); }
 .island--error { border-color: var(--color-danger); color: var(--color-danger); }
 
@@ -7845,8 +7845,8 @@ h6 {
 }
 .engine-status--visible { display: inline-flex; }
 .engine-status__dot {
-  width: 8px;
-  height: 8px;
+  width: 0.5rem;
+  height: 0.5rem;
   border-radius: 999px;
   background: var(--color-warning);
   animation: engine-status-pulse 1.2s ease-in-out infinite;
@@ -7867,8 +7867,8 @@ h6 {
   color: var(--color-text-muted);
 }
 .engine-status-mirror__dot {
-  width: 8px;
-  height: 8px;
+  width: 0.5rem;
+  height: 0.5rem;
   border-radius: 999px;
   background: var(--color-warning);
   animation: engine-status-pulse 1.2s ease-in-out infinite;
@@ -8428,7 +8428,7 @@ h6 {
 }
 .chart__radial-value {
 	fill: var(--color-text);
-	font-size: 26px;
+	font-size: var(--font-size-2xl);
 	font-weight: 600;
 	text-anchor: middle;
 	dominant-baseline: middle;
@@ -8542,6 +8542,8 @@ h6 {
 	clip: rect(0 0 0 0);
 	clip-path: inset(50%);
 	white-space: nowrap;
+	table-layout: fixed;
+	line-height: 0;
 	border: 0;
 }
 
