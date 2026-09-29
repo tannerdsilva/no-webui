@@ -513,8 +513,8 @@ struct ChartRenderer {
 			byCategory[c, default: []].append((sIndex, bar.spec.y?.value.numericValue ?? 0, bar))
 		}
 
-		for c in xBands where !(byCategory[c]?.isEmpty ?? true) {
-			let group = byCategory[c]!
+		for c in xBands {
+			guard let group = byCategory[c], !group.isEmpty else { continue }
 			let bandX = banded.position(of: c)
 			let bandW = banded.bandWidth
 			switch stacking {

@@ -139,12 +139,13 @@ public struct WebUIOTP: View {
     }
 
     public func render() -> String {
+        let digits = value ?? []
         var html = "<div class=\"otp\(size.rawValue)\(error ? " otp--error" : "")\" aria-label=\"One-time code\">"
         for i in 0..<length {
-            let filled = (value != nil && i < value!.count)
+            let filled = i < digits.count
             let cellID = id.map { " id=\"\(htmlEscape("\($0)-cell-\(i)"))\"" } ?? ""
             let cellAttrs = id.map { controlAttributes(id: "\($0)-cell-\(i)", event: .input, handler: onChange) } ?? ""
-            html += "<input class=\"otp__cell\(filled ? " otp__cell--filled" : "")\(i == (value?.count ?? 0) ? " otp__cell--active" : "")\"\(cellID) type=\"text\" inputmode=\"numeric\" maxlength=\"1\" value=\"\(filled ? "\(value![i])" : "")\" aria-label=\"Digit \(i + 1)\"\(cellAttrs)>"
+            html += "<input class=\"otp__cell\(filled ? " otp__cell--filled" : "")\(i == digits.count ? " otp__cell--active" : "")\"\(cellID) type=\"text\" inputmode=\"numeric\" maxlength=\"1\" value=\"\(filled ? "\(digits[i])" : "")\" aria-label=\"Digit \(i + 1)\"\(cellAttrs)>"
         }
         html += "</div>"
         return html

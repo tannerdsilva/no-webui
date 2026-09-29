@@ -20,9 +20,15 @@ public enum HMACSHA256 {
 		var hmac = try RAW_hmac.HMAC<RAW_sha256.Hasher>(key: key)
 		try hmac.update(message: message)
 		var digest = [UInt8](repeating: 0, count: 32)
-		try digest.withUnsafeMutableBytes { buffer in
-			try hmac.finish(into: buffer.baseAddress!)
+		// the buffer is non-empty, so its base address is never nil; a nil base
+		// would mean the hasher and the buffer disagree about the digest size,
+		// which must fail loudly rather than yield an all-zero digest.
+		let finished = try digest.withUnsafeMutableBytes { buffer -> Bool in
+			guard let base = buffer.baseAddress else { return false }
+			try hmac.finish(into: base)
+			return true
 		}
+		precondition(finished, "HMAC-SHA256 digest buffer has no base address")
 		return digest
 	}
 
@@ -55,8 +61,9 @@ public enum SHA256 {
 		// moved underneath us. fail loudly — a silently truncated digest would
 		// mint a wrong content address for the stylesheet.
 		let finished = out.withUnsafeMutableBytes { buffer -> Bool in
+			guard let base = buffer.baseAddress else { return false }
 			do {
-				try hasher.finish(into: buffer.baseAddress!)
+				try hasher.finish(into: base)
 				return true
 			} catch {
 				return false
@@ -108,7 +115,10 @@ public enum SecureRandom {
 		return out
 		#else
 		let status = out.withUnsafeMutableBytes { (ptr) -> Int32 in
-			SecRandomCopyBytes(kSecRandomDefault, count, ptr.baseAddress!)
+			// non-empty buffer ⇒ non-nil base address; treat a nil base like an
+			// entropy failure, which is what this function's optional reports.
+			guard let base = ptr.baseAddress else { return errSecParam }
+			return SecRandomCopyBytes(kSecRandomDefault, count, base)
 		}
 		guard status == errSecSuccess else { return nil }
 		return out

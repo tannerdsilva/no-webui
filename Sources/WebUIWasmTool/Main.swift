@@ -211,13 +211,16 @@ enum WebUIWasmTool {
         var hasher = RAW_sha256.Hasher()
         bytes.withUnsafeBytes { hasher.update($0) }
         var digest = [UInt8](repeating: 0, count: 32)
-        do {
-            try digest.withUnsafeMutableBytes { buffer in
-                try hasher.finish(into: buffer.baseAddress!)
+        let finished = digest.withUnsafeMutableBytes { buffer -> Bool in
+            guard let base = buffer.baseAddress else { return false }
+            do {
+                try hasher.finish(into: base)
+                return true
+            } catch {
+                return false
             }
-        } catch {
-            return ""
         }
+        guard finished else { return "" }
         return digest.map { String(format: "%02x", $0) }.joined()
     }
 }

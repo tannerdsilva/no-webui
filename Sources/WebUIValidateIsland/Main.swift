@@ -89,8 +89,11 @@ private func utf8Decode(_ ptr: UnsafeRawPointer, _ len: Int) -> String {
 			i += 1
 			continue
 		}
-		if scalar <= 0x10FFFF, !(0xD800...0xDFFF).contains(scalar) {
-			out.unicodeScalars.append(Unicode.Scalar(scalar)!)
+		// `Unicode.Scalar(_:)` rejects exactly what utf-8 forbids here: values
+		// above U+10FFFF and the surrogate range, so the failable init is the
+		// validity check itself — no force unwrap, no separate range test.
+		if let scalarValue = Unicode.Scalar(scalar) {
+			out.unicodeScalars.append(scalarValue)
 		} else {
 			out.unicodeScalars.append("\u{FFFD}")
 		}

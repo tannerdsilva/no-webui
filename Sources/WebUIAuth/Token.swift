@@ -37,9 +37,14 @@ public enum SessionToken {
 			hasher.update(buffer)
 		}
 		var out = [UInt8](repeating: 0, count: 32)
-		try out.withUnsafeMutableBytes { buffer in
-			try hasher.finish(into: buffer.baseAddress!)
+		// non-empty buffer ⇒ non-nil base address; a nil base would mean the
+		// digest size drifted, which must fail loudly, never silently.
+		let finished = try out.withUnsafeMutableBytes { buffer -> Bool in
+			guard let base = buffer.baseAddress else { return false }
+			try hasher.finish(into: base)
+			return true
 		}
+		precondition(finished, "token digest buffer has no base address")
 		return out
 	}
 }

@@ -96,6 +96,14 @@ struct JSONValueTests {
 		#expect(throws: JSONError.invalidEscape) { try JSONValue.parse("\"\\q\"") }
 	}
 
+	@Test("an object cut off at a key or colon reports unexpectedEnd, not a placeholder token")
+	func objectTruncatedIsUnexpectedEnd() {
+		// both cases used to throw invalidToken(U+FFFD) — a fabricated scalar
+		// standing in for "there is nothing left to read".
+		#expect(throws: JSONError.unexpectedEnd) { try JSONValue.parse("{") }
+		#expect(throws: JSONError.unexpectedEnd) { try JSONValue.parse("{\"a\"") }
+	}
+
 	@Test("deep nesting is capped instead of overflowing the stack")
 	func nestingDepthCapped() throws {
 		// the boundary: 128 containers still parse...

@@ -1743,9 +1743,9 @@ public struct WebUITree: View {
         }
         html += "<span class=\"tree__label\">" + htmlEscape(node.label) + "</span>"
         html += "</div>"
-        if hasChildren {
+        if let children = node.children, !children.isEmpty {
             html += "<div class=\"tree__children\">"
-            for child in node.children! { html += renderNode(child, level: level + 1, interactive: interactive) }
+            for child in children { html += renderNode(child, level: level + 1, interactive: interactive) }
             html += "</div>"
         }
         html += "</div>"
