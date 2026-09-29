@@ -45,7 +45,7 @@ See `Sources/WebUIExample/main.swift` and `Documentation/GETTING_STARTED.md`.
 
 ```bash
 swift build          # WebUIAssetPlugin auto-generates Assets+Generated.swift
-swift test           # 902 tests
+swift test           # 903 tests
 swift run WebUIExample  # example server on :9090
 ```
 
