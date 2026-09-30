@@ -15,51 +15,16 @@ struct TokenPruningCLITests {
 	static var toolAvailable: Bool { toolURL() != nil }
 	static let unavailable: Comment = "WebUIAssetTool not built — run `swift build` first"
 
-	static func toolURL() -> URL? {
-		// scanned, not hard-coded: the product directory carries a platform suffix off
-		// darwin, and a nil `Process.executableURL` aborts the runner.
-		let root = ".build/out/Products"
-		if let entries = try? FileManager.default.contentsOfDirectory(atPath: root) {
-			for dir in entries.sorted() {
-				let candidate = root + "/" + dir + "/WebUIAssetTool"
-				if FileManager.default.isExecutableFile(atPath: candidate) {
-					return URL(fileURLWithPath: candidate)
-				}
-			}
-		}
-		for legacy in [".build/debug/WebUIAssetTool", ".build/release/WebUIAssetTool"] {
-			if FileManager.default.isExecutableFile(atPath: legacy) {
-				return URL(fileURLWithPath: legacy)
-			}
-		}
-		return nil
-	}
+	static func toolURL() -> URL? { assetToolURL() }
 
 	func runTool(_ args: [String]) throws -> (status: Int32, out: String) {
-		let url = try #require(Self.toolURL(), "\(Self.unavailable)")
-		let process = Process()
-		process.executableURL = url
-		process.arguments = args
-		let pipe = Pipe()
-		process.standardOutput = pipe
-		process.standardError = pipe
-		try process.run()
-		let data = pipe.fileHandleForReading.readDataToEndOfFile()
-		process.waitUntilExit()
-		return (process.terminationStatus, String(decoding: data, as: UTF8.self))
+		try runAssetTool(args)
 	}
 
 	/// a scratch directory that is removed when the test ends.
-	func scratch() throws -> String {
-		let dir = FileManager.default.temporaryDirectory
-			.appendingPathComponent("webui-pruning-\(UUID().uuidString)")
-		try FileManager.default.createDirectory(atPath: dir.path, withIntermediateDirectories: true)
-		return dir.path
-	}
+	func scratch() throws -> String { try assetToolScratch(prefix: "webui-pruning") }
 
-	func write(_ text: String, to path: String) throws {
-		try text.write(toFile: path, atomically: true, encoding: .utf8)
-	}
+	func write(_ text: String, to path: String) throws { try writeAssetToolInput(text, to: path) }
 
 	/// the generated source, one `public static let <name>: String = """…"""` block,
 	/// de-indented by the generator's four spaces.

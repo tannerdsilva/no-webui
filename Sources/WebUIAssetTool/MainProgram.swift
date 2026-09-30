@@ -17,6 +17,7 @@ enum WebUIAssetTool {
         var manifestOutputPath: String?
         var usedTokensPath: String?
         var guardCSSPaths: [String] = []
+        var embedManifestPath: String?
 
         var iterator = args.makeIterator()
         while let flag = iterator.next() {
@@ -39,14 +40,41 @@ enum WebUIAssetTool {
                 usedTokensPath = iterator.next()
             case "--guard-css":
                 if let path = iterator.next() { guardCSSPaths.append(path) }
+            case "--embed-manifest":
+                embedManifestPath = iterator.next()
             default:
                 break
             }
         }
 
         guard outputPath != nil || tokensOutputPath != nil else {
-            print("usage: WebUIAssetTool --css-input <path> --js-input <path> --engine-input <path> --shell-input <path> --output <path> [--tokens-output <path>] [--manifest-output <path>] [--used-tokens <path>] [--guard-css <path>]…")
+            print("usage: WebUIAssetTool --css-input <path> --js-input <path> --engine-input <path> --shell-input <path> --output <path> [--tokens-output <path>] [--manifest-output <path>] [--used-tokens <path>] [--guard-css <path>]… | --embed-manifest <json> --output <path>")
             exit(1)
+        }
+
+        // the consumer-manifest mode: one command, no framework inputs — this is what a
+        // consumer's build plugin invokes over an `Assets/webui-assets.json`.
+        if let embedManifestPath {
+            guard let outputPath else {
+                print("usage: --embed-manifest requires --output <path>")
+                exit(1)
+            }
+            do {
+                let manifest = try WebUIAssetManifest.load(from: URL(fileURLWithPath: embedManifestPath))
+                let receipts = try WebUIAssetBuilder.embed(
+                    manifest: manifest, to: URL(fileURLWithPath: outputPath)
+                )
+                let total = receipts.reduce(0) { $0 + $1.bytes }
+                print("embedded \(receipts.count) asset(s) into \(outputPath) (\(total) bytes)")
+                for receipt in receipts {
+                    let gz = receipt.gzipBytes.map { ", \($0) gz" } ?? ""
+                    print("  \(receipt.typeName): \(receipt.bytes) bytes\(gz), sha \(receipt.stamp)")
+                }
+            } catch {
+                print("error: \(error)")
+                exit(1)
+            }
+            exit(0)
         }
 
         var cssContent = ""
