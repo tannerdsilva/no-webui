@@ -460,6 +460,14 @@ let package = Package(
                 .product(name: "RAW_sha256", package: "rawdog"),
             ]
         ),
+        // the asset tool carries the token surface (T9 pruning), so its pruner is
+        // unit-tested in-process and its CLI is exercised as a subprocess.
+        .testTarget(
+            name: "WebUIAssetToolTests",
+            dependencies: [
+                "WebUIAssetTool",
+            ]
+        ),
         .testTarget(
             name: "WebUIIslandCoreTests",
             dependencies: [

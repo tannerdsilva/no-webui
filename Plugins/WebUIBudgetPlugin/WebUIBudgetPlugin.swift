@@ -36,6 +36,12 @@ struct WebUIBudgetPlugin: CommandPlugin {
     ///   shell    1,514 raw /    554 gz
     ///   island 164,447 stripped (WebUIValidateIsland)  [doc: "164 kb" — matches]
     ///
+    /// re-pinned 2026-09-30: the engine grew 1,678 raw bytes across three deliberate commits
+    /// (client-owned theme switching, `on.afterPatch`/`on.ready`, `htmlAttributes` + the
+    /// server-rendered scheme stop being stripped), tripping this gate — which is what it is
+    /// for. measured 44,118 raw / 10,898 gz, so the gzip pin holds (the additions compress
+    /// well: raw +4%, gz +3%) and only the raw ceiling moves.
+    ///
     /// the sheet's `raw` is the MINIFIED size, not the working file: the two differ by
     /// ~8% and a budget on the wrong number is a false sense of safety. this plugin
     /// learned that the hard way — its first pin was taken from the working file's gzip
@@ -47,7 +53,7 @@ struct WebUIBudgetPlugin: CommandPlugin {
     /// the theming work (T8/T9) will add tokens and therefore grow the sheet, which should
     /// trip this gate and force a deliberate re-pin rather than a silent drift.
     private static let ceilings: [Ceiling] = [
-        Ceiling(surface: "engine", label: "webui-engine.js", raw: 44_000, gz: 11_600),
+        Ceiling(surface: "engine", label: "webui-engine.js", raw: 46_000, gz: 11_600),
         Ceiling(surface: "sheet", label: "design-system.css", raw: 335_000, gz: 49_500),
         Ceiling(surface: "shell", label: "webui-shell.js", raw: 1_700, gz: 650),
     ]

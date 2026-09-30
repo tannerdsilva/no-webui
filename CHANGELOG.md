@@ -4,6 +4,61 @@ all notable changes to this project are documented here.
 
 ## [unreleased]
 
+### theming (breaking)
+
+- **`ColorScheme` is now `ThemeMode`**, `WebUITheme` carries a **light/dark pair** instead of
+  one `scheme:`, and `stylesheet()` takes a **`ThemeScope`**. in-place breaks — no alongside
+  type, no deprecation window, no shim. `ColorScheme` is the name consumers give their *own*
+  scheme type (arc's 27-scheme enum is exactly that), and a theme that means different things
+  in two modes cannot be one palette. every in-tree call site moved in the same commits.
+- `@Theme(base: Base.self)` — themes **inherit**. `static let` members are overrides layered
+  per palette over the base's, so a scheme states the tokens it changes (11) instead of all of
+  them (35). `light`/`dark` members replace the reserved `scheme`; a theme naming itself as its
+  own base is an expansion error.
+- `WebUIThemeProvider` gains `themeID`/`themeLabel`/`themeSwatch` (defaulted, so an existing
+  conformer still compiles) and `ThemeCatalog` collects providers into `all`/`defaultTheme`, so
+  a picker renders from the catalog rather than a hand-written list. catalog integrity — unique
+  ids, a default that is a member, every `base` resolving — is tested.
+- **one sheet carries every scheme.** `ThemeScope.attribute` emits
+  `:root[data-scheme="…"][data-theme="light|dark"]` plus a `prefers-color-scheme` pass, so a
+  scheme switch costs no round trip and no server render; the `.root` default keeps a
+  single-theme page byte-identical.
+- **the engine owns switching**: scheme + mode, persisted in `localStorage`, `system` following
+  `prefers-color-scheme`, and a `webui:theme` event. a stored choice is applied by a
+  **pre-paint prelude** — a comment-free inline script carrying the render nonce, so the stored
+  palette is never flashed over — and the prelude's storage keys are asserted against the
+  engine's.
+- `ThemeSheet` serves the rendered catalog from a **content-addressed url**
+  (`/__assets/theme.<sha256>`), so the theme no longer rides `rawStyles` and a second
+  navigation transfers zero theme bytes. the address is computed from the bytes, so the url a
+  page links and the url a server serves cannot disagree.
+- `WebUITheme`/`ThemePalette`/`ThemeEntry` are **`Codable`**, keyed by css token name, which is
+  what lets the catalog ship to the client as data (encode → decode → identical css).
+- `TokenAlias("--bg", .colorBg)` declares an app's own property vocabulary **in Swift** against
+  `DesignToken` and emits the indirection `--bg: var(--color-bg)`, so a mistyped token is a
+  missing enum case instead of a missing colour.
+- contrast is swept for **every theme × mode** from the typed catalog
+  (`DeploymentIntegrityTests`) rather than 50-odd hand-written pairs that rot.
+
+### engine & assets
+
+- assets are compressed at **build** time (the tool runs the host `gzip`) and `WebUIServer`
+  negotiates `Accept-Encoding`, sending `Vary` whenever a variant exists — so the sheet leaves
+  the server at its compressed size (321,262 → 44,991 gz) while a client that asks for nothing
+  still gets the bytes it always did. no runtime compressor is linked.
+- `plugin budget` gates the shipped surface against a pinned table (engine, sheet raw+gz,
+  shell, per-island) and reports retired artifacts; every ceiling carries 5-15% headroom and
+  names the measurement it came from. the served numbers come from the build manifest, not the
+  working files — a budget on the wrong number is a false sense of safety.
+- `WebUIEngine.on.afterPatch(fn)` / `on.ready(fn)` — the post-patch seam a consumer needs to
+  re-run enhancement work (math, table tooling) against the mutated subtree instead of
+  rescanning the whole DOM on every mutation.
+- `WebUIAssetTool --used-tokens <path> [--guard-css <path>]` prunes the sheet's `:root` token
+  surface to the reachable set (T9): a catalog resolving 40 of the 174 tokens emits a 40-token
+  sheet, `--guard-css` keeps anything a consumer's own stylesheet still resolves, the counts
+  land in the build manifest, and a name the sheet does not declare fails the build. omitted,
+  the sheet ships whole — byte-identical to before.
+
 ### developer experience
 
 - `WebUIServerService` — hosts a `WebUIServer` as a `Service`, so a long-lived

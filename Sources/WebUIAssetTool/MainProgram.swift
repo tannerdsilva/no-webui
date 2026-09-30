@@ -14,6 +14,8 @@ enum WebUIAssetTool {
         var outputPath: String?
         var tokensOutputPath: String?
         var manifestOutputPath: String?
+        var usedTokensPath: String?
+        var guardCSSPaths: [String] = []
 
         var iterator = args.makeIterator()
         while let flag = iterator.next() {
@@ -32,13 +34,17 @@ enum WebUIAssetTool {
                 tokensOutputPath = iterator.next()
             case "--manifest-output":
                 manifestOutputPath = iterator.next()
+            case "--used-tokens":
+                usedTokensPath = iterator.next()
+            case "--guard-css":
+                if let path = iterator.next() { guardCSSPaths.append(path) }
             default:
                 break
             }
         }
 
         guard outputPath != nil || tokensOutputPath != nil else {
-            print("usage: WebUIAssetTool --css-input <path> --js-input <path> --engine-input <path> --shell-input <path> --output <path> [--tokens-output <path>]")
+            print("usage: WebUIAssetTool --css-input <path> --js-input <path> --engine-input <path> --shell-input <path> --output <path> [--tokens-output <path>] [--manifest-output <path>] [--used-tokens <path>] [--guard-css <path>]…")
             exit(1)
         }
 
@@ -77,6 +83,31 @@ enum WebUIAssetTool {
         }
 
         if let outputPath {
+            // T9: prune the `:root` token surface to the reachable set *before* anything is
+            // minified, compressed or embedded — see TokenPruning. With no `--used-tokens`
+            // there is no oracle to prune against and the sheet ships whole, byte-identical
+            // to every build before this step existed.
+            var pruning: TokenPruning.Outcome?
+            if let usedTokensPath {
+                guard cssInput != nil else {
+                    print("usage: --used-tokens requires --css-input")
+                    exit(1)
+                }
+                do {
+                    let outcome = try TokenPruning.performing(
+                        css: cssContent,
+                        usedTokensPath: usedTokensPath,
+                        guardPaths: guardCSSPaths
+                    )
+                    cssContent = outcome.css
+                    pruning = outcome
+                    print("pruned \(outcome.dropped.count) of \(outcome.dropped.count + outcome.kept.count) distinct tokens (\(outcome.emittedTokens) kept, \(outcome.declarations) :root declarations)")
+                } catch {
+                    print("error: \(error)")
+                    exit(1)
+                }
+            }
+
             let cssMinified = minifyCSS(
                 CSSStylesheet(LayoutStyles.complete).render() + "\n\n" + cssContent
             )
@@ -105,13 +136,23 @@ enum WebUIAssetTool {
             // measure the working files, and the sheet differs from what ships by ~15%
             // (it is minified) — a budget on the wrong number is a false sense of safety.
             if let manifestOutputPath {
-                let served: [String: Any] = [
+                var served: [String: Any] = [
                     "sheet": ["raw": cssMinified.utf8.count, "gz": cssGz?.count ?? 0,
                               "workingRaw": cssBytes],
                     "engine": ["raw": engineBytes, "gz": engineGz?.count ?? 0],
                     "shell": ["raw": shellBytes, "gz": shellGz?.count ?? 0],
                     "webui-runtime.js": ["raw": jsBytes, "gz": jsGz?.count ?? 0],
                 ]
+                // pruning is a build-time decision, so its effect belongs in the build-time
+                // record: a sheet that quietly stopped declaring 134 tokens should be
+                // visible in the manifest a budget gate reads, not inferred from byte counts.
+                if let pruning {
+                    served["tokens"] = [
+                        "emitted": pruning.emittedTokens,
+                        "pruned": pruning.dropped.count,
+                        "declarations": pruning.declarations,
+                    ]
+                }
                 let payload: [String: Any] = ["served": served]
                 if let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]) {
                     try? data.write(to: URL(fileURLWithPath: manifestOutputPath))

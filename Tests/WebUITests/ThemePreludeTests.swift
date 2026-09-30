@@ -38,6 +38,16 @@ struct ThemePreludeTests {
 		#expect(!body.contains("/*"))
 	}
 
+	@Test("stays under its byte budget — it is on the critical path")
+	func preludeBudget() {
+		// the E2 budget gate pins engine/shell/sheet/islands from the asset manifest; the
+		// prelude is a swift constant, not a file, so its ceiling lives beside its other
+		// invariants. measured 213 bytes on 2026-09-30 — the ceiling carries ~20% headroom,
+		// so a behaviour fix fits and a rewrite that triples the prelude does not.
+		let bytes = preludeBody(document()).utf8.count
+		#expect(bytes <= 256, "the pre-paint prelude ships inline on every themed page: \(bytes) bytes")
+	}
+
 	/// the inline script's body, i.e. what the client parses.
 	private func preludeBody(_ html: String) -> String {
 		guard let open = html.range(of: "<script nonce="),
