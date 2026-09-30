@@ -22,6 +22,20 @@ window.WebUIEngine = (function () {
   var EVENT_TYPES = ['click', 'input', 'change', 'submit', 'keydown', 'keyup', 'keypress', 'focus', 'blur', 'focusin', 'focusout', 'mouseover', 'mouseout', 'mousedown', 'mouseup'];
   var LOST_ANCHOR_WARNED = {};
 
+  var afterPatchHooks = [];
+  var readyHooks = [];
+  var hookLog = null;
+
+  function runHooks(hooks, arg) {
+    for (var i = 0; i < hooks.length; i++) {
+      try {
+        hooks[i](arg);
+      } catch (e) {
+        if (hookLog) { hookLog.error('engine hook failed: ' + e); }
+      }
+    }
+  }
+
   (function () {
     var mql = null;
     try { mql = window.matchMedia('(prefers-color-scheme: dark)'); } catch (e) { }
@@ -622,6 +636,7 @@ window.WebUIEngine = (function () {
     }
 
     function applyFragments(fragments, optimistic) {
+      var changed = [];
       for (var i = 0; i < fragments.length; i++) {
         var f = fragments[i];
         if (!f.id || f.html === undefined) {
@@ -635,7 +650,10 @@ window.WebUIEngine = (function () {
           clearPending(f.id);
         }
         replaceElement(f.id, f.html);
+        var node = document.getElementById(f.id);
+        if (node) { changed.push(node); }
       }
+      if (changed.length) { runHooks(afterPatchHooks, changed); }
     }
 
     function armPending(id) {
@@ -1258,6 +1276,7 @@ window.WebUIEngine = (function () {
 
     eventDelegator.mount();
 
+    hookLog = log;
     wsClient.connect();
 
     var bootIslands = function () {
@@ -1292,6 +1311,8 @@ window.WebUIEngine = (function () {
       popstateHandler: popstateHandler,
     };
 
+    runHooks(readyHooks, document);
+
     log.info('WebUI Engine initialized');
   }
 
@@ -1314,6 +1335,11 @@ window.WebUIEngine = (function () {
   return {
     init: init,
     destroy: destroy,
+
+    on: {
+      afterPatch: function (fn) { if (typeof fn === 'function') { afterPatchHooks.push(fn); } },
+      ready: function (fn) { if (typeof fn === 'function') { readyHooks.push(fn); } },
+    },
 
     _reset: function () { instance = null; },
     _getInstance: function () { return instance; },
