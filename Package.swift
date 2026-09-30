@@ -333,6 +333,15 @@ let package = Package(
             ]
         ),
         .plugin(
+            name: "WebUIBudgetPlugin",
+            capability: .command(
+                intent: .custom(
+                    verb: "budget",
+                    description: "Fail when any shipped surface (engine, design-system sheet, shell, island artifact) exceeds its pinned size ceiling. Read-only; no sandbox flag needed."
+                )
+            )
+        ),
+        .plugin(
             name: "WebUIIslandPlugin",
             capability: .command(
                 intent: .custom(
