@@ -224,6 +224,10 @@ let package = Package(
                 // `DesignToken` through it precisely to avoid rawdog. see `Hash.swift`.
                 .product(name: "RAW", package: "rawdog"),
                 .product(name: "RAW_sha256", package: "rawdog"),
+                // the minifier and the prose guard live here (`ProseGuard` is package-level,
+                // which is exactly why this library — not a plugin — is where a consumer's
+                // tool meets them).
+                .target(name: "WebUICore"),
             ]
         ),
 

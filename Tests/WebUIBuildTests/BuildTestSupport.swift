@@ -31,3 +31,28 @@ func gunzipIndependently(_ data: Data) throws -> Data {
 	process.waitUntilExit()
 	return inflated
 }
+
+enum BuildTestError: Error {
+	case missingLiteral
+	case badBase64
+}
+
+/// pull `private static let <label> = "<base64>"` back out of emitted source. base64 is
+/// mechanically extractable, which is the point of the encoding: no escaping can silently
+/// change bytes, so a test can prove the payload round-tripped.
+func extractBase64Literal(_ source: String, label: String) throws -> Data {
+	guard let start = source.range(of: "\(label) = \"") else {
+		Issue.record("no `\(label)` literal in the emitted source")
+		throw BuildTestError.missingLiteral
+	}
+	let rest = source[start.upperBound...]
+	guard let end = rest.firstIndex(of: "\"") else {
+		Issue.record("unterminated `\(label)` literal")
+		throw BuildTestError.missingLiteral
+	}
+	guard let data = Data(base64Encoded: String(rest[..<end])) else {
+		Issue.record("`\(label)` is not base64")
+		throw BuildTestError.badBase64
+	}
+	return data
+}

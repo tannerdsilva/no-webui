@@ -1,4 +1,5 @@
 import Foundation
+import WebUICore
 
 // MARK: - the emitter
 
@@ -25,13 +26,42 @@ public struct Emitted: Sendable {
 public enum WebUIBuildError: Error, CustomStringConvertible {
 	/// the type name would not be a legal swift identifier in generated code.
 	case invalidTypeName(String)
+	/// the payload would ship comments to clients (see ``ProsePolicy``).
+	case proseWouldShip(typeName: String, findings: [ProseFinding])
 
 	public var description: String {
 		switch self {
 		case .invalidTypeName(let name):
 			return "'\(name)' is not a swift identifier — the generated code declares `enum \(name): WebUIShippedAsset`"
+		case .proseWouldShip(let typeName, let findings):
+			var lines = ["\(typeName) would ship \(findings.count) comment(s) to clients:"]
+			for finding in findings.prefix(12) {
+				lines.append("  line \(finding.line): \(finding.text)")
+			}
+			lines.append("  the shipped bytes are the client's — keep the note in Documentation/*.md,")
+			lines.append("  or set `minify` for a sheet whose comments the minifier strips.")
+			return lines.joined(separator: "\n")
 		}
 	}
+}
+
+/// what the emitter does about comments in a payload.
+public enum ProsePolicy: Sendable {
+	/// ship what was given, comments included — the caller's decision, stated.
+	case off
+	/// refuse a payload whose comments would reach a client. the guard runs on the payload
+	/// as it will ship, so a comment ``WebUIAssetBuilder/Options/minify`` strips is not a
+	/// finding.
+	case check
+}
+
+/// one comment a payload would have shipped. the guard's own finding type is package-level,
+/// so this is its public re-exposure — the shape a consumer's tool can read.
+public struct ProseFinding: Sendable {
+	/// 1-based line number of the comment's opening delimiter.
+	public let line: Int
+	/// the comment's opening line, trimmed — enough to recognize the prose.
+	public let text: String
 }
 
 /// the emitter a host's build tool calls: one payload in, one generated type out.
@@ -39,10 +69,19 @@ public enum WebUIAssetBuilder {
 
 	/// what an emission does with the payload on the way in.
 	public struct Options: Sendable {
-		/// the `Content-Type` the served asset carries.
+		/// run the css minifier over the payload before emitting — the same minifier the
+		/// framework's own sheet goes through, so a working sheet's designer notes never
+		/// reach a client.
+		public var minify: Bool
+		/// refuse (or not) a payload whose comments would ship.
+		public var prose: ProsePolicy
+		/// the `Content-Type` the served asset carries; it also decides which comment
+		/// grammar the prose guard reads.
 		public var contentType: String
 
-		public init(contentType: String) {
+		public init(minify: Bool = false, prose: ProsePolicy = .off, contentType: String) {
+			self.minify = minify
+			self.prose = prose
 			self.contentType = contentType
 		}
 	}
@@ -56,7 +95,11 @@ public enum WebUIAssetBuilder {
 		options: Options,
 		to url: URL
 	) throws -> Emitted {
-		try emit(bytes: Array(text.utf8), typeName: typeName, options: options, to: url)
+		// minify first, then judge: the guard's question is "would a client receive prose",
+		// and a comment the minifier strips never reaches one.
+		let payload = options.minify ? minifyCSS(text) : text
+		try check(payload: payload, typeName: typeName, options: options)
+		return try emit(bytes: Array(payload.utf8), typeName: typeName, options: options, to: url)
 	}
 
 	/// the byte-level core: every other front door funnels here so there is one place that
@@ -88,6 +131,27 @@ public enum WebUIAssetBuilder {
 	}
 
 	// MARK: internals
+
+	/// the prose gate, over the payload as it will ship.
+	static func check(payload: String, typeName: String, options: Options) throws {
+		guard options.prose == .check, let language = proseLanguage(for: options.contentType) else { return }
+		let findings = ProseGuard.findings(in: payload, language: language)
+		guard findings.isEmpty else {
+			throw WebUIBuildError.proseWouldShip(
+				typeName: typeName,
+				findings: findings.map { ProseFinding(line: $0.line, text: $0.text) }
+			)
+		}
+	}
+
+	/// which comment grammar a content type speaks, or `nil` where comments do not apply (a
+	/// font, an image): the guard is a comment grammar, and nothing else has one.
+	static func proseLanguage(for contentType: String) -> ProseGuard.Language? {
+		let lowered = contentType.lowercased()
+		if lowered.contains("javascript") || lowered.contains("ecmascript") { return .javaScript }
+		if lowered.contains("css") { return .css }
+		return nil
+	}
 
 	/// a generated declaration is `enum <name>: …` — a name that is not an identifier would
 	/// surface as a swift compile error in the consumer's own build, far from this tool.

@@ -18,26 +18,6 @@ struct EmitTests {
 	/// `printf ':root { --probe: 1 }\n/* probe */\n' | shasum -a 256`
 	static let expectedStamp = "8c8581e09ea5"
 
-	// MARK: source extraction
-
-	/// pull `private static let <label> = "<base64>"` back out of emitted source.
-	func extractBase64(_ source: String, label: String) throws -> Data {
-		guard let start = source.range(of: "\(label) = \"") else {
-			Issue.record("no `\(label)` literal in the emitted source")
-			throw EmitSupportError.missingLiteral
-		}
-		let rest = source[start.upperBound...]
-		guard let end = rest.firstIndex(of: "\"") else {
-			Issue.record("unterminated `\(label)` literal")
-			throw EmitSupportError.missingLiteral
-		}
-		guard let data = Data(base64Encoded: String(rest[..<end])) else {
-			Issue.record("`\(label)` is not base64")
-			throw EmitSupportError.badBase64
-		}
-		return data
-	}
-
 	// MARK: tests
 
 	@Test("writes a WebUIShippedAsset type carrying the payload, its address and its variant")
@@ -67,10 +47,10 @@ struct EmitTests {
 		#expect(source.contains("public static var text: String"), "text entries carry the inline convenience")
 
 		// the payload decodes out of the source, byte for byte…
-		let body = try extractBase64(source, label: "bodyBase64")
+		let body = try extractBase64Literal(source, label: "bodyBase64")
 		#expect(Array(body) == Array(Self.payload.utf8))
 		// …and the emitted variant inflates to the same bytes.
-		let variant = try extractBase64(source, label: "gzipBase64")
+		let variant = try extractBase64Literal(source, label: "gzipBase64")
 		#expect(try gunzipIndependently(variant) == Data(Self.payload.utf8))
 	}
 
@@ -106,9 +86,4 @@ struct EmitTests {
 			#expect(error.description.contains("Not A Name"))
 		}
 	}
-}
-
-enum EmitSupportError: Error {
-	case missingLiteral
-	case badBase64
 }
