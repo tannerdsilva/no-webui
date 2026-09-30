@@ -1,0 +1,90 @@
+import Testing
+import WebUI
+import WebUIDesignSystem
+
+// MARK: - pre-paint theme prelude
+//
+// Without the prelude, a client with a stored scheme sees the DEFAULT palette paint first
+// and then get replaced — a flash on every load. The prelude must be inline (a deferred
+// script runs too late) and must therefore carry the csp nonce.
+
+@Suite("theme prelude")
+struct ThemePreludeTests {
+
+	private func document(_ themePrelude: Bool = true, includeRuntime: Bool = true) -> String {
+		HTMLDocument(
+			title: "t",
+			body: "<p>x</p>",
+			includeRuntime: includeRuntime,
+			themePrelude: themePrelude
+		).render()
+	}
+
+	@Test("is emitted, inline, carrying the nonce, and free of comments")
+	func preludeShape() {
+		let html = document()
+		#expect(html.contains("data-theme"))
+		#expect(html.contains("data-scheme"))
+		#expect(html.contains("localStorage.getItem('webui-theme')"))
+		#expect(html.contains("localStorage.getItem('webui-scheme')"))
+		// inline + nonced: a deferred or external prelude would run after first paint
+		let nonced = html.range(of: #"<script nonce="[^"]+">\(function\(\)"#, options: .regularExpression)
+		#expect(nonced != nil, "the prelude must be an inline nonce-carrying script")
+		// first law: it is a shipped web asset. assert on the bytes that actually ship, not
+		// on the constant — the rendered output is the thing a client parses.
+		let body = preludeBody(html)
+		#expect(!body.isEmpty)
+		#expect(!body.contains("//"))
+		#expect(!body.contains("/*"))
+	}
+
+	/// the inline script's body, i.e. what the client parses.
+	private func preludeBody(_ html: String) -> String {
+		guard let open = html.range(of: "<script nonce="),
+			  let close = html.range(of: "</script>", range: open.upperBound..<html.endIndex)
+		else { return "" }
+		let tag = html[open.upperBound..<close.lowerBound]
+		guard let gt = tag.firstIndex(of: ">") else { return "" }
+		return String(tag[tag.index(after: gt)...])
+	}
+
+	@Test("lands before the stylesheet, so the attribute is set before anything paints")
+	func preludePrecedesStylesheet() {
+		let html = document()
+		let prelude = html.range(of: "localStorage.getItem('webui-theme')")!
+		if let sheet = html.range(of: "<style>") {
+			#expect(prelude.lowerBound < sheet.lowerBound)
+		}
+		if let link = html.range(of: "<link rel=\"stylesheet\"") {
+			#expect(prelude.lowerBound < link.lowerBound)
+		}
+	}
+
+	@Test("is suppressed when the caller opts out")
+	func optOut() {
+		#expect(!document(false).contains("localStorage.getItem('webui-theme')"))
+	}
+
+	@Test("is suppressed with no client runtime, which is the only thing that honours it")
+	func suppressedWithoutRuntime() {
+		let html = document(true, includeRuntime: false)
+		#expect(!html.contains("localStorage.getItem('webui-theme')"),
+			"a prelude that sets an attribute nothing reads is pure payload")
+	}
+
+	@Test("the engine honours the exact keys and attributes the prelude sets")
+	func agreesWithTheEngine() {
+		// the two cannot drift: the prelude is server-side, the reader is the engine asset.
+		let engine = WebUIAssets.engine
+		#expect(engine.contains("webui-theme"))
+		#expect(engine.contains("webui-scheme"))
+		#expect(engine.contains("data-theme"))
+		#expect(engine.contains("data-scheme"))
+		// comment lines only: `//` also appears inside string literals (urls, messages).
+		let commentLines = engine
+			.split(separator: "\n")
+			.map { $0.trimmingCharacters(in: .whitespaces) }
+			.filter { $0.hasPrefix("//") || $0.hasPrefix("/*") }
+		#expect(commentLines.isEmpty, "the engine is a shipped asset: \(commentLines.prefix(3))")
+	}
+}

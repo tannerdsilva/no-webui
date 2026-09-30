@@ -20,6 +20,17 @@ public struct HTMLDocument: Sendable {
     /// attribute entirely, so the default document stays byte-identical.
     public let dir: String?
     public let includeRuntime: Bool
+    /// Emit a pre-paint theme prelude: a one-line inline script that applies the stored
+    /// scheme and mode to `<html>` before the first paint.
+    ///
+    /// Without it a client with a stored choice sees the *default* palette flash, because
+    /// the engine applies the stored theme when it boots — after the first paint. Inline is
+    /// the only option: `defer`/`async` scripts run too late by definition, so the prelude
+    /// carries the render nonce to satisfy the csp invariant (#1).
+    ///
+    /// Only emitted when a client runtime is present: the engine owns the same storage keys,
+    /// and without it nothing would honour what the prelude sets.
+    public let themePrelude: Bool
     public let runtimeConfig: RuntimeConfig?
     public let contentSecurityPolicy: String?
     /// the tab icon: a data-uri (2×-supersampled 32 px png of the accent
@@ -95,6 +106,7 @@ public struct HTMLDocument: Sendable {
         lang: String = "en",
         dir: String? = nil,
         includeRuntime: Bool = true,
+        themePrelude: Bool = true,
         runtimeConfig: RuntimeConfig? = nil,
         contentSecurityPolicy: String? = nil,
         icon: String = Self.defaultIcon,
@@ -113,6 +125,7 @@ public struct HTMLDocument: Sendable {
         self.lang = lang
         self.dir = dir
         self.includeRuntime = includeRuntime
+        self.themePrelude = themePrelude
         self.runtimeConfig = runtimeConfig
         self.contentSecurityPolicy = contentSecurityPolicy
         self.icon = icon
@@ -120,6 +133,19 @@ public struct HTMLDocument: Sendable {
         self.stylesheetURL = stylesheetURL
         self.nonce = Self.generateNonce()
     }
+    /// The pre-paint prelude, verbatim.
+    ///
+    /// One line, no comments: this is bytes the client parses before it can paint anything
+    /// (the first law applies to every shipped web asset, and this one is on the critical
+    /// path). The storage keys and attribute names are the **engine's**; `ThemePreludeTests`
+    /// reads the engine asset and asserts they still agree, so the two cannot drift apart
+    /// without a test failing.
+    static let themePreludeScript =
+        "(function(){try{var r=document.documentElement,"
+        + "m=localStorage.getItem('webui-theme'),s=localStorage.getItem('webui-scheme');"
+        + "if(m)r.setAttribute('data-theme',m);if(s)r.setAttribute('data-scheme',s);}"
+        + "catch(e){}})();"
+
     public func render() -> String {
         let boot: ClientBoot?
         if let clientMode {
@@ -176,6 +202,12 @@ public struct HTMLDocument: Sendable {
         // the tab icon: a caller-supplied `<link>` wins (override); the
         // default brand mark lands otherwise; an empty string suppresses it.
         let iconTag = icon.isEmpty ? "" : "  \(icon)"
+        let preludeTag: String
+        if themePrelude, boot != nil {
+            preludeTag = "<script nonce=\"\(htmlEscape(nonce))\">\(Self.themePreludeScript)</script>"
+        } else {
+            preludeTag = ""
+        }
         let stylesheetTag: String
         if let url = stylesheetURL {
             stylesheetTag = "  <link rel=\"stylesheet\" href=\"\(htmlEscape(url))\">\n"
@@ -190,7 +222,7 @@ public struct HTMLDocument: Sendable {
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">\(cspTag)\(iconTag)
           <title>\(htmlEscape(title))</title>
-          \(resolvedHead)
+          \(resolvedHead)\(preludeTag.isEmpty ? "" : "\n          " + preludeTag)
           \(stylesheetTag)\(styleTag)
         </head>
         <body\(bodyAttr)>
