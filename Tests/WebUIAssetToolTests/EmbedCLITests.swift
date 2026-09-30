@@ -61,4 +61,28 @@ struct EmbedCLITests {
 		#expect(result.status != 0, "a missing asset must not embed: \(result.out)")
 		#expect(result.out.contains("ProbeCSS"), "the failure names the entry: \(result.out)")
 	}
+
+	@Test("a payload over its pinned ceiling exits non-zero, naming the entry and the ceiling",
+	      .enabled(if: assetToolAvailable))
+	func refusesAnOverCeilingPayload() throws {
+		let dir = try assetToolScratch(prefix: "webui-embed")
+		defer { try? FileManager.default.removeItem(atPath: dir) }
+		let assets = dir + "/Assets"
+		try FileManager.default.createDirectory(atPath: assets + "/vendor", withIntermediateDirectories: true)
+		try writeAssetToolInput(":root { --probe: 1 }\n", to: assets + "/vendor/probe.min.css")
+		// `ProbeInline` is 15 bytes of javascript; the manifest pins it to 4.
+		let pinned = Self.manifestJSON.replacingOccurrences(
+			of: "\"contentType\": \"text/javascript\"",
+			with: "\"contentType\": \"text/javascript\", \"ceilingBytes\": 4"
+		)
+		try writeAssetToolInput(pinned, to: assets + "/webui-assets.json")
+
+		let result = try runAssetTool([
+			"--embed-manifest", assets + "/webui-assets.json",
+			"--output", dir + "/Embedded.swift",
+		])
+		#expect(result.status != 0, "an over-ceiling payload must not embed: \(result.out)")
+		#expect(result.out.contains("ProbeInline"), "the failure names the entry: \(result.out)")
+		#expect(result.out.contains("ceiling"), "the failure names the ceiling: \(result.out)")
+	}
 }

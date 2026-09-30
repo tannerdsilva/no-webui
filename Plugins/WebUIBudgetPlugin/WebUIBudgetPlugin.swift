@@ -125,6 +125,47 @@ struct WebUIBudgetPlugin: CommandPlugin {
             ))
         }
 
+        // consumer manifests: one row per entry the embed plugin declared, with the manifest's
+        // own pins. a breach here is defense in depth — the build that produced the receipt
+        // would already have failed — but the row is what makes a consumer's bytes visible
+        // next to the framework's own.
+        var consumerRows: [(String, String, Int, String, String, String)] = []
+        for receiptFile in Self.embedReceipts(in: packageDir) {
+            guard
+                let data = FileManager.default.contents(atPath: receiptFile.path),
+                let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                let embedded = root["embedded"] as? [[String: Any]]
+            else { continue }
+            let label = (root["manifest"] as? String)
+                .map { URL(fileURLWithPath: $0).lastPathComponent } ?? "webui-assets.json"
+            for entry in embedded {
+                let type = (entry["type"] as? String) ?? "?"
+                let raw = entry["raw"] as? Int ?? 0
+                let gz = entry["gz"] as? Int ?? 0
+                var verdict = "ok"
+                if let ceiling = entry["ceilingBytes"] as? Int, raw > ceiling {
+                    verdict = "OVER"
+                    breaches.append("\(label)/\(type): \(raw) raw bytes > \(ceiling) pinned")
+                }
+                if let ceiling = entry["ceilingGzipBytes"] as? Int, gz > ceiling {
+                    verdict = "OVER"
+                    breaches.append("\(label)/\(type): \(gz) gzip bytes > \(ceiling) pinned")
+                }
+                let pinned = [
+                    (entry["ceilingBytes"] as? Int).map { "raw≤\($0)" },
+                    (entry["ceilingGzipBytes"] as? Int).map { "gz≤\($0)" },
+                ].compactMap { $0 }.joined(separator: " ")
+                consumerRows.append((
+                    "\(label)/\(type)",
+                    verdict,
+                    raw,
+                    gz > 0 ? String(gz) : "n/a",
+                    "manifest",
+                    pinned.isEmpty ? "unpinned" : pinned
+                ))
+            }
+        }
+
         // islands: report every artifact, enforce the per-file ceiling on each.
         let islandDir = packageDir
             .appendingPathComponent(".build")
@@ -166,6 +207,10 @@ struct WebUIBudgetPlugin: CommandPlugin {
               + "  " + pad("verdict", 12) + pad("source", 18) + "pinned")
         for (surface, verdict, raw, gz, source, pinned) in rows {
             print("  " + pad(surface, 10) + padLeft(String(raw), 10) + padLeft(gz, 10)
+                  + "  " + pad(verdict, 12) + pad(source, 18) + pinned)
+        }
+        for (surface, verdict, raw, gz, source, pinned) in consumerRows {
+            print("  " + pad(surface, 28) + padLeft(String(raw), 10) + padLeft(gz, 10)
                   + "  " + pad(verdict, 12) + pad(source, 18) + pinned)
         }
         if islandRows.isEmpty {
@@ -224,6 +269,34 @@ struct WebUIBudgetPlugin: CommandPlugin {
             }
         }
         return nil
+    }
+
+    /// every `EmbedReceipt.json` the embed plugin wrote — found by walking the known
+    /// plugin-output shape rather than guessing the package hash swiftpm owns.
+    private static func embedReceipts(in packageDir: URL) -> [URL] {
+        let outputs = packageDir
+            .appendingPathComponent(".build")
+            .appendingPathComponent("plugins")
+            .appendingPathComponent("outputs")
+        guard let packages = try? FileManager.default.contentsOfDirectory(
+            at: outputs, includingPropertiesForKeys: nil
+        ) else { return [] }
+        var found: [URL] = []
+        for package in packages {
+            guard let targets = try? FileManager.default.contentsOfDirectory(
+                at: package, includingPropertiesForKeys: nil
+            ) else { continue }
+            for target in targets {
+                let receipt = target
+                    .appendingPathComponent("destination")
+                    .appendingPathComponent("WebUIEmbedPlugin")
+                    .appendingPathComponent("EmbedReceipt.json")
+                if FileManager.default.fileExists(atPath: receipt.path) {
+                    found.append(receipt)
+                }
+            }
+        }
+        return found
     }
 
     /// gzip byte count for a file, or nil when `gzip` is unavailable. the plugin sandbox

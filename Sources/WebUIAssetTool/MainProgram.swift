@@ -70,6 +70,28 @@ enum WebUIAssetTool {
                     let gz = receipt.gzipBytes.map { ", \($0) gz" } ?? ""
                     print("  \(receipt.typeName): \(receipt.bytes) bytes\(gz), sha \(receipt.stamp)")
                 }
+                // the receipt a budget gate reads: what shipped, per type, plus the
+                // manifest's own pins — the gate never has to re-parse the manifest.
+                if let manifestOutputPath {
+                    let embedded: [[String: Any]] = zip(manifest.entries, receipts).map { pair -> [String: Any] in
+                        let (entry, receipt) = pair
+                        var row: [String: Any] = [
+                            "type": receipt.typeName,
+                            "raw": receipt.bytes,
+                            "gz": receipt.gzipBytes ?? 0,
+                        ]
+                        if let ceiling = entry.ceilingBytes { row["ceilingBytes"] = ceiling }
+                        if let ceiling = entry.ceilingGzipBytes { row["ceilingGzipBytes"] = ceiling }
+                        return row
+                    }
+                    let payload: [String: Any] = [
+                        "manifest": embedManifestPath,
+                        "embedded": embedded,
+                    ]
+                    if let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]) {
+                        try? data.write(to: URL(fileURLWithPath: manifestOutputPath))
+                    }
+                }
             } catch {
                 print("error: \(error)")
                 exit(1)

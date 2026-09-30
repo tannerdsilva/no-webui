@@ -156,4 +156,38 @@ struct ManifestTests {
 			#expect(error.description.contains("ProbeCSS"), "the failure names the entry: \(error)")
 		}
 	}
+
+	@Test("a payload that outgrows its pinned ceiling stops the embed, naming the entry")
+	func ceilingsAreEnforced() throws {
+		let pinned = Self.manifestJSON.replacingOccurrences(
+			of: "\"contentType\": \"text/javascript\"",
+			with: "\"contentType\": \"text/javascript\", \"ceilingBytes\": 4"
+		)
+		let (root, manifestURL) = try fixture(manifestJSON: pinned)
+		defer { try? FileManager.default.removeItem(at: root) }
+		let manifest = try WebUIAssetManifest.load(from: manifestURL)
+		#expect(manifest.entries[1].ceilingBytes == 4, "the ceiling is part of the loaded entry")
+
+		do {
+			_ = try WebUIAssetBuilder.embed(manifest: manifest, to: root.appendingPathComponent("Bad.swift"))
+			Issue.record("a payload over its ceiling must not embed")
+		} catch let error as WebUIBuildError {
+			#expect(error.description.contains("ProbeInline"), "the failure names the entry: \(error)")
+			#expect(error.description.contains("ceiling"), "the failure names the ceiling: \(error)")
+		}
+
+		// the same manifest with room in the pin embeds fine — the ceiling is a gate, not a
+		// minimum.
+		let roomy = Self.manifestJSON.replacingOccurrences(
+			of: "\"contentType\": \"text/javascript\"",
+			with: "\"contentType\": \"text/javascript\", \"ceilingBytes\": 1024, \"ceilingGzipBytes\": 1024"
+		)
+		let (root2, manifestURL2) = try fixture(manifestJSON: roomy)
+		defer { try? FileManager.default.removeItem(at: root2) }
+		let receipts = try WebUIAssetBuilder.embed(
+			manifest: try WebUIAssetManifest.load(from: manifestURL2),
+			to: root2.appendingPathComponent("Good.swift")
+		)
+		#expect(receipts.count == 3)
+	}
 }

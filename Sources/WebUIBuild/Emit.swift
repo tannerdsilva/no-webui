@@ -34,6 +34,8 @@ public enum WebUIBuildError: Error, CustomStringConvertible {
 	case malformedManifest(String)
 	/// a manifest entry names a file that does not exist.
 	case missingAsset(entry: String, path: String)
+	/// a manifest entry is larger than the ceiling the manifest pins for it.
+	case overCeiling(entry: String, measured: Int, ceiling: Int, isGzip: Bool)
 
 	public var description: String {
 		switch self {
@@ -51,6 +53,9 @@ public enum WebUIBuildError: Error, CustomStringConvertible {
 			return "webui-assets.json: \(message)"
 		case .missingAsset(let entry, let path):
 			return "webui-assets.json: entry '\(entry)' names no file at \(path)"
+		case .overCeiling(let entry, let measured, let ceiling, let isGzip):
+			let unit = isGzip ? "gzip bytes" : "bytes"
+			return "webui-assets.json: entry '\(entry)' is \(measured) \(unit), over its pinned ceiling of \(ceiling) — re-pin deliberately after measuring, or shrink the payload"
 		}
 	}
 }

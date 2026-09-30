@@ -34,6 +34,12 @@ public struct WebUIAssetManifest: Sendable {
 		public let contentType: String
 		public let minify: Bool
 		public let prose: ProsePolicy
+		/// the pinned ceiling for the payload as it ships, in bytes; `nil` pins nothing.
+		/// enforced at embed time, so a payload that outgrows its pin fails the BUILD that
+		/// would ship it, naming the entry.
+		public let ceilingBytes: Int?
+		/// the pinned ceiling for the compressed variant, in gzip bytes; `nil` pins nothing.
+		public let ceilingGzipBytes: Int?
 	}
 
 	/// the declared assets, in manifest order.
@@ -70,6 +76,7 @@ public struct WebUIAssetManifest: Sendable {
 
 	static let entryKeys: Set<String> = [
 		"name", "kind", "path", "text", "extensions", "contentType", "minify", "prose",
+		"ceilingBytes", "ceilingGzipBytes",
 	]
 
 	static func entry(from raw: [String: Any], index: Int) throws -> Entry {
@@ -113,7 +120,9 @@ public struct WebUIAssetManifest: Sendable {
 		}
 		return Entry(
 			name: name, kind: kind, path: path, text: text, extensions: extensions,
-			contentType: contentType, minify: raw["minify"] as? Bool ?? false, prose: prose
+			contentType: contentType, minify: raw["minify"] as? Bool ?? false, prose: prose,
+			ceilingBytes: raw["ceilingBytes"] as? Int,
+			ceilingGzipBytes: raw["ceilingGzipBytes"] as? Int
 		)
 	}
 
@@ -148,9 +157,11 @@ public extension WebUIAssetBuilder {
 					stamp: stamp, body: bytes, variant: variant,
 					includeText: isTextContent(entry.contentType)
 				))
-				receipts.append(Emitted(
+				let receipt = Emitted(
 					typeName: entry.name, bytes: bytes.count, gzipBytes: variant?.count, stamp: stamp
-				))
+				)
+				try enforce(receipt, entry: entry)
+				receipts.append(receipt)
 
 			case .file:
 				let path = manifest.directory.appendingPathComponent(entry.path ?? "")
@@ -176,9 +187,11 @@ public extension WebUIAssetBuilder {
 					stamp: stamp, body: bytes, variant: variant,
 					includeText: isTextContent(entry.contentType)
 				))
-				receipts.append(Emitted(
+				let receipt = Emitted(
 					typeName: entry.name, bytes: bytes.count, gzipBytes: variant?.count, stamp: stamp
-				))
+				)
+				try enforce(receipt, entry: entry)
+				receipts.append(receipt)
 
 			case .directory:
 				let dir = manifest.directory.appendingPathComponent(entry.path ?? "")
@@ -201,12 +214,14 @@ public extension WebUIAssetBuilder {
 					joined.append(contentsOf: Array(file.name.utf8))
 					joined.append(contentsOf: file.bytes)
 				}
-				receipts.append(Emitted(
+				let receipt = Emitted(
 					typeName: entry.name,
 					bytes: files.reduce(0) { $0 + $1.bytes.count },
 					gzipBytes: nil,
 					stamp: String(sha256Hex(joined).prefix(12))
-				))
+				)
+				try enforce(receipt, entry: entry)
+				receipts.append(receipt)
 			}
 		}
 
@@ -218,6 +233,23 @@ public extension WebUIAssetBuilder {
 		]
 		try assemble(header: header, blocks: blocks).write(to: url, atomically: true, encoding: .utf8)
 		return receipts
+	}
+
+	/// the manifest's own budget gate: a payload that outgrows its pinned ceiling stops the
+	/// build that would ship it, naming the entry — a build-time refusal, earlier and
+	/// stronger than a later report, and the only enforcement point available here (a
+	/// vendored plugin cannot import the budget gate's tooling).
+	static func enforce(_ receipt: Emitted, entry: WebUIAssetManifest.Entry) throws {
+		if let ceiling = entry.ceilingBytes, receipt.bytes > ceiling {
+			throw WebUIBuildError.overCeiling(
+				entry: entry.name, measured: receipt.bytes, ceiling: ceiling, isGzip: false
+			)
+		}
+		if let ceiling = entry.ceilingGzipBytes, let gzip = receipt.gzipBytes, gzip > ceiling {
+			throw WebUIBuildError.overCeiling(
+				entry: entry.name, measured: gzip, ceiling: ceiling, isGzip: true
+			)
+		}
 	}
 
 	/// minify (if asked), then judge the prose gate — the same order, and the same two

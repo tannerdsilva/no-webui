@@ -27,14 +27,20 @@ struct WebUIEmbedPlugin: BuildToolPlugin {
 
 		let tool = try context.tool(named: "WebUIAssetTool")
 		let output = context.pluginWorkDirectoryURL.appendingPathComponent("EmbeddedAssets.swift")
+		// the receipt the budget gate reads: per-type raw/gz sizes plus the manifest's pins.
+		let receipt = context.pluginWorkDirectoryURL.appendingPathComponent("EmbedReceipt.json")
 
 		return [
 			.buildCommand(
 				displayName: "embedding \(target.name) assets",
 				executable: tool.url,
-				arguments: ["--embed-manifest", manifest.string, "--output", output.path],
+				arguments: [
+					"--embed-manifest", manifest.string,
+					"--output", output.path,
+					"--manifest-output", receipt.path,
+				],
 				inputFiles: Self.referencedInputs(manifest: manifest, assets: assets),
-				outputFiles: [output]
+				outputFiles: [output, receipt]
 			)
 		]
 	}
