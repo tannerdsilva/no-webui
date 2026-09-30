@@ -43,9 +43,11 @@ the theme layer compile into the wasm client unchanged.
 the theme surface is exactly the set of custom properties declared on `:root`
 (174 tokens, light + the dark-adaptation rules). dark is applied at runtime:
 the sheet's dark rules are re-keyed on `[data-theme="dark"]`, and the engine
-resolves the effective theme at boot (saved choice, else the OS
-`prefers-color-scheme`) in `<head>` before the sheet applies — system default
-still has no flash, and a user override beats the OS either way. that pre-paint
+resolves the effective theme at boot — a stored choice wins; with none, the
+attributes the *server* rendered are the default; only a page rendering neither
+falls back to the OS `prefers-color-scheme` — in `<head>` before the sheet
+applies, so a system default still has no flash, and a user override beats the OS
+either way. that pre-paint
 prelude is an inline script carrying the render nonce, and the policy that ships
 with the page names that nonce; a host policy with no nonce source suppresses the
 prelude rather than shipping a script the browser would refuse. the

@@ -44,7 +44,10 @@ window.WebUIEngine = (function () {
       savedMode = localStorage.getItem('webui-theme');
       savedScheme = localStorage.getItem('webui-scheme');
     } catch (e) { }
-    var mode = (savedMode === 'light' || savedMode === 'dark') ? savedMode : 'system';
+    var serverMode = document.documentElement.getAttribute('data-theme');
+    var mode = (savedMode === 'light' || savedMode === 'dark' || savedMode === 'system')
+      ? savedMode
+      : (serverMode === 'light' || serverMode === 'dark' || serverMode === 'system') ? serverMode : 'system';
     var scheme = savedScheme || null;
 
     function sysDark() { return mql ? mql.matches : false; }

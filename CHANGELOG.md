@@ -82,6 +82,15 @@ all notable changes to this project are documented here.
   sheet, `--guard-css` keeps anything a consumer's own stylesheet still resolves, the counts
   land in the build manifest, and a name the sheet does not declare fails the build. omitted,
   the sheet ships whole — byte-identical to before.
+- the engine's mode fallback no longer discards a **server-rendered** default: with no stored
+  choice it keeps the `data-theme` the server rendered, a stored choice still wins, and only a
+  page rendering neither falls back to `system`. `data-scheme` already behaved this way — not
+  storing a choice is not the same as choosing nothing — and the pre-paint prelude always had
+  this shape; the engine was the odd one out, and a host's server-side default mode was
+  silently replaced on every fresh client. `designer/theme-default-probe.mjs` is the gate
+  (it drives a synthesised page whose only theme code is the engine), and it refuses to run
+  against a port that is already serving: an earlier revision of it passed while measuring a
+  **stale** server left over from the previous run.
 - **the shipped payloads are prose-free, checked at build time.** `WebUICore.ProseGuard` reads
   comments only where each language says one can start — a `//` inside a string literal is not a
   comment — and the asset tool runs it over every payload a client can receive: the runtime, the
