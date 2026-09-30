@@ -86,6 +86,23 @@ public struct ThemePalette: Sendable, Equatable {
 	}
 }
 
+// MARK: - ThemeScope
+
+/// Where a theme's css lands.
+///
+/// `.root` is a single-theme page: the palette on `:root`, a media pass for the dark
+/// override. `.attribute` is one theme inside a catalog: the same declarations, scoped to
+/// `:root[data-scheme="<id>"][data-theme="…"]` so a page can ship every scheme at once and
+/// let the client switch without a round trip.
+///
+/// `data-theme` keeps its **existing** meaning of *mode* (`light` / `dark` / `system`) —
+/// the engine already flips exactly that attribute — and `data-scheme` names the theme. The
+/// two axes are orthogonal, which is what lets one stylesheet carry 27 schemes × 2 modes.
+public enum ThemeScope: Sendable, Equatable {
+	case root
+	case attribute(id: String)
+}
+
 // MARK: - WebUITheme
 
 /// A theme: up to two palettes, a mode, and app-specific rules that layer on top of the
@@ -169,32 +186,60 @@ public struct WebUITheme: Sendable, Equatable {
 		)
 	}
 
-	/// The css this theme contributes to a plain `:root` page: a `:root` block (the
-	/// `color-scheme` declaration, then ``palette``) followed by a
-	/// `prefers-color-scheme: dark` pass for ``dark``, then the app rules.
+	/// The css this theme contributes.
 	///
 	/// Empty when the theme is `.standard`, so an unthemed document stays byte-identical.
-	public func stylesheet() -> String {
-		var rootDeclarations: [CSSDeclaration] = []
-		// `color-scheme` tells the browser which way `defaultMode` faces so form controls,
-		// scrollbars and the canvas follow it. `.automatic` declares nothing.
-		if let schemeValue = defaultMode.cssValue {
-			rootDeclarations.append(CSSDeclaration("color-scheme", schemeValue))
-		}
-		rootDeclarations.append(contentsOf: palette.declarations())
-
+	/// Declarations are sorted by css name, so the output is byte-stable across runs — which
+	/// is what makes it safe to serve from a content-addressed url.
+	public func stylesheet(scope: ThemeScope = .root) -> String {
 		var parts: [String] = []
-		if !rootDeclarations.isEmpty {
-			parts.append(CSSStylesheet([CSSRule(":root", rootDeclarations)]).render())
+
+		switch scope {
+		case .root:
+			var rootDeclarations: [CSSDeclaration] = []
+			// `color-scheme` tells the browser which way the page faces, so form controls,
+			// scrollbars and the canvas follow it. `.automatic` declares nothing.
+			if let schemeValue = defaultMode.cssValue {
+				rootDeclarations.append(CSSDeclaration("color-scheme", schemeValue))
+			}
+			rootDeclarations.append(contentsOf: palette.declarations())
+			if !rootDeclarations.isEmpty {
+				parts.append(CSSStylesheet([CSSRule(":root", rootDeclarations)]).render())
+			}
+			if !dark.isEmpty {
+				parts.append(CSSMediaQuery(
+					"prefers-color-scheme: dark",
+					rules: [CSSRule(":root", dark.declarations())]
+				).render())
+			}
+
+		case .attribute(let id):
+			let scoped = { (mode: String) in ":root[data-scheme=\"\(id)\"][data-theme=\"\(mode)\"]" }
+			// the light and `system` selectors share the base palette: `system` is the
+			// "follow the OS" choice, and this block is what the media pass below overrides.
+			var base: [CSSDeclaration] = []
+			if let schemeValue = defaultMode.cssValue {
+				base.append(CSSDeclaration("color-scheme", schemeValue))
+			}
+			base.append(contentsOf: palette.declarations())
+			if !base.isEmpty {
+				parts.append(CSSStylesheet([
+					CSSRule(scoped("light"), base),
+					CSSRule(scoped("system"), base),
+				]).render())
+			}
+			if !dark.isEmpty {
+				// a client that explicitly chose dark, and a client on `system` whose OS is
+				// dark. both declare `color-scheme: dark` so the browser's own chrome follows.
+				let darkDeclarations = [CSSDeclaration("color-scheme", "dark")] + dark.declarations()
+				parts.append(CSSStylesheet([CSSRule(scoped("dark"), darkDeclarations)]).render())
+				parts.append(CSSMediaQuery(
+					"prefers-color-scheme: dark",
+					rules: [CSSRule(scoped("system"), darkDeclarations)]
+				).render())
+			}
 		}
-		// the dark pass is an OVERRIDE over the base palette, so it is emitted whenever it
-		// exists — including for a `defaultMode: .dark` theme that also declares one.
-		if !dark.isEmpty {
-			parts.append(CSSMediaQuery(
-				"(prefers-color-scheme: dark)",
-				rules: [CSSRule(":root", dark.declarations())]
-			).render())
-		}
+
 		if !rules.isEmpty {
 			parts.append(CSSStylesheet(rules).render())
 		}
@@ -301,6 +346,18 @@ extension ThemeCatalog {
 	/// the declaration ergonomic.
 	public static var entries: [ThemeEntry] {
 		all.map(ThemeEntry.init)
+	}
+
+	/// The whole catalog as one scoped stylesheet, in catalog order.
+	///
+	/// This is the artefact a host serves (content-addressed — it only changes when a theme
+	/// does) so a page ships every scheme once and switching costs no round trip and no
+	/// re-render.
+	public static func stylesheet() -> String {
+		entries
+			.map { $0.theme.stylesheet(scope: .attribute(id: $0.id)) }
+			.filter { !$0.isEmpty }
+			.joined(separator: "\n\n")
 	}
 
 	/// The theme for a stored id, or the default's.
