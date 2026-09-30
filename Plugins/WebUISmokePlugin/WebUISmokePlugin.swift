@@ -92,6 +92,28 @@ struct WebUISmokePlugin: CommandPlugin {
             bad("engine served bytes DIFFER from source or carry comments")
         }
 
+        // the embed plugin's dogfood, end to end: /ui/probe.css is served from the generated
+        // `ProbeAsset` a build produced out of `Assets/webui-assets.json`, and the bytes a
+        // client receives must equal that generated payload — payload in, generated type
+        // out, wire bytes verified.
+        let probeSource = context.package.directoryURL
+            .appendingPathComponent("Sources/WebUISmokeTest/Assets/probe.css")
+        if let (servedProbe, probeHeaders) = await GETWithHeaders(session, "\(base)/ui/probe.css"),
+           let sourceProbe = try? Data(contentsOf: probeSource),
+           let generatedPayload = generatedBodyPayload(packageDir: context.package.directoryURL) {
+            let probeText = String(data: servedProbe, encoding: .utf8) ?? ""
+            if servedProbe == generatedPayload,
+               !probeText.contains("/*"), !probeText.contains("dogfood"),
+               servedProbe.count < sourceProbe.count,
+               headerValue(probeHeaders, "Cache-Control")?.contains("immutable") == true {
+                ok("embedded asset served == generated payload (comment-free, \(servedProbe.count) bytes < source \(sourceProbe.count), immutable)")
+            } else {
+                bad("embedded asset served DIFFERS from the generated payload")
+            }
+        } else {
+            bad("the embed plugin's asset did not serve at /ui/probe.css (or its generated file is missing — run swift build)")
+        }
+
         guard let pageData = await GET(session, "\(base)/"),
               let html = String(data: pageData, encoding: .utf8) else {
             Diagnostics.error("page not reachable at \(base)/")
@@ -166,6 +188,27 @@ struct WebUISmokePlugin: CommandPlugin {
         } else {
             Diagnostics.error("smoke gate failed")
         }
+    }
+
+    /// the `bodyBase64` payload of the generated embed file, decoded — the bytes the server
+    /// is expected to serve, read back from the build product itself. found by walking the
+    /// known plugin-output shape rather than guessing the package hash swiftpm owns.
+    private func generatedBodyPayload(packageDir: URL) -> Data? {
+        let outputs = packageDir.appendingPathComponent(".build/plugins/outputs")
+        guard let packages = try? FileManager.default.contentsOfDirectory(
+            at: outputs, includingPropertiesForKeys: nil
+        ) else { return nil }
+        for package in packages {
+            let file = package
+                .appendingPathComponent("WebUISmokeTest/destination/WebUIEmbedPlugin/EmbeddedAssets.swift")
+            guard
+                let source = try? String(contentsOf: file, encoding: .utf8),
+                let start = source.range(of: "bodyBase64 = \""),
+                let end = source.range(of: "\"", range: start.upperBound..<source.endIndex)
+            else { continue }
+            return Data(base64Encoded: String(source[start.upperBound..<end.lowerBound]))
+        }
+        return nil
     }
 
     private func GET(_ session: URLSession, _ urlString: String) async -> Data? {
