@@ -17,6 +17,12 @@ private enum CachedAssets {
 	static let css = ByteBuffer(string: DesignSystemAssets.minifiedCss)
 	static let engine = ByteBuffer(string: WebUIAssets.engine)
 	static let shell = ByteBuffer(string: WebUIAssets.shell)
+	/// the build-time pre-compressed variants, served when the client accepts gzip.
+	/// `nil` when the build host had no `gzip`, in which case the raw bytes serve.
+	/// the runtime never compresses anything — see `WebUIAssetTool.gzipBase64`.
+	static let cssGzip = WebUIAssets.cssGzip.map { ByteBuffer(bytes: $0) }
+	static let engineGzip = WebUIAssets.engineGzip.map { ByteBuffer(bytes: $0) }
+	static let shellGzip = WebUIAssets.shellGzip.map { ByteBuffer(bytes: $0) }
 }
 
 // MARK: - host assets
@@ -536,6 +542,8 @@ final class Runner: Sendable {
 					return
 				}
 				let uri = head.uri
+				// read once; every asset response below negotiates against it
+				let acceptEncoding = head.headers.first(name: "Accept-Encoding")
 				// strip the query once: routing and the host-asset table both
 				// key on the bare path, so a cache-busting `?v=41` still
 				// resolves, and the bare page path accepts `?s=<id>`.
@@ -547,6 +555,8 @@ final class Runner: Sendable {
 					try await respond(
 						channel: channel.channel,
 						bytes: CachedAssets.css,
+						gzip: CachedAssets.cssGzip,
+						acceptEncoding: acceptEncoding,
 						contentType: "text/css; charset=utf-8",
 						cacheControl: "public, max-age=\(config.assetCacheSeconds)"
 					)
@@ -557,6 +567,8 @@ final class Runner: Sendable {
 					try await respond(
 						channel: channel.channel,
 						bytes: CachedAssets.css,
+						gzip: CachedAssets.cssGzip,
+						acceptEncoding: acceptEncoding,
 						contentType: "text/css; charset=utf-8",
 						cacheControl: "public, max-age=31536000, immutable"
 					)
@@ -564,6 +576,8 @@ final class Runner: Sendable {
 					try await respond(
 						channel: channel.channel,
 						bytes: CachedAssets.engine,
+						gzip: CachedAssets.engineGzip,
+						acceptEncoding: acceptEncoding,
 						contentType: "text/javascript; charset=utf-8",
 						cacheControl: "public, max-age=\(config.assetCacheSeconds)"
 					)
@@ -571,6 +585,8 @@ final class Runner: Sendable {
 					try await respond(
 						channel: channel.channel,
 						bytes: CachedAssets.shell,
+						gzip: CachedAssets.shellGzip,
+						acceptEncoding: acceptEncoding,
 						contentType: "text/javascript; charset=utf-8",
 						cacheControl: "public, max-age=\(config.assetCacheSeconds)"
 					)
@@ -634,13 +650,22 @@ final class Runner: Sendable {
 	private func respond(
 		channel: Channel,
 		bytes: ByteBuffer,
+		gzip: ByteBuffer? = nil,
+		acceptEncoding: String? = nil,
 		contentType: String,
 		status: HTTPResponseStatus = .ok,
 		cacheControl: String = "no-store"
 	) async throws {
+		// negotiate once. a client that accepts gzip gets the pre-compressed body, and
+		// `Vary` goes out whenever a variant EXISTS — not only when it was chosen — or a
+		// shared cache would hand the compressed body to the next client that did not ask.
+		let useGzip = gzip != nil && (acceptEncoding?.contains("gzip") ?? false)
+		let body = useGzip ? gzip! : bytes
 		var head = HTTPResponseHead(version: .http1_1, status: status)
 		head.headers.replaceOrAdd(name: "Content-Type", value: contentType)
-		head.headers.replaceOrAdd(name: "Content-Length", value: "\(bytes.readableBytes)")
+		head.headers.replaceOrAdd(name: "Content-Length", value: "\(body.readableBytes)")
+		if gzip != nil { head.headers.replaceOrAdd(name: "Vary", value: "Accept-Encoding") }
+		if useGzip { head.headers.replaceOrAdd(name: "Content-Encoding", value: "gzip") }
 		// security headers — parity with the reference servers.
 		head.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
 		head.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
@@ -651,7 +676,7 @@ final class Runner: Sendable {
 		// buffer would otherwise lose its tail when the connection closes
 		// right after writing (probe-verified truncation).
 		_ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.head(head))
-		_ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.body(bytes))
+		_ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.body(body))
 		try await channel.writeAndFlush(HTTPPart<HTTPResponseHead, ByteBuffer>.end(nil)).get()
 	}
 

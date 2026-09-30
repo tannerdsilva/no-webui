@@ -204,7 +204,13 @@ let package = Package(
 
         // ── Asset Tool ───────────────────────────────────────────
         .executableTarget(
-            name: "WebUIAssetTool"
+            name: "WebUIAssetTool",
+            dependencies: [
+                // the minifier and the layout rules live in WebUICore, so the
+                // minified sheet is produced at BUILD time (and therefore
+                // compressible at build time — the runtime has no compressor).
+                .target(name: "WebUICore"),
+            ]
         ),
 
         // ── Icon Tool (svg iconography generator + linter) ───────

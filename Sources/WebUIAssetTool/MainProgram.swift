@@ -1,4 +1,5 @@
 import Foundation
+import WebUICore
 
 @main
 enum WebUIAssetTool {
@@ -73,8 +74,16 @@ enum WebUIAssetTool {
         }
 
         if let outputPath {
+            let cssMinified = minifyCSS(
+                CSSStylesheet(LayoutStyles.complete).render() + "\n\n" + cssContent
+            )
             let generated = try generateAssetsSource(
-                css: cssContent, js: jsContent, engine: engineContent, shell: shellContent
+                css: cssContent, js: jsContent, engine: engineContent, shell: shellContent,
+                cssMinified: cssMinified,
+                cssGzip: cssGzipBase64(of: cssMinified),
+                jsGzip: jsInput.map(gzipBase64(of:)) ?? "",
+                engineGzip: engineInput.map(gzipBase64(of:)) ?? "",
+                shellGzip: shellInput.map(gzipBase64(of:)) ?? ""
             )
 
             try generated.write(toFile: outputPath, atomically: true, encoding: .utf8)
@@ -87,7 +96,44 @@ enum WebUIAssetTool {
         }
     }
 
-    static func generateAssetsSource(css: String, js: String, engine: String, shell: String) throws -> String {
+    /// gzip a file with the host `gzip`, base64-encoded, or "" when unavailable.
+    ///
+    /// compression happens at BUILD time on purpose. no-webui takes no
+    /// dependencies and has no runtime compressor: Foundation's `compression`
+    /// API is Darwin-only and linking zlib would be a dependency. the runtime
+    /// therefore never compresses anything — it serves bytes prepared here.
+    static func gzipBase64(of path: String) -> String {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+        process.arguments = ["gzip", "-n", "-9", "-c", path]
+        let pipe = Pipe()
+        process.standardOutput = pipe
+        process.standardError = Pipe()
+        do {
+            try process.run()
+        } catch {
+            return ""
+        }
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        process.waitUntilExit()
+        guard process.terminationStatus == 0, !data.isEmpty else { return "" }
+        return data.base64EncodedString()
+    }
+
+    /// gzip an in-memory string (the minified sheet has no file on disk).
+    static func cssGzipBase64(of text: String) -> String {
+        let tmp = FileManager.default.temporaryDirectory
+            .appendingPathComponent("webui-css-min-\(ProcessInfo.processInfo.processIdentifier).css")
+        guard (try? text.write(to: tmp, atomically: true, encoding: .utf8)) != nil else { return "" }
+        defer { try? FileManager.default.removeItem(at: tmp) }
+        return gzipBase64(of: tmp.path)
+    }
+
+    static func generateAssetsSource(
+        css: String, js: String, engine: String, shell: String,
+        cssMinified: String,
+        cssGzip: String, jsGzip: String, engineGzip: String, shellGzip: String
+    ) throws -> String {
         let escapedCSS = css.replacingOccurrences(of: "\\", with: "\\\\")
         let escapedJS = js.replacingOccurrences(of: "\\", with: "\\\\")
         let escapedEngine = engine.replacingOccurrences(of: "\\", with: "\\\\")
@@ -113,8 +159,15 @@ enum WebUIAssetTool {
             .map { "    \($0)" }
             .joined(separator: "\n")
 
+        let escapedMinified = cssMinified.replacingOccurrences(of: "\\", with: "\\\\")
+        let indentedMinified = escapedMinified
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map { "    \($0)" }
+            .joined(separator: "\n")
+
         let assets = """
         import Foundation
+        import WebUICore
         public enum WebUIAssets {
             public static let css: String = \"\"\"
         \(indentedCSS)
@@ -128,6 +181,26 @@ enum WebUIAssetTool {
             public static let shell: String = \"\"\"
         \(indentedShell)
             \"\"\"
+            /// the sheet exactly as it ships: minified at BUILD time, so the served
+            /// bytes are build-time-known and therefore compressible at build time.
+            public static let cssMinified: String = \"\"\"
+        \(indentedMinified)
+            \"\"\"
+            /// pre-compressed variants, base64 (a 52k-element `[UInt8]` literal is
+            /// slow to type-check). `nil` means the build host had no `gzip`; the
+            /// server then falls back to the raw bytes rather than serving nothing.
+            private static let cssGzipBase64 = "\(cssGzip)"
+            private static let jsGzipBase64 = "\(jsGzip)"
+            private static let engineGzipBase64 = "\(engineGzip)"
+            private static let shellGzipBase64 = "\(shellGzip)"
+            public static let cssGzip: [UInt8]? = decodeGzip(cssGzipBase64)
+            public static let jsGzip: [UInt8]? = decodeGzip(jsGzipBase64)
+            public static let engineGzip: [UInt8]? = decodeGzip(engineGzipBase64)
+            public static let shellGzip: [UInt8]? = decodeGzip(shellGzipBase64)
+            private static func decodeGzip(_ text: String) -> [UInt8]? {
+                guard !text.isEmpty, let bytes = Base64.decode(text), !bytes.isEmpty else { return nil }
+                return bytes
+            }
         }
         """
 

@@ -8,9 +8,7 @@ public enum DesignSystemAssets {
 	/// their `/__assets/css` endpoint instead of the raw working file, which
 	/// carries designer comments (the first law: shipped web assets are
 	/// comment-free) and roughly 6% more bytes on a constrained link.
-	public static let minifiedCss: String = minifyCSS(
-		CSSStylesheet(LayoutStyles.complete).render() + "\n\n" + WebUIAssets.css
-	)
+	public static let minifiedCss: String = WebUIAssets.cssMinified
 
 	/// sha-256 (lowercase hex) of the minified sheet — the content address for
 	/// the immutable css route. hashed with the framework's own `SHA256` (not
