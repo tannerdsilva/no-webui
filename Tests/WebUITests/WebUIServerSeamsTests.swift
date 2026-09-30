@@ -220,6 +220,29 @@ struct WebUIServerSeamsTests {
 		#endif
 	}
 
+		@Test("serves a content-addressed theme sheet, and only at its own address")
+	func themeSheetRoute() async throws {
+		let sheet = ThemeSheet(css: ":root[data-scheme=\"x\"]{--color-bg:#fff;}")
+		try await withServer(
+			requestRender: { _ in "<p>page</p>" },
+			router: EventRouter(),
+			assets: [],
+			themeSheet: sheet
+		) { port in
+			let (body, status) = try await get("http://127.0.0.1:\(port)\(sheet.url)")
+			#expect(status == 200)
+			#expect(body.contains("--color-bg:#fff;"))
+			// the address IS the content: a wrong address must not serve the right sheet, or a
+			// cache would hold bytes under a url they do not belong to.
+			let (_, missing) = try await get("http://127.0.0.1:\(port)/__assets/theme.deadbeef")
+			#expect(missing == 404)
+			// and the page route still works with a sheet configured.
+			let (page, pageStatus) = try await get("http://127.0.0.1:\(port)/")
+			#expect(pageStatus == 200)
+			#expect(page.contains("page"))
+		}
+	}
+
 	// MARK: harness
 
 	/// start a server on a free port, run `body`, then stop it.
@@ -227,13 +250,16 @@ struct WebUIServerSeamsTests {
 		requestRender: @escaping WebUIServer.RequestRender,
 		router: EventRouter,
 		assets: [WebUIServerAsset],
+		themeSheet: ThemeSheet? = nil,
 		_ body: (Int) async throws -> Void
 	) async throws {
 		let port = try await freePort()
 		let server = WebUIServer(
 			requestRender: requestRender,
 			router: router,
-			config: WebUIServerConfig(host: "127.0.0.1", port: port, assets: assets)
+			config: WebUIServerConfig(
+				host: "127.0.0.1", port: port, themeSheet: themeSheet, assets: assets
+			)
 		)
 		let task = Task { try await server.start() }
 		_ = try await waitForServe(port: port)

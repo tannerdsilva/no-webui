@@ -23,6 +23,12 @@ public struct WebUIDocument: View {
     /// `/__assets/css` — hosts serve the same bytes via
     /// `DesignSystemAssets.minifiedCss`). pass `nil` to inline like before.
     public let stylesheetURL: String?
+    /// A content-addressed theme catalog (see ``ThemeSheet``) to LINK after the base sheet.
+    ///
+    /// When set, the inline theme is skipped: the sheet is immutable-cached, so a second
+    /// navigation transfers zero theme bytes. Pair it with a ``ThemeSheet``'s `url`, and hand
+    /// the same sheet to `WebUIServerConfig.themeSheet` so the route exists.
+    public let themeStylesheetURL: String?
     /// dev-time class validation: when true, the rendered document is scanned
     /// against the shipped sheet and every undefined class is routed through
     /// `HTMLClassValidator.onUndefined`. catches typo'd class names that
@@ -44,6 +50,7 @@ public struct WebUIDocument: View {
         theme: WebUITheme = .standard,
         rawStyles: [String] = [],
         stylesheetURL: String? = DesignSystemAssets.stylesheetURL,
+        themeStylesheetURL: String? = nil,
         checkClasses: Bool = false
     ) {
         self.title = title
@@ -61,6 +68,7 @@ public struct WebUIDocument: View {
         self.theme = theme
         self.rawStyles = rawStyles
         self.stylesheetURL = stylesheetURL
+        self.themeStylesheetURL = themeStylesheetURL
         self.checkClasses = checkClasses
     }
 
@@ -74,7 +82,11 @@ public struct WebUIDocument: View {
         // the theme block lands after the base sheet, so its `:root`
         // overrides win the cascade. `.standard` contributes nothing and the
         // document stays byte-identical to the unthemed one.
-        let themeCSS = theme.stylesheet()
+        // a LINKED theme sheet wins over an inline one: it is content-addressed, so the
+        // browser caches it and a second navigation transfers zero theme bytes. inlining is
+        // what made the theme ride every page (the plan's B7).
+        let linksThemeSheet = themeStylesheetURL != nil
+        let themeCSS = linksThemeSheet ? "" : theme.stylesheet()
         var rawStyles: [String]
         if stylesheetURL != nil {
             // linked sheet mode: only theme + page-scoped styles stay inline.
@@ -102,7 +114,8 @@ public struct WebUIDocument: View {
             runtimeConfig: runtimeConfig,
             contentSecurityPolicy: contentSecurityPolicy,
             preMinifiedStyles: true,
-            stylesheetURL: stylesheetURL
+            stylesheetURL: stylesheetURL,
+            themeStylesheetURL: themeStylesheetURL
         )
         let html = doc.render()
         if checkClasses {

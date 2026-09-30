@@ -31,6 +31,11 @@ public struct HTMLDocument: Sendable {
     /// Only emitted when a client runtime is present: the engine owns the same storage keys,
     /// and without it nothing would honour what the prelude sets.
     public let themePrelude: Bool
+    /// A content-addressed theme catalog to LINK, after the base sheet.
+    ///
+    /// The theme is not inlined when this is set: the sheet is cacheable, so a second
+    /// navigation transfers zero theme bytes.
+    public let themeStylesheetURL: String?
     public let runtimeConfig: RuntimeConfig?
     public let contentSecurityPolicy: String?
     /// the tab icon: a data-uri (2×-supersampled 32 px png of the accent
@@ -111,7 +116,8 @@ public struct HTMLDocument: Sendable {
         contentSecurityPolicy: String? = nil,
         icon: String = Self.defaultIcon,
         preMinifiedStyles: Bool = false,
-        stylesheetURL: String? = nil
+        stylesheetURL: String? = nil,
+        themeStylesheetURL: String? = nil
     ) {
         self.title = title
         self.body = body
@@ -130,6 +136,7 @@ public struct HTMLDocument: Sendable {
         self.contentSecurityPolicy = contentSecurityPolicy
         self.icon = icon
         self.preMinifiedStyles = preMinifiedStyles
+        self.themeStylesheetURL = themeStylesheetURL
         self.stylesheetURL = stylesheetURL
         self.nonce = Self.generateNonce()
     }
@@ -214,6 +221,15 @@ public struct HTMLDocument: Sendable {
         } else {
             stylesheetTag = ""
         }
+        // the theme sheet links AFTER the base one: same specificity, later source order, so
+        // its `:root` tokens win the cascade. emitted here rather than through `head` for
+        // exactly that reason — `head` renders before the base sheet.
+        let themeStylesheetTag: String
+        if let url = themeStylesheetURL {
+            themeStylesheetTag = "  <link rel=\"stylesheet\" href=\"\(htmlEscape(url))\">\n"
+        } else {
+            themeStylesheetTag = ""
+        }
 
         return """
         <!DOCTYPE html>
@@ -223,7 +239,7 @@ public struct HTMLDocument: Sendable {
           <meta name="viewport" content="width=device-width, initial-scale=1.0">\(cspTag)\(iconTag)
           <title>\(htmlEscape(title))</title>
           \(resolvedHead)\(preludeTag.isEmpty ? "" : "\n          " + preludeTag)
-          \(stylesheetTag)\(styleTag)
+          \(stylesheetTag)\(themeStylesheetTag)\(styleTag)
         </head>
         <body\(bodyAttr)>
           \(body)

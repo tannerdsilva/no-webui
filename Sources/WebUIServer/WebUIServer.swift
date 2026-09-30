@@ -117,6 +117,10 @@ public struct WebUIServerConfig: Sendable {
 	public var readIdleSeconds: Int64
 	public var assetCacheSeconds: Int
 	public var pagePath: String
+	/// the host's rendered theme catalog (see ``ThemeSheet``), served at its
+	/// content-addressed `url` with a year-long immutable cache. the same value's `url` is
+	/// what a ``WebUIDocument`` links, so the page and the server agree by construction.
+	public var themeSheet: ThemeSheet?
 	/// extra assets this host serves (see ``WebUIServerAsset``). the framework
 	/// routes and the page route are matched first, so an entry here can
 	/// neither shadow nor disable them. duplicate paths: the last entry wins.
@@ -129,6 +133,7 @@ public struct WebUIServerConfig: Sendable {
 		readIdleSeconds: Int64 = 120,
 		assetCacheSeconds: Int = 3600,
 		pagePath: String = "/",
+		themeSheet: ThemeSheet? = nil,
 		assets: [WebUIServerAsset] = []
 	) {
 		self.host = host
@@ -137,6 +142,7 @@ public struct WebUIServerConfig: Sendable {
 		self.readIdleSeconds = readIdleSeconds
 		self.assetCacheSeconds = assetCacheSeconds
 		self.pagePath = pagePath
+		self.themeSheet = themeSheet
 		self.assets = assets
 	}
 }
@@ -416,6 +422,11 @@ final class Runner: Sendable {
 	/// instead of per request.
 	private let assets: [String: HostAsset]
 
+	/// the host's theme catalog, pre-encoded once like the framework assets. `nil` when the
+	/// host has no catalog, in which case the route simply does not exist.
+	private let themeSheet: ByteBuffer?
+	private let themeSheetPath: String?
+
 	struct HostAsset: Sendable {
 		let body: ByteBuffer
 		let contentType: String
@@ -451,6 +462,13 @@ final class Runner: Sendable {
 			)
 		}
 		self.assets = encoded
+		if let sheet = config.themeSheet, !sheet.isEmpty {
+			self.themeSheet = ByteBuffer(bytes: Array(sheet.css.utf8))
+			self.themeSheetPath = sheet.url
+		} else {
+			self.themeSheet = nil
+			self.themeSheetPath = nil
+		}
 	}
 
 	func handle(_ negotiationFuture: EventLoopFuture<ServerUpgradeResult>) async {
@@ -569,6 +587,15 @@ final class Runner: Sendable {
 						bytes: CachedAssets.css,
 						gzip: CachedAssets.cssGzip,
 						acceptEncoding: acceptEncoding,
+						contentType: "text/css; charset=utf-8",
+						cacheControl: "public, max-age=31536000, immutable"
+					)
+				} else if let sheet = themeSheet, path == themeSheetPath {
+					// the host's theme catalog. content-addressed, so immutable: a rebuilt
+					// sheet is a different url and no cache invalidation is ever needed.
+					try await respond(
+						channel: channel.channel,
+						bytes: sheet,
 						contentType: "text/css; charset=utf-8",
 						cacheControl: "public, max-age=31536000, immutable"
 					)
