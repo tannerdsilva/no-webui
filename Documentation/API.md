@@ -141,8 +141,16 @@ every attribute parameter (`id`, `class`, `name`, `for`, `data-status`,
 
 | Type | Parameters | Description |
 |---|---|---|
-| `HTMLDocument` | title, body, styles, rawStyles, scripts, contentSecurityPolicy, includeRuntime, runtimeConfig, devMode, head, bodyAttributes, lang, preMinifiedStyles | complete HTML document with auto-generated CSP and nonce. shipped css is minified (comments + blank lines stripped) unless `preMinifiedStyles: true` embeds the caller-provided combined sheet verbatim (used by `WebUIDocument`'s hoisted sheet) |
+| `HTMLDocument` | title, body, styles, rawStyles, scripts, contentSecurityPolicy, contentSecurityPolicyExtras, includeRuntime, runtimeConfig, devMode, head, bodyAttributes, lang, preMinifiedStyles | complete HTML document with auto-generated CSP and nonce. shipped css is minified (comments + blank lines stripped) unless `preMinifiedStyles: true` embeds the caller-provided combined sheet verbatim (used by `WebUIDocument`'s hoisted sheet) |
 | `WebUIDocument` | same as HTMLDocument | HTML document with the full design system css — the record sheet (layout rules + embedded css) is minified once into `WebUIDocument.minifiedDesignStyles` and embedded verbatim on every render (`preMinifiedStyles: true`), removing the old per-render minify of ~300 kb css (~11 ms in release → <0.01 ms) |
+
+`contentSecurityPolicyExtras` is the seam for a host that needs one more directive than
+the policy it would otherwise get: its directives are **merged per name** into the
+effective policy (the nonce-aware default, or `contentSecurityPolicy` when that is set),
+so an extra replaces the default's directive of the same name and everything else —
+including the render nonce — is carried over. restating the whole policy instead names no
+nonce source, and `HTMLDocument` then suppresses the pre-paint theme prelude rather than
+emit an inline script the browser refuses.
 
 `runtimeConfig` (a `RuntimeConfig?`) changes only the runtime bootstrap: with a
 non-empty config the page emits `WebUIRuntime.init({...})`; with no config the
@@ -171,7 +179,8 @@ client-mode pages flip with one argument:
   `WebUIDocument(…, clientMode: ClientBoot?)` — `.none` (default) is
   byte-identical to legacy output; a boot emits the `webui-config` meta plus the
   engine script and suppresses the inline server runtime (an explicit
-  `contentSecurityPolicy` still wins). the wasm *client* mode this parameter
+  `contentSecurityPolicy` still wins; `contentSecurityPolicyExtras` extends whichever
+  policy applies without losing its nonce). the wasm *client* mode this parameter
   also described was deleted; wasm is per-page capability islands now.
 
 ### CSS

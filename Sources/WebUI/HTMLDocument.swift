@@ -45,7 +45,22 @@ public struct HTMLDocument: Sendable {
     /// navigation transfers zero theme bytes.
     public let themeStylesheetURL: String?
     public let runtimeConfig: RuntimeConfig?
+    /// The policy for this document.
+    ///
+    /// When set it is used verbatim — after `contentSecurityPolicyExtras`, if any, merges
+    /// into it. A policy that names no `'nonce-…'` source also disables the pre-paint theme
+    /// prelude (`render()` logs a warning when that happens). A host that only needs
+    /// additional directives should leave this nil and pass ``contentSecurityPolicyExtras``
+    /// instead, which extends the framework's nonce-aware default.
     public let contentSecurityPolicy: String?
+    /// Directives merged per name into the effective policy — ``contentSecurityPolicy``
+    /// when set, otherwise the framework's nonce-aware default.
+    ///
+    /// The seam for the common case: a host needs `img-src … https:`, a `font-src`, or a
+    /// `form-action` on top of the default. Restating the whole policy to get one of those
+    /// is what drops the render nonce — and with it the pre-paint theme prelude, which the
+    /// browser then refuses as an unauthorised inline script.
+    public let contentSecurityPolicyExtras: String?
     /// the tab icon: a data-uri (2×-supersampled 32 px png of the accent
     /// rounded tile with the window glyph) so every host gets a branded tab
     /// without a `/favicon.ico` route — no http request, no 404, and the
@@ -93,19 +108,23 @@ public struct HTMLDocument: Sendable {
 
     private func effectiveCSP(nonce: String, clientMode: ClientBoot?) -> String? {
         if let csp = contentSecurityPolicy {
-            return csp.isEmpty ? nil : csp
+            guard !csp.isEmpty else { return nil }
+            return ClientBoot.merging(policy: csp, extras: contentSecurityPolicyExtras)
         }
         guard clientMode != nil else {
             // a document with no client runtime needs no wasm-unsafe-eval and
             // no ws connect-src: scripts are external same-origin only
             // (default-src 'self'), inline styles stay permitted for the
             // page-scoped sheet.
-            return "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
+            return ClientBoot.merging(
+                policy: "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;",
+                extras: contentSecurityPolicyExtras
+            )
         }
         // the client runtime needs wasm-unsafe-eval (the chamber compiles the
         // module) and the render's nonce: the pre-paint prelude is an inline script,
         // and a policy that names no nonce source blocks it outright.
-        return ClientBoot.csp(nonce: nonce)
+        return ClientBoot.csp(nonce: nonce, extras: contentSecurityPolicyExtras)
     }
     public init(
         title: String = "WebUI",
@@ -124,6 +143,7 @@ public struct HTMLDocument: Sendable {
         themePrelude: Bool = true,
         runtimeConfig: RuntimeConfig? = nil,
         contentSecurityPolicy: String? = nil,
+        contentSecurityPolicyExtras: String? = nil,
         icon: String = Self.defaultIcon,
         preMinifiedStyles: Bool = false,
         stylesheetURL: String? = nil,
@@ -145,6 +165,7 @@ public struct HTMLDocument: Sendable {
         self.themePrelude = themePrelude
         self.runtimeConfig = runtimeConfig
         self.contentSecurityPolicy = contentSecurityPolicy
+        self.contentSecurityPolicyExtras = contentSecurityPolicyExtras
         self.icon = icon
         self.preMinifiedStyles = preMinifiedStyles
         self.themeStylesheetURL = themeStylesheetURL
@@ -233,7 +254,7 @@ public struct HTMLDocument: Sendable {
         } else {
             if themePrelude, boot != nil {
                 Self.documentLogger.warning(
-                    "theme prelude suppressed: the effective Content-Security-Policy names no nonce source, so inline scripts cannot run — a stored theme choice will flash on first paint. add `'nonce-…'` to script-src (see ClientBoot.csp(nonce:)), or pass themePrelude: false"
+                    "theme prelude suppressed: the effective Content-Security-Policy names no nonce source, so inline scripts cannot run — a stored theme choice will flash on first paint. add `'nonce-…'` to script-src (see ClientBoot.csp(nonce:)), extend the default policy with `contentSecurityPolicyExtras:` instead of restating it, or pass themePrelude: false"
                 )
             }
             preludeTag = ""

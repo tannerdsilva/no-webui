@@ -69,6 +69,14 @@ all notable changes to this project are documented here.
 - `WebUIEngine.on.afterPatch(fn)` / `on.ready(fn)` — the post-patch seam a consumer needs to
   re-run enhancement work (math, table tooling) against the mutated subtree instead of
   rescanning the whole DOM on every mutation.
+- `HTMLDocument.contentSecurityPolicyExtras` (and `WebUIDocument`'s forwarding parameter) lets a
+  host add directives — `img-src … https:`, a `font-src`, a `form-action` — without restating the
+  policy. extras **merge per directive name** into the effective policy (the nonce-aware default,
+  or an explicit `contentSecurityPolicy`), so a repeated name replaces the base's directive and
+  every name the host did not mention, including the render nonce, is carried over. the case that
+  motivated it: a host that restated the policy to add two directives lost the nonce, and
+  `HTMLDocument` then suppressed the pre-paint theme prelude rather than ship an inline script the
+  browser refuses — a stored scheme flashed on every load, with only a log line to say why.
 - `WebUIAssetTool --used-tokens <path> [--guard-css <path>]` prunes the sheet's `:root` token
   surface to the reachable set (T9): a catalog resolving 40 of the 174 tokens emits a 40-token
   sheet, `--guard-css` keeps anything a consumer's own stylesheet still resolves, the counts

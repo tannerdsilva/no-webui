@@ -15,6 +15,9 @@ public struct WebUIDocument: View {
     public let includeRuntime: Bool
     public let runtimeConfig: RuntimeConfig?
     public let contentSecurityPolicy: String?
+    /// Directives merged per name into the effective policy (the framework's nonce-aware
+    /// default, or ``contentSecurityPolicy`` when set) — see `HTMLDocument`.
+    public let contentSecurityPolicyExtras: String?
     public let theme: WebUITheme
     public let clientMode: ClientBoot?
     public let rawStyles: [String]
@@ -47,6 +50,7 @@ public struct WebUIDocument: View {
         includeRuntime: Bool = true,
         runtimeConfig: RuntimeConfig? = nil,
         contentSecurityPolicy: String? = nil,
+        contentSecurityPolicyExtras: String? = nil,
         theme: WebUITheme = .standard,
         rawStyles: [String] = [],
         stylesheetURL: String? = DesignSystemAssets.stylesheetURL,
@@ -65,6 +69,7 @@ public struct WebUIDocument: View {
         self.includeRuntime = includeRuntime
         self.runtimeConfig = runtimeConfig
         self.contentSecurityPolicy = contentSecurityPolicy
+        self.contentSecurityPolicyExtras = contentSecurityPolicyExtras
         self.theme = theme
         self.rawStyles = rawStyles
         self.stylesheetURL = stylesheetURL
@@ -113,6 +118,7 @@ public struct WebUIDocument: View {
             includeRuntime: includeRuntime,
             runtimeConfig: runtimeConfig,
             contentSecurityPolicy: contentSecurityPolicy,
+            contentSecurityPolicyExtras: contentSecurityPolicyExtras,
             preMinifiedStyles: true,
             stylesheetURL: stylesheetURL,
             themeStylesheetURL: themeStylesheetURL
