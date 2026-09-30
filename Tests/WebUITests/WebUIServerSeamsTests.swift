@@ -243,7 +243,83 @@ struct WebUIServerSeamsTests {
 		}
 	}
 
+	@Test("serves a host asset's pre-compressed variant, and `Vary` either way")
+	func hostAssetGzipVariant() async throws {
+		let plain = ".probe{color:teal}"
+		// `printf '.probe{color:teal}' | gzip -c` — 38 bytes, and gunzip round-trips it.
+		// embedded rather than compressed here because the server never compresses: the
+		// point of the seam is that a host ships bytes it built.
+		let gzipped: [UInt8] = [
+			0x1f, 0x8b, 0x08, 0x00, 0xb9, 0x64, 0xbd, 0x6a, 0x00, 0x03,
+			0xd3, 0x2b, 0x28, 0xca, 0x4f, 0x4a, 0xad, 0x4e, 0xce, 0xcf,
+			0xc9, 0x2f, 0xb2, 0x2a, 0x49, 0x4d, 0xcc, 0xa9, 0x05, 0x00,
+			0x19, 0xff, 0x10, 0x08, 0x12, 0x00, 0x00, 0x00,
+		]
+		try await withServer(
+			requestRender: { _ in "<p>page</p>" },
+			router: EventRouter(),
+			assets: [
+				WebUIServerAsset(
+					path: "/ui/probe.css",
+					body: .text(plain),
+					contentType: "text/css; charset=utf-8",
+					cacheSeconds: 60,
+					gzip: gzipped
+				)
+			]
+		) { port in
+			let url = "http://127.0.0.1:\(port)/ui/probe.css"
+
+			// a client that accepts gzip gets the host's compressed bytes.
+			let (gzipHeaders, gzipBody) = try await rawGET(url, acceptEncoding: "gzip, deflate")
+			#expect(gzipHeaders.contains("Content-Encoding: gzip"))
+			#expect(gzipHeaders.contains("Vary: Accept-Encoding"))
+			#expect(gzipBody == Data(gzipped))
+
+			// one that does not gets the plain bytes — and STILL sees `Vary`, or a shared
+			// cache would hand it the compressed variant.
+			let (plainHeaders, plainBody) = try await rawGET(url, acceptEncoding: "identity")
+			#expect(!plainHeaders.contains("Content-Encoding:"))
+			#expect(plainHeaders.contains("Vary: Accept-Encoding"))
+			#expect(String(decoding: plainBody, as: UTF8.self) == plain)
+
+			// an asset with no variant advertises none: no `Vary`, no `Content-Encoding`.
+			let (bareHeaders, _) = try await rawGET("http://127.0.0.1:\(port)/", acceptEncoding: "gzip")
+			#expect(!bareHeaders.contains("Vary: Accept-Encoding"))
+		}
+	}
+
 	// MARK: harness
+
+	/// a raw HTTP GET through `curl`, returning `(headers, body)`.
+	///
+	/// `URLSession` decompresses a `Content-Encoding: gzip` response transparently and hides
+	/// the header, so it cannot observe the wire bytes this test is about. curl is the
+	/// instrument that does not lie about what arrived.
+	private func rawGET(_ url: String, acceptEncoding: String) async throws -> (String, Data) {
+		guard FileManager.default.isExecutableFile(atPath: "/usr/bin/curl") else {
+			Issue.record("curl is not available — the wire bytes cannot be observed")
+			throw SeamTestError.notReady
+		}
+		let headerFile = FileManager.default.temporaryDirectory
+			.appendingPathComponent("seam-headers-\(UUID().uuidString)")
+		defer { try? FileManager.default.removeItem(at: headerFile) }
+
+		let process = Process()
+		process.executableURL = URL(fileURLWithPath: "/usr/bin/curl")
+		process.arguments = [
+			"-s", "-D", headerFile.path, "-o", "-",
+			"-H", "Accept-Encoding: \(acceptEncoding)", url,
+		]
+		let pipe = Pipe()
+		process.standardOutput = pipe
+		try process.run()
+		// drain before waiting, or a body larger than the pipe buffer deadlocks.
+		let body = pipe.fileHandleForReading.readDataToEndOfFile()
+		process.waitUntilExit()
+		let headers = (try? String(contentsOf: headerFile, encoding: .utf8)) ?? ""
+		return (headers, body)
+	}
 
 	/// start a server on a free port, run `body`, then stop it.
 	private func withServer(

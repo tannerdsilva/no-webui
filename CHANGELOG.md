@@ -82,6 +82,12 @@ all notable changes to this project are documented here.
   sheet, `--guard-css` keeps anything a consumer's own stylesheet still resolves, the counts
   land in the build manifest, and a name the sheet does not declare fails the build. omitted,
   the sheet ships whole — byte-identical to before.
+- `WebUIServerAsset.gzip` — a host may register a **pre-compressed** variant of any asset, and
+  the server negotiates it exactly like the framework's own sheet and engine: `Content-Encoding:
+  gzip` for a client whose `Accept-Encoding` allows it, `Vary: Accept-Encoding` whenever a
+  variant exists (including on the plain response — or a shared cache would hand the compressed
+  bytes to a client that never asked). the server still compresses nothing at runtime; a host
+  builds both forms in its own tooling and passes both.
 - the engine's mode fallback no longer discards a **server-rendered** default: with no stored
   choice it keeps the `data-theme` the server rendered, a stored choice still wins, and only a
   page rendering neither falls back to `system`. `data-scheme` already behaved this way — not

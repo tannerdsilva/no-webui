@@ -54,12 +54,20 @@ public struct WebUIServerAsset: Sendable {
 	public var contentType: String
 	/// `Cache-Control: max-age=<seconds>`. `nil` emits `no-store`.
 	public var cacheSeconds: Int?
+	/// a **pre-compressed** variant of ``body`` (gzip bytes), served when the client's
+	/// `Accept-Encoding` allows it; `nil` serves ``body`` to every client.
+	///
+	/// the compression happens at the host's build time, never in this server: the runtime
+	/// links no compressor, so a host that wants the smaller transfer ships both forms —
+	/// the same arrangement the framework's own sheet and engine use.
+	public var gzip: [UInt8]?
 
-	public init(path: String, body: Body, contentType: String, cacheSeconds: Int? = nil) {
+	public init(path: String, body: Body, contentType: String, cacheSeconds: Int? = nil, gzip: [UInt8]? = nil) {
 		self.path = path
 		self.body = body
 		self.contentType = contentType
 		self.cacheSeconds = cacheSeconds
+		self.gzip = gzip
 	}
 
 	/// a utf-8 text asset (css, js, html).
@@ -67,9 +75,12 @@ public struct WebUIServerAsset: Sendable {
 		_ path: String,
 		_ text: String,
 		contentType: String,
-		cacheSeconds: Int? = nil
+		cacheSeconds: Int? = nil,
+		gzip: [UInt8]? = nil
 	) -> WebUIServerAsset {
-		WebUIServerAsset(path: path, body: .text(text), contentType: contentType, cacheSeconds: cacheSeconds)
+		WebUIServerAsset(
+			path: path, body: .text(text), contentType: contentType, cacheSeconds: cacheSeconds, gzip: gzip
+		)
 	}
 
 	/// a binary asset (fonts, images).
@@ -77,9 +88,12 @@ public struct WebUIServerAsset: Sendable {
 		_ path: String,
 		_ bytes: [UInt8],
 		contentType: String,
-		cacheSeconds: Int? = nil
+		cacheSeconds: Int? = nil,
+		gzip: [UInt8]? = nil
 	) -> WebUIServerAsset {
-		WebUIServerAsset(path: path, body: .bytes(bytes), contentType: contentType, cacheSeconds: cacheSeconds)
+		WebUIServerAsset(
+			path: path, body: .bytes(bytes), contentType: contentType, cacheSeconds: cacheSeconds, gzip: gzip
+		)
 	}
 }
 
@@ -429,6 +443,8 @@ final class Runner: Sendable {
 
 	struct HostAsset: Sendable {
 		let body: ByteBuffer
+		/// the host's pre-compressed variant, when it shipped one.
+		let gzip: ByteBuffer?
 		let contentType: String
 		let cacheControl: String
 	}
@@ -457,6 +473,7 @@ final class Runner: Sendable {
 			let cacheControl = asset.cacheSeconds.map { "public, max-age=\($0)" } ?? "no-store"
 			encoded[asset.path] = HostAsset(
 				body: ByteBuffer(bytes: bytes),
+				gzip: asset.gzip.map { ByteBuffer(bytes: $0) },
 				contentType: asset.contentType,
 				cacheControl: cacheControl
 			)
@@ -620,10 +637,14 @@ final class Runner: Sendable {
 				} else if let asset = assets[path] {
 					// host asset: vendor css/js, fonts, app scripts. the
 					// framework routes above win, so a host asset can never
-					// shadow the stylesheet, the engine, or the shell.
+					// shadow the stylesheet, the engine, or the shell. a host
+					// that shipped a pre-compressed variant gets the same
+					// negotiation the framework's own assets use.
 					try await respond(
 						channel: channel.channel,
 						bytes: asset.body,
+						gzip: asset.gzip,
+						acceptEncoding: acceptEncoding,
 						contentType: asset.contentType,
 						cacheControl: asset.cacheControl
 					)

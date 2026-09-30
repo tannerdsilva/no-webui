@@ -496,6 +496,19 @@ framework routes are matched first, so a host asset can neither shadow nor
 disable the stylesheet, the engine, or the shell. `cacheSeconds: nil` (the
 default) emits `no-store`.
 
+`gzip:` takes a **pre-compressed** variant of the same body, negotiated exactly
+like the framework's own sheet and engine: a client whose `Accept-Encoding`
+allows gzip gets those bytes with `Content-Encoding: gzip`, and `Vary:
+Accept-Encoding` goes out whenever a variant exists — including on the plain
+response, or a shared cache would hand it to a client that never asked. the
+server compresses nothing at runtime, so a host builds both forms (`gzip -c`
+in its own asset tooling) and passes both:
+
+```swift
+.text("/ui/app.css", appCSS, contentType: "text/css; charset=utf-8",
+      cacheSeconds: 31536000, gzip: appCSSGzip)
+```
+
 ### hosting as a Service
 
 `WebUIServerService` wraps the server for `swift-service-lifecycle`, so a
