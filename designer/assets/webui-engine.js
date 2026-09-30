@@ -54,8 +54,6 @@ window.WebUIEngine = (function () {
       root.setAttribute('data-theme', mode);
       if (scheme) {
         root.setAttribute('data-scheme', scheme);
-      } else {
-        root.removeAttribute('data-scheme');
       }
     }
     function press() {

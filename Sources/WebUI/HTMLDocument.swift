@@ -9,6 +9,13 @@ public struct HTMLDocument: Sendable {
     public let scripts: String
     public let head: String
     public let bodyAttributes: String
+    /// Attributes for the `<html>` element, verbatim — the mirror of ``bodyAttributes``.
+    ///
+    /// Exists for the pre-attribute case: a theme is scoped to `:root`, so a *server-rendered*
+    /// default scheme has to land on `<html>` before the engine can override it from storage.
+    /// Without it the only choices were to inline a script or to put the attribute somewhere the
+    /// theme selectors do not look.
+    public let htmlAttributes: String
     /// the client-mode boot: when set, the document emits the `webui-wasm`
     /// contract + external chamber/boot scripts and substitutes the client csp
     /// (`'wasm-unsafe-eval'`) for the default nonce policy; the inline server
@@ -106,6 +113,7 @@ public struct HTMLDocument: Sendable {
         scripts: String = "",
         head: String = "",
         bodyAttributes: String = "",
+        htmlAttributes: String = "",
         clientMode: ClientBoot? = nil,
         devMode: Bool = false,
         lang: String = "en",
@@ -126,6 +134,7 @@ public struct HTMLDocument: Sendable {
         self.scripts = scripts
         self.head = head
         self.bodyAttributes = bodyAttributes
+        self.htmlAttributes = htmlAttributes
         self.clientMode = clientMode
         self.devMode = devMode
         self.lang = lang
@@ -233,7 +242,7 @@ public struct HTMLDocument: Sendable {
 
         return """
         <!DOCTYPE html>
-        <html lang="\(lang)"\(dirAttribute)>
+        <html lang="\(lang)"\(htmlAttributes.isEmpty ? "" : " " + htmlAttributes)\(dirAttribute)>
         <head>
           <meta charset="UTF-8">
           <meta name="viewport" content="width=device-width, initial-scale=1.0">\(cspTag)\(iconTag)
