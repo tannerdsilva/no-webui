@@ -4,6 +4,22 @@ all notable changes to this project are documented here.
 
 ## [unreleased]
 
+### assets (additive)
+
+- **the asset toolkit ships** — the machinery no-webui already runs for its own sheet,
+  engine and shell, as three host-facing products: `WebUIShippedAsset` (the protocol
+  generated code conforms to, in `WebUICore`), `WebUIBuild` (host-side gzip, emitter and
+  manifest), `WebUIEmbedPlugin` (embeds a target's `Assets/webui-assets.json` on every
+  build) and `WebUIAsset` (server-side url + registration + cache from one value). a
+  consumer stops hand-rolling hashing, compression, embedding, address/registration pairing
+  and cache headers. see `Documentation/ASSETS.md`.
+- `WebUIServerAsset` gains `immutable:`; `WebUIAssetTool` gains
+  `--embed-manifest <json> --output <swift>`; manifest entries may pin
+  `ceilingBytes`/`ceilingGzipBytes`, enforced at embed time (the build refuses before
+  anything ships), and `plugin budget` reports one row per consumer entry.
+- `ThemeSheet` gains an optional pre-compressed variant and its route negotiates
+  (`Content-Encoding` + `Vary`) — the url is unchanged (`/__assets/theme.<sha256>`).
+
 ### theming (breaking)
 
 - **`ColorScheme` is now `ThemeMode`**, `WebUITheme` carries a **light/dark pair** instead of

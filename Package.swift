@@ -502,6 +502,9 @@ let package = Package(
                 "WebUIShowcaseContent",
                 "WebUIServer",
                 "WebUIBlocks",
+                // the surface pins reference the toolkit's public types (STABILITY.md
+                // change discipline).
+                "WebUIBuild",
                 .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
                 .product(name: "Logging", package: "swift-log"),
             ],

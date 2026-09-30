@@ -647,3 +647,65 @@ tuned for small hosts (a 2 gb / 4-core box).
 not a deployment template: session caps per user and per-session state
 containers are deferred (see the plan); the Argon2 cap, sweep, and render-token
 binding described above are shipped.
+
+## WebUIBuild
+
+the host-side build library the asset toolkit is made of: deterministic gzip, the
+generated-source emitter, and the manifest. host-only by construction — it may import
+Foundation, and the client build never links it. `Documentation/ASSETS.md` is the full
+article (the two recipes, the manifest reference, the measured constraints that fix the
+shape); this is the surface map.
+
+```swift
+// a consumer's tool: one call between the render and the file
+let receipt = try WebUIAssetBuilder.emit(
+    shipped: sheet, typeName: "MySheet",
+    options: .init(minify: true, prose: .check, contentType: "text/css; charset=utf-8"),
+    to: output
+)
+// a target's manifest: every entry becomes a WebUIShippedAsset conformance
+let receipts = try WebUIAssetBuilder.embed(
+    manifest: try WebUIAssetManifest.load(from: manifestURL), to: generatedURL
+)
+```
+
+- `gzip(_ data: Data) -> Data?`, `gzip(_ text: String) -> Data?` — deterministic
+  `gzip -n -9 -c`; `nil` when the build host has no working `gzip`, in which case the caller
+  ships the raw bytes. the payload round-trips through a temporary file, never a two-pipe
+  dance (which deadlocks once output outgrows the pipe buffer).
+- `WebUIAssetBuilder.emit(shipped:typeName:options:to:) -> Emitted` — one payload in, one
+  `WebUIShippedAsset` conformance named `typeName` out. the payload rides base64: no escaping
+  can silently change bytes, and a byte literal is slow for the type checker at asset sizes.
+- `WebUIAssetBuilder.Options` — `minify: Bool` (the framework's own `minifyCSS`),
+  `prose: ProsePolicy` (`.off` | `.check`, the guard over the payload *as it will ship*),
+  `contentType: String` (required; also decides the prose grammar).
+- `Emitted` — the build's receipt: `typeName`, `bytes`, `gzipBytes: Int?`, `stamp`. for a
+  directory bag the stamp is a build record (the digest of the sorted name+bytes stream),
+  not a url address.
+- `WebUIAssetManifest.load(from:)` — validated loading of `Assets/webui-assets.json`
+  (`WebUIAssetManifest.Entry.Kind`: `file` | `text` | `directory`; optional `ceilingBytes` /
+  `ceilingGzipBytes` pins, enforced during `embed`). unknown keys, unknown kinds, missing
+  required fields, non-utf-8 text payloads and missing paths fail naming the entry.
+- `ProsePolicy`, `ProseFinding` (the public re-exposure of the package-level guard's
+  findings: `line` + `text`), and `WebUIBuildError` (`invalidTypeName`, `proseWouldShip`,
+  `malformedManifest`, `missingAsset`, `overCeiling` — every case's `description` names the
+  entry a build should fix).
+
+### the toolkit's other halves
+
+- `WebUIShippedAsset` (`WebUICore`) — the protocol generated code conforms to:
+  `contentType`, `stamp` (the first 12 hex of the sha256 of `body`), `body: [UInt8]`,
+  `gzip: [UInt8]?`. foundation-free, because generated code must conform without linking a
+  server, the view dsl or a runtime.
+- `WebUIAsset` (`WebUIServer`) — one value owning bytes, content type, variant and cache
+  policy: `url` is the bare path plus `?v=<12 hex>`, `registration` is the bare path with a
+  year-long `immutable` cache and the variant attached. `WebUIAsset(_ shipped:path:)` takes a
+  generated conformance. registering the *stamped* path answers 404 — pinned as a test.
+- `WebUIServerAsset.immutable` (defaulted `false`) — appends `, immutable` to the host
+  asset's cache policy.
+- `ThemeSheet.gzip: [UInt8]?` (`WebUIDesignSystem`) — the catalog sheet's optional
+  pre-compressed variant; its route now negotiates (`Content-Encoding` + `Vary`) like every
+  other asset route, while the url stays `/__assets/theme.<sha256>`.
+- `WebUIEmbedPlugin` — the build-tool plugin: `<target>/Assets/webui-assets.json` in, one
+  generated file out, every referenced file declared as an input. attach it and
+  `exclude: ["Assets"]` the target so swiftpm stops warning about files it does not compile.

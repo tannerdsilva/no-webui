@@ -1,8 +1,11 @@
 import Testing
 import Foundation
 import WebUI
+import WebUICore
 import WebUIDesignSystem
 import WebUIAuth
+import WebUIBuild
+import WebUIServer
 
 // MARK: - Public API surface pins
 //
@@ -17,6 +20,56 @@ import WebUIAuth
 
 private func rendered(_ view: some View) -> String {
 	view.render()
+}
+
+// MARK: - the asset toolkit
+
+// the public surface `Documentation/ASSETS.md` documents, referenced here at compile time
+// and asserted where it can drift: the protocol's stamp convention, the pairing value's url
+// and registration, and the emitter's receipt.
+
+@Test("the asset toolkit's public surface pins its contract")
+func assetToolkitSurfacePins() throws {
+	// WebUIShippedAsset (WebUICore): the shape generated code conforms to.
+	struct Pinned: WebUIShippedAsset {
+		static let contentType = "text/css; charset=utf-8"
+		static let stamp = "dc8a9766bbab"
+		static let body: [UInt8] = Array(":root { --probe: 1 }\n".utf8)
+		static let gzip: [UInt8]? = nil
+	}
+
+	// WebUIAsset (WebUIServer): url and registration from one value.
+	let shipped = WebUIAsset(Pinned.self, path: "/ui/pinned.css")
+	#expect(shipped.url == "/ui/pinned.css?v=dc8a9766bbab")
+	#expect(shipped.registration.path == "/ui/pinned.css")
+	#expect(shipped.registration.immutable)
+	#expect(shipped.registration.cacheSeconds == 31536000)
+	let fromText = WebUIAsset(path: "/ui/pinned.css", text: ":root { --probe: 1 }\n", contentType: "text/css; charset=utf-8")
+	#expect(fromText.url == shipped.url, "the same bytes and path are the same address")
+
+	// WebUIBuild: the build-side surface a consumer's tool calls.
+	let dir = FileManager.default.temporaryDirectory
+		.appendingPathComponent("webui-surface-\(UUID().uuidString)")
+	try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+	defer { try? FileManager.default.removeItem(at: dir) }
+	let receipt = try WebUIAssetBuilder.emit(
+		shipped: ":root { --probe: 1 }\n",
+		typeName: "PinnedAsset",
+		options: .init(minify: false, prose: .off, contentType: "text/css; charset=utf-8"),
+		to: dir.appendingPathComponent("PinnedAsset.swift")
+	)
+	#expect(receipt.typeName == "PinnedAsset")
+	#expect(receipt.bytes == 21)
+	#expect(receipt.stamp == Pinned.stamp, "the emitter's address agrees with the protocol's convention")
+	#expect(receipt.stamp == String(SHA256.hex(Pinned.body).prefix(12)))
+	#expect((receipt.gzipBytes ?? 0) > 0)
+
+	_ = gzip(Data("probe".utf8)) as Data?
+	_ = gzip("probe") as Data?
+	#expect(ProsePolicy.off != ProsePolicy.check)
+	#expect(WebUIBuildError.invalidTypeName("Not A Name").description.contains("Not A Name"))
+	_ = Emitted.self
+	_ = WebUIAssetManifest.self
 }
 
 // MARK: - Core primitives
