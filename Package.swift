@@ -51,6 +51,12 @@ let package = Package(
             name: "WebUIIslandPlugin",
             targets: ["WebUIIslandPlugin"]
         ),
+        // a consumer attaches this plugin and ships an `Assets/webui-assets.json`; the
+        // plugin runs the framework's tool over it on every build.
+        .plugin(
+            name: "WebUIEmbedPlugin",
+            targets: ["WebUIEmbedPlugin"]
+        ),
         .library(
             name: "WebUIIslandCore",
             targets: ["WebUIIslandCore"]
@@ -319,6 +325,13 @@ let package = Package(
                 .product(name: "NIOHTTP1", package: "swift-nio"),
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOWebSocket", package: "swift-nio"),
+            ],
+            // `Assets/` is consumed by `WebUIEmbedPlugin`, not compiled: excluding it keeps
+            // swiftpm from warning about files it does not know how to handle (the plugin
+            // reads them through its own context, which exclusion does not affect).
+            exclude: ["Assets"],
+            plugins: [
+                "WebUIEmbedPlugin",
             ]
         ),
 
@@ -367,6 +380,15 @@ let package = Package(
             capability: .buildTool(),
             dependencies: [
                 .target(name: "WebUIIconTool"),
+            ]
+        ),
+        // the file half of the asset toolkit: a target shipping `Assets/webui-assets.json`
+        // attaches this; the plugin runs the framework's own tool over the manifest.
+        .plugin(
+            name: "WebUIEmbedPlugin",
+            capability: .buildTool(),
+            dependencies: [
+                .target(name: "WebUIAssetTool"),
             ]
         ),
         .plugin(

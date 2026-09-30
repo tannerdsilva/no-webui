@@ -750,6 +750,12 @@ extension SmokeApp {
 							+ "<p><a href=\"/blocks\">all blocks</a></p></body></html>"
 					}
 					contentType = "text/html; charset=utf-8"
+				case "/ui/probe.css":
+					// the embed plugin's dogfood: this payload is not a string in this
+					// file — it is `ProbeAsset`, a type a build produced from
+					// `Assets/webui-assets.json` (minified, prose-gated).
+					text = ProbeAsset.text; contentType = ProbeAsset.contentType
+					cacheControl = "public, max-age=31536000, immutable"
 				case "/ui/webui-engine.js":
 					text = WebUIAssets.engine; contentType = "text/javascript; charset=utf-8"
 					cacheControl = "public, max-age=3600"
