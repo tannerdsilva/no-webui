@@ -9,80 +9,118 @@ struct BudgetError: Error, CustomStringConvertible {
     init(_ description: String) { self.description = description }
 }
 
-/// one pinned ceiling: what the artifact is, its raw bytes, its gzip bytes.
+/// one pinned ceiling for a shipped surface.
 private struct Ceiling {
+    /// the key `WebUIAssetTool` writes into `AssetsManifest.json`.
+    let surface: String
+    /// the working file, measured only when no manifest is available.
     let label: String
+    /// bytes as served (the minified sheet), or as written for the fallback.
     let raw: Int
+    /// gzip bytes as served. this is the number that reaches a client.
     let gz: Int?
 }
 
 @main
 struct WebUIBudgetPlugin: CommandPlugin {
 
-    /// ceilings are deliberately loose enough to absorb a copy edit and tight
-    /// enough that a structural regression trips them. every number carries the
-    /// measurement it came from so the next person can tell drift from noise.
+    /// ceilings carry roughly 5-15% headroom over the measured value: loose enough to
+    /// absorb a copy edit, tight enough that a structural regression trips them. every
+    /// number names the measurement it came from so the next person can tell drift from
+    /// noise rather than guessing.
     ///
-    /// measured 2026-09-29 (pre-compression):
-    ///   engine 42,440 raw · sheet 346,163 raw (working file; served minified is
-    ///   ~308,930) · shell 1,514 raw · island 164 kb stripped.
-    /// the sheet is measured as the WORKING file, which is larger than what ships,
-    /// so this budget is conservative on purpose.
+    /// measured 2026-09-29 (post-compression), verified against a live WebUIExample and
+    /// reported by the asset tool's manifest:
+    ///   engine  42,440 raw / 10,547 gz
+    ///   sheet  321,262 SERVED (minified) / 44,991 gz   [working file is 346,163]
+    ///   shell    1,514 raw /    554 gz
+    ///   island 164,447 stripped (WebUIValidateIsland)  [doc: "164 kb" — matches]
+    ///
+    /// the sheet's `raw` is the MINIFIED size, not the working file: the two differ by
+    /// ~8% and a budget on the wrong number is a false sense of safety. this plugin
+    /// learned that the hard way — its first pin was taken from the working file's gzip
+    /// and failed immediately.
+    ///
+    /// `NEXT_ARCHITECTURE.md` §5 quotes the sheet at "~40 kb gz" and 308,930 served bytes;
+    /// measured are 44,991 gz and 321,262. those doc figures are stale.
+    ///
+    /// the theming work (T8/T9) will add tokens and therefore grow the sheet, which should
+    /// trip this gate and force a deliberate re-pin rather than a silent drift.
     private static let ceilings: [Ceiling] = [
-        Ceiling(label: "webui-engine.js", raw: 48_000, gz: 18_000),
-        Ceiling(label: "design-system.css", raw: 380_000, gz: 55_000),
-        Ceiling(label: "webui-shell.js", raw: 4_000, gz: 2_000),
+        Ceiling(surface: "engine", label: "webui-engine.js", raw: 44_000, gz: 11_600),
+        Ceiling(surface: "sheet", label: "design-system.css", raw: 335_000, gz: 49_500),
+        Ceiling(surface: "shell", label: "webui-shell.js", raw: 1_700, gz: 650),
     ]
 
     /// a capability island is a per-capability artifact; the ceiling is per file,
     /// and absence is reported rather than failed (islands are opt-in, d3/d6).
     private static let islandCeiling = 200_000
 
-    /// artifacts the architecture has retired. if one is still on disk it is a
-    /// stale build product, not a shipped surface — reported so nobody ships it
-    /// by accident, but not a breach (it cannot ship: `.build/out` is gitignored).
-    /// `NEXT_ARCHITECTURE.md` §3 records the monolith as dropped from the default
-    /// path; this list is where that decision becomes operational.
+    /// artifacts the architecture has retired. if one is still on disk it is a stale
+    /// build product, not a shipped surface — reported so nobody ships it by accident,
+    /// but not a breach (it cannot ship: `.build/out` is gitignored).
+    /// `NEXT_ARCHITECTURE.md` §3 records the monolith as dropped from the default path;
+    /// this list is where that decision becomes operational.
     private static let retiredArtifacts: Set<String> = ["WebUIClient.wasm"]
 
     func performCommand(context: PluginContext, arguments: [String]) async throws {
-        let assets = context.package.directoryURL
+        let packageDir = context.package.directoryURL
+        let assets = packageDir
             .appendingPathComponent("designer")
             .appendingPathComponent("assets")
 
+        let manifest = Self.servedManifest(in: packageDir)
         var breaches: [String] = []
-        var rows: [(String, Int, String, String, String)] = []
+        var rows: [(String, String, Int, String, String, String)] = []
 
         for ceiling in Self.ceilings {
-            let url = assets.appendingPathComponent(ceiling.label)
-            guard let data = FileManager.default.contents(atPath: url.path) else {
-                breaches.append("\(ceiling.label): missing at \(url.path)")
-                continue
+            var raw: Int
+            var gz: Int?
+            var source: String
+
+            if let served = manifest?[ceiling.surface],
+               let servedRaw = served["raw"], let servedGz = served["gz"] {
+                raw = servedRaw
+                gz = servedGz > 0 ? servedGz : nil
+                source = "served"
+            } else {
+                // no manifest yet (nothing built, or the tool predates it): measure the
+                // working file. it is LARGER than what ships, so this is conservative —
+                // and the row says so, because a proxy silently mistaken for the real
+                // number is how the first pin went wrong.
+                let url = assets.appendingPathComponent(ceiling.label)
+                guard let data = FileManager.default.contents(atPath: url.path) else {
+                    breaches.append("\(ceiling.label): missing at \(url.path)")
+                    continue
+                }
+                raw = data.count
+                gz = gzipSize(of: url)
+                source = "working*"
             }
-            let raw = data.count
-            let gz = gzipSize(of: url)
-            let rawVerdict = raw <= ceiling.raw ? "ok" : "OVER"
-            if rawVerdict == "OVER" {
-                breaches.append("\(ceiling.label): \(raw) raw bytes > \(ceiling.raw) pinned")
+
+            if raw > ceiling.raw {
+                breaches.append("\(ceiling.surface): \(raw) raw bytes > \(ceiling.raw) pinned")
             }
             var gzVerdict = "—"
             if let gz, let limit = ceiling.gz {
                 gzVerdict = gz <= limit ? "ok" : "OVER"
                 if gzVerdict == "OVER" {
-                    breaches.append("\(ceiling.label): \(gz) gzip bytes > \(limit) pinned")
+                    breaches.append("\(ceiling.surface): \(gz) gzip bytes > \(limit) pinned")
                 }
             }
+            let rawVerdict = raw <= ceiling.raw ? "ok" : "OVER"
             rows.append((
-                ceiling.label,
+                ceiling.surface,
+                "\(rawVerdict)/\(gzVerdict)",
                 raw,
                 gz.map(String.init) ?? "n/a",
-                "\(rawVerdict)/\(gzVerdict)",
+                source,
                 "raw≤\(ceiling.raw) gz≤\(ceiling.gz.map(String.init) ?? "-")"
             ))
         }
 
         // islands: report every artifact, enforce the per-file ceiling on each.
-        let islandDir = context.package.directoryURL
+        let islandDir = packageDir
             .appendingPathComponent(".build")
             .appendingPathComponent("out")
             .appendingPathComponent("Products")
@@ -118,21 +156,26 @@ struct WebUIBudgetPlugin: CommandPlugin {
         }
 
         print("── webui shipped-surface budget ─────────────────────────────────")
-        print("  " + pad("artifact", 20) + padLeft("raw", 10) + padLeft("gzip", 10)
-              + "  " + pad("verdict", 12) + "pinned")
-        for (label, raw, gz, verdict, pinned) in rows {
-            print("  " + pad(label, 20) + padLeft(String(raw), 10) + padLeft(gz, 10)
-                  + "  " + pad(verdict, 12) + pinned)
+        print("  " + pad("surface", 10) + padLeft("raw", 10) + padLeft("gzip", 10)
+              + "  " + pad("verdict", 12) + pad("source", 18) + "pinned")
+        for (surface, verdict, raw, gz, source, pinned) in rows {
+            print("  " + pad(surface, 10) + padLeft(String(raw), 10) + padLeft(gz, 10)
+                  + "  " + pad(verdict, 12) + pad(source, 18) + pinned)
         }
         if islandRows.isEmpty {
             print("  islands: none built (opt-in — run `plugin wasm-island` to produce one)")
         } else {
             for (name, size, verdict) in islandRows {
-                print("  " + pad(name, 20) + padLeft(String(size), 10) + padLeft("—", 10)
-                      + "  " + pad(verdict, 12) + "per-file ≤ \(Self.islandCeiling)")
+                print("  " + pad(name, 10) + padLeft(String(size), 10) + padLeft("—", 10)
+                      + "  " + pad(verdict, 12) + pad("", 18) + "per-file ≤ \(Self.islandCeiling)")
             }
         }
         print("─────────────────────────────────────────────────────────────────")
+        if manifest == nil {
+            print("source `working*` = measured from the working file because no")
+            print("  AssetsManifest.json was found; those numbers are LARGER than what ships.")
+            print("  run `swift build` to produce it and re-run this gate.")
+        }
         if islandRows.contains(where: { $0.2 == "stale" }) {
             let names = islandRows.filter { $0.2 == "stale" }.map(\.0).joined(separator: ", ")
             print("stale: \(names) — retired by NEXT_ARCHITECTURE.md §3. not shipped (.build/out is")
@@ -142,16 +185,48 @@ struct WebUIBudgetPlugin: CommandPlugin {
         guard breaches.isEmpty else {
             throw BudgetError("budget breached:\n" + breaches.map { "  • \($0)" }.joined(separator: "\n"))
         }
-        print("budget: PASS — every shipped surface is within its pinned ceiling, so the\nnext item (compression) fails loudly if it does not actually help.")
+        print("budget: PASS — every shipped surface is within its pinned ceiling.")
     }
 
-    /// gzip byte count for a file, or nil when `gzip` is unavailable. the plugin
-    /// sandbox permits spawning; if it does not, the compressed column degrades to
-    /// `n/a` and only the raw ceilings are enforced rather than the gate lying.
+    // MARK: - the served manifest
+
+    /// `WebUIAssetTool` writes the served byte counts next to the generated assets, which
+    /// live in a plugin-work path whose hash SwiftPM owns. found by walking the known
+    /// shape rather than guessing the hash.
+    private static func servedManifest(in packageDir: URL) -> [String: [String: Int]]? {
+        let outputs = packageDir
+            .appendingPathComponent(".build")
+            .appendingPathComponent("plugins")
+            .appendingPathComponent("outputs")
+        guard let packages = try? FileManager.default.contentsOfDirectory(
+            at: outputs, includingPropertiesForKeys: nil
+        ) else { return nil }
+        for package in packages {
+            guard let targets = try? FileManager.default.contentsOfDirectory(
+                at: package, includingPropertiesForKeys: nil
+            ) else { continue }
+            for target in targets {
+                let manifest = target
+                    .appendingPathComponent("destination")
+                    .appendingPathComponent("WebUIAssetPlugin")
+                    .appendingPathComponent("AssetsManifest.json")
+                guard let data = FileManager.default.contents(atPath: manifest.path),
+                      let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+                      let served = root["served"] as? [String: [String: Int]]
+                else { continue }
+                return served
+            }
+        }
+        return nil
+    }
+
+    /// gzip byte count for a file, or nil when `gzip` is unavailable. the plugin sandbox
+    /// permits spawning; if it does not, the compressed column degrades to `n/a` and only
+    /// the raw ceilings are enforced rather than the gate lying.
     private func gzipSize(of url: URL) -> Int? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["gzip", "-9", "-c", url.path]
+        process.arguments = ["gzip", "-n", "-9", "-c", url.path]
         let pipe = Pipe()
         process.standardOutput = pipe
         process.standardError = Pipe()

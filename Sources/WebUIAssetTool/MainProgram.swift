@@ -13,6 +13,7 @@ enum WebUIAssetTool {
         var shellInput: String?
         var outputPath: String?
         var tokensOutputPath: String?
+        var manifestOutputPath: String?
 
         var iterator = args.makeIterator()
         while let flag = iterator.next() {
@@ -29,6 +30,8 @@ enum WebUIAssetTool {
                 outputPath = iterator.next()
             case "--tokens-output":
                 tokensOutputPath = iterator.next()
+            case "--manifest-output":
+                manifestOutputPath = iterator.next()
             default:
                 break
             }
@@ -77,13 +80,17 @@ enum WebUIAssetTool {
             let cssMinified = minifyCSS(
                 CSSStylesheet(LayoutStyles.complete).render() + "\n\n" + cssContent
             )
+            let cssGz = cssGzipData(of: cssMinified)
+            let jsGz = jsInput.flatMap { gzipData(of: $0) }
+            let engineGz = engineInput.flatMap { gzipData(of: $0) }
+            let shellGz = shellInput.flatMap { gzipData(of: $0) }
             let generated = try generateAssetsSource(
                 css: cssContent, js: jsContent, engine: engineContent, shell: shellContent,
                 cssMinified: cssMinified,
-                cssGzip: cssGzipBase64(of: cssMinified),
-                jsGzip: jsInput.map(gzipBase64(of:)) ?? "",
-                engineGzip: engineInput.map(gzipBase64(of:)) ?? "",
-                shellGzip: shellInput.map(gzipBase64(of:)) ?? ""
+                cssGzip: cssGz?.base64EncodedString() ?? "",
+                jsGzip: jsGz?.base64EncodedString() ?? "",
+                engineGzip: engineGz?.base64EncodedString() ?? "",
+                shellGzip: shellGz?.base64EncodedString() ?? ""
             )
 
             try generated.write(toFile: outputPath, atomically: true, encoding: .utf8)
@@ -93,6 +100,23 @@ enum WebUIAssetTool {
             let engineBytes = engineContent.utf8.count
             let shellBytes = shellContent.utf8.count
             print("generated \(outputPath) (\(cssBytes) bytes CSS, \(jsBytes) bytes JS, \(engineBytes) bytes engine, \(shellBytes) bytes shell)")
+
+            // the SERVED numbers, for the budget gate. `plugin budget` otherwise has to
+            // measure the working files, and the sheet differs from what ships by ~15%
+            // (it is minified) — a budget on the wrong number is a false sense of safety.
+            if let manifestOutputPath {
+                let served: [String: Any] = [
+                    "sheet": ["raw": cssMinified.utf8.count, "gz": cssGz?.count ?? 0,
+                              "workingRaw": cssBytes],
+                    "engine": ["raw": engineBytes, "gz": engineGz?.count ?? 0],
+                    "shell": ["raw": shellBytes, "gz": shellGz?.count ?? 0],
+                    "webui-runtime.js": ["raw": jsBytes, "gz": jsGz?.count ?? 0],
+                ]
+                let payload: [String: Any] = ["served": served]
+                if let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]) {
+                    try? data.write(to: URL(fileURLWithPath: manifestOutputPath))
+                }
+            }
         }
     }
 
@@ -102,7 +126,7 @@ enum WebUIAssetTool {
     /// dependencies and has no runtime compressor: Foundation's `compression`
     /// API is Darwin-only and linking zlib would be a dependency. the runtime
     /// therefore never compresses anything — it serves bytes prepared here.
-    static func gzipBase64(of path: String) -> String {
+    static func gzipData(of path: String) -> Data? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
         process.arguments = ["gzip", "-n", "-9", "-c", path]
@@ -112,21 +136,21 @@ enum WebUIAssetTool {
         do {
             try process.run()
         } catch {
-            return ""
+            return nil
         }
         let data = pipe.fileHandleForReading.readDataToEndOfFile()
         process.waitUntilExit()
-        guard process.terminationStatus == 0, !data.isEmpty else { return "" }
-        return data.base64EncodedString()
+        guard process.terminationStatus == 0, !data.isEmpty else { return nil }
+        return data
     }
 
     /// gzip an in-memory string (the minified sheet has no file on disk).
-    static func cssGzipBase64(of text: String) -> String {
+    static func cssGzipData(of text: String) -> Data? {
         let tmp = FileManager.default.temporaryDirectory
             .appendingPathComponent("webui-css-min-\(ProcessInfo.processInfo.processIdentifier).css")
-        guard (try? text.write(to: tmp, atomically: true, encoding: .utf8)) != nil else { return "" }
+        guard (try? text.write(to: tmp, atomically: true, encoding: .utf8)) != nil else { return nil }
         defer { try? FileManager.default.removeItem(at: tmp) }
-        return gzipBase64(of: tmp.path)
+        return gzipData(of: tmp.path)
     }
 
     static func generateAssetsSource(

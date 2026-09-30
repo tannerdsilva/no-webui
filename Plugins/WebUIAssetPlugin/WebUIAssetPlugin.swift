@@ -81,7 +81,9 @@ struct WebUIAssetPlugin: BuildToolPlugin {
             args += ["--shell-input", shellFile.path]
             inputs.append(shellFile)
         }
-        args += ["--output", outputURL.path]
+        let manifestURL = context.pluginWorkDirectoryURL
+            .appendingPathComponent("AssetsManifest.json")
+        args += ["--output", outputURL.path, "--manifest-output", manifestURL.path]
 
         return [
             .buildCommand(
@@ -89,7 +91,7 @@ struct WebUIAssetPlugin: BuildToolPlugin {
                 executable: assetTool.url,
                 arguments: args,
                 inputFiles: inputs,
-                outputFiles: [outputURL]
+                outputFiles: [outputURL, manifestURL]
             )
         ]
     }
