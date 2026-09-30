@@ -13,7 +13,7 @@ import WebUICore
 /// and the collision forced consumer code to avoid ever *naming* this type, relying on
 /// inference (`WebUITheme(scheme: .dark)`). `ThemeMode` frees the name `ColorScheme` for
 /// the thing every app actually calls that.
-public enum ThemeMode: String, Sendable, Equatable, CaseIterable {
+public enum ThemeMode: String, Sendable, Equatable, CaseIterable, Codable {
 	case automatic
 	case light
 	case dark
@@ -36,7 +36,7 @@ public enum ThemeMode: String, Sendable, Equatable, CaseIterable {
 ///
 /// Both live here rather than on the theme because they are *per mode* — an app's
 /// `--chat-bubble-bg` differs between light and dark exactly as `colorBg` does.
-public struct ThemePalette: Sendable, Equatable {
+public struct ThemePalette: Sendable, Equatable, Codable {
 	/// overrides for the framework's `:root` tokens (the `DesignToken` vocabulary
 	/// generated from `design-system.css`). a value restyles every component that
 	/// references that token.
@@ -114,7 +114,7 @@ public enum ThemeScope: Sendable, Equatable {
 /// There is one theme type, not two. Identity (`themeID`/`themeLabel`/swatch) belongs to
 /// the *provider* — see ``WebUIThemeProvider`` and ``ThemeCatalog`` — so a named theme is
 /// still a `WebUITheme`, and an unnamed one is too.
-public struct WebUITheme: Sendable, Equatable {
+public struct WebUITheme: Sendable, Equatable, Codable {
 	/// What the theme looks like: the palette on `:root`.
 	///
 	/// Named for its role rather than its mode on purpose. A one-palette theme is the
@@ -309,7 +309,7 @@ public protocol ThemeCatalog {
 /// *stored* `static let` of `[any WebUIThemeProvider.Type]` is not `Sendable`, which Swift 6
 /// rejects as global mutable state. Converting once, here, keeps conformers writing the
 /// ergonomic `[Foo.self, Bar.self]` list while everything else handles `Sendable` data.
-public struct ThemeEntry: Sendable, Equatable {
+public struct ThemeEntry: Sendable, Equatable, Codable {
 	/// the stable id a client persists and `theme(for:)` resolves.
 	public let id: String
 	/// what a picker shows.
