@@ -655,7 +655,7 @@ func documentSurfacePins() {
 	#expect(doc.contains("<meta name=\"webui-config\""))
 	#expect(doc.contains("renderToken"))
 
-	let themed = WebUIDocument(body: Text("x").render(), theme: WebUITheme(scheme: .dark)).render()
+	let themed = WebUIDocument(body: Text("x").render(), theme: WebUITheme(defaultMode: .dark)).render()
 	#expect(themed.contains("color-scheme: dark"))
 }
 

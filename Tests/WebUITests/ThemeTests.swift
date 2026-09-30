@@ -51,12 +51,12 @@ struct WebUIThemeTests {
 	}
 
 	@Test("scheme emits color-scheme in the :root block")
-	func schemeEmitsColorScheme() {
-		let dark = WebUITheme(scheme: .dark)
+	func defaultModeEmitsColorScheme() {
+		let dark = WebUITheme(defaultMode: .dark)
 		#expect(dark.stylesheet().contains("color-scheme: dark;"))
-		let light = WebUITheme(scheme: .light)
+		let light = WebUITheme(defaultMode: .light)
 		#expect(light.stylesheet().contains("color-scheme: light;"))
-		#expect(WebUITheme(scheme: .automatic).stylesheet() == "")
+		#expect(WebUITheme(defaultMode: .automatic).stylesheet() == "")
 	}
 
 	@Test("rules are appended after the :root block")
@@ -81,7 +81,7 @@ struct WebUIThemeTests {
 	func overlayingMerges() {
 		let base = WebUITheme(
 			tokens: [.colorPrimarySolid: "#6366f1", .colorBg: "#ffffff"],
-			scheme: .light,
+			defaultMode: .light,
 			rules: [CSSRule(".a", [CSSDeclaration("color", "red")])]
 		)
 		let overlay = WebUITheme(
@@ -90,25 +90,25 @@ struct WebUIThemeTests {
 			rules: [CSSRule(".b", [CSSDeclaration("color", "blue")])]
 		)
 		let merged = base.overlaying(overlay)
-		#expect(merged.tokens[.colorPrimarySolid] == "#6c8cff")
-		#expect(merged.tokens[.colorBg] == "#ffffff")
-		#expect(merged.customTokens["--accent"] == "#123456")
-		#expect(merged.scheme == .light)
+		#expect(merged.palette.tokens[.colorPrimarySolid] == "#6c8cff")
+		#expect(merged.palette.tokens[.colorBg] == "#ffffff")
+		#expect(merged.palette.customTokens["--accent"] == "#123456")
+		#expect(merged.defaultMode == .light)
 		#expect(merged.rules.count == 2)
 	}
 
 	@Test("overlaying with an automatic scheme keeps the base scheme")
 	func overlayingKeepsBaseSchemeWhenAutomatic() {
-		let base = WebUITheme(scheme: .dark)
+		let base = WebUITheme(defaultMode: .dark)
 		let merged = base.overlaying(WebUITheme())
-		#expect(merged.scheme == .dark)
+		#expect(merged.defaultMode == .dark)
 	}
 
 	@Test("overlaying with an explicit scheme replaces the base scheme")
 	func overlayingReplacesScheme() {
-		let base = WebUITheme(scheme: .dark)
-		let merged = base.overlaying(WebUITheme(scheme: .light))
-		#expect(merged.scheme == .light)
+		let base = WebUITheme(defaultMode: .dark)
+		let merged = base.overlaying(WebUITheme(defaultMode: .light))
+		#expect(merged.defaultMode == .light)
 	}
 }
 
@@ -144,7 +144,7 @@ struct WebUIDocumentThemeTests {
 		let theme = WebUITheme(
 			tokens: [.colorPrimarySolid: "#6c8cff"],
 			customTokens: ["--chat-user-bubble": "#2a2a2e"],
-			scheme: .dark,
+			defaultMode: .dark,
 			rules: [CSSRule(".user-bubble", [CSSDeclaration("border-radius", "var(--radius-lg)")])]
 		)
 		let html = WebUIDocument(title: "t", body: "<p>hi</p>", theme: theme).render()
@@ -167,7 +167,7 @@ struct WebUIDocumentThemeTests {
 
 	@Test("themed document keeps the design sheet and runtime intact")
 	func themedDocumentKeepsSheet() {
-		let html = WebUIDocument(body: "<p>x</p>", theme: WebUITheme(scheme: .dark)).render()
+		let html = WebUIDocument(body: "<p>x</p>", theme: WebUITheme(defaultMode: .dark)).render()
 		#expect(html.contains("<meta name=\"webui-config\""))
 		#expect(html.contains("href=\"\(DesignSystemAssets.stylesheetURL)\""))
 		#expect(DesignSystemAssets.minifiedCss.contains("--color-neutral-50:"))
@@ -195,6 +195,6 @@ struct WebUIThemeProviderTests {
 
 	@Test("hand-written providers keep their theme")
 	func handWrittenThemeWins() {
-		#expect(HandWritten.theme.tokens[.colorPrimarySolid] == "#123456")
+		#expect(HandWritten.theme.palette.tokens[.colorPrimarySolid] == "#123456")
 	}
 }

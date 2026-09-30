@@ -16,7 +16,7 @@ extension CSSRule {
 
 @Theme
 struct NexusDark {
-	static let scheme = ColorScheme.dark
+	static let defaultMode = ThemeMode.dark
 	static let rules: [CSSRule] = [.chatBubble, .streamDots]
 	static let customTokens = ["--chat-user-bubble": "#2a2a2e"]
 	static let colorPrimarySolid = "#6c8cff"
@@ -40,10 +40,10 @@ struct ThemeCompiledRuntimeTests {
 	@Test("generated witness exposes every axis")
 	func witnessExposesAxes() {
 		let theme = NexusDark.theme
-		#expect(theme.tokens[.colorPrimarySolid] == "#6c8cff")
-		#expect(theme.tokens[.colorBg] == "#101014")
-		#expect(theme.customTokens["--chat-user-bubble"] == "#2a2a2e")
-		#expect(theme.scheme == .dark)
+		#expect(theme.palette.tokens[.colorPrimarySolid] == "#6c8cff")
+		#expect(theme.palette.tokens[.colorBg] == "#101014")
+		#expect(theme.palette.customTokens["--chat-user-bubble"] == "#2a2a2e")
+		#expect(theme.defaultMode == .dark)
 		#expect(theme.rules.count == 2)
 	}
 
@@ -63,20 +63,20 @@ struct ThemeCompiledRuntimeTests {
 	@Test("overlaying composes with a generated theme")
 	func overlayingComposes() {
 		let combined = NexusDark.theme.overlaying(AccentOnly.theme)
-		#expect(combined.tokens[.colorPrimarySolid] == "#f59e0b")
-		#expect(combined.tokens[.colorBg] == "#101014")
-		#expect(combined.scheme == .dark)
+		#expect(combined.palette.tokens[.colorPrimarySolid] == "#f59e0b")
+		#expect(combined.palette.tokens[.colorBg] == "#101014")
+		#expect(combined.defaultMode == .dark)
 	}
 
 	@Test("a public struct yields a publicly accessible theme")
 	func publicThemeAccessible() {
-		#expect(PublicPalette.theme.tokens[.colorBg] == "#0b0b0f")
-		#expect(PublicPalette.theme.tokens[.colorTextMuted] == "#97a3b8")
+		#expect(PublicPalette.theme.palette.tokens[.colorBg] == "#0b0b0f")
+		#expect(PublicPalette.theme.palette.tokens[.colorTextMuted] == "#97a3b8")
 	}
 
 	@Test("an empty token bag overrides nothing")
 	func emptyBagOverridesNothing() {
 		let theme = AccentOnly.theme.overlaying(WebUITheme())
-		#expect(theme.tokens[.colorPrimarySolid] == "#f59e0b")
+		#expect(theme.palette.tokens[.colorPrimarySolid] == "#f59e0b")
 	}
 }

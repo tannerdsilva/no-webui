@@ -1,20 +1,25 @@
 import WebUICore
 
-// MARK: - ColorScheme
+// MARK: - ThemeMode
 
-/// the page's color-scheme preference. `.automatic` follows the system; a
-/// fixed scheme declares `color-scheme:` on `:root` so the theme's token
-/// overrides are the active palette regardless of the system setting.
-/// `.dark` is the dark-first choice: the base stylesheet's `@media
-/// (prefers-color-scheme: dark)` block loads in dark, and the theme's own
-/// overrides win the cascade in both schemes.
-public enum ColorScheme: String, Sendable, Equatable {
+/// The mode a theme renders in.
+///
+/// `.automatic` follows the system preference through a `prefers-color-scheme` media
+/// pass rather than being a third palette — a theme declares at most two palettes and
+/// `.automatic` decides which one the browser starts with.
+///
+/// Renamed from `ColorScheme` (2026-09, breaking per d15). Consumers name their own
+/// scheme type `ColorScheme` in practice — arc's 27-scheme enum is called exactly that —
+/// and the collision forced consumer code to avoid ever *naming* this type, relying on
+/// inference (`WebUITheme(scheme: .dark)`). `ThemeMode` frees the name `ColorScheme` for
+/// the thing every app actually calls that.
+public enum ThemeMode: String, Sendable, Equatable, CaseIterable {
 	case automatic
 	case light
 	case dark
 
-	/// the css `color-scheme` value to emit, or `nil` for `.automatic` (nothing
-	/// is declared and the browser follows the system).
+	/// the css `color-scheme` value to emit, or `nil` for `.automatic` (nothing is
+	/// declared and the browser follows the system).
 	public var cssValue: String? {
 		switch self {
 		case .automatic: return nil
@@ -24,89 +29,171 @@ public enum ColorScheme: String, Sendable, Equatable {
 	}
 }
 
-// MARK: - WebUITheme
+// MARK: - ThemePalette
 
-/// a set of design-token overrides, a color scheme, and app-specific rules
-/// that layer on top of the shipped design-system sheet. rendering appends
-/// the theme's css after the base sheet, so a later `:root` declaration wins
-/// the cascade for every token the components resolve through `var(--…)`.
-public struct WebUITheme: Sendable, Equatable {
-	/// overrides for the framework's `:root` tokens (the `DesignToken`
-	/// vocabulary generated from `design-system.css`). a value restyles every
-	/// component that references that token.
+/// One mode's worth of theme values: overrides for the framework's `DesignToken`
+/// vocabulary, plus custom properties the app invents for itself.
+///
+/// Both live here rather than on the theme because they are *per mode* — an app's
+/// `--chat-bubble-bg` differs between light and dark exactly as `colorBg` does.
+public struct ThemePalette: Sendable, Equatable {
+	/// overrides for the framework's `:root` tokens (the `DesignToken` vocabulary
+	/// generated from `design-system.css`). a value restyles every component that
+	/// references that token.
 	public var tokens: [DesignToken: String]
-	/// overrides for custom properties invented by the app (arbitrary
-	/// `--name` keys). component-scoped variables that are not on `:root`
-	/// belong here when they must be theme-level, or in `rules` when they only
-	/// affect one rule set.
+	/// overrides for custom properties the app invented (arbitrary `--name` keys).
 	public var customTokens: [String: String]
-	/// the page color scheme; `.automatic` (the default) emits nothing.
-	public var scheme: ColorScheme
-	/// app-specific component css, appended after all token overrides so it
-	/// can both reference `var(--…)` tokens and set scoped ones.
-	public var rules: [CSSRule]
 
-	public init(
-		tokens: [DesignToken: String] = [:],
-		customTokens: [String: String] = [:],
-		scheme: ColorScheme = .automatic,
-		rules: [CSSRule] = []
-	) {
+	public init(tokens: [DesignToken: String] = [:], customTokens: [String: String] = [:]) {
 		self.tokens = tokens
 		self.customTokens = customTokens
-		self.scheme = scheme
-		self.rules = rules
 	}
 
-	/// the default theme: no overrides, no scheme, no rules. a document
-	/// rendered with `.standard` is byte-identical to one rendered without a
-	/// theme.
-	public static let standard = WebUITheme()
+	/// no overrides. a palette that is `.empty` contributes no css.
+	public static let empty = ThemePalette()
 
-	/// true when this theme contributes no css at all.
 	public var isEmpty: Bool {
-		tokens.isEmpty && customTokens.isEmpty && scheme == .automatic && rules.isEmpty
+		tokens.isEmpty && customTokens.isEmpty
 	}
 
-	/// layers `overrides` on top of `self`: token overrides merge (the
-	/// override wins), a non-`.automatic` scheme replaces, and rules append.
-	/// used to apply a dynamic accent or a user preference over a static
-	/// `@Theme`-declared theme.
-	public func overlaying(_ overrides: WebUITheme) -> WebUITheme {
+	/// Layers `overrides` on top of `self`: the override wins, per key.
+	public func overlaying(_ overrides: ThemePalette) -> ThemePalette {
 		var mergedTokens = tokens
 		for (key, value) in overrides.tokens { mergedTokens[key] = value }
 		var mergedCustom = customTokens
 		for (key, value) in overrides.customTokens { mergedCustom[key] = value }
-		let mergedScheme: ColorScheme = overrides.scheme == .automatic ? scheme : overrides.scheme
-		return WebUITheme(
-			tokens: mergedTokens,
-			customTokens: mergedCustom,
-			scheme: mergedScheme,
-			rules: rules + overrides.rules
-		)
+		return ThemePalette(tokens: mergedTokens, customTokens: mergedCustom)
 	}
 
-	/// the css this theme contributes: a `:root` block (color-scheme, then
-	/// token overrides sorted by css name for deterministic output) followed
-	/// by the app rules. empty when the theme is `.standard`.
-	public func stylesheet() -> String {
-		var declarations: [CSSDeclaration] = []
-		if let schemeValue = scheme.cssValue {
-			declarations.append(CSSDeclaration("color-scheme", schemeValue))
-		}
+	/// The declarations this palette contributes.
+	///
+	/// Sorted by css name so the emitted sheet is deterministic — an unsorted
+	/// dictionary iteration is exactly how the same build produces different bytes on
+	/// two runs, which defeats content-addressed caching and makes diffs useless.
+	func declarations() -> [CSSDeclaration] {
+		var out: [CSSDeclaration] = []
 		for token in tokens.keys.sorted(by: { $0.rawValue < $1.rawValue }) {
 			if let value = tokens[token] {
-				declarations.append(CSSDeclaration("--\(token.rawValue)", value))
+				out.append(CSSDeclaration("--\(token.rawValue)", value))
 			}
 		}
 		for key in customTokens.keys.sorted() {
 			if let value = customTokens[key] {
-				declarations.append(CSSDeclaration(key, value))
+				out.append(CSSDeclaration(key, value))
 			}
 		}
+		return out
+	}
+}
+
+// MARK: - WebUITheme
+
+/// A theme: up to two palettes, a mode, and app-specific rules that layer on top of the
+/// shipped design-system sheet.
+///
+/// Rendering appends the theme's css after the base sheet, so a later `:root`
+/// declaration wins the cascade for every token the components resolve through `var(--…)`.
+///
+/// There is one theme type, not two. Identity (`themeID`/`themeLabel`/swatch) belongs to
+/// the *provider* — see ``WebUIThemeProvider`` and ``ThemeCatalog`` — so a named theme is
+/// still a `WebUITheme`, and an unnamed one is too.
+public struct WebUITheme: Sendable, Equatable {
+	/// What the theme looks like: the palette on `:root`.
+	///
+	/// Named for its role rather than its mode on purpose. A one-palette theme is the
+	/// common case, and it has no "light" or "dark" identity — a dark-only theme puts its
+	/// colours here and declares `defaultMode: .dark`. Calling this `light` would invite
+	/// exactly the misreading that a dark theme's own colours are the light ones.
+	public var palette: ThemePalette
+	/// The override applied inside the `prefers-color-scheme: dark` pass. Empty means the
+	/// theme renders the same in both modes.
+	public var dark: ThemePalette
+	/// the mode the document declares up front. `.automatic` (the default) emits nothing
+	/// and lets the browser decide; the engine may still override it per client.
+	public var defaultMode: ThemeMode
+	/// app-specific component css, appended after all token overrides so it can both
+	/// reference `var(--…)` tokens and set scoped ones.
+	public var rules: [CSSRule]
+
+	/// the full form: a base palette plus an optional dark override.
+	public init(
+		palette: ThemePalette = .empty,
+		dark: ThemePalette = .empty,
+		defaultMode: ThemeMode = .automatic,
+		rules: [CSSRule] = []
+	) {
+		self.palette = palette
+		self.dark = dark
+		self.defaultMode = defaultMode
+		self.rules = rules
+	}
+
+	/// the one-palette form, which is the common case: `tokens`/`customTokens` become
+	/// the base palette and the theme renders the same in both modes unless `dark` is
+	/// also supplied.
+	public init(
+		tokens: [DesignToken: String] = [:],
+		customTokens: [String: String] = [:],
+		dark: ThemePalette = .empty,
+		defaultMode: ThemeMode = .automatic,
+		rules: [CSSRule] = []
+	) {
+		self.init(
+			palette: ThemePalette(tokens: tokens, customTokens: customTokens),
+			dark: dark,
+			defaultMode: defaultMode,
+			rules: rules
+		)
+	}
+
+	/// The default theme: no overrides, no mode, no rules. A document rendered with
+	/// `.standard` is byte-identical to one rendered without a theme.
+	public static let standard = WebUITheme()
+
+	/// True when this theme contributes no css at all.
+	public var isEmpty: Bool {
+		palette.isEmpty && dark.isEmpty && rules.isEmpty
+	}
+
+	/// Layers `overrides` on top of `self`: each palette merges (the override wins), a
+	/// non-`.automatic` mode replaces, and rules append.
+	///
+	/// Used to apply a dynamic accent or a user preference over a static `@Theme`-declared
+	/// theme.
+	public func overlaying(_ overrides: WebUITheme) -> WebUITheme {
+		WebUITheme(
+			palette: palette.overlaying(overrides.palette),
+			dark: dark.overlaying(overrides.dark),
+			defaultMode: overrides.defaultMode == .automatic ? defaultMode : overrides.defaultMode,
+			rules: rules + overrides.rules
+		)
+	}
+
+	/// The css this theme contributes to a plain `:root` page: a `:root` block (the
+	/// `color-scheme` declaration, then ``palette``) followed by a
+	/// `prefers-color-scheme: dark` pass for ``dark``, then the app rules.
+	///
+	/// Empty when the theme is `.standard`, so an unthemed document stays byte-identical.
+	public func stylesheet() -> String {
+		var rootDeclarations: [CSSDeclaration] = []
+		// `color-scheme` tells the browser which way `defaultMode` faces so form controls,
+		// scrollbars and the canvas follow it. `.automatic` declares nothing.
+		if let schemeValue = defaultMode.cssValue {
+			rootDeclarations.append(CSSDeclaration("color-scheme", schemeValue))
+		}
+		rootDeclarations.append(contentsOf: palette.declarations())
+
 		var parts: [String] = []
-		if !declarations.isEmpty {
-			parts.append(CSSStylesheet([CSSRule(":root", declarations)]).render())
+		if !rootDeclarations.isEmpty {
+			parts.append(CSSStylesheet([CSSRule(":root", rootDeclarations)]).render())
+		}
+		// the dark pass is an OVERRIDE over the base palette, so it is emitted whenever it
+		// exists — including for a `defaultMode: .dark` theme that also declares one.
+		if !dark.isEmpty {
+			parts.append(CSSMediaQuery(
+				"(prefers-color-scheme: dark)",
+				rules: [CSSRule(":root", dark.declarations())]
+			).render())
 		}
 		if !rules.isEmpty {
 			parts.append(CSSStylesheet(rules).render())
@@ -117,17 +204,111 @@ public struct WebUITheme: Sendable, Equatable {
 
 // MARK: - WebUIThemeProvider
 
-/// a type that provides a `WebUITheme`. `@Theme` generates the conformance
-/// from the type's `static let` members; hand-written conformers can also add
-/// conformance directly, and the default yields `.standard` so an unthemed
-/// type conforms for free.
+/// A type that provides a `WebUITheme`.
+///
+/// `@Theme` generates the conformance from the type's `static let` members; hand-written
+/// conformers can add conformance directly, and the default yields `.standard` so an
+/// unthemed type conforms for free.
 public protocol WebUIThemeProvider {
+	/// stable identity for a named theme.
+	///
+	/// the engine persists this string, a picker keys on it, and a serialized catalog
+	/// uses it as the lookup key — so it must be stable across builds and unique within
+	/// a catalog. defaults to the type's own name, which is unique by construction.
+	///
+	/// Declare it explicitly only when the type name is a poor identifier (a nested or
+	/// generated type, or a name chosen before the theme was).
+	static var themeID: String { get }
+	/// what a picker shows next to the swatch. defaults to `themeID`.
+	static var themeLabel: String { get }
+	/// the picker's swatch: an accent first, then up to two companion dots — the same
+	/// shape a colour-scheme grid uses. empty means "no swatch, show the label only".
+	static var themeSwatch: [String] { get }
 	/// the theme this provider contributes.
 	static var theme: WebUITheme { get }
 }
 
 extension WebUIThemeProvider {
-	/// the lifeline default: an empty theme. a type that conforms without
-	/// providing its own `theme` renders exactly like the unthemed document.
+	/// the identity default: the type's own name. unique by construction, and stable as
+	/// long as the type is not renamed.
+	public static var themeID: String { String(describing: Self.self) }
+	public static var themeLabel: String { themeID }
+	public static var themeSwatch: [String] { [] }
+	/// the lifeline default: an empty theme. a type that conforms without providing its
+	/// own `theme` renders exactly like the unthemed document.
 	public static var theme: WebUITheme { .standard }
+}
+
+// MARK: - ThemeCatalog
+
+/// An ordered set of themes a page offers.
+///
+/// The catalog is the *data* a picker renders from — id, label and swatch per entry — so
+/// no consumer hand-writes the list, and `ThemeCatalogTests` can assert its integrity
+/// (unique ids, a default that is actually a member) instead of trusting it.
+///
+/// `all` is ordered: it is the order a picker shows, and the first entry is what a page
+/// falls back to when nothing is persisted.
+public protocol ThemeCatalog {
+	/// every theme this catalog offers, in picker order.
+	static var all: [any WebUIThemeProvider.Type] { get }
+	/// the theme used when no choice is stored. must be a member of ``all``.
+	static var defaultTheme: any WebUIThemeProvider.Type { get }
+}
+
+/// One catalog entry as **data**: what a picker shows and what the engine ships.
+///
+/// The catalog is expressed as providers (types), but everything downstream wants values —
+/// a picker wants (id, label, swatch), the engine wants to serialize a list, and a page
+/// wants the resolved `WebUITheme`. Metatypes are the wrong currency for all three: a
+/// *stored* `static let` of `[any WebUIThemeProvider.Type]` is not `Sendable`, which Swift 6
+/// rejects as global mutable state. Converting once, here, keeps conformers writing the
+/// ergonomic `[Foo.self, Bar.self]` list while everything else handles `Sendable` data.
+public struct ThemeEntry: Sendable, Equatable {
+	/// the stable id a client persists and `theme(for:)` resolves.
+	public let id: String
+	/// what a picker shows.
+	public let label: String
+	/// the swatch: an accent first, then up to two companion dots. empty = label only.
+	public let swatch: [String]
+	/// the resolved theme.
+	public let theme: WebUITheme
+
+	public init(id: String, label: String, swatch: [String] = [], theme: WebUITheme) {
+		self.id = id
+		self.label = label
+		self.swatch = swatch
+		self.theme = theme
+	}
+
+	/// the entry for a provider.
+	public init(_ provider: any WebUIThemeProvider.Type) {
+		self.init(
+			id: provider.themeID,
+			label: provider.themeLabel,
+			swatch: provider.themeSwatch,
+			theme: provider.theme
+		)
+	}
+}
+
+extension ThemeCatalog {
+	/// The catalog as `Sendable` data, in picker order.
+	///
+	/// Conformers expose `all` as a **computed** property (`static var all: [...] { [...] }`)
+	/// — a stored one trips Swift 6's global-mutable-state check, because an existential
+	/// metatype is not `Sendable`. Computing it costs an array literal per access and keeps
+	/// the declaration ergonomic.
+	public static var entries: [ThemeEntry] {
+		all.map(ThemeEntry.init)
+	}
+
+	/// The theme for a stored id, or the default's.
+	///
+	/// The engine resolves a persisted choice through this, so an id from a previous build
+	/// — a scheme since renamed or deleted — degrades to the default rather than to a
+	/// broken page.
+	public static func theme(for id: String) -> WebUITheme {
+		all.first { $0.themeID == id }?.theme ?? defaultTheme.theme
+	}
 }

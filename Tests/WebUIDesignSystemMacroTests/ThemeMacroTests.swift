@@ -45,13 +45,13 @@ private func assertExpansionThrows(_ source: String, message: String) {
 @Suite("@Theme macro expansion")
 struct ThemeMacroExpansionTests {
 
-	@Test("full theme: tokens, scheme, rules, customTokens")
+	@Test("full theme: palette, mode, rules, customTokens")
 	func fullTheme() {
 		assertExpansion(
 			"""
 			@Theme
 			struct NexusDark {
-				static let scheme = ColorScheme.dark
+				static let defaultMode = ThemeMode.dark
 				static let rules: [CSSRule] = [.chatBubble, .streamDots]
 				static let customTokens = ["--chat-user-bubble": "#2a2a2e"]
 				static let colorPrimarySolid = "#6c8cff"
@@ -60,7 +60,7 @@ struct ThemeMacroExpansionTests {
 			""",
 			expanded: """
 			struct NexusDark {
-				static let scheme = ColorScheme.dark
+				static let defaultMode = ThemeMode.dark
 				static let rules: [CSSRule] = [.chatBubble, .streamDots]
 				static let customTokens = ["--chat-user-bubble": "#2a2a2e"]
 				static let colorPrimarySolid = "#6c8cff"
@@ -70,9 +70,8 @@ struct ThemeMacroExpansionTests {
 			extension NexusDark: WebUIThemeProvider {
 				static var theme: WebUITheme {
 					WebUITheme(
-						tokens: [.colorPrimarySolid: colorPrimarySolid, .colorBg: colorBg],
-						customTokens: customTokens,
-						scheme: scheme,
+						palette: ThemePalette(tokens: [.colorPrimarySolid: colorPrimarySolid, .colorBg: colorBg], customTokens: customTokens),
+						defaultMode: defaultMode,
 						rules: rules
 					)
 				}
@@ -95,34 +94,31 @@ struct ThemeMacroExpansionTests {
 
 			extension Bare: WebUIThemeProvider {
 				static var theme: WebUITheme {
-					WebUITheme(
-						tokens: []
-					)
+					WebUITheme()
 				}
 			}
 			"""
 		)
 	}
 
-	@Test("scheme-only theme omits the undeclared axes")
-	func schemeOnly() {
+	@Test("mode-only theme omits the undeclared axes")
+	func modeOnly() {
 		assertExpansion(
 			"""
 			@Theme
 			struct DarkOnly {
-				static let scheme = ColorScheme.dark
+				static let defaultMode = ThemeMode.dark
 			}
 			""",
 			expanded: """
 			struct DarkOnly {
-				static let scheme = ColorScheme.dark
+				static let defaultMode = ThemeMode.dark
 			}
 
 			extension DarkOnly: WebUIThemeProvider {
 				static var theme: WebUITheme {
 					WebUITheme(
-						tokens: [],
-						scheme: scheme
+						defaultMode: defaultMode
 					)
 				}
 			}
@@ -149,7 +145,7 @@ struct ThemeMacroExpansionTests {
 			extension Tokens: WebUIThemeProvider {
 				static var theme: WebUITheme {
 					WebUITheme(
-						tokens: [.colorText: colorText, .colorTextMuted: colorTextMuted]
+						palette: ThemePalette(tokens: [.colorText: colorText, .colorTextMuted: colorTextMuted])
 					)
 				}
 			}
@@ -174,7 +170,60 @@ struct ThemeMacroExpansionTests {
 			extension PublicTheme: WebUIThemeProvider {
 				public static var theme: WebUITheme {
 					WebUITheme(
-						tokens: [.colorBg: colorBg]
+						palette: ThemePalette(tokens: [.colorBg: colorBg])
+					)
+				}
+			}
+			"""
+		)
+	}
+
+	@Test("base: layers overrides on another provider")
+	func baseLayering() {
+		assertExpansion(
+			"""
+			@Theme(base: ArcBase.self)
+			struct Poseidon {
+				static let colorPrimarySolid = "#268BD2"
+			}
+			""",
+			expanded: """
+			struct Poseidon {
+				static let colorPrimarySolid = "#268BD2"
+			}
+
+			extension Poseidon: WebUIThemeProvider {
+				static var theme: WebUITheme {
+					ArcBase.theme.overlaying(WebUITheme(
+						palette: ThemePalette(tokens: [.colorPrimarySolid: colorPrimarySolid])
+					))
+				}
+			}
+			"""
+		)
+	}
+
+	@Test("palette and dark members declare both modes")
+	func twoMode() {
+		assertExpansion(
+			"""
+			@Theme
+			struct TwoMode {
+				static let palette = ThemePalette(tokens: [.colorBg: "#ffffff"])
+				static let dark = ThemePalette(tokens: [.colorBg: "#101014"])
+			}
+			""",
+			expanded: """
+			struct TwoMode {
+				static let palette = ThemePalette(tokens: [.colorBg: "#ffffff"])
+				static let dark = ThemePalette(tokens: [.colorBg: "#101014"])
+			}
+
+			extension TwoMode: WebUIThemeProvider {
+				static var theme: WebUITheme {
+					WebUITheme(
+						palette: palette,
+						dark: dark
 					)
 				}
 			}
@@ -211,6 +260,33 @@ struct ThemeMacroNegativeTests {
 			}
 			""",
 			message: "@Theme member 'colorBackground' must be a 'static let' declaration"
+		)
+	}
+
+	@Test("a palette member plus flat tokens is ambiguous and throws")
+	func palettePlusFlatThrows() {
+		assertExpansionThrows(
+			"""
+			@Theme
+			struct Clash {
+				static let palette = ThemePalette(tokens: [.colorBg: "#fff"])
+				static let colorPrimarySolid = "#6c8cff"
+			}
+			""",
+			message: "@Theme on 'Clash' declares a 'palette' AND flat token members — use one form: flat members define the light palette, so a 'palette' member makes them ambiguous"
+		)
+	}
+
+	@Test("a theme naming itself as its base throws")
+	func selfBaseThrows() {
+		assertExpansionThrows(
+			"""
+			@Theme(base: SelfTheme.self)
+			struct SelfTheme {
+				static let colorBg = "#fff"
+			}
+			""",
+			message: "@Theme(base:) on 'SelfTheme' names itself — a theme cannot extend itself"
 		)
 	}
 
