@@ -164,6 +164,22 @@ public struct WebUIAsset: Sendable {
 	}
 }
 
+public extension WebUIAsset {
+	/// the runtime value for a build-produced conformance — the shape generated code hands
+	/// the server: the conformance's bytes, variant and content type, served at `path`.
+	///
+	/// the stamp is recomputed from ``WebUIShippedAsset/body``, not copied from the
+	/// conformance's declared ``WebUIShippedAsset/stamp``. the two agree for every
+	/// in-contract conformance — ``WebUIBuild`` pins the literal against the bytes it emits —
+	/// and recomputing means a payload edited without its literal cannot keep an old url
+	/// alive in a year-long cache.
+	init(_ shipped: any WebUIShippedAsset.Type, path: String) {
+		self.init(
+			path: path, bytes: shipped.body, gzip: shipped.gzip, contentType: shipped.contentType
+		)
+	}
+}
+
 // MARK: - request
 
 /// the request a page render answers: the path plus the decoded query, so a
