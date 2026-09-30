@@ -25,42 +25,73 @@ window.WebUIEngine = (function () {
   (function () {
     var mql = null;
     try { mql = window.matchMedia('(prefers-color-scheme: dark)'); } catch (e) { }
-    var saved = null;
-    try { saved = localStorage.getItem('webui-theme'); } catch (e) { }
-    var choice = (saved === 'light' || saved === 'dark') ? saved : 'system';
+    var savedMode = null, savedScheme = null;
+    try {
+      savedMode = localStorage.getItem('webui-theme');
+      savedScheme = localStorage.getItem('webui-scheme');
+    } catch (e) { }
+    var mode = (savedMode === 'light' || savedMode === 'dark') ? savedMode : 'system';
+    var scheme = savedScheme || null;
 
     function sysDark() { return mql ? mql.matches : false; }
+
     function reflect() {
-      if (choice === 'system' ? sysDark() : choice === 'dark') {
-        document.documentElement.setAttribute('data-theme', 'dark');
+      var root = document.documentElement;
+      root.setAttribute('data-theme', mode);
+      if (scheme) {
+        root.setAttribute('data-scheme', scheme);
       } else {
-        document.documentElement.removeAttribute('data-theme');
+        root.removeAttribute('data-scheme');
       }
     }
     function press() {
-      var btns = document.querySelectorAll('[data-theme-choice]');
-      for (var i = 0; i < btns.length; i++) {
-        btns[i].setAttribute('aria-pressed', btns[i].getAttribute('data-theme-choice') === choice ? 'true' : 'false');
+      var modes = document.querySelectorAll('[data-theme-choice]');
+      for (var i = 0; i < modes.length; i++) {
+        modes[i].setAttribute('aria-pressed', modes[i].getAttribute('data-theme-choice') === mode ? 'true' : 'false');
+      }
+      var schemes = document.querySelectorAll('[data-scheme-choice]');
+      for (var j = 0; j < schemes.length; j++) {
+        schemes[j].setAttribute('aria-pressed', schemes[j].getAttribute('data-scheme-choice') === scheme ? 'true' : 'false');
       }
     }
-    function apply(next) {
-      choice = next;
+    function announce() {
+      try {
+        document.dispatchEvent(new CustomEvent('webui:theme', {
+          detail: { scheme: scheme, mode: mode }
+        }));
+      } catch (e) { }
+    }
+    function applyMode(next) {
+      mode = next;
       try { localStorage.setItem('webui-theme', next); } catch (e) { }
       reflect();
       press();
+      announce();
+    }
+    function applyScheme(next) {
+      scheme = next;
+      try { localStorage.setItem('webui-scheme', next); } catch (e) { }
+      reflect();
+      press();
+      announce();
     }
     document.addEventListener('click', function (e) {
       var t = e.target;
-      while (t && t !== document.documentElement && !(t.getAttribute && t.getAttribute('data-theme-choice'))) {
+      while (t && t !== document.documentElement && !(t.getAttribute &&
+             (t.getAttribute('data-theme-choice') || t.getAttribute('data-scheme-choice')))) {
         t = t.parentNode;
       }
       if (!t || t === document.documentElement || !t.getAttribute) { return; }
+      var nextScheme = t.getAttribute('data-scheme-choice');
+      if (nextScheme) { applyScheme(nextScheme); return; }
       var next = t.getAttribute('data-theme-choice');
       if (next !== 'light' && next !== 'dark' && next !== 'system') { return; }
-      apply(next);
+      applyMode(next);
     });
     if (mql && mql.addEventListener) {
-      mql.addEventListener('change', function () { if (choice === 'system') { reflect(); } });
+      mql.addEventListener('change', function () {
+        if (mode === 'system') { reflect(); announce(); }
+      });
     }
     reflect();
     function pressInitial() { press(); }
