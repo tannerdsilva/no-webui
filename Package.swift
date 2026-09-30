@@ -36,6 +36,13 @@ let package = Package(
             name: "WebUIServer",
             targets: ["WebUIServer"]
         ),
+        // the host-side build library: gzip, generated-source emission and the asset
+        // manifest, shared by the framework's own tool and a consumer's tool (a plugin
+        // cannot import a library, so the plugin ships this and invokes a tool).
+        .library(
+            name: "WebUIBuild",
+            targets: ["WebUIBuild"]
+        ),
         .library(
             name: "WebUIBlocks",
             targets: ["WebUIBlocks"]
@@ -202,6 +209,15 @@ let package = Package(
             ]
         ),
 
+        // ── Asset Build Library (host-side) ──────────────────────
+        // the logic the framework's asset tool and a consumer's tool share, promoted out
+        // of `WebUIAssetTool` so there is one implementation of gzip, emission and the
+        // manifest. host-only by construction: it may import Foundation, and the client
+        // never sees any of it.
+        .target(
+            name: "WebUIBuild"
+        ),
+
         // ── Asset Tool ───────────────────────────────────────────
         .executableTarget(
             name: "WebUIAssetTool",
@@ -210,6 +226,8 @@ let package = Package(
                 // minified sheet is produced at BUILD time (and therefore
                 // compressible at build time — the runtime has no compressor).
                 .target(name: "WebUICore"),
+                // the gzip/emit internals live in WebUIBuild; the tool is a CLI over them.
+                .target(name: "WebUIBuild"),
             ]
         ),
 
@@ -466,6 +484,12 @@ let package = Package(
             name: "WebUIAssetToolTests",
             dependencies: [
                 "WebUIAssetTool",
+            ]
+        ),
+        .testTarget(
+            name: "WebUIBuildTests",
+            dependencies: [
+                "WebUIBuild",
             ]
         ),
         .testTarget(

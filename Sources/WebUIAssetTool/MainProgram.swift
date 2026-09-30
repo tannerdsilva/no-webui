@@ -1,4 +1,5 @@
 import Foundation
+import WebUIBuild
 import WebUICore
 
 @main
@@ -118,10 +119,12 @@ enum WebUIAssetTool {
                     + CSSStylesheet(LayoutStyles.complete).render()
                     + "\n}\n\n" + cssContent
             )
-            let cssGz = cssGzipData(of: cssMinified)
-            let jsGz = jsInput.flatMap { gzipData(of: $0) }
-            let engineGz = engineInput.flatMap { gzipData(of: $0) }
-            let shellGz = shellInput.flatMap { gzipData(of: $0) }
+            // the compression helpers live in WebUIBuild now: the tool is a CLI over the
+            // same library a consumer's tool calls, so the bytes come from one implementation.
+            let cssGz = WebUIBuild.gzip(cssMinified)
+            let jsGz = jsInput.flatMap { _ in WebUIBuild.gzip(jsContent) }
+            let engineGz = engineInput.flatMap { _ in WebUIBuild.gzip(engineContent) }
+            let shellGz = shellInput.flatMap { _ in WebUIBuild.gzip(shellContent) }
 
             // the first law, enforced where the payloads are fixed: prose never
             // reaches a client. the working sheet may carry designer notes —
@@ -194,39 +197,6 @@ enum WebUIAssetTool {
                 }
             }
         }
-    }
-
-    /// gzip a file with the host `gzip`, base64-encoded, or "" when unavailable.
-    ///
-    /// compression happens at BUILD time on purpose. no-webui takes no
-    /// dependencies and has no runtime compressor: Foundation's `compression`
-    /// API is Darwin-only and linking zlib would be a dependency. the runtime
-    /// therefore never compresses anything — it serves bytes prepared here.
-    static func gzipData(of path: String) -> Data? {
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-        process.arguments = ["gzip", "-n", "-9", "-c", path]
-        let pipe = Pipe()
-        process.standardOutput = pipe
-        process.standardError = Pipe()
-        do {
-            try process.run()
-        } catch {
-            return nil
-        }
-        let data = pipe.fileHandleForReading.readDataToEndOfFile()
-        process.waitUntilExit()
-        guard process.terminationStatus == 0, !data.isEmpty else { return nil }
-        return data
-    }
-
-    /// gzip an in-memory string (the minified sheet has no file on disk).
-    static func cssGzipData(of text: String) -> Data? {
-        let tmp = FileManager.default.temporaryDirectory
-            .appendingPathComponent("webui-css-min-\(ProcessInfo.processInfo.processIdentifier).css")
-        guard (try? text.write(to: tmp, atomically: true, encoding: .utf8)) != nil else { return nil }
-        defer { try? FileManager.default.removeItem(at: tmp) }
-        return gzipData(of: tmp.path)
     }
 
     static func generateAssetsSource(
