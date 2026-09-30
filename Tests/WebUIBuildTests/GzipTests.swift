@@ -53,23 +53,6 @@ struct GzipTests {
 		let out = try #require(gzip(Data()), "the helper must not crash or lie on empty input")
 		#expect(Array(out.prefix(4)) == [0x1f, 0x8b, 0x08, 0x00])
 		// the independent instrument: the bytes must inflate back to empty.
-		#expect(try gunzip(out).isEmpty)
-	}
-
-	/// an independent `gunzip -c` over the helper's bytes — never the helper's own logic.
-	private func gunzip(_ data: Data) throws -> Data {
-		let process = Process()
-		process.executableURL = URL(fileURLWithPath: "/usr/bin/env")
-		process.arguments = ["gunzip", "-c"]
-		let input = Pipe()
-		let output = Pipe()
-		process.standardInput = input
-		process.standardOutput = output
-		try process.run()
-		input.fileHandleForWriting.write(data)
-		try input.fileHandleForWriting.close()
-		let inflated = output.fileHandleForReading.readDataToEndOfFile()
-		process.waitUntilExit()
-		return inflated
+		#expect(try gunzipIndependently(out).isEmpty)
 	}
 }

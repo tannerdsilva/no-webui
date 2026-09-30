@@ -212,10 +212,19 @@ let package = Package(
         // ── Asset Build Library (host-side) ──────────────────────
         // the logic the framework's asset tool and a consumer's tool share, promoted out
         // of `WebUIAssetTool` so there is one implementation of gzip, emission and the
-        // manifest. host-only by construction: it may import Foundation, and the client
-        // never sees any of it.
+        // manifest. host-only by construction: it may import Foundation and links WebUI
+        // (for `SHA256`) — the client never sees any of it.
         .target(
-            name: "WebUIBuild"
+            name: "WebUIBuild",
+            dependencies: [
+                // sha-256 comes from rawdog directly, NOT through WebUI: WebUI's own asset
+                // plugin invokes `WebUIAssetTool`, which depends on this library, so a WebUI
+                // dependency here is a manifest cycle SwiftPM refuses. WebUICore — the other
+                // candidate — must stay rawdog-free, because the client build reaches
+                // `DesignToken` through it precisely to avoid rawdog. see `Hash.swift`.
+                .product(name: "RAW", package: "rawdog"),
+                .product(name: "RAW_sha256", package: "rawdog"),
+            ]
         ),
 
         // ── Asset Tool ───────────────────────────────────────────
