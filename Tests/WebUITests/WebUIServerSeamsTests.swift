@@ -338,4 +338,52 @@ struct WebUIServerSeamsTests {
 			#expect(bare == 404)
 		}
 	}
+
+	@Test("the theme sheet negotiates compression, and a sheet without a variant advertises none")
+	func themeSheetNegotiates() async throws {
+		// the sheet's bytes are the shared fixture pair, so the compressed leg can be
+		// asserted byte-for-byte the way the host-asset leg is.
+		let sheet = ThemeSheet(css: probePlain, gzip: probeGzip)
+		let bare = ThemeSheet(css: probePlain)
+
+		try await withServer(
+			requestRender: { _ in "<p>page</p>" },
+			router: EventRouter(),
+			assets: [],
+			themeSheet: sheet
+		) { port in
+			let (plainHeaders, plainBody) = try await rawGET(
+				"http://127.0.0.1:\(port)\(sheet.url)", acceptEncoding: "identity"
+			)
+			#expect(plainHeaders.contains("200 OK"))
+			#expect(plainHeaders.contains("Cache-Control: public, max-age=31536000, immutable"))
+			#expect(plainHeaders.contains("Vary: Accept-Encoding"), "a variant exists, so caches must be told")
+			#expect(!plainHeaders.contains("Content-Encoding:"))
+			#expect(String(decoding: plainBody, as: UTF8.self) == probePlain)
+
+			let (gzHeaders, gzBody) = try await rawGET(
+				"http://127.0.0.1:\(port)\(sheet.url)", acceptEncoding: "gzip"
+			)
+			#expect(gzHeaders.contains("Content-Encoding: gzip"))
+			#expect(gzHeaders.contains("Vary: Accept-Encoding"))
+			#expect(gzBody == Data(probeGzip))
+		}
+
+		// no variant: bytes and headers exactly as they were before the seam existed.
+		try await withServer(
+			requestRender: { _ in "<p>page</p>" },
+			router: EventRouter(),
+			assets: [],
+			themeSheet: bare,
+			portBase: 22000
+		) { port in
+			let (headers, body) = try await rawGET(
+				"http://127.0.0.1:\(port)\(bare.url)", acceptEncoding: "gzip"
+			)
+			#expect(headers.contains("200 OK"))
+			#expect(!headers.contains("Content-Encoding:"))
+			#expect(!headers.contains("Vary: Accept-Encoding"))
+			#expect(String(decoding: body, as: UTF8.self) == probePlain)
+		}
+	}
 }

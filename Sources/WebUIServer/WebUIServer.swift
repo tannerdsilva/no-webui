@@ -522,6 +522,8 @@ final class Runner: Sendable {
 	/// the host's theme catalog, pre-encoded once like the framework assets. `nil` when the
 	/// host has no catalog, in which case the route simply does not exist.
 	private let themeSheet: ByteBuffer?
+	/// the catalog's pre-compressed variant, when the host shipped one.
+	private let themeSheetGzip: ByteBuffer?
 	private let themeSheetPath: String?
 
 	struct HostAsset: Sendable {
@@ -567,9 +569,11 @@ final class Runner: Sendable {
 		self.assets = encoded
 		if let sheet = config.themeSheet, !sheet.isEmpty {
 			self.themeSheet = ByteBuffer(bytes: Array(sheet.css.utf8))
+			self.themeSheetGzip = sheet.gzip.map { ByteBuffer(bytes: $0) }
 			self.themeSheetPath = sheet.url
 		} else {
 			self.themeSheet = nil
+			self.themeSheetGzip = nil
 			self.themeSheetPath = nil
 		}
 	}
@@ -695,10 +699,13 @@ final class Runner: Sendable {
 					)
 				} else if let sheet = themeSheet, path == themeSheetPath {
 					// the host's theme catalog. content-addressed, so immutable: a rebuilt
-					// sheet is a different url and no cache invalidation is ever needed.
+					// sheet is a different url and no cache invalidation is ever needed. it
+					// negotiates like every other asset route when the host built a variant.
 					try await respond(
 						channel: channel.channel,
 						bytes: sheet,
+						gzip: themeSheetGzip,
+						acceptEncoding: acceptEncoding,
 						contentType: "text/css; charset=utf-8",
 						cacheControl: "public, max-age=31536000, immutable"
 					)

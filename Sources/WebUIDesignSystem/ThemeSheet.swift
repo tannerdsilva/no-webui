@@ -15,11 +15,18 @@ import WebUI
 public struct ThemeSheet: Sendable, Equatable {
 	/// the scoped css, as `ThemeCatalog.stylesheet()` renders it.
 	public let css: String
+	/// the pre-compressed variant, served when the client accepts `gzip`.
+	///
+	/// a build product like every other compressed variant in the framework: the runtime
+	/// links no compressor, so a host that wants the smaller transfer builds this (e.g. with
+	/// `WebUIBuild.gzip`) and hands both forms over. `nil` serves ``css`` to every client.
+	public let gzip: [UInt8]?
 	/// the content-addressed route, `/__assets/theme.<sha256>`.
 	public let url: String
 
-	public init(css: String) {
+	public init(css: String, gzip: [UInt8]? = nil) {
 		self.css = css
+		self.gzip = gzip
 		self.url = "/__assets/theme.\(SHA256.hex(Array(css.utf8)))"
 	}
 
