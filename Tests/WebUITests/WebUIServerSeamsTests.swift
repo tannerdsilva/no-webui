@@ -48,6 +48,20 @@ struct ServerQueryParsingTests {
 	}
 }
 
+// MARK: - shared wiring fixtures
+
+/// a fixed payload/gzip pair (`.probe{color:teal}`, 38 compressed bytes) shared by the
+/// host-asset negotiation tests. the server never compresses, so every variant asserted
+/// against it is bytes a build produced — embedded rather than compressed at test time.
+private let probePlain = ".probe{color:teal}"
+// `printf '.probe{color:teal}' | gzip -n -9 -c`
+private let probeGzip: [UInt8] = [
+	0x1f, 0x8b, 0x08, 0x00, 0xb9, 0x64, 0xbd, 0x6a, 0x00, 0x03,
+	0xd3, 0x2b, 0x28, 0xca, 0x4f, 0x4a, 0xad, 0x4e, 0xce, 0xcf,
+	0xc9, 0x2f, 0xb2, 0x2a, 0x49, 0x4d, 0xcc, 0xa9, 0x05, 0x00,
+	0x19, 0xff, 0x10, 0x08, 0x12, 0x00, 0x00, 0x00,
+]
+
 // MARK: - host assets, query stripping, request-aware render
 
 @Suite("WebUIServer seams", .serialized)
@@ -245,16 +259,8 @@ struct WebUIServerSeamsTests {
 
 	@Test("serves a host asset's pre-compressed variant, and `Vary` either way")
 	func hostAssetGzipVariant() async throws {
-		let plain = ".probe{color:teal}"
-		// `printf '.probe{color:teal}' | gzip -c` — 38 bytes, and gunzip round-trips it.
-		// embedded rather than compressed here because the server never compresses: the
-		// point of the seam is that a host ships bytes it built.
-		let gzipped: [UInt8] = [
-			0x1f, 0x8b, 0x08, 0x00, 0xb9, 0x64, 0xbd, 0x6a, 0x00, 0x03,
-			0xd3, 0x2b, 0x28, 0xca, 0x4f, 0x4a, 0xad, 0x4e, 0xce, 0xcf,
-			0xc9, 0x2f, 0xb2, 0x2a, 0x49, 0x4d, 0xcc, 0xa9, 0x05, 0x00,
-			0x19, 0xff, 0x10, 0x08, 0x12, 0x00, 0x00, 0x00,
-		]
+		let plain = probePlain
+		let gzipped = probeGzip
 		try await withServer(
 			requestRender: { _ in "<p>page</p>" },
 			router: EventRouter(),
@@ -286,6 +292,64 @@ struct WebUIServerSeamsTests {
 			// an asset with no variant advertises none: no `Vary`, no `Content-Encoding`.
 			let (bareHeaders, _) = try await rawGET("http://127.0.0.1:\(port)/", acceptEncoding: "gzip")
 			#expect(!bareHeaders.contains("Vary: Accept-Encoding"))
+		}
+	}
+
+	@Test("a `WebUIAsset` owns its url, registration and variant — and the stamped path 404s")
+	func webUIAssetOwnsItsAddress() async throws {
+		let asset = WebUIAsset(
+			path: "/ui/pair.css", text: probePlain, gzip: probeGzip, contentType: "text/css; charset=utf-8"
+		)
+		// the pairing is derived from one value, never hand-declared: the url carries the
+		// stamp, the registration is the *bare* path. matching happens after the query is
+		// stripped, so a registration carrying its stamp (the P3 bug) can never match.
+		#expect(asset.registration.path == "/ui/pair.css")
+		#expect(asset.url == "/ui/pair.css?v=\(asset.stamp)")
+		#expect(asset.stamp.count == 12)
+
+		try await withServer(
+			requestRender: { _ in "<p>page</p>" },
+			router: EventRouter(),
+			assets: [
+				asset.registration,
+				// a host asset with a plain policy: no stamp, no immutable.
+				.text("/ui/plain.css", probePlain, contentType: "text/css; charset=utf-8", cacheSeconds: 60),
+				// the bug, pinned: a registration that carries its stamp matches nothing.
+				.text("/x.css?v=deadbeef", "wrong", contentType: "text/css; charset=utf-8"),
+			]
+		) { port in
+			// (a) the linked url answers, bare registration + immutable cache, `Vary`
+			// present because a variant exists.
+			let (headers, body) = try await rawGET(
+				"http://127.0.0.1:\(port)\(asset.url)", acceptEncoding: "identity"
+			)
+			#expect(headers.contains("200 OK"))
+			#expect(headers.contains("Cache-Control: public, max-age=31536000, immutable"))
+			#expect(headers.contains("Vary: Accept-Encoding"))
+			#expect(!headers.contains("Content-Encoding:"))
+			#expect(String(decoding: body, as: UTF8.self) == probePlain)
+
+			// (b) the compressed variant negotiates to the bytes the build produced.
+			let (gzHeaders, gzBody) = try await rawGET(
+				"http://127.0.0.1:\(port)\(asset.url)", acceptEncoding: "gzip, deflate"
+			)
+			#expect(gzHeaders.contains("Content-Encoding: gzip"))
+			#expect(gzHeaders.contains("Vary: Accept-Encoding"))
+			#expect(gzBody == Data(probeGzip))
+
+			// (c) a plain host policy is untouched: max-age without immutable.
+			let (plainHeaders, _) = try await rawGET(
+				"http://127.0.0.1:\(port)/ui/plain.css", acceptEncoding: "identity"
+			)
+			#expect(plainHeaders.contains("Cache-Control: public, max-age=60"))
+			#expect(!plainHeaders.contains("immutable"))
+
+			// (d) the P3 bug, pinned both ways: the stamped registration matches nothing —
+			// not the stamped request, and not the bare path it was never registered at.
+			let (_, stamped) = try await get("http://127.0.0.1:\(port)/x.css?v=deadbeef")
+			#expect(stamped == 404)
+			let (_, bare) = try await get("http://127.0.0.1:\(port)/x.css")
+			#expect(bare == 404)
 		}
 	}
 

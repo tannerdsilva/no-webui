@@ -54,6 +54,12 @@ public struct WebUIServerAsset: Sendable {
 	public var contentType: String
 	/// `Cache-Control: max-age=<seconds>`. `nil` emits `no-store`.
 	public var cacheSeconds: Int?
+	/// append `, immutable` to the cache policy. for a content-addressed response — a
+	/// ``WebUIAsset`` registration, whose url carries the stamp of the bytes it serves —
+	/// revalidation can never find anything new, so it is pure overhead. has no effect when
+	/// ``cacheSeconds`` is `nil`: without a policy there is nothing to extend, and the
+	/// response is `no-store`.
+	public var immutable: Bool
 	/// a **pre-compressed** variant of ``body`` (gzip bytes), served when the client's
 	/// `Accept-Encoding` allows it; `nil` serves ``body`` to every client.
 	///
@@ -62,11 +68,15 @@ public struct WebUIServerAsset: Sendable {
 	/// the same arrangement the framework's own sheet and engine use.
 	public var gzip: [UInt8]?
 
-	public init(path: String, body: Body, contentType: String, cacheSeconds: Int? = nil, gzip: [UInt8]? = nil) {
+	public init(
+		path: String, body: Body, contentType: String,
+		cacheSeconds: Int? = nil, immutable: Bool = false, gzip: [UInt8]? = nil
+	) {
 		self.path = path
 		self.body = body
 		self.contentType = contentType
 		self.cacheSeconds = cacheSeconds
+		self.immutable = immutable
 		self.gzip = gzip
 	}
 
@@ -76,10 +86,12 @@ public struct WebUIServerAsset: Sendable {
 		_ text: String,
 		contentType: String,
 		cacheSeconds: Int? = nil,
+		immutable: Bool = false,
 		gzip: [UInt8]? = nil
 	) -> WebUIServerAsset {
 		WebUIServerAsset(
-			path: path, body: .text(text), contentType: contentType, cacheSeconds: cacheSeconds, gzip: gzip
+			path: path, body: .text(text), contentType: contentType,
+			cacheSeconds: cacheSeconds, immutable: immutable, gzip: gzip
 		)
 	}
 
@@ -89,10 +101,65 @@ public struct WebUIServerAsset: Sendable {
 		_ bytes: [UInt8],
 		contentType: String,
 		cacheSeconds: Int? = nil,
+		immutable: Bool = false,
 		gzip: [UInt8]? = nil
 	) -> WebUIServerAsset {
 		WebUIServerAsset(
-			path: path, body: .bytes(bytes), contentType: contentType, cacheSeconds: cacheSeconds, gzip: gzip
+			path: path, body: .bytes(bytes), contentType: contentType,
+			cacheSeconds: cacheSeconds, immutable: immutable, gzip: gzip
+		)
+	}
+}
+
+// MARK: - shipped asset (runtime value)
+
+/// one value that owns a shipped asset's bytes, address, variant and cache policy.
+///
+/// the pairing that used to be hand-maintained per asset — the url a document links and the
+/// path the server registers — is derived from this single value instead: ``url`` is
+/// ``registration``'s path plus the `?v=` stamp, and ``registration`` always registers the
+/// *bare* path. the server matches host assets after stripping the query, so a registration
+/// carrying its stamp would answer 404 for the whole asset (the failure mode is pinned as a
+/// test, not a comment). immutable caching is part of the value rather than something a host
+/// remembers to ask for, for the same reason: the url changes exactly when the bytes do.
+///
+/// a host builds one per served asset and hands `url` to the document and `registration` to
+/// ``WebUIServerConfig/assets``.
+public struct WebUIAsset: Sendable {
+	/// the bare request path, e.g. `/ui/style.css`. the stamp rides the url, never this.
+	public let path: String
+	/// the payload, exactly as it ships.
+	public let bytes: [UInt8]
+	/// the pre-compressed variant, or `nil` when the build host had no `gzip`.
+	public let gzip: [UInt8]?
+	/// the `Content-Type` header value.
+	public let contentType: String
+	/// the address the url carries: the first 12 hex characters of the sha256 of ``bytes``,
+	/// computed once at init — the same convention ``WebUIShippedAsset/stamp`` declares.
+	public let stamp: String
+
+	public init(path: String, bytes: [UInt8], gzip: [UInt8]? = nil, contentType: String) {
+		self.path = path
+		self.bytes = bytes
+		self.gzip = gzip
+		self.contentType = contentType
+		self.stamp = String(SHA256.hex(bytes).prefix(12))
+	}
+
+	/// a utf-8 text asset.
+	public init(path: String, text: String, gzip: [UInt8]? = nil, contentType: String) {
+		self.init(path: path, bytes: Array(text.utf8), gzip: gzip, contentType: contentType)
+	}
+
+	/// what a document links: the bare path plus the `?v=<12 hex>` stamp.
+	public var url: String { "\(path)?v=\(stamp)" }
+
+	/// what the server registers: the bare path, a year-long immutable cache, the
+	/// pre-compressed variant attached.
+	public var registration: WebUIServerAsset {
+		WebUIServerAsset(
+			path: path, body: .bytes(bytes), contentType: contentType,
+			cacheSeconds: 31536000, immutable: true, gzip: gzip
 		)
 	}
 }
@@ -470,7 +537,10 @@ final class Runner: Sendable {
 			case .text(let text): bytes = Array(text.utf8)
 			case .bytes(let raw): bytes = raw
 			}
-			let cacheControl = asset.cacheSeconds.map { "public, max-age=\($0)" } ?? "no-store"
+			// `immutable` extends a policy; without a max-age there is none to extend.
+			let cacheControl = asset.cacheSeconds.map {
+				"public, max-age=\($0)" + (asset.immutable ? ", immutable" : "")
+			} ?? "no-store"
 			encoded[asset.path] = HostAsset(
 				body: ByteBuffer(bytes: bytes),
 				gzip: asset.gzip.map { ByteBuffer(bytes: $0) },
