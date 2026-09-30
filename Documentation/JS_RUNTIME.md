@@ -270,6 +270,24 @@ resets the fragment patcher, clears the state store, and removes the
 ```javascript
 WebUIRuntime.init(opts)      // Initialize the runtime
 WebUIRuntime.destroy()       // Clean up all resources
+WebUIRuntime.on.afterPatch(fn)  // Run after every applied fragment batch
+WebUIRuntime.on.ready(fn)    // Run once the runtime is live
 WebUIRuntime._reset()        // For testing: reset singleton
 WebUIRuntime._getInstance()  // For testing: get current instance
 ```
+
+## Host extension points
+
+the runtime has no opinion about what a host does once the DOM has changed —
+typeset math, restore scroll, enhance tables — so it exposes the moment instead of
+the behaviour. `on.afterPatch` runs after every applied fragment batch; `on.ready`
+runs once the runtime is live (and immediately if it is registered after boot, so a
+host that loads its overlay as a second script is not silently skipped). a throwing
+hook is caught and logged, never allowed to break a patch. registration is
+module-scope, so hooks survive `destroy()` + `init()`.
+
+the engine — the default client runtime — carries the same seam as
+`WebUIEngine.on.afterPatch(fn)` / `on.ready(fn)`, and hands `afterPatch` the
+mutated subtree so an enhancement can scope itself. `webui-runtime.js` remains for
+hosts that still serve `WebUIRuntime.source` or use the legacy `HTMLDocument`
+path.

@@ -115,6 +115,34 @@ enum WebUIAssetTool {
             let jsGz = jsInput.flatMap { gzipData(of: $0) }
             let engineGz = engineInput.flatMap { gzipData(of: $0) }
             let shellGz = shellInput.flatMap { gzipData(of: $0) }
+
+            // the first law, enforced where the payloads are fixed: prose never
+            // reaches a client. the working sheet may carry designer notes —
+            // `minifyCSS` strips them before embedding — but the js assets have no
+            // strip step, so their source must be clean. a comment in any payload
+            // below fails the build here, naming file, line and text, rather than
+            // shipping (a prose-filled release is exactly what nobody notices).
+            let payloads: [(label: String, text: String, language: ProseGuard.Language)] = [
+                (jsInput ?? "webui-runtime.js", jsContent, .javaScript),
+                (engineInput ?? "webui-engine.js", engineContent, .javaScript),
+                (shellInput ?? "webui-shell.js", shellContent, .javaScript),
+                ("design-system.css (minified)", cssMinified, .css),
+            ]
+            var proseFound = false
+            for payload in payloads {
+                let findings = ProseGuard.findings(in: payload.text, language: payload.language)
+                guard !findings.isEmpty else { continue }
+                proseFound = true
+                print("error: \(payload.label) would ship \(findings.count) comment(s) to clients:")
+                for finding in findings.prefix(12) {
+                    print("  \(payload.label):\(finding.line): \(finding.text)")
+                }
+            }
+            if proseFound {
+                print("  the shipped bytes are the client's — keep the note in Documentation/*.md, or in the css working file, which is minified before embedding.")
+                exit(1)
+            }
+
             let generated = try generateAssetsSource(
                 css: cssContent, js: jsContent, engine: engineContent, shell: shellContent,
                 cssMinified: cssMinified,

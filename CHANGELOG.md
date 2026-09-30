@@ -58,6 +58,24 @@ all notable changes to this project are documented here.
   sheet, `--guard-css` keeps anything a consumer's own stylesheet still resolves, the counts
   land in the build manifest, and a name the sheet does not declare fails the build. omitted,
   the sheet ships whole — byte-identical to before.
+- **the shipped payloads are prose-free, checked at build time.** `WebUICore.ProseGuard` reads
+  comments only where each language says one can start — a `//` inside a string literal is not a
+  comment — and the asset tool runs it over every payload a client can receive: the runtime, the
+  engine, the shell, and the minified sheet. a comment fails the build naming file, line and text.
+  the runtime had been shipping a seven-line "Host extension points" note plus a `///` line
+  verbatim (11 comment lines, −698 bytes); the engine's and shell's comment-free pins never
+  covered it, and the plan's `grep -c '//'` lint was never built. the note now lives in
+  `Documentation/JS_RUNTIME.md`, where prose belongs.
+
+### fixed
+
+- **the orphan-class ratchet no longer hears prose.** `orphanBaselineIsTight` measured
+  "reachable" as "mentioned anywhere in swift", so the english word `comment` — in a prose note,
+  or in a message string such as `"would ship N comment(s) to clients"` — declared the sheet's
+  genuinely orphaned `.comment` class reachable and demanded its deletion from the baseline: the
+  ratchet would have rotted a real orphan on the strength of a mention. tightness now measures
+  **emissions** (a rendered page, plus the engine's own js-only class names), while the mention
+  scan stays what it was written to be — the *growth* direction's lenient floor.
 
 ### developer experience
 

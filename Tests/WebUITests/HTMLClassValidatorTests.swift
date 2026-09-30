@@ -117,23 +117,46 @@ struct HTMLClassValidatorTests {
 
 	private static let baselinePath = "Tests/WebUITests/orphan-class-baseline.txt"
 
-	/// the widest emitter surface we have. a class that a component *can* emit
-	/// but the showcase never demos also reads as an orphan — add the demo, or
-	/// accept it into the baseline and keep the count honest.
+	/// the growth direction's census: what the sheet defines and *nothing* can
+	/// reach. a class that a component *can* emit but the showcase never demos
+	/// also reads as an orphan — add the demo, or accept it into the baseline and
+	/// keep the count honest.
 	///
 	/// reachability has two signals, unioned on purpose:
 	///   1. the class name appears anywhere in the swift sources — a
-	///      deliberately lenient floor: a token collision can only *under*-
+	///      deliberately lenient floor, and a *floor only*: a token collision (the
+	///      english word `comment`, an unrelated message string) can only *under*-
 	///      report an orphan, it can never invent one;
 	///   2. the class is actually emitted by a rendered page (catches names
 	///      composed at render time, which a source scan cannot see).
+	///
+	/// signal 1 must not be used in the other direction — see `measuredUnemitted()`.
 	private func measuredOrphans() throws -> Set<String> {
 		let html = ShowcasePage(state: ShowcaseState()).render()
 		let extra = try swiftTokens().union(Self.jsOnlyClasses)
 		return Set(HTMLClassValidator.orphanClasses(in: [html], extra: extra))
 	}
 
-	/// every word token across `Sources/**/*.swift`.
+	/// the tightness direction's census: what the sheet defines and no rendered
+	/// page emits. the mention signal is *excluded* here, and the asymmetry is the
+	/// point.
+	///
+	/// measured, not argued: the word "comment" reaching any swift source — a
+	/// prose note, or a message string such as "would ship N comment(s) to
+	/// clients" — made the tightness ratchet declare the sheet's genuinely
+	/// orphaned `.comment` class reachable and demand its removal from the
+	/// baseline. deleting it would have rotted the ratchet *on the strength of a
+	/// mention*, which is the exact rot this pair of tests exists to prevent. a
+	/// mention is not an emitter, so tightness measures emissions: rendered pages,
+	/// plus the js-only names the engine writes.
+	private func measuredUnemitted() throws -> Set<String> {
+		let html = ShowcasePage(state: ShowcaseState()).render()
+		return Set(HTMLClassValidator.orphanClasses(in: [html], extra: Self.jsOnlyClasses))
+	}
+
+	/// every word token across `Sources/**/*.swift` — the growth direction's
+	/// lenient floor, never an evictor (`measuredUnemitted()` is what tightness
+	/// measures against; see its note).
 	private func swiftTokens() throws -> Set<String> {
 		var tokens = Set<String>()
 		let root = "Sources"
@@ -174,12 +197,13 @@ struct HTMLClassValidatorTests {
 			""")
 	}
 
-	@Test("the orphan baseline is tight: no entry lingers after its class becomes reachable")
+	@Test("the orphan baseline is tight: no entry lingers once a rendered page emits its class")
 	func orphanBaselineIsTight() throws {
-		let stale = baselineClasses().subtracting(try measuredOrphans())
+		let stale = baselineClasses().subtracting(try measuredUnemitted())
 		#expect(stale.isEmpty, """
-			these classes are now reachable — delete them from \(Self.baselinePath) so the \
-			ratchet cannot silently rot:
+			these classes are now emitted by a rendered page — delete them from \(Self.baselinePath) \
+			so the ratchet cannot silently rot (a mention in swift is not an emission, so it never \
+			retires a baseline entry):
 			\(stale.sorted().joined(separator: "\n"))
 			""")
 	}
