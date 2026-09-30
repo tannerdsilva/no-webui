@@ -1,7 +1,7 @@
 # no-webui
 
 A SwiftUI-for-web framework: server-rendered HTML with a SwiftUI-like declarative
-API, a design system with 205 CSS custom properties and 133 component types, and a JS runtime
+API, a design system with 174 CSS custom properties and 133 component types, and a JS runtime
 for live UI updates.
 
 ## Modules
@@ -9,7 +9,7 @@ for live UI updates.
 | Module | Description | Dependencies |
 |---|---|---|
 | `WebUI` | View protocol, primitives, layouts, modifiers, CSS system, HTML document assembly, WebSocket protocol, JS runtime | swift-log, rawdog |
-| `WebUIDesignSystem` | design system: 205 CSS custom properties, 133 component types | WebUI |
+| `WebUIDesignSystem` | design system: 174 CSS custom properties, 133 component types | WebUI |
 | `WebUIChart` | server-rendered inline-SVG charts: 9 mark types (bar/line/area/point/rect/rule/sector/radar/radial), scales, axes, selection, palette tokens; a plot declares a design width, compresses to 92% and pans rather than shrinking its labels | WebUICore |
 | `WebUIServer` | the NIO server that hosts a page plus its assets and the `/ws` socket | WebUI, WebUIDesignSystem, swift-nio |
 | `WebUIBlocks` | standalone page scaffolds — dashboard, login, signup, four sidebar variants, patterns — served one per process by `WebUIBlocksServer` | WebUI, WebUIDesignSystem, WebUIChart |

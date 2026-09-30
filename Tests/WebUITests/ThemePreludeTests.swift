@@ -97,4 +97,34 @@ struct ThemePreludeTests {
 			.filter { $0.hasPrefix("//") || $0.hasPrefix("/*") }
 		#expect(commentLines.isEmpty, "the engine is a shipped asset: \(commentLines.prefix(3))")
 	}
+
+	@Test("the emitted csp authorizes the prelude's nonce")
+	func cspAuthorizesTheNonce() {
+		// invariant #1: every inline script's nonce is named by the policy that ships
+		// with the page. a policy without it blocks the prelude — measured on the smoke
+		// page and the block sweeps, where the console carried a `script-src` violation
+		// and a stored theme never applied before paint.
+		let html = document()
+		guard let match = html.firstMatch(of: /<script nonce="([^"]+)">\(function\(\)/) else {
+			Issue.record("no prelude to authorize")
+			return
+		}
+		let nonce = String(match.1)
+		#expect(html.contains("'nonce-\(nonce)'"), "the policy must name the prelude's nonce")
+		#expect(html.contains("script-src 'self' 'wasm-unsafe-eval' 'nonce-\(nonce)'"))
+	}
+
+	@Test("a host policy with no nonce source suppresses the prelude instead of shipping a blocked script")
+	func hostPolicyWithoutNonceSourceSkipsPrelude() {
+		let html = HTMLDocument(
+			title: "t",
+			body: "<p>x</p>",
+			contentSecurityPolicy: "default-src 'self'; script-src 'self';"
+		).render()
+		#expect(!html.contains("localStorage.getItem('webui-theme')"),
+			"a prelude the browser will refuse is payload plus a console error")
+		#expect(!html.contains("<script nonce="), "no inline script is emitted at all")
+		#expect(html.contains("content=\"default-src 'self'; script-src 'self';\""),
+			"the host's own policy is kept verbatim")
+	}
 }

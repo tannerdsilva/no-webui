@@ -19,8 +19,8 @@ the package follows **semantic versioning** for its public API:
 the stability epoch begins at **1.0.0**. before that (`0.x`) the project is
 in active design and the API is allowed to churn (it already has: the
 `EventData.data` payload was widened from `[String: String]` to
-`[String: JSONValue]` during the wasm migration — see
-`WASM_TRAJECTORY.md` for why).
+`[String: JSONValue]` during the wasm migration; the doc that argued that change
+has since been deleted, and `CHANGELOG.md` records it).
 
 the canonical list of what may not change in a minor/patch is known as the
 **frozen surface**.
@@ -61,7 +61,11 @@ the frozen surface is:
   `WebUIListItem`, `WebUIComposer`, `WebUIPanel`, `WebUISelect`).
 - document/assembly: `WebUIDocument` (title/body/`includeRuntime`/
   `runtimeConfig`/`contentSecurityPolicy`/`theme`/`rawStyles`/`clientMode`),
-  `RuntimeConfig`, `WebUITheme`, `@Theme`, `DesignToken`.
+  `RuntimeConfig`, `ClientBoot` (the engine boot + `csp(nonce:)`),
+  `DesignSystemAssets` (the content-addressed sheet url, hash and prewarm).
+- the theming surface: `WebUITheme`, `ThemeMode`, `ThemePalette`, `ThemeScope`,
+  `TokenAlias`, `WebUIThemeProvider`, `ThemeCatalog` / `ThemeEntry`, the `@Theme`
+  macro, and the generated `DesignToken` vocabulary.
 - the `WebUIAuth` surface: `SessionToken`, `CSRFProtection`,
   `PasswordVerifier` / `Argon2Parameters` / `PasswordRecord`, `LoginThrottle`,
   `SingleUseTokenStore`, `AsyncSemaphore`, `CookieParser` / `HTTPCookie`,
@@ -190,9 +194,11 @@ frozen surface is a mistake:
    enforced by review against this document and the changelog. the in-repo
    enforcement (tests, byte-identity pins) guarantees the *current* epoch's
    surface, not the *transition* between epochs.
-7. **the applet harness is pre-2.0.** `WASM_APPLET_HARNESS.md` is the target
-   contract (applet regions, renderer registry, expanded import surface,
-   v2 message shapes). the v1 wire/ABI pinned by this 1.0.0 epoch remains
+7. **the applet harness is pre-2.0.** the harness's design doc
+   (`WASM_APPLET_HARNESS.md`) was deleted with the wasm-era docs; the target
+   contract — applet regions, renderer registry, expanded import surface, v2
+   message shapes — is described in `NEXT_ARCHITECTURE.md` §2c–§2d. the v1
+   wire/ABI pinned by this 1.0.0 epoch remains
    authoritative until the 2.0 epoch cut — the harness lands behind
    `clientMode` so the JS-runtime path and its pins stay untouched.
 

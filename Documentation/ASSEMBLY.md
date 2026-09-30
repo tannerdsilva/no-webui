@@ -34,6 +34,18 @@ consumed by `WebUIDocument` and `WebUIRuntime`.
 to update assets: edit the files in `designer/assets/`, then `swift build`
 (any plugin/gate invocation that builds `WebUI` also picks them up).
 
+the tool also *composes* what ships. the served sheet is the layer order
+statement, then the layout primitives wrapped in `@layer webui.utilities`, then
+the working sheet — which is itself wrapped in `@layer webui` in the source, so
+the working file the dev preview links behaves exactly like the served bytes.
+unlayered css (the app's own sheet, `rawStyles`, the theme sheet) outranks both
+layers by cascade origin. and the payloads are prose-free by construction:
+`WebUICore.ProseGuard` scans the runtime, engine, shell and minified sheet and
+fails the build naming file, line and text — the first law, enforced where the
+payloads are fixed. `--used-tokens <path> [--guard-css <path>]` optionally prunes
+the sheet's `:root` surface to the reachable set (T9), recording the counts in the
+build manifest; omitted, the sheet ships whole.
+
 ## stage 1b — svg icon generation (build time, automatic)
 
 `WebUIIconPlugin` (build tool plugin, applied to the `WebUI` target, alongside

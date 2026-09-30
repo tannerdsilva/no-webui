@@ -1,7 +1,9 @@
-> **SUPERSEDED** — the inline JS runtime described here was retired in the
-> wasm-always migration. Pages now always emit the `webui-wasm` client contract
-> (chamber + content-addressed artifact) and patch the DOM over the `/ws`
-> authority channel; see `ARCHITECTURE.md` and `WASM_BOOTSTRAP.md`.
+> **SUPERSEDED** — the inline JS runtime described here was retired by the
+> engine-first architecture (`NEXT_ARCHITECTURE.md`): pages emit the engine
+> (`ClientBoot` → `webui-engine.js`) and the wasm chamber it once named has been
+> deleted; wasm survives only as capability islands. the runtime still ships for
+> hosts that serve `WebUIRuntime.source` or the legacy `HTMLDocument` path, so this
+> remains its reference.
 
 # JS Runtime
 

@@ -222,17 +222,23 @@ servers use the capped path) |
 
 ### WebUIDocument
 
-`HTMLDocument` variant that ships `LayoutStyles.complete` plus the full
-`WebUIAssets.css` (the nexus design system, 169 `:root` CSS custom properties).
-the css is minified at render time, so served pages carry no comments and no
-blank lines. see `Documentation/DESIGN_SYSTEM.md` for the complete token and
-component catalog.
+`HTMLDocument` variant that ships the design system: the shared sheet
+(`designer/assets/design-system.css`, 174 `:root` custom properties, wrapped in
+`@layer webui, webui.utilities`) plus `LayoutStyles.complete`, minified once into
+`DesignSystemAssets.minifiedCss` and linked (or inlined) as the content-addressed
+`/__assets/css.<sha256>`. the served bytes carry no comments. see
+`Documentation/DESIGN_SYSTEM.md` for the cascade, the token catalog, and the
+theming surface.
 
-accepts `theme: WebUITheme = .standard` — a themed document appends the
-theme's css (`:root` overrides + app rules) after the design sheet, so later
-source order wins the cascade for every token the components resolve through
-`var(--…)`. `.standard` (the default) contributes nothing and renders
-byte-identical to the unthemed document.
+because every framework rule is layered, **a page's own css wins without
+specificity games**: `rawStyles`, an app stylesheet, and the theme sheet are
+unlayered, so they outrank the framework by cascade origin — `!important` and
+selector-weight escalation are never required.
+
+accepts `theme: WebUITheme = .standard` — a themed document appends the theme's
+css (`:root` overrides + app rules, unlayered) after the design sheet.
+`.standard` (the default) contributes nothing and renders byte-identical to the
+unthemed document.
 
 accepts `checkClasses: Bool = false` — when true the rendered document is
 scanned against the shipped sheet and every undefined class is routed through
@@ -256,30 +262,35 @@ are not defined in the shipped sheet".
 
 ### Theme
 
-per-page custom aesthetics on top of the shipped design system, without a
-fork of the framework css.
+per-page (or per-scheme) custom aesthetics on top of the shipped design system,
+without a fork of the framework css. the emitted theme css is **unlayered**: it
+outranks the layered base sheet, and in turn loses to the app's own css.
 
 | Type | Role |
 |---|---|
-| `DesignToken` | generated enum of the 169 `:root`-scoped tokens from `design-system.css` (the only custom properties a later `:root` override can restyle). **generated into the wasm-clean `WebUIDesignSystemCore` target** (`DesignTokens+Generated.swift`) so the client build can reference it without rawdog. case name = camelCased css name (`color-primary-solid` → `.colorPrimarySolid`), `rawValue` = the exact kebab name, `cssVariable` = `--<rawValue>`. component-scoped custom properties (`.btn { --btn-bg: … }`) are excluded by construction — restyle those via theme `rules`. |
-| `ColorScheme` | `.automatic` / `.light` / `.dark`. a fixed scheme declares `color-scheme:` on `:root`; `.dark` is the dark-first choice. |
-| `WebUITheme` | value type in `WebUIDesignSystemCore` (wasm-clean, re-exported via `WebUIDesignSystem`): `tokens: [DesignToken: String]`, `customTokens: [String: String]` (app-invented `--name` keys), `scheme: ColorScheme`, `rules: [CSSRule]`. `.standard` is the empty theme; `.overlaying(_:)` layers a partial theme (dynamic accent) over a static one; `stylesheet()` renders deterministically (color-scheme, then tokens sorted by css name, then rules). |
-| `WebUIThemeProvider` | protocol with `static var theme: WebUITheme`. the default yields `.standard`, so hand-written conformers compile for free. |
-| `@Theme` | attached macro: turns a struct of `static let` members into a `WebUIThemeProvider`. reserved members `scheme`, `rules`, `customTokens` map to the three non-token axes; every other `static let <name> = <value>` is a token override whose member name must be a `DesignToken` case (compiler-validated at the expansion site). |
+| `DesignToken` | generated enum of the 174 `:root`-scoped tokens from `design-system.css` (the only custom properties a later `:root` override can restyle). **generated into the wasm-clean `WebUIDesignSystemCore` target** (`DesignTokens+Generated.swift`) so the client build can reference it without rawdog. case name = camelCased css name (`color-primary-solid` → `.colorPrimarySolid`), `rawValue` = the exact kebab name, `cssVariable` = `--<rawValue>`. component-scoped custom properties (`.btn { --btn-bg: … }`) are excluded by construction — restyle those via a theme's `rules`. |
+| `ThemeMode` | `.automatic` / `.light` / `.dark`. a fixed mode emits `color-scheme:`; `.automatic` emits nothing and follows the OS. (renamed from `ColorScheme` — which is the name an app gives its *own* scheme type.) |
+| `ThemePalette` | one mode's overrides: `tokens: [DesignToken: String]` + `customTokens: [String: String]` (app-invented `--name` keys). `.overlaying(_:)` merges per key. |
+| `WebUITheme` | `palette`, `dark` (the dark override palette), `defaultMode`, `rules: [CSSRule]` (escape hatch, last resort), `aliases: [TokenAlias]`. `.standard` is the empty theme; `.overlaying(_:)` merges per palette; `stylesheet(scope:)` renders deterministically (declarations sorted by css name, so the bytes are stable and cacheable). |
+| `ThemeScope` | `.root` (one theme on `:root`, the default) or `.attribute(id:)` (scoped to `:root[data-scheme="<id>"][data-theme="light\|dark"]`, so one page can ship every scheme). |
+| `TokenAlias` | `TokenAlias("--bg", .colorBg)` — an app's own property name bound to a token; emits the indirection `--bg: var(--color-bg)`, so a token override updates every alias and a typo is a missing enum case. |
+| `WebUIThemeProvider` | protocol with `static var theme: WebUITheme` plus identity (`themeID`/`themeLabel`/`themeSwatch`, all defaulted), so a hand-written conformer compiles for free. |
+| `ThemeCatalog` | `static var all: [any WebUIThemeProvider.Type]` + `static var defaultTheme`, with `entries` / `stylesheet()` / `theme(for:)` rendering the whole set — what a client-side switcher renders from. |
+| `@Theme` | attached macro: turns a struct of `static let` members into a `WebUIThemeProvider`. reserved members `palette`, `dark`, `defaultMode`, `rules`, `customTokens` map to the axes of `WebUITheme`; every other `static let <name> = <value>` is a token override whose member name must be a `DesignToken` case (compile error otherwise). `@Theme(base: Other.self)` layers the declared overrides over another provider, per palette. |
 
 ```swift
 import WebUIDesignSystem
 
-@Theme
-struct NexusDark {
-    static let scheme = ColorScheme.dark
-    static let colorPrimarySolid = "#6c8cff"
-    static let colorBg = "#101014"
+@Theme(base: NexusBase.self)
+struct Poseidon {
+    static let defaultMode = ThemeMode.dark
+    static let colorPrimarySolid = "#268BD2"
     static let customTokens = ["--chat-user-bubble": "#2a2a2e"]
-    static let rules: [CSSRule] = [.chatBubble, .streamDots]
+    static let rules: [CSSRule] = [.chatBubble]
+    static let aliases = [TokenAlias("--bg", .colorBg)]
 }
 
-let page = WebUIDocument(body: body, theme: NexusDark.theme)
+let page = WebUIDocument(body: body, theme: Poseidon.theme)
 ```
 
 a dynamic overlay rides on top of a static theme:
@@ -287,9 +298,26 @@ a dynamic overlay rides on top of a static theme:
 ```swift
 let doc = WebUIDocument(
     body: body,
-    theme: NexusDark.theme.overlaying(WebUITheme(tokens: [.colorPrimarySolid: userAccent]))
+    theme: Poseidon.theme.overlaying(
+        WebUITheme(palette: ThemePalette(tokens: [.colorPrimarySolid: userAccent]))
+    )
 )
 ```
+
+a scheme *set* ships as a catalog, and the catalog serializes to the client as
+data (`WebUITheme`/`ThemePalette`/`ThemeEntry` are `Codable`):
+
+```swift
+enum SchemeCatalog: ThemeCatalog {
+    static var all: [any WebUIThemeProvider.Type] { [Poseidon.self, …] }
+    static var defaultTheme: any WebUIThemeProvider.Type { Poseidon.self }
+}
+```
+
+`.standard` contributes nothing: a page themed `.standard` renders byte-identical
+to an unthemed one. catalog integrity (unique ids, a default that is a member,
+every `base` resolving) and the emitted scope shape are pinned by the theme
+suites.
 
 ### Components
 

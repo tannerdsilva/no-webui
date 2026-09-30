@@ -40,6 +40,22 @@ all notable changes to this project are documented here.
 - contrast is swept for **every theme × mode** from the typed catalog
   (`DeploymentIntegrityTests`) rather than 50-odd hand-written pairs that rot.
 
+### css delivery — the cascade is now explicit
+
+- **the sheet ships in cascade layers.** `@layer webui, webui.utilities;` wraps the
+  framework's rules — components in `webui`, the layout primitives the asset tool
+  prepends in `webui.utilities` — so **unlayered css outranks the framework by cascade
+  origin, not by specificity**: an app's own stylesheet, `rawStyles`, and the theme
+  sheet win outright, and restyling a component never needs `!important` or matching
+  selector weight. measured before the change: 704 of the sheet's 2,511 rules sat above
+  single-class specificity, so an override like `.button--icon.button--sm` could only be
+  beaten by escalating to the same weight. the browser gate now proves the consequence
+  on the deployed page (a single-class consumer rule beats a two-class framework rule),
+  and `CascadeLayerTests` scans the served bytes, failing if any rule escapes the layers.
+  theme sheets stay *unlayered* by design, so a theme outranks the base sheet's tokens.
+  this is a consumer-visible change by intent: css that used to tie or lose to the
+  framework now wins.
+
 ### engine & assets
 
 - assets are compressed at **build** time (the tool runs the host `gzip`) and `WebUIServer`
@@ -76,6 +92,14 @@ all notable changes to this project are documented here.
   ratchet would have rotted a real orphan on the strength of a mention. tightness now measures
   **emissions** (a rendered page, plus the engine's own js-only class names), while the mention
   scan stays what it was written to be — the *growth* direction's lenient floor.
+- **a generated csp authorizes the inline theme prelude.** `ClientBoot.csp(nonce:)`
+  splices the render's nonce into the default policy. before this, the served default
+  policy named no nonce source, so the pre-paint prelude was **blocked by the browser**
+  on every reference page — measured: the browser smoke gate and the block sweeps both
+  reported `script-src 'self' 'wasm-unsafe-eval'` violations and a stored theme never
+  applied before paint. a host policy that names no nonce source now *suppresses* the
+  prelude (with a warning naming the fix) instead of shipping a script the browser will
+  refuse. `preludeTag` is emitted only when the effective policy can run it.
 
 ### developer experience
 

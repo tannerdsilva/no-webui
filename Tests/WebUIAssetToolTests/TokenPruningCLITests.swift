@@ -106,32 +106,34 @@ struct TokenPruningCLITests {
 		chars = Array(stripped)
 
 		var names: [String] = []
-		var stack: [String] = []
-		var selector = ""
-		var body = ""
+		// a `:root` block is collected wherever it sits — at the top level, or
+		// nested in the `@layer webui { … }` wrapper the shipped composition uses.
+		// a layer is a nesting level like any other; a parser that only reads depth
+		// 0 would "prove" the surface empty. selector text and declaration text
+		// both accumulate in `pending`, which is consumed at each brace: what
+		// precedes a `{` is that block's selector, what precedes its `}` is its
+		// body (`:root` blocks nest nothing, so this is exact for them).
+		var selectors: [String] = []
+		var pending = ""
 		i = 0
 		while i < chars.count {
 			let c = chars[i]
 			if c == "{" {
-				stack.append(selector.trimmingCharacters(in: .whitespacesAndNewlines))
-				selector = ""
-				body = ""
+				selectors.append(pending.trimmingCharacters(in: .whitespacesAndNewlines))
+				pending = ""
 			} else if c == "}" {
-				if stack.last == ":root" {
-					for part in body.split(separator: ";") {
+				let selector = selectors.popLast() ?? ""
+				if selector == ":root" {
+					for part in pending.split(separator: ";") {
 						let text = part.trimmingCharacters(in: .whitespacesAndNewlines)
 						guard text.hasPrefix("--"), let colon = text.firstIndex(of: ":") else { continue }
 						let name = String(text[text.startIndex..<colon])
 						if !names.contains(name) { names.append(name) }
 					}
 				}
-				if !stack.isEmpty { stack.removeLast() }
-				selector = ""
-				body = ""
-			} else if stack.isEmpty {
-				selector.append(c)
+				pending = ""
 			} else {
-				body.append(c)
+				pending.append(c)
 			}
 			i += 1
 		}

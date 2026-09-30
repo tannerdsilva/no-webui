@@ -174,8 +174,9 @@ The same `View`/`ViewModifier` core can run **inside the browser** — the
   Use `.four` (16px) etc. for padding/gaps, never raw px.
 - **ColorToken**: `.primary`, `.text`, `.textMuted`, `.textFaint`, `.border`,
   `.background`, `.backgroundRaised`, `.success`, `.warning`, `.danger`, …
-  → `var(--color-*)`. `WebUITheme`'s Swift palette is legacy — the CSS tokens are
-  the source of truth.
+  → `var(--color-*)`. the CSS file is the vocabulary's source of truth; the Swift
+  `WebUITheme`/`@Theme` surface (`DesignToken` keys) is the typed way to restate
+  them — a token override there is compiler-checked.
 - **Semantic tokens** (in `design-system.css`): light bg `#f4f6f8`, raised
   `#ffffff`; dark bg `#060910`, raised `#0c111c`; primary indigo `#6366f1`
   (light action fill `#4f46e5`; dark link `#818cf8`); radii `--radius-md` 6px
@@ -187,8 +188,10 @@ The same `View`/`ViewModifier` core can run **inside the browser** — the
   override beats the OS either way. `WebUIThemeToggle` (System/Light/Dark)
   drives it client-side with `localStorage` persistence, no round trip.
   Design and verify **both** themes; never hardcode a theme. On a page-scoped
-  tweak, put it in `WebUIDocument.rawStyles` (lands after the sheet, so it
-  extends without overriding the shared defaults).
+  tweak, put it in `WebUIDocument.rawStyles` — and note that **unlayered css
+  always wins**: the sheet ships in `@layer webui, webui.utilities`, so rawStyles,
+  an app stylesheet, and the theme sheet outrank the framework by cascade origin.
+  no `!important`, no matching specificity.
 
 ### The `*__body` padding convention (key gotcha)
 

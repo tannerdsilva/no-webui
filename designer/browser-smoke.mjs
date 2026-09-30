@@ -351,6 +351,64 @@ else bad("status chip did not clear on reconnect");
     await esc.close();
 }
 
+// 5. cascade layers: unlayered consumer css outranks the sheet by intent, not by
+//    specificity. the probe picks its pair out of the *served* bytes — a framework
+//    rule whose selector carries more than one class part — so it cannot pass by
+//    finding a rule a plain single-class override would have beaten anyway.
+{
+  const candidate = await page.evaluate(async () => {
+    const link = document.querySelector('link[rel="stylesheet"][href*="/__assets/css"]');
+    if (!link) return { error: "no deployed sheet link" };
+    const css = await (await fetch(link.href)).text();
+    if (!css.startsWith("@layer webui, webui.utilities;")) return { error: "the sheet is not layered" };
+    const lengthProps = ["gap", "row-gap", "column-gap", "padding", "padding-top", "padding-inline-start",
+      "margin", "margin-top", "margin-bottom", "border-radius", "font-size", "width", "min-width",
+      "max-width", "height", "min-height", "top", "left", "inset", "border-width", "outline-offset"];
+    const blocks = css.match(/[^{}]+\{[^{}]*\}/g) || [];
+    for (const block of blocks) {
+      const open = block.indexOf("{");
+      const sel = block.slice(0, open).trim();
+      if (sel.startsWith("@")) continue;
+      const classes = (sel.match(/\.[A-Za-z0-9_-]+/g) || []).map((s) => s.slice(1));
+      const elements = (sel.replace(/[#.\[][^\s>+~,]*/g, "").match(/[a-zA-Z][a-zA-Z0-9-]*/g) || []).length;
+      if (classes.length < 2 && !(classes.length === 1 && elements > 0)) continue;
+      const target = classes[classes.length - 1];
+      if (!target) continue;
+      const el = document.querySelector("." + CSS.escape(target));
+      if (!el) continue;
+      const body = block.slice(open + 1);
+      for (const prop of lengthProps) {
+        const m = body.match(new RegExp("(?:^|;)\\s*" + prop + "\\s*:\\s*([^;]+)"));
+        if (!m) continue;
+        if (!/\d(px|rem|em)\b/.test(m[1])) continue;
+        const before = getComputedStyle(el).getPropertyValue(prop).trim();
+        if (!before) continue;
+        return { selector: sel.replace(/\s+/g, " ").slice(0, 64), target, prop, before, classParts: classes.length };
+      }
+    }
+    return { error: "no multi-class rule with a length property whose target is on the page" };
+  });
+  if (candidate.error) {
+    bad(`layers probe: ${candidate.error}`);
+  } else {
+    // the consumer's own rule: single class, unlayered, added after the sheet.
+    // a constructable stylesheet — not a `<style>` tag — so the page's csp cannot
+    // make this probe pass or fail for the wrong reason.
+    const applied = await page.evaluate(({ target, prop }) => {
+      const sheet = new CSSStyleSheet();
+      sheet.replaceSync(`.${target} { ${prop}: 37px; }`);
+      document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+      const el = document.querySelector("." + CSS.escape(target));
+      return getComputedStyle(el).getPropertyValue(prop).trim();
+    }, candidate);
+    if (applied === "37px") {
+      ok(`unlayered consumer css beats a ${candidate.classParts}-class framework rule (${candidate.selector} → .${candidate.target} ${candidate.prop}, was ${candidate.before})`);
+    } else {
+      bad(`layers: consumer override lost — ${candidate.prop} = ${applied} (framework rule ${candidate.selector})`);
+    }
+  }
+}
+
 await browser.close();
 server.kill();
 

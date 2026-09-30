@@ -108,8 +108,15 @@ enum WebUIAssetTool {
                 }
             }
 
+            // the layout primitives are the framework's utility layer: above the
+            // sheet's component rules, below anything unlayered. the order
+            // statement is repeated here because layer order is set by first
+            // mention and this block is prepended to the sheet (which declares the
+            // same order — a repeat is a no-op).
             let cssMinified = minifyCSS(
-                CSSStylesheet(LayoutStyles.complete).render() + "\n\n" + cssContent
+                "@layer webui, webui.utilities;\n\n@layer webui.utilities {\n"
+                    + CSSStylesheet(LayoutStyles.complete).render()
+                    + "\n}\n\n" + cssContent
             )
             let cssGz = cssGzipData(of: cssMinified)
             let jsGz = jsInput.flatMap { gzipData(of: $0) }

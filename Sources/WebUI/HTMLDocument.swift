@@ -1,4 +1,5 @@
 import Foundation
+import Logging
 
 // MARK: - HTMLDocument
 public struct HTMLDocument: Sendable {
@@ -102,8 +103,9 @@ public struct HTMLDocument: Sendable {
             return "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;"
         }
         // the client runtime needs wasm-unsafe-eval (the chamber compiles the
-        // module); still `'self'`, still no `'unsafe-inline'` in script-src.
-        return ClientBoot.defaultCSP
+        // module) and the render's nonce: the pre-paint prelude is an inline script,
+        // and a policy that names no nonce source blocks it outright.
+        return ClientBoot.csp(nonce: nonce)
     }
     public init(
         title: String = "WebUI",
@@ -149,6 +151,8 @@ public struct HTMLDocument: Sendable {
         self.stylesheetURL = stylesheetURL
         self.nonce = Self.generateNonce()
     }
+    private static let documentLogger = Logger(label: "webui.document")
+
     /// The pre-paint prelude, verbatim.
     ///
     /// One line, no comments: this is bytes the client parses before it can paint anything
@@ -219,9 +223,19 @@ public struct HTMLDocument: Sendable {
         // default brand mark lands otherwise; an empty string suppresses it.
         let iconTag = icon.isEmpty ? "" : "  \(icon)"
         let preludeTag: String
-        if themePrelude, boot != nil {
+        // an inline script only runs when the effective policy names its nonce (a
+        // nil policy allows it). suppressing the prelude beats emitting a script the
+        // browser refuses: the failure is otherwise a console error plus a silent
+        // theme flash, which is exactly how this went unnoticed.
+        let inlineScriptsAllowed = cspValue.map { $0.contains("'nonce-") } ?? true
+        if themePrelude, boot != nil, inlineScriptsAllowed {
             preludeTag = "<script nonce=\"\(htmlEscape(nonce))\">\(Self.themePreludeScript)</script>"
         } else {
+            if themePrelude, boot != nil {
+                Self.documentLogger.warning(
+                    "theme prelude suppressed: the effective Content-Security-Policy names no nonce source, so inline scripts cannot run — a stored theme choice will flash on first paint. add `'nonce-…'` to script-src (see ClientBoot.csp(nonce:)), or pass themePrelude: false"
+                )
+            }
             preludeTag = ""
         }
         let stylesheetTag: String

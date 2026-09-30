@@ -1,5 +1,16 @@
 
 
+/* the framework's css lives in one cascade layer, and the layout primitives the
+   asset tool prepends live in a second, later one (`webui.utilities`, declared
+   here so this file is correct standalone — the dev preview links it directly).
+   unlayered css outranks both: a consumer's own sheet, and the theme sheet, win
+   by intent instead of by specificity. that is the point of layering them: 704 of
+   this sheet's rules sit above single-class specificity, so an app's override was
+   a specificity contest it could only win by escalating to matching weight. */
+@layer webui, webui.utilities;
+
+@layer webui {
+
 :root {
 
   --color-neutral-50:  #f8fafc;
@@ -9295,3 +9306,5 @@ html[data-theme="dark"] {
   max-width: 100%;
   min-width: 0;
 }
+
+} /* end @layer webui */

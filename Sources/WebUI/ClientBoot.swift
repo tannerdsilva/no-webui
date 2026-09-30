@@ -21,6 +21,22 @@ public struct ClientBoot: Sendable {
 	/// capability is a follow-up.
 	public static let defaultCSP = "default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws: wss:;"
 
+	/// The default policy with this render's nonce authorised for inline scripts.
+	///
+	/// `defaultCSP` names no `'nonce-…'` source, so it *blocks* any inline script —
+	/// including the pre-paint theme prelude `HTMLDocument` emits carrying a nonce.
+	/// measured: the browser smoke gate and the block sweeps both reported the
+	/// `script-src 'self' 'wasm-unsafe-eval'` violation and the prelude never ran, so
+	/// the served default policy carries the render's nonce. a host that passes its
+	/// own policy keeps it, and `HTMLDocument` skips the prelude in that case rather
+	/// than emitting a script the browser will refuse.
+	public static func csp(nonce: String) -> String {
+		defaultCSP.replacingOccurrences(
+			of: "script-src 'self' 'wasm-unsafe-eval';",
+			with: "script-src 'self' 'wasm-unsafe-eval' 'nonce-\(nonce)';"
+		)
+	}
+
 	/// only-set `RuntimeConfig` knobs. behavior knobs ride through to the boot;
 	/// transport knobs (debounce, reconnect) stay runtime-owned.
 	public let config: RuntimeConfig?

@@ -10,10 +10,12 @@ one Package.swift, one family — the swiftui-for-web stack:
    modifiers, css system, html document assembly, websocket protocol, js
    runtime. the host of the design-system assets (embedded at build time).
    actively developed — this is where most work happens.
-2. **WebUIDesignSystem** — the nexus design system: 257 css custom properties
-   (tokens) and 133 component types. mature, stable. the counts are measured,
-   not asserted — re-measure rather than trust them:
-   `grep -oE '^\s*--[a-z0-9-]+:' designer/assets/design-system.css | sort -u | wc -l`,
+2. **WebUIDesignSystem** — the nexus design system: 174 css custom properties
+   (the `:root` token vocabulary) and 133 component types. mature, stable. the
+   counts are measured, not asserted — re-measure rather than trust them:
+   the authoritative token count is `DesignToken.tokenCount` in the generated
+   `DesignTokens+Generated.swift` (every `swift build` prints it: "generated … (174
+   tokens)"), and
    `grep -rhoE '^public struct WebUI[A-Za-z]+' Sources/WebUIDesignSystemCore/*.swift | sort -u | wc -l`.
 3. **WebUIAuth** — authentication + sessions: identity model, session tokens,
    cookies, in-memory session store behind an `AuthSessionStore` protocol,
@@ -29,17 +31,20 @@ one Package.swift, one family — the swiftui-for-web stack:
 the low-level core libraries (ip, futures, fifo, pthread) were removed from
 the manifest — the package is web-ui only now.
 
-## first law — comments allowed in swift, none in shipped web assets
+## first law — comments allowed in swift, none in shipped bytes
 
 comments are welcome in swift source. `///` doc comments and `//` line comments
 are fine anywhere a comment helps — libraries, executables, plugins, tests.
 `// MARK:` remains the convention for structural navigation.
 
-the one place comments stay forbidden is the distributed web surface: the html,
-css, and js shipped to clients. `designer/assets/design-system.css`,
-`designer/assets/webui-runtime.js`, and every generated html document go over
-the wire verbatim — comments there are payload weight and leak implementation
-detail. keep the bytes the client receives free of comments.
+the one place comments stay forbidden is the bytes a client receives: the served
+html, css, and js. `WebUIAssetTool` enforces it — `WebUICore.ProseGuard` scans
+the payloads it embeds (`webui-runtime.js`, `webui-engine.js`, `webui-shell.js`,
+and the minified sheet) on every build and fails naming file, line and text. the
+css working file is the one place prose may *live*: `design-system.css` carries
+the designer's notes and the build minifies them away, so the file the designer
+edits and the bytes the client receives differ by exactly that one transform —
+and nothing else.
 
 framework-level prose documentation still belongs in `Documentation/*.md`;
 inline comments explain code, markdown files explain architecture and APIs.
@@ -219,6 +224,19 @@ invocation. gates host their own server, check, and tear down in one call.
   (deployment-guarded).
 - **fragment save/restore** — scroll position and non-form `[tabindex]` focus
   survive a patch alongside value/checked/caret for form controls.
+- **cascade layers** — the sheet ships inside `@layer webui, webui.utilities;`
+  (declared in `design-system.css`), and the asset tool wraps the prepended
+  `LayoutStyles` rules in `webui.utilities`. unlayered css outranks the framework
+  by cascade origin, so an app overrides without specificity games and without
+  `!important`; the theme sheet stays *unlayered* for the same reason (a scheme
+  must outrank the base sheet's tokens). pinned structurally by
+  `Tests/WebUITests/CascadeLayerTests.swift` and in a real browser by
+  `designer/browser-smoke.mjs`.
+- **inline scripts need their nonce in the csp** — `HTMLDocument` emits the
+  pre-paint theme prelude inline, so the served default policy carries the render
+  nonce (`ClientBoot.csp(nonce:)`); a host policy that names no `'nonce-…'` source
+  suppresses the prelude with a warning instead of shipping a script the browser
+  refuses.
 - **RenderContext** — `@TaskLocal` context for component ID generation and
   handler registration. must be set before rendering.
 - **HTMLDocument** — assembles complete HTML with auto-generated CSP and nonce.
