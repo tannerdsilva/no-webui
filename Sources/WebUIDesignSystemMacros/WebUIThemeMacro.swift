@@ -14,7 +14,9 @@ import SwiftSyntaxMacros
 ///   - `dark`        — a `ThemePalette` for the dark palette;
 ///   - `defaultMode` — a `ThemeMode`;
 ///   - `rules`       — `[CSSRule]`, appended after the token overrides;
-///   - `customTokens`— `[String: String]`, app-invented custom properties (light palette).
+///   - `customTokens`— `[String: String]`, app-invented custom properties (base palette);
+///   - `aliases`     — `[TokenAlias]`, the app's own property names declared against the
+///     framework's tokens (emitted as indirections, so they follow the token per mode).
 /// - every other `static let <name>` is a light-palette token override — the generated
 ///   code references `.<name>` in a `[DesignToken: String]` literal, so the token name is
 ///   validated by the compiler against the generated `DesignToken` enum (a typo is a
@@ -43,6 +45,7 @@ public struct WebUIThemeMacro: ExtensionMacro {
         var hasDark = false
         var hasDefaultMode = false
         var hasRules = false
+        var hasAliases = false
         var hasBase = false
 
         // `base:` is a macro argument (a type), not a member — parse it off the attribute.
@@ -75,6 +78,7 @@ public struct WebUIThemeMacro: ExtensionMacro {
                 case "dark": hasDark = true
                 case "defaultMode": hasDefaultMode = true
                 case "rules": hasRules = true
+                case "aliases": hasAliases = true
                 case "customTokens": hasCustomTokens = true
                 // identity members. satisfied by the struct's own declaration (a `static let`
                 // meets a `{ get }` requirement), so there is nothing to emit — but they MUST
@@ -124,6 +128,7 @@ public struct WebUIThemeMacro: ExtensionMacro {
         if hasDark { themeArgs.append("dark: dark") }
         if hasDefaultMode { themeArgs.append("defaultMode: defaultMode") }
         if hasRules { themeArgs.append("rules: rules") }
+        if hasAliases { themeArgs.append("aliases: aliases") }
 
         let overrides = themeArgs.isEmpty
             ? "WebUITheme()"

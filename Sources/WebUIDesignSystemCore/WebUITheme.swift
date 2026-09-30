@@ -103,6 +103,32 @@ public enum ThemeScope: Sendable, Equatable {
 	case attribute(id: String)
 }
 
+// MARK: - TokenAlias
+
+/// An app's own custom property, declared against the framework's token vocabulary.
+///
+/// An app that carries its own names — `--bg`, `--surface`, `--sidebar` — previously had to
+/// hand-write a table mapping them onto tokens. That table is untyped on both sides, so a
+/// mistyped token name survives to runtime and renders as a missing colour. Declaring the
+/// mapping here makes the token a compile-time name (a typo is a missing enum case) and leaves
+/// only the app's own property name as a string, which is the side the app owns.
+///
+/// It emits an **indirection**, not a value: `--bg: var(--color-bg)`. So a theme that overrides
+/// the token updates every alias for free — including across modes, where the token resolves to
+/// a different value, and including when the theme does not set the token at all (the var
+/// resolves against the base sheet's `:root`).
+public struct TokenAlias: Sendable, Equatable, Codable {
+	/// the app's property name, e.g. `--bg`. kept verbatim, like a custom token.
+	public let property: String
+	/// the framework token it means.
+	public let token: DesignToken
+
+	public init(_ property: String, _ token: DesignToken) {
+		self.property = property
+		self.token = token
+	}
+}
+
 // MARK: - WebUITheme
 
 /// A theme: up to two palettes, a mode, and app-specific rules that layer on top of the
@@ -131,18 +157,26 @@ public struct WebUITheme: Sendable, Equatable, Codable {
 	/// app-specific component css, appended after all token overrides so it can both
 	/// reference `var(--…)` tokens and set scoped ones.
 	public var rules: [CSSRule]
+	/// The app's own custom-property vocabulary, declared against the framework's tokens.
+	///
+	/// Theme-level rather than per-palette: the *mapping* is the same in every mode, and the
+	/// indirection means the value follows the token. Emitted into every rule the theme
+	/// contributes, so an alias exists in light, dark and scoped modes alike.
+	public var aliases: [TokenAlias]
 
 	/// the full form: a base palette plus an optional dark override.
 	public init(
 		palette: ThemePalette = .empty,
 		dark: ThemePalette = .empty,
 		defaultMode: ThemeMode = .automatic,
-		rules: [CSSRule] = []
+		rules: [CSSRule] = [],
+		aliases: [TokenAlias] = []
 	) {
 		self.palette = palette
 		self.dark = dark
 		self.defaultMode = defaultMode
 		self.rules = rules
+		self.aliases = aliases
 	}
 
 	/// the one-palette form, which is the common case: `tokens`/`customTokens` become
@@ -153,13 +187,15 @@ public struct WebUITheme: Sendable, Equatable, Codable {
 		customTokens: [String: String] = [:],
 		dark: ThemePalette = .empty,
 		defaultMode: ThemeMode = .automatic,
-		rules: [CSSRule] = []
+		rules: [CSSRule] = [],
+		aliases: [TokenAlias] = []
 	) {
 		self.init(
 			palette: ThemePalette(tokens: tokens, customTokens: customTokens),
 			dark: dark,
 			defaultMode: defaultMode,
-			rules: rules
+			rules: rules,
+			aliases: aliases
 		)
 	}
 
@@ -169,7 +205,15 @@ public struct WebUITheme: Sendable, Equatable, Codable {
 
 	/// True when this theme contributes no css at all.
 	public var isEmpty: Bool {
-		palette.isEmpty && dark.isEmpty && rules.isEmpty
+		palette.isEmpty && dark.isEmpty && rules.isEmpty && aliases.isEmpty
+	}
+
+	/// The alias declarations, in declaration order: `--bg: var(--color-bg)`.
+	///
+	/// Order matters only for duplicate properties; a later alias wins, which matches how the
+	/// palettes sort and merge.
+	private var aliasDeclarations: [CSSDeclaration] {
+		aliases.map { CSSDeclaration($0.property, "var(--\($0.token.rawValue))") }
 	}
 
 	/// Layers `overrides` on top of `self`: each palette merges (the override wins), a
@@ -178,11 +222,21 @@ public struct WebUITheme: Sendable, Equatable, Codable {
 	/// Used to apply a dynamic accent or a user preference over a static `@Theme`-declared
 	/// theme.
 	public func overlaying(_ overrides: WebUITheme) -> WebUITheme {
-		WebUITheme(
+		// aliases merge by property name, the override winning — the same rule the palettes use.
+		var mergedAliases = aliases
+		for alias in overrides.aliases {
+			if let index = mergedAliases.firstIndex(where: { $0.property == alias.property }) {
+				mergedAliases[index] = alias
+			} else {
+				mergedAliases.append(alias)
+			}
+		}
+		return WebUITheme(
 			palette: palette.overlaying(overrides.palette),
 			dark: dark.overlaying(overrides.dark),
 			defaultMode: overrides.defaultMode == .automatic ? defaultMode : overrides.defaultMode,
-			rules: rules + overrides.rules
+			rules: rules + overrides.rules,
+			aliases: mergedAliases
 		)
 	}
 
@@ -203,6 +257,7 @@ public struct WebUITheme: Sendable, Equatable, Codable {
 				rootDeclarations.append(CSSDeclaration("color-scheme", schemeValue))
 			}
 			rootDeclarations.append(contentsOf: palette.declarations())
+			rootDeclarations.append(contentsOf: aliasDeclarations)
 			if !rootDeclarations.isEmpty {
 				parts.append(CSSStylesheet([CSSRule(":root", rootDeclarations)]).render())
 			}
@@ -222,6 +277,7 @@ public struct WebUITheme: Sendable, Equatable, Codable {
 				base.append(CSSDeclaration("color-scheme", schemeValue))
 			}
 			base.append(contentsOf: palette.declarations())
+			base.append(contentsOf: aliasDeclarations)
 			if !base.isEmpty {
 				parts.append(CSSStylesheet([
 					CSSRule(scoped("light"), base),
@@ -231,7 +287,8 @@ public struct WebUITheme: Sendable, Equatable, Codable {
 			if !dark.isEmpty {
 				// a client that explicitly chose dark, and a client on `system` whose OS is
 				// dark. both declare `color-scheme: dark` so the browser's own chrome follows.
-				let darkDeclarations = [CSSDeclaration("color-scheme", "dark")] + dark.declarations()
+				let darkDeclarations = [CSSDeclaration("color-scheme", "dark")]
+					+ dark.declarations() + aliasDeclarations
 				parts.append(CSSStylesheet([CSSRule(scoped("dark"), darkDeclarations)]).render())
 				parts.append(CSSMediaQuery(
 					"prefers-color-scheme: dark",
