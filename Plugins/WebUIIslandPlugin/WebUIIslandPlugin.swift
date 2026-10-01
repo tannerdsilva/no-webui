@@ -3,13 +3,20 @@ import PackagePlugin
 
 /// `swift package --disable-sandbox plugin wasm-island [--product WebUIValidateIsland]`
 ///
-/// cross-builds a capability island product with the official wasm sdk, strips
-/// custom sections, and copies the artifact to the canonical
-/// `.build/out/Products/Release-webassembly-wasm32/<product>.wasm` location the
-/// serving seam reads. same constraints as `wasm-client`: `--disable-sandbox`
-/// (the nested swift build re-enters its own sandbox), an isolated scratch
-/// root (the plugin invocation holds the package `.build` lock), and the
-/// swiftly shim (the Xcode frontend cannot read the wasm sdk's modules).
+/// cross-builds a capability island product with the official wasm sdk's **embedded**
+/// variant, strips custom sections, and copies the artifact to the canonical
+/// `.build/out/Products/Release-webassembly-wasm32/<product>.wasm` location the serving
+/// seam reads. the embedded variant is what keeps an island kb-scale — the full-sdk link
+/// of the same sources is ~40× larger — and the leaf the island builds against is
+/// deliberately scalar-clean for that stdlib: keep island-bound code free of
+/// `firstRange(of:)`, `String.contains(_:)` and grapheme-constructing APIs
+/// (`Character(...)`, `String(decoding:as:)`), or the embedded compile fails. `--sdk`
+/// overrides the default for a product that is not embedded-clean.
+///
+/// same constraints as the other cross-build verbs: `--disable-sandbox` (the nested swift
+/// build re-enters its own sandbox), an isolated scratch root (the plugin invocation holds
+/// the package `.build` lock), and the swiftly shim (the Xcode frontend cannot read the
+/// wasm sdk's modules).
 @main
 struct WebUIIslandPlugin: CommandPlugin {
 	func performCommand(
@@ -17,7 +24,7 @@ struct WebUIIslandPlugin: CommandPlugin {
 		arguments: [String]
 	) throws {
 		var product = "WebUIValidateIsland"
-		var sdk = "swift-6.4.0-RELEASE_wasm"
+		var sdk = "swift-6.4.0-RELEASE_wasm-embedded"
 		var outputOverride: String?
 		var noStrip = false
 		var iterator = arguments.makeIterator()
@@ -89,6 +96,17 @@ struct WebUIIslandPlugin: CommandPlugin {
 		}
 		let destination = outputOverride
 			?? packageDir + "/.build/out/Products/Release-webassembly-wasm32/" + product + ".wasm"
+
+		// the strip path below hands `WebUIWasmTool` an output beside `destination`, and the
+		// tool does not create directories — on a checkout where
+		// `.build/out/Products/Release-webassembly-wasm32/` does not exist yet (no artifact
+		// has been produced), the write fails and the plugin reports "custom-section strip …
+		// failed". `copyFile` creates the directory for the no-strip path; create it here for
+		// both, before anything writes.
+		try FileManager.default.createDirectory(
+			at: URL(fileURLWithPath: destination).deletingLastPathComponent(),
+			withIntermediateDirectories: true
+		)
 
 		if noStrip {
 			try Self.copyFile(from: builtArtifact, to: destination)
