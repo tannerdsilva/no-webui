@@ -7588,6 +7588,24 @@ section,
   align-self: stretch;
 }
 
+/* ── …but a declared stack alignment wins over the fill ─
+   The fill above exists for the shrink-to-fit case (`align-items: flex-start`).
+   A stack that declares `.align-center` / `.align-flex-end` means exactly what
+   it says, and `align-self: stretch` would override the declaration and park a
+   width-capped child at the cross-start edge — measured: the auth card
+   (`max-width: 26rem`) sat at x=24 in a 1280 px viewport instead of x=432, on
+   the login and signup blocks whose whole point is a *centered* card.
+   `width: 100%` keeps the component spanning its column (the same fill, and
+   what an uncapped alert/table still wants) while `align-self: auto` lets the
+   stack place the box: capped width honored, then centered/end-aligned.
+   Row stacks (.hstack) are deliberately untouched — their cross axis is
+   height, where the stretch is the equal-heights intent, not a placement bug. */
+.vstack.align-center > :is(.card, .alert, .table, .progress, .skeleton, .input__label, .input-wrapper, .input__help, section, .demo-card-body),
+.vstack.align-flex-end > :is(.card, .alert, .table, .progress, .skeleton, .input__label, .input-wrapper, .input__help, section, .demo-card-body) {
+  align-self: auto;
+  width: 100%;
+}
+
 /* ── Button ─────────────────────────────────────────────── */
 .button--full { width: 100%; }
 

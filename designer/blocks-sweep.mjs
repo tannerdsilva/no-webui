@@ -31,6 +31,17 @@ const expect = {
   patterns: [".carousel__track", ".menubar__trigger", ".radio-group", ".checkbox-group"],
 };
 
+// geometry the sweep could not see before: the auth card IS the block's point
+// ("a centered auth card"), and a capped-width box in a centered column must be
+// centered — the block-fill shim (`align-self: stretch` on .card) parked it at
+// the cross-start edge at 768/1440 while looking perfectly fine at 320. the
+// width check guards the other half of the contract: centering must not shrink
+// the card to its content, it must keep the cap.
+const centered = {
+  login: { sel: ".card", cap: 416 },
+  signup: { sel: ".card", cap: 416 },
+};
+
 const stamp = new Date().toISOString().slice(0, 10);
 const OUT = join(ROOT, ".smoke", "blocks-" + stamp);
 mkdirSync(OUT, { recursive: true });
@@ -102,6 +113,32 @@ for (const name of BLOCKS) {
       const over = m.scrollW - m.innerW;
       if (over > 1) { bad(slide + ": horizontal overflow " + over + "px"); }
       else { ok(slide + ": no overflow"); }
+
+      const spec = centered[name];
+      if (spec) {
+        const geo = await page.evaluate((s) => {
+          const el = document.querySelector(s.sel);
+          if (!el) return null;
+          const c = el.getBoundingClientRect();
+          const p = el.parentElement.getBoundingClientRect();
+          const ps = getComputedStyle(el.parentElement);
+          const contentW = p.width - parseFloat(ps.paddingLeft) - parseFloat(ps.paddingRight);
+          return {
+            dx: Math.round((c.x + c.width / 2) - (p.x + p.width / 2)),
+            w: Math.round(c.width),
+            expected: Math.round(Math.min(contentW, s.cap)),
+          };
+        }, spec);
+        if (!geo) {
+          bad(slide + ": " + spec.sel + " not found");
+        } else if (Math.abs(geo.dx) > 2) {
+          bad(slide + ": " + spec.sel + " off-center by " + geo.dx + "px (card " + geo.w + "px in a centered column)");
+        } else if (Math.abs(geo.w - geo.expected) > 2) {
+          bad(slide + ": " + spec.sel + " width " + geo.w + "px != min(column, cap) " + geo.expected + "px");
+        } else {
+          ok(slide + ": " + spec.sel + " centered, cap honored (" + geo.w + "px)");
+        }
+      }
     }
   }
 

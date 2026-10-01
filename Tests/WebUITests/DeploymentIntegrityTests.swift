@@ -384,3 +384,28 @@ func spaceTokensResolveInCss() {
 	#expect(missing.isEmpty, "space tokens missing from shipped css: \(missing)")
 }
 
+@Test("a declared stack alignment beats the block-fill shim, keyed on the emitted class")
+func declaredStackAlignmentPlacesCappedChildren() {
+	let css = WebUIAssets.css
+	// the fill exists because a flex column (any host's, too) sizes block
+	// children to their content unless something restores the block behavior.
+	#expect(css.contains("align-self: stretch"), "the block-fill shim left the sheet")
+	// …but the alignment a stack *declares* wins over it: a width-capped child
+	// (the auth card's `max-width: 26rem`) must be placed by the stack, not
+	// parked at the cross-start edge — measured before the fix at x=24 in a
+	// 1280 px viewport, where the column's center is 640.
+	#expect(css.contains(".vstack.align-center > :is(.card,"), "centered columns lost the placement rule")
+	#expect(css.contains(".vstack.align-flex-end > :is(.card,"), "end-aligned columns lost the placement rule")
+	#expect(css.contains("align-self: auto;"), "the placement rule no longer yields to the stack")
+	// and the pairing is the contract: the classes the emitted markup carries are
+	// exactly the ones the rule keys on, so a rename on either side fails here
+	// rather than silently re-parking the card.
+	let emit: [(HorizontalAlignment, String)] = [
+		(.leading, "align-flex-start"), (.center, "align-center"), (.trailing, "align-flex-end"),
+	]
+	for (alignment, klass) in emit {
+		let html = VStack(alignment: alignment, spacing: 8) { Text("x") }.render()
+		#expect(html.contains("vstack spacing-8 \(klass)"), "\(alignment) should emit \(klass): \(html.prefix(90))")
+	}
+}
+
