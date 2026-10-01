@@ -1,5 +1,6 @@
 import Testing
 import WebUI
+import WebUIDesignSystem
 
 // MARK: - the host stylesheet contract (NW-1, NW-6)
 //
@@ -92,5 +93,51 @@ struct HostStylesheetContractTests {
 		let bounded = doc.components(separatedBy: "\"0 0 24 24\" width=\"").count - 1
 		#expect(icons == 3, "expected 3 icons in the fixture, saw \(icons)")
 		#expect(bounded == icons, "\(icons - bounded) icon(s) could size to their container")
+	}
+}
+
+// MARK: - the engine's own DOM (NW-2, NW-2b, NW-3)
+//
+// the engine injects a status chip on every boot, and both its visibility and
+// its text lived only in the design-system sheet: a page that never links the
+// sheet showed a permanently visible "reconnecting…" chip on a healthy socket.
+// the engine now owns both — the hidden default rides an inline cssom write (a
+// `<style>` injection needs `style-src 'unsafe-inline'`, which a strict host
+// policy may not grant; cssom writes are not csp-governed), and
+// `updateStatusMirrors` keeps the chip text equal to the real socket state.
+
+@Suite("engine status chip contract")
+struct EngineStatusChipContractTests {
+
+	private static let injectedClasses = [
+		"engine-status", "engine-status--visible", "engine-status__dot", "engine-status__text",
+	]
+
+	@Test("every class the engine injects is defined by the shipped sheet")
+	func injectedClassesAreDefined() {
+		let defined = HTMLClassValidator.definedClasses()
+		for name in Self.injectedClasses {
+			#expect(defined.contains(name), "\(name) is emitted by the engine but defined by no stylesheet")
+		}
+	}
+
+	@Test("the engine owns the chip's visibility, so it stays hidden without any sheet")
+	func chipVisibilityIsEngineOwned() {
+		let engine = WebUIAssets.engine
+		// hidden at creation, before any stylesheet has a say
+		#expect(engine.contains("_statusEl.style.display = 'none'"), "the chip is not hidden by the engine itself")
+		// shown on disconnect, hidden again on reconnect — by cssom
+		#expect(engine.contains("_statusEl.style.display = 'inline-flex'"))
+		#expect(!engine.contains("<style>"), "an injected sheet needs style-src unsafe-inline, which a host may not grant")
+		#expect(!engine.contains("createElement('style')"), "cssom writes are not csp-governed; an injected sheet is")
+		// the class toggles the browser gate drives stay intact
+		#expect(engine.contains("_statusEl.className = 'engine-status engine-status--visible'"))
+	}
+
+	@Test("the chip text tracks the state, so it can never contradict the socket")
+	func chipTextTracksState() {
+		let engine = WebUIAssets.engine
+		#expect(engine.contains("_statusText"), "the chip text node is not tracked")
+		#expect(engine.contains("_statusText.textContent = state === 'connected' ? 'connected' : 'reconnecting\\u2026'"))
 	}
 }

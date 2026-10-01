@@ -1206,6 +1206,7 @@ window.WebUIEngine = (function () {
   }
 
   var _statusEl = null;
+  var _statusText = null;
   var _statusTimer = null;
   function ensureStatus() {
     if (_statusEl || !document.body) { return; }
@@ -1213,6 +1214,7 @@ window.WebUIEngine = (function () {
     _statusEl = document.createElement('div');
     _statusEl.className = 'engine-status';
     _statusEl.setAttribute('role', 'status');
+    _statusEl.style.display = 'none';
     var dot = document.createElement('span');
     dot.className = 'engine-status__dot';
     var text = document.createElement('span');
@@ -1220,6 +1222,7 @@ window.WebUIEngine = (function () {
     text.textContent = 'reconnecting\u2026';
     _statusEl.appendChild(dot);
     _statusEl.appendChild(text);
+    _statusText = text;
     document.body.appendChild(_statusEl);
   }
   document.addEventListener('webui:disconnected', function () {
@@ -1228,12 +1231,16 @@ window.WebUIEngine = (function () {
     if (_statusTimer) { clearTimeout(_statusTimer); }
     _statusTimer = setTimeout(function () {
       _statusEl.className = 'engine-status engine-status--visible';
+      _statusEl.style.display = 'inline-flex';
     }, 400);
     updateStatusMirrors('reconnecting');
   });
   document.addEventListener('webui:connected', function () {
     if (_statusTimer) { clearTimeout(_statusTimer); _statusTimer = null; }
-    if (_statusEl) { _statusEl.className = 'engine-status'; }
+    if (_statusEl) {
+      _statusEl.className = 'engine-status';
+      _statusEl.style.display = 'none';
+    }
     updateStatusMirrors('connected');
   });
 
@@ -1241,6 +1248,9 @@ window.WebUIEngine = (function () {
     var els = document.querySelectorAll('[data-webui-status]');
     for (var i = 0; i < els.length; i++) {
       els[i].setAttribute('data-webui-state', state);
+    }
+    if (_statusText) {
+      _statusText.textContent = state === 'connected' ? 'connected' : 'reconnecting\u2026';
     }
   }
 

@@ -7871,7 +7871,11 @@ h6 {
 }
 
 /* engine status chip (reconnect indicator) — framework-owned, created by the
-   engine when the /ws transport drops; hidden until then */
+   engine when the /ws transport drops; hidden until then. the engine owns the
+   chip's visibility itself (an inline display write at creation and on every
+   state change), so a page that never links this sheet can never show a false
+   "reconnecting…"; these rules own its appearance and mirror the same display
+   contract as a fallback for anything styling the class directly. */
 .engine-status {
   position: fixed;
   top: var(--space-4);
@@ -7902,6 +7906,7 @@ h6 {
 @media (prefers-reduced-motion: reduce) {
   .engine-status__dot { animation: none; }
 }
+.engine-status__text { white-space: nowrap; }
 
 /* the engine-driven status mirror: components render `data-webui-status`
    and the engine sets `data-webui-state`; the css shows exactly one state,
