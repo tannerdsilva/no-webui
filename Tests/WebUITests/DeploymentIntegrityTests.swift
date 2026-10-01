@@ -384,6 +384,57 @@ func spaceTokensResolveInCss() {
 	#expect(missing.isEmpty, "space tokens missing from shipped css: \(missing)")
 }
 
+@Test("the dark-mode link hover differs from its resting tint (feedback, not a no-op)")
+func darkLinkHoverIsNotANoOp() throws {
+	let css = WebUIAssets.css
+	// the dark block tints anchors for legibility; the hover override exists to
+	// replace the light hover ink (primary-800, illegible on dark). it once
+	// repeated the resting token instead, which silently removed hover feedback:
+	// `.navbar__brand` read #818cf8 both hovered and unhovered in dark while the
+	// light theme steps the same element to primary-800. both rules must move.
+	func colorToken(after selector: String) throws -> String {
+		let rule = try #require(css.range(of: selector), "missing rule: \(selector)")
+		let rest = css[rule.upperBound...]
+		let open = try #require(rest.firstIndex(of: "{"), "no body for \(selector)")
+		let close = try #require(rest[open...].firstIndex(of: "}"), "unterminated rule: \(selector)")
+		let body = rest[rest.index(after: open)..<close]
+		let color = try #require(body.range(of: "color:"), "no color declaration in \(selector)")
+		return body[color.upperBound...].prefix { $0 != ";" }
+			.trimmingCharacters(in: .whitespacesAndNewlines)
+	}
+	let resting = try colorToken(after: "[data-theme=\"dark\"] a, [data-theme=\"dark\"] .button--link")
+	let hovered = try colorToken(after: "[data-theme=\"dark\"] a:hover, [data-theme=\"dark\"] .button--link:hover")
+	#expect(
+		resting != hovered,
+		"the dark hover repeats \(hovered) — the legibility override silently removes hover feedback"
+	)
+}
+
+@Test("dark active-variant overrides do not swallow their family's hover")
+func darkActiveVariantsKeepTheirHover() {
+	let css = WebUIAssets.css
+	// every dark `--active`/`--selected` override ties its family's `:hover` rule
+	// on specificity and sits later in source order, so without an explicit dark
+	// hover the state never moves at all — measured in dark as
+	// property-for-property identical while `:hover` matched:
+	// `.navbar__link--active`, `.tabs__tab--active`, `.sidebar__item--active`,
+	// `.tree__row--selected`. both halves are pinned: the resting treatment must
+	// stay, and a hover rule must exist so the state can move.
+	let pairs: [(rest: String, hover: String)] = [
+		("[data-theme=\"dark\"] .navbar__link--active {", "[data-theme=\"dark\"] .navbar__link--active:hover"),
+		("[data-theme=\"dark\"] .tabs__tab--active {", "[data-theme=\"dark\"] .tabs__tab--active:hover"),
+		("[data-theme=\"dark\"] .tabs--bordered .tabs__tab--active {", "[data-theme=\"dark\"] .tabs--bordered .tabs__tab--active:hover"),
+		("[data-theme=\"dark\"] .sidebar__item--active {", "[data-theme=\"dark\"] .sidebar__item--active:hover"),
+		("[data-theme=\"dark\"] .tree__row--selected {", "[data-theme=\"dark\"] .tree__row--selected:hover"),
+		("[data-theme=\"dark\"] .toc__link--active {", "[data-theme=\"dark\"] .toc__link--active:hover"),
+		("[data-theme=\"dark\"] .bottom-nav__item--active {", "[data-theme=\"dark\"] .bottom-nav__item--active:hover"),
+	]
+	for (rest, hover) in pairs {
+		#expect(css.contains(rest), "dark rest treatment vanished: \(rest)")
+		#expect(css.contains(hover), "dark override has no hover rule — the state cannot move: \(hover)")
+	}
+}
+
 @Test("a declared stack alignment beats the block-fill shim, keyed on the emitted class")
 func declaredStackAlignmentPlacesCappedChildren() {
 	let css = WebUIAssets.css

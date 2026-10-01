@@ -42,6 +42,14 @@ const centered = {
   signup: { sel: ".card", cap: 416 },
 };
 
+// hover states the sweep never measured: theme overrides that tie a component's
+// own `:hover` rule on specificity and win by source order silently freeze the
+// state (measured dead in dark for the active navbar link / tab / sidebar item /
+// tree row). the probe asserts the family hover still moves, in both themes.
+const hoverMoves = {
+  "sidebar-default": { sel: ".sidebar__item--active" },
+};
+
 const stamp = new Date().toISOString().slice(0, 10);
 const OUT = join(ROOT, ".smoke", "blocks-" + stamp);
 mkdirSync(OUT, { recursive: true });
@@ -137,6 +145,37 @@ for (const name of BLOCKS) {
           bad(slide + ": " + spec.sel + " width " + geo.w + "px != min(column, cap) " + geo.expected + "px");
         } else {
           ok(slide + ": " + spec.sel + " centered, cap honored (" + geo.w + "px)");
+        }
+      }
+
+      const hoverSpec = hoverMoves[name];
+      if (hoverSpec) {
+        const readState = (sel) =>
+          page.evaluate((s) => {
+            const el = document.querySelector(s);
+            if (!el) return null;
+            const cs = getComputedStyle(el);
+            return cs.color + "|" + cs.backgroundColor;
+          }, sel);
+        const target = await page.$(hoverSpec.sel);
+        if (!target || !(await target.isVisible())) {
+          ok(slide + ": " + hoverSpec.sel + " not visible at this size (hover probe skipped)");
+        } else {
+          await page.mouse.move(4, 4);
+          await page.waitForTimeout(140);
+          const before = await readState(hoverSpec.sel);
+          await target.hover({ timeout: 2500 });
+          await page.waitForTimeout(260);
+          const landed = await page.evaluate((s) => document.querySelector(s).matches(":hover"), hoverSpec.sel);
+          const after = await readState(hoverSpec.sel);
+          if (!landed) {
+            bad(slide + ": hover did not land on " + hoverSpec.sel);
+          } else if (before === after) {
+            bad(slide + ": " + hoverSpec.sel + " hover does not move — a theme override swallows it (" + before + ")");
+          } else {
+            ok(slide + ": " + hoverSpec.sel + " hover moves the state");
+          }
+          await page.mouse.move(4, 4);
         }
       }
     }

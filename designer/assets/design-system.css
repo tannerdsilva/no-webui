@@ -8911,8 +8911,15 @@ html[data-theme="dark"] {
   [data-theme="dark"] .segmented__item--active .segmented__count {
  color: var(--color-primary-400); 
 }
+/* …and the hover must DIFFER from the resting tint. this rule used to repeat
+   `primary-400`, so the override that exists to keep the light hover ink
+   (`a:hover { primary-800 }`) legible on dark silently removed hover feedback
+   instead — measured: `.navbar__brand` read #818cf8 both hovered and
+   unhovered in dark, while light steps it to primary-800. `-strong` is the
+   palette's theme-appropriate legible ink (dark: #a5b4fc, brighter than the
+   resting #818cf8 — the dark analogue of light's deeper step). */
 [data-theme="dark"] a:hover, [data-theme="dark"] .button--link:hover {
- color: var(--color-primary-400); 
+ color: var(--color-primary-strong); 
 }
 [data-theme="dark"] .badge--primary {
  color: var(--color-primary-400); 
@@ -8988,6 +8995,24 @@ html[data-theme="dark"] {
 [data-theme="dark"] .bottom-nav__item--active {
  color: var(--color-primary-strong); 
 }
+/* Active-variant overrides above sit at the same specificity as their family's
+   :hover rule and later in source order, so on hover they swallowed the family
+   ink and the state never moved — measured in dark, property-for-property
+   identical while :hover matched: .navbar__link--active, .tabs__tab--active,
+   .sidebar__item--active and .tree__row--selected. Each rule below restates
+   the family's own hover declarations (`.navbar__link:hover` and siblings), so
+   the resting treatments above are untouched and the state moves again.
+   .toc__link--active / .bottom-nav__item--active / the bordered tab are the
+   same shape; no page in the tree demonstrates them, so they are fixed by
+   construction rather than by measurement. */
+[data-theme="dark"] .navbar__link--active:hover { color: var(--color-text); background: var(--color-bg-subtle); }
+[data-theme="dark"] .tabs__tab--active:hover { color: var(--color-text); }
+[data-theme="dark"] .tabs--bordered .tabs__tab--active:hover { background: var(--color-bg-subtle); }
+[data-theme="dark"] .sidebar__item--active:hover { background: var(--color-bg-subtle); color: var(--color-text); }
+[data-theme="dark"] .tree__row--selected:hover { background: var(--color-bg-subtle); }
+[data-theme="dark"] .tree__branch .tree__row--selected:hover { background: var(--color-bg-inset); color: var(--color-text); }
+[data-theme="dark"] .toc__link--active:hover { color: var(--color-text); }
+[data-theme="dark"] .bottom-nav__item--active:hover { color: var(--color-text); }
 [data-theme="dark"] .timeline__event--current {
  color: var(--color-primary-strong); 
 }
