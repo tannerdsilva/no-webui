@@ -40,6 +40,12 @@ public enum IconSize: String, CaseIterable, Sendable {
 ///
 /// The geometry (path/circle/line/...) comes from the generated catalog, so a
 /// single icon can be emitted inline without shipping a separate asset.
+///
+/// The svg carries its size twice: the `icon--<size>` class, and the same
+/// `IconSize.em` pair as `width`/`height` *presentation attributes*. The
+/// attributes sit at specificity 0, so every stylesheet rule still wins — they
+/// only bound the glyph on a page that forgot the design-system sheet. `.slot`
+/// emits neither dimension: its size is the container slot's contract.
 public struct WebUIIcon: View {
 	public let name: IconName
 	public let size: IconSize
@@ -59,13 +65,26 @@ public struct WebUIIcon: View {
 		} else {
 			aria = " aria-hidden=\"true\""
 		}
-		return "<svg class=\"\(classes)\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\"\(aria)>\(name.body)</svg>"
+		return "<svg class=\"\(classes)\" viewBox=\"0 0 24 24\"\(iconDimensionAttributes(for: size)) fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\"\(aria)>\(name.body)</svg>"
 	}
 }
 
 /// The root `class` attribute value for an icon of the given size.
 func iconClass(for size: IconSize) -> String {
 	size == .slot ? "icon" : "icon icon--\(size.rawValue)"
+}
+
+/// The fallback dimension attributes for an icon of the given size: the em pair
+/// as presentation attributes, or nothing for `.slot` (whose contract is the
+/// container slot).
+///
+/// presentation attributes sit at specificity 0 in the author origin, so every
+/// stylesheet rule still wins — `.icon--*`, a consumer override, and
+/// `.fill-slot > svg.icon { width:100% }` all keep their say. the attributes
+/// exist so a page that forgot the design-system sheet renders bounded glyphs
+/// instead of container-sized ones (measured: 240-718 px before the fallback).
+func iconDimensionAttributes(for size: IconSize) -> String {
+	size == .slot ? "" : " width=\"\(size.em)\" height=\"\(size.em)\""
 }
 
 // MARK: - WebUIIconCustom
@@ -103,7 +122,7 @@ public struct WebUIIconCustom: View {
 			aria = " aria-hidden=\"true\""
 		}
 		let dataIcon = " data-icon=\"\(htmlEscape(name))\""
-		return "<svg class=\"\(classes)\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\"\(dataIcon)\(aria)>\(body)</svg>"
+		return "<svg class=\"\(classes)\" viewBox=\"0 0 24 24\"\(iconDimensionAttributes(for: size)) fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\"\(dataIcon)\(aria)>\(body)</svg>"
 	}
 }
 
@@ -278,8 +297,24 @@ public struct IconSizeModifier: ViewModifier {
 		self.size = size
 	}
 	public func apply(to html: String) -> String {
-		replaceIconSuffix(in: html, with: size == .slot ? "icon" : "icon--\(size.rawValue)")
+		let retargeted = replaceIconSuffix(in: html, with: size == .slot ? "icon" : "icon--\(size.rawValue)")
+		return replaceIconDimensions(in: retargeted, with: size)
 	}
+}
+
+/// Rewrite the root svg's fallback dimensions to the given size (or remove
+/// them for `.slot`). The window is anchored between the root's
+/// `viewBox="0 0 24 24"` and the ` fill="none"` that follows it, so geometry
+/// inside the body — a `rect` may carry its own `width`/`height` — is never
+/// touched, and a stale pair cannot survive an `iconSize` retarget.
+func replaceIconDimensions(in html: String, with size: IconSize) -> String {
+	guard let anchor = html.range(of: "viewBox=\"0 0 24 24\""),
+	      let fill = html.range(of: " fill=\"none\"", range: anchor.upperBound..<html.endIndex) else {
+		return html
+	}
+	return String(html[html.startIndex..<anchor.upperBound])
+		+ iconDimensionAttributes(for: size)
+		+ String(html[fill.lowerBound..<html.endIndex])
 }
 
 /// Replace the size class on an icon svg with the given suffix. Works whether
