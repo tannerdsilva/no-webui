@@ -60,6 +60,15 @@ struct WebUIBudgetPlugin: CommandPlugin {
 
     /// a capability island is a per-capability artifact; the ceiling is per file,
     /// and absence is reported rather than failed (islands are opt-in, d3/d6).
+    ///
+    /// re-measured 2026-09-30: 164,670 stripped (WebUIValidateIsland) — the ~21% headroom
+    /// intact, so the pin did not move. it HAD been breaching at 7,168,189, and that was a
+    /// build-mode regression, not a size decision: the island was being cross-built with the
+    /// FULL wasm sdk, because the leaf had lost its embedded-cleanliness (`firstRange(of:)`
+    /// arriving with the attribute model, which the embedded stdlib does not carry) and the
+    /// embedded compile therefore failed. the plugin defaults to
+    /// `swift-6.4.0-RELEASE_wasm-embedded` now and the leaf is scalar-clean again; keep
+    /// island-bound code free of the APIs named in `WebUIIslandPlugin`'s doc comment.
     private static let islandCeiling = 200_000
 
     /// artifacts the architecture has retired. if one is still on disk it is a stale
