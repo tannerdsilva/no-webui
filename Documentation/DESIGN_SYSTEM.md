@@ -345,7 +345,10 @@ catalog (618 glyphs, `designer/icons/icon-manifest.json`). stroke is
 **Custom:** `WebUIIconCustom` sanitizes caller geometry (strips `<script>`,
 `on*`, `foreignObject`, `javascript:`/`data:`).
 
-CSS classes: `icon icon--{size}` (+ `fill-slot` on component icon slots). see
+CSS classes: `icon icon--{size}` (+ `fill-slot` on component icon slots); the
+root svg also carries the same em pair as `width`/`height` presentation
+attributes, so a page that never links the sheet still renders bounded glyphs
+(`.slot` excepted — its size is the container's). see
 `Documentation/ICONS.md` for the full guide and the `WebUIIconTool`/
 `WebUIIconPlugin` toolset.
 

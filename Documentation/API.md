@@ -141,7 +141,7 @@ every attribute parameter (`id`, `class`, `name`, `for`, `data-status`,
 
 | Type | Parameters | Description |
 |---|---|---|
-| `HTMLDocument` | title, body, styles, rawStyles, scripts, contentSecurityPolicy, contentSecurityPolicyExtras, includeRuntime, runtimeConfig, devMode, head, bodyAttributes, lang, preMinifiedStyles | complete HTML document with auto-generated CSP and nonce. shipped css is minified (comments + blank lines stripped) unless `preMinifiedStyles: true` embeds the caller-provided combined sheet verbatim (used by `WebUIDocument`'s hoisted sheet) |
+| `HTMLDocument` | title, body, styles, rawStyles, scripts, contentSecurityPolicy, contentSecurityPolicyExtras, includeRuntime, runtimeConfig, devMode, head, bodyAttributes, lang, preMinifiedStyles, stylesheetURL, themeStylesheetURL, inlinedComponentStyles | complete HTML document with auto-generated CSP and nonce. shipped css is minified (comments + blank lines stripped) unless `preMinifiedStyles: true` embeds the caller-provided combined sheet verbatim (used by `WebUIDocument`'s hoisted sheet) |
 | `WebUIDocument` | same as HTMLDocument | HTML document with the full design system css — the record sheet (layout rules + embedded css) is minified once into `WebUIDocument.minifiedDesignStyles` and embedded verbatim on every render (`preMinifiedStyles: true`), removing the old per-render minify of ~300 kb css (~11 ms in release → <0.01 ms) |
 
 `contentSecurityPolicyExtras` is the seam for a host that needs one more directive than
@@ -164,6 +164,28 @@ websocket `event`/`ping` so a server that mints tokens can route each message
 to the page's router and reject stale pages from other sessions — see
 `WebSocketProtocol` and the auth docs. only keys that are set are emitted;
 string values are hand-escaped into safe json string literals.
+
+`stylesheetURL` and `themeStylesheetURL` are the two sheet slots, emitted in that
+order *before* the inline `<style>`: the base sheet (the design-system component css)
+first, then a sheet that must win collisions — same specificity, later source order,
+which is why that slot exists rather than a `<link>` in `head:` (a `head` sheet
+renders *before* the base sheet and silently loses the collisions).
+
+`HTMLDocument.diagnostics(body:head:stylesheetURL:inlinedComponentStyles:)` answers,
+purely and without logging, which wiring misconfigurations apply to a document;
+`render()` logs each through the `webui.document` logger, unconditionally rather than
+only in debug builds — the failure mode is silent (markup renders "fine" while
+individual glyphs detonate):
+
+| diagnostic | condition |
+|---|---|
+| `.headStylesheetWithoutBaseStylesheet` | `head:` carries a stylesheet link while `stylesheetURL:` is nil |
+| `.frameworkMarkupWithoutStylesheet` | the body emits framework icon markup (`class="icon"`) while `stylesheetURL:` is nil |
+
+a host that inlined the component sheet itself (`rawStyles` carries
+`DesignSystemAssets.minifiedCss`) sets `inlinedComponentStyles: true` to suppress the
+missing-sheet diagnostics — `WebUIDocument`'s inline mode (`stylesheetURL: nil`) does
+exactly that.
 
 ### Client Mode (wasm)
 
@@ -243,6 +265,13 @@ because every framework rule is layered, **a page's own css wins without
 specificity games**: `rawStyles`, an app stylesheet, and the theme sheet are
 unlayered, so they outrank the framework by cascade origin — `!important` and
 selector-weight escalation are never required.
+
+`stylesheetURL` defaults to the content-addressed design-system sheet
+(`DesignSystemAssets.stylesheetURL`), so a `WebUIDocument` page is styled out of
+the box; core `HTMLDocument` defaults it to nil (it takes no design-system
+dependency) — a host on the core path wires both sheets itself, and gets a
+logged diagnostic when it does not. `themeStylesheetURL` is the slot for a host
+sheet that must win collisions against the base.
 
 accepts `theme: WebUITheme = .standard` — a themed document appends the theme's
 css (`:root` overrides + app rules, unlayered) after the design sheet.

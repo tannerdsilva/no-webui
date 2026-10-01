@@ -103,10 +103,16 @@ WebUIIcon(.download, size: .large, title: "Download file")
 | `.slot` | `icon` | sized by its container slot |
 
 sizes are `em` multiples, so an icon always sits in proportion to its text
-context (deference) and scales with the surrounding `font-size`. `.slot` emits
-the bare `icon` class and lets a component's icon-slot css (`.alert__icon`,
-`.tree__icon`, `.empty-state__icon`, …) size it — used by every migrated
-component so an icon fills exactly the box the component already reserves.
+context (deference) and scales with the surrounding `font-size`. every non-slot
+size is emitted **twice**: the class, and the same `em` pair as
+`width`/`height` *presentation attributes* on the root svg. the attributes sit
+at specificity 0, so every sheet rule still wins — they are a fallback, and
+their job is bounds: before them, a page that forgot the design-system sheet
+rendered an `<svg viewBox>` at its container's width (measured 240-718 px on the
+arc-agent consumer). `.slot` emits neither dimension: it keeps the bare `icon`
+class and lets a component's icon-slot css (`.alert__icon`, `.tree__icon`,
+`.empty-state__icon`, …) size it — used by every migrated component so an icon
+fills exactly the box the component already reserves.
 
 ### modifiers
 
@@ -116,8 +122,10 @@ WebUIIcon(.star)
     .foregroundColor(.danger)     // -> style="color:var(--color-danger)" drives currentColor
 ```
 
-`iconSize(_:)` rewrites the `icon--<size>` suffix (works from a `.slot` base
-too). `foregroundColor(_ token:)` emits a `color:var(--color-…)` inline style;
+`iconSize(_:)` retargets the `icon--<size>` suffix *and* the fallback
+`width`/`height` attributes together (works from a `.slot` base too, and to
+one), so the attribute can never go stale against its class.
+`foregroundColor(_ token:)` emits a `color:var(--color-…)` inline style;
 because the stroke is `currentColor`, that is the whole coloring mechanism —
 icons ride the existing `ColorToken` system rather than inventing a parallel
 one.
