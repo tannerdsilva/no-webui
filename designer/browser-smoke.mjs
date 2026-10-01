@@ -288,24 +288,61 @@ if (vtPatch === "7") ok("patches apply under prefers-reduced-motion (guard path)
 else bad(`reduced-motion patch failed: ${JSON.stringify(vtPatch)}`);
 
 // 6d. reconnect indicator (engine mode): the framework status chip exists
-// hidden, appears on transport disconnect, clears on reconnect.
+// hidden, appears on transport disconnect, clears on reconnect. its visibility
+// is engine-owned (an inline display write), so both states must hold with
+// every stylesheet disabled — a sheet-less page that showed a permanently
+// visible "reconnecting…" chip is the failure this measures.
 await page.waitForTimeout(200);
 const stat0 = await page.evaluate(() => {
   const el = document.querySelector('.engine-status');
-  return { present: !!el, visible: !!(el && el.classList.contains('engine-status--visible')) };
+  return {
+    present: !!el,
+    visible: !!(el && el.classList.contains('engine-status--visible')),
+    inline: el ? el.style.display : null,
+  };
 });
 if (stat0.present && !stat0.visible) ok("engine status chip present + hidden by default");
 else bad(`status chip state: ${JSON.stringify(stat0)}`);
+if (stat0.inline === 'none') ok("chip hidden by its own inline display (independent of any sheet)");
+else bad(`chip inline display: ${JSON.stringify(stat0.inline)}`);
+
+// sheet-less probe: disable every stylesheet link, then drive a disconnect.
+// the chip must appear (inline-flex), report the truth, and clear on reconnect
+// — all without a single css rule in play.
+const disabledSheets = await page.evaluate(() => {
+  const links = [...document.querySelectorAll('link[rel="stylesheet"]')];
+  links.forEach((l) => { l.disabled = true; });
+  return links.length;
+});
 await page.evaluate(() => document.dispatchEvent(new CustomEvent('webui:disconnected', { detail: {} })));
 await page.waitForTimeout(700);
+const sheetless = await page.evaluate(() => {
+  const el = document.querySelector('.engine-status');
+  if (!el) return null;
+  return { display: getComputedStyle(el).display, inline: el.style.display, text: el.textContent.trim() };
+});
+if (sheetless && sheetless.display === 'inline-flex') ok(`chip appears on disconnect with ${disabledSheets} sheet link(s) disabled (engine-owned visibility)`);
+else bad(`sheet-less disconnect state: ${JSON.stringify(sheetless)}`);
+if (sheetless && sheetless.text.indexOf('reconnecting') === 0) ok("chip text is truthful while disconnected");
+else bad(`chip text while disconnected: ${JSON.stringify(sheetless && sheetless.text)}`);
 const vis1 = await page.evaluate(() => !!document.querySelector('.engine-status--visible'));
 if (vis1) ok("status chip appears on transport disconnect");
 else bad("status chip did not appear on disconnect");
 await page.evaluate(() => document.dispatchEvent(new CustomEvent('webui:connected', { detail: {} })));
 await page.waitForTimeout(150);
+const hiddenAgain = await page.evaluate(() => {
+  const el = document.querySelector('.engine-status');
+  if (!el) return null;
+  return { display: getComputedStyle(el).display, inline: el.style.display, text: el.textContent.trim() };
+});
+if (hiddenAgain && hiddenAgain.display === 'none') ok("chip clears with every stylesheet still disabled (inline display, not css)");
+else bad(`sheet-less reconnect state: ${JSON.stringify(hiddenAgain)}`);
+if (hiddenAgain && hiddenAgain.text === 'connected') ok("chip text follows the socket state when connected");
+else bad(`chip text when connected: ${JSON.stringify(hiddenAgain && hiddenAgain.text)}`);
 const vis2 = await page.evaluate(() => !!document.querySelector('.engine-status--visible'));
 if (!vis2) ok("status chip clears on reconnect");
 else bad("status chip did not clear on reconnect");
+await page.evaluate(() => { document.querySelectorAll('link[rel="stylesheet"]').forEach((l) => { l.disabled = false; }); });
 
 
 {
