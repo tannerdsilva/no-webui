@@ -121,7 +121,10 @@ public struct WebUIDocument: View {
             contentSecurityPolicyExtras: contentSecurityPolicyExtras,
             preMinifiedStyles: true,
             stylesheetURL: stylesheetURL,
-            themeStylesheetURL: themeStylesheetURL
+            themeStylesheetURL: themeStylesheetURL,
+            // inline mode carries the sheet in rawStyles (see the rawStyles
+            // block above) — the missing-sheet diagnostics must stay quiet
+            inlinedComponentStyles: stylesheetURL == nil
         )
         let html = doc.render()
         if checkClasses {

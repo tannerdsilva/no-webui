@@ -141,3 +141,83 @@ struct EngineStatusChipContractTests {
 		#expect(engine.contains("_statusText.textContent = state === 'connected' ? 'connected' : 'reconnecting\\u2026'"))
 	}
 }
+
+// MARK: - document-level stylesheet diagnostics (NW-4)
+//
+// `head:` renders *before* the base sheet, so a host that puts its own sheet
+// there and never wires `stylesheetURL:` gets framework markup with no
+// component css — and no signal. measured on the arc-agent consumer: 209-233
+// framework icons plus a permanent status chip, with nothing in the page or
+// the log to say why. `render()` now reports both misconfigurations; the
+// diagnostics are a pure function, so hosts and tests can assert what a
+// document will report without capturing the logger.
+
+@Suite("document stylesheet diagnostics")
+struct DocumentStylesheetDiagnosticTests {
+
+	@Test("a head-supplied sheet without a base sheet is reported")
+	func headSheetWithoutBase() {
+		let found = HTMLDocument.diagnostics(
+			body: "<p>x</p>",
+			head: "<link rel=\"stylesheet\" href=\"/ui/style.css\">",
+			stylesheetURL: nil
+		)
+		#expect(found == [.headStylesheetWithoutBaseStylesheet])
+		// the single-quoted spelling is the same trap
+		#expect(
+			HTMLDocument.diagnostics(body: "<p>x</p>", head: "<link rel='stylesheet' href='/x'>", stylesheetURL: nil)
+				== [.headStylesheetWithoutBaseStylesheet]
+		)
+	}
+
+	@Test("framework icon markup without a base sheet is reported")
+	func markupWithoutBase() {
+		let found = HTMLDocument.diagnostics(body: WebUIIcon(.check).render(), head: "", stylesheetURL: nil)
+		#expect(found == [.frameworkMarkupWithoutStylesheet])
+	}
+
+	@Test("both misconfigurations report together")
+	func bothReport() {
+		let found = HTMLDocument.diagnostics(
+			body: WebUIIcon(.check).render(),
+			head: "<link rel=\"stylesheet\" href=\"/ui/style.css\">",
+			stylesheetURL: nil
+		)
+		#expect(Set(found) == Set([.headStylesheetWithoutBaseStylesheet, .frameworkMarkupWithoutStylesheet]))
+	}
+
+	@Test("a wired document is quiet")
+	func wiredIsQuiet() {
+		#expect(
+			HTMLDocument.diagnostics(
+				body: WebUIIcon(.check).render(),
+				head: "<link rel=\"stylesheet\" href=\"/ui/style.css\">",
+				stylesheetURL: "/__assets/css.abc"
+			).isEmpty
+		)
+	}
+
+	@Test("a document that inlines the component sheet is quiet")
+	func inlineModeIsQuiet() {
+		// the design-system document's inline mode (`stylesheetURL: nil`) carries
+		// the sheet in `rawStyles`; that is a supplied sheet, not a missing one.
+		#expect(
+			HTMLDocument.diagnostics(
+				body: WebUIIcon(.check).render(),
+				head: "",
+				stylesheetURL: nil,
+				inlinedComponentStyles: true
+			).isEmpty
+		)
+		let doc = WebUIDocument(title: "inline", body: WebUIIcon(.check).render(), stylesheetURL: nil).render()
+		#expect(doc.contains("--color-primary-500"), "the fixture must carry the inlined sheet")
+	}
+
+	@Test("the warnings are log-only: the served bytes carry no diagnostic prose")
+	func warningsDoNotChangeThePayload() {
+		let html = HTMLDocument(title: "t", body: WebUIIcon(.check).render()).render()
+		#expect(html.contains("<svg class=\"icon"), "the fixture must exercise the warning path")
+		#expect(!html.contains("stylesheetURL:"), "diagnostic prose reached the served bytes")
+		#expect(!html.contains(HTMLDocumentDiagnostic.frameworkMarkupWithoutStylesheet.message))
+	}
+}

@@ -1,6 +1,39 @@
 import Foundation
 import Logging
 
+// MARK: - HTMLDocumentDiagnostic
+
+/// a stylesheet-wiring misconfiguration ``HTMLDocument/render()`` reports
+/// through the document logger.
+///
+/// the failures these catch are silent by construction: markup renders, the
+/// page "works", and only individual glyphs detonate — an `<svg viewBox>` with
+/// no sheet resolves to its container (measured: 240-718 px on the arc-agent
+/// consumer). the check runs unconditionally, not only in debug builds; a host
+/// that inlined the component sheet itself opts out with
+/// ``HTMLDocument/inlinedComponentStyles``.
+public enum HTMLDocumentDiagnostic: String, Sendable, CaseIterable {
+    /// `head:` supplies a `<link rel="stylesheet">` while `stylesheetURL:` is
+    /// nil: whatever the host brought is the only sheet on the page, and
+    /// framework component markup gets no css.
+    case headStylesheetWithoutBaseStylesheet
+    /// the body emits framework component markup (`class="icon"`) while
+    /// `stylesheetURL:` is nil: icons fall back to their `IconSize.em`
+    /// dimensions and components render unstyled.
+    case frameworkMarkupWithoutStylesheet
+
+    /// the warning text `render()` logs for this diagnostic. hosts may restate
+    /// it through their own logging pipeline.
+    public var message: String {
+        switch self {
+        case .headStylesheetWithoutBaseStylesheet:
+            return "head: carries a stylesheet link but stylesheetURL: is nil — no framework component sheet will be linked, so framework markup (icons, the engine status chip) renders unstyled. pass the design system sheet as stylesheetURL:, or a sheet that must win collisions as themeStylesheetURL:"
+        case .frameworkMarkupWithoutStylesheet:
+            return "the body renders framework component markup (class=\"icon\") but stylesheetURL: is nil — icons fall back to their em dimensions and components render unstyled. pass DesignSystemAssets.stylesheetURL as stylesheetURL:, or set inlinedComponentStyles: true when the sheet rides rawStyles"
+        }
+    }
+}
+
 // MARK: - HTMLDocument
 public struct HTMLDocument: Sendable {
     public let title: String
@@ -77,6 +110,12 @@ public struct HTMLDocument: Sendable {
     /// when set, emitted as a cacheable `<link rel="stylesheet">` before the
     /// inline `<style>` (which keeps custom/page-scoped styles only).
     public let stylesheetURL: String?
+    /// when true, the caller has inlined the framework component sheet itself
+    /// (through `rawStyles`) — the ``HTMLDocumentDiagnostic`` warnings about a
+    /// missing sheet are suppressed, because none is missing. ``WebUIDocument``'s
+    /// inline mode (`stylesheetURL: nil`) sets this; a core host that inlines
+    /// `DesignSystemAssets.minifiedCss` should too.
+    public let inlinedComponentStyles: Bool
     private static func generateNonce() -> String {
         guard let bytes = SecureRandom.bytes(16) else {
             // fail loud: silently falling back to a weaker nonce source would
@@ -147,7 +186,8 @@ public struct HTMLDocument: Sendable {
         icon: String = Self.defaultIcon,
         preMinifiedStyles: Bool = false,
         stylesheetURL: String? = nil,
-        themeStylesheetURL: String? = nil
+        themeStylesheetURL: String? = nil,
+        inlinedComponentStyles: Bool = false
     ) {
         self.title = title
         self.body = body
@@ -170,9 +210,30 @@ public struct HTMLDocument: Sendable {
         self.preMinifiedStyles = preMinifiedStyles
         self.themeStylesheetURL = themeStylesheetURL
         self.stylesheetURL = stylesheetURL
+        self.inlinedComponentStyles = inlinedComponentStyles
         self.nonce = Self.generateNonce()
     }
     private static let documentLogger = Logger(label: "webui.document")
+
+    /// the diagnostics that apply to this document's stylesheet wiring. pure,
+    /// so hosts and tests can assert what ``render()`` will report without
+    /// capturing the logger.
+    public static func diagnostics(
+        body: String,
+        head: String,
+        stylesheetURL: String?,
+        inlinedComponentStyles: Bool = false
+    ) -> [HTMLDocumentDiagnostic] {
+        guard stylesheetURL == nil, !inlinedComponentStyles else { return [] }
+        var found: [HTMLDocumentDiagnostic] = []
+        if head.contains("rel=\"stylesheet\"") || head.contains("rel='stylesheet'") {
+            found.append(.headStylesheetWithoutBaseStylesheet)
+        }
+        if body.contains("class=\"icon") {
+            found.append(.frameworkMarkupWithoutStylesheet)
+        }
+        return found
+    }
 
     /// The pre-paint prelude, verbatim.
     ///
@@ -273,6 +334,18 @@ public struct HTMLDocument: Sendable {
             themeStylesheetTag = "  <link rel=\"stylesheet\" href=\"\(htmlEscape(url))\">\n"
         } else {
             themeStylesheetTag = ""
+        }
+
+        // the stylesheet wiring is checked at render time: the failure mode is
+        // silent (unstyled markup renders "fine" until a glyph detonates), so it
+        // warns unconditionally rather than only in debug builds.
+        for diagnostic in Self.diagnostics(
+            body: body,
+            head: head,
+            stylesheetURL: stylesheetURL,
+            inlinedComponentStyles: inlinedComponentStyles
+        ) {
+            Self.documentLogger.warning("\(diagnostic.message)")
         }
 
         return """
