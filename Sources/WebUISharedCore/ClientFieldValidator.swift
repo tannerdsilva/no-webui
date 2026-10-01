@@ -50,7 +50,7 @@ public struct ClientFieldValidator: Sendable {
 		case .email:
 			return isPlausibleEmail(value) ? nil : "enter a valid email address"
 		case .contains(let needle):
-			return Self.contains(value, needle) ? nil : "must contain \"\(needle)\""
+			return scalarContains(value, needle) ? nil : "must contain \"\(needle)\""
 		}
 	}
 
@@ -93,23 +93,5 @@ public struct ClientFieldValidator: Sendable {
 		while end > start, isWhitespaceOrNewline(scalars[end - 1]) { end -= 1 }
 		if start == 0, end == scalars.count { return value }
 		return String(String.UnicodeScalarView(scalars[start..<end]))
-	}
-
-	/// substring membership without `firstRange(of:)`/`contains(_:)` — the
-	/// embedded stdlib drops the range-returning String API entirely. scalar
-	/// comparison (single-source parity holds: the same code runs on host).
-	private static func contains(_ value: String, _ needle: String) -> Bool {
-		if needle.unicodeScalars.isEmpty { return true }
-		let h = Array(value.unicodeScalars)
-		let n = Array(needle.unicodeScalars)
-		if n.count > h.count { return false }
-		var i = 0
-		while i <= h.count - n.count {
-			var j = 0
-			while j < n.count, h[i + j] == n[j] { j += 1 }
-			if j == n.count { return true }
-			i += 1
-		}
-		return false
 	}
 }

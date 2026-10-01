@@ -22,21 +22,47 @@ package func trimmingHTMLWhitespace(_ string: String) -> String {
 	return String(string[start..<end])
 }
 
+/// substring membership without `firstRange(of:)`/`contains(_:)` — the embedded
+/// stdlib drops the range-returning String API, and `String.contains(_:)` with it.
+/// scalar comparison, and single-source parity holds: the same code runs on host.
+package func scalarContains(_ value: String, _ needle: String) -> Bool {
+	if needle.unicodeScalars.isEmpty { return true }
+	let h = Array(value.unicodeScalars)
+	let n = Array(needle.unicodeScalars)
+	if n.count > h.count { return false }
+	var i = 0
+	while i <= h.count - n.count {
+		var j = 0
+		while j < n.count, h[i + j] == n[j] { j += 1 }
+		if j == n.count { return true }
+		i += 1
+	}
+	return false
+}
+
 /// non-overlapping replace-all, matching `String.replacingOccurrences(of:with:)`.
+/// scalar-level for the same reason: the embedded stdlib has no `firstRange(of:)`,
+/// and for the attribute text and markdown markers these renderers produce, a scalar
+/// scan is the same scan a character-level one performs (single-source parity: the
+/// same code runs on host, pinned by the attribute-merge tests).
 package func replacingAllOccurrences(_ string: String, of target: String, with replacement: String) -> String {
 	guard !target.isEmpty else { return string }
-	var result = ""
-	var index = string.startIndex
-	while index < string.endIndex {
-		guard let found = string[index...].firstRange(of: target) else {
-			result += string[index...]
-			break
+	let needle = Array(target.unicodeScalars)
+	guard !needle.isEmpty else { return string }
+	let haystack = Array(string.unicodeScalars)
+	var out: [Unicode.Scalar] = []
+	out.reserveCapacity(haystack.count)
+	var i = 0
+	while i < haystack.count {
+		if i + needle.count <= haystack.count, haystack[i..<(i + needle.count)].elementsEqual(needle) {
+			out.append(contentsOf: replacement.unicodeScalars)
+			i += needle.count
+		} else {
+			out.append(haystack[i])
+			i += 1
 		}
-		result += string[index..<found.lowerBound]
-		result += replacement
-		index = found.upperBound
 	}
-	return result
+	return String(String.UnicodeScalarView(out))
 }
 
 // MARK: - Attribute Model
