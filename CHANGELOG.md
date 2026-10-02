@@ -4,6 +4,31 @@ all notable changes to this project are documented here.
 
 ## [unreleased]
 
+### runtime — streaming patch ops and calm patches
+
+- **`FragmentUpdate` gains ops.** `append` inserts one subtree as a child of the
+  target (anchored via `before`, idempotent by the child's own id, never coalesced);
+  `text` writes the target's text content — in steady state the text node's data is
+  mutated, so a token stream costs characterData writes and zero element churn.
+  Absent op = `replace` (unchanged; emits no `op` on the wire). Unknown ops warn and
+  skip rather than guess.
+- **transition policy.** A patch animates only when the consumer allows it: no
+  per-fragment `transition:false`, no `data-webui-transition="off"` ancestor region,
+  no transition already in flight, no `prefers-reduced-motion`. `append`/`text` never
+  animate; refused transitions still apply synchronously. Measured pre-change: one
+  view transition per push on a token stream (108–368 per turn).
+- **`details[open]` survives a patch.** The engine's save/restore captures and
+  re-applies `details` open state per stable key (`data-webui-key` / id / structural
+  index); a captured-open row the replacement drops warns once per key. Measured
+  pre-change: a reasoning row opened mid-stream was re-emitted collapsed by the next
+  push.
+- **queued application, last-write-wins.** Patches apply in order; same-target
+  `replace`/`text` updates collapse to the newest, and applications serialize behind
+  an in-flight transition — an older deferred animation callback can no longer clobber
+  a newer update. Also: the engine's reduced-motion guard now reads
+  `window.matchMedia` (`document.matchMedia` does not exist in current Chromium, so
+  the guard had been dead code).
+
 ### assets (additive)
 
 - **the asset toolkit ships** — the machinery no-webui already runs for its own sheet,

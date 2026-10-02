@@ -1,10 +1,56 @@
 // MARK: - WebSocket Protocol Types
+
+/// How a fragment update is applied by the client:
+/// - `.replace` (the default): `html` replaces the element with this id wholesale.
+/// - `.append`: `html` is inserted as a child of the id (before the `before` child
+///   when named) — one inserted subtree, no sibling parsing. The inserted child's
+///   own id makes the append idempotent (a repeat is skipped).
+/// - `.text`: `text` becomes the id's text content — the token-append primitive.
+///   The target must be a text-only element.
+public enum FragmentOp: String, Sendable, Codable, Equatable, Hashable {
+    case replace
+    case append
+    case text
+}
+
 public struct FragmentUpdate: Sendable, Codable, Equatable, Hashable {
     public let id: String
     public let html: String
-    public init(id: String, html: String) {
+    /// `false` opts this update out of the client's view-transition animation;
+    /// `nil` (the default) leaves the client's transition policy in charge
+    /// (see the engine's `data-webui-transition="off"` region opt-out).
+    public let transition: Bool?
+    /// `nil` means `.replace`; `.replace` emits no `op` on the wire.
+    public let op: FragmentOp?
+    /// `.text` payload.
+    public let text: String?
+    /// `.append` anchor: insert before this child id (default: at the end).
+    public let before: String?
+    public init(
+        id: String,
+        html: String,
+        transition: Bool? = nil,
+        op: FragmentOp? = nil,
+        text: String? = nil,
+        before: String? = nil
+    ) {
         self.id = id
         self.html = html
+        self.transition = transition
+        self.op = op
+        self.text = text
+        self.before = before
+    }
+
+    /// Insert `html` as a child of `#id` (before the named child when given)
+    /// instead of replacing the container.
+    public static func append(id: String, html: String, before: String? = nil, transition: Bool? = nil) -> FragmentUpdate {
+        FragmentUpdate(id: id, html: html, transition: transition, op: .append, before: before)
+    }
+
+    /// Write `value` into `#id`'s text content.
+    public static func text(id: String, value: String, transition: Bool? = nil) -> FragmentUpdate {
+        FragmentUpdate(id: id, html: "", transition: transition, op: .text, text: value)
     }
 }
 
@@ -168,7 +214,20 @@ extension WSOutgoing {
         switch self {
         case .update(let fragments, let seq):
             object["fragments"] = .array(fragments.map { fragment in
-                .object(["id": .string(fragment.id), "html": .string(fragment.html)])
+                var encoded: [String: JSONValue] = ["id": .string(fragment.id), "html": .string(fragment.html)]
+                if let transition = fragment.transition {
+                    encoded["transition"] = .bool(transition)
+                }
+                if let op = fragment.op, op != .replace {
+                    encoded["op"] = .string(op.rawValue)
+                }
+                if let text = fragment.text {
+                    encoded["text"] = .string(text)
+                }
+                if let before = fragment.before {
+                    encoded["before"] = .string(before)
+                }
+                return .object(encoded)
             })
             if let seq {
                 object["seq"] = .number(Double(seq))

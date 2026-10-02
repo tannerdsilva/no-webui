@@ -21,6 +21,8 @@ window.WebUIEngine = (function () {
   var LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3, silent: 4 };
   var EVENT_TYPES = ['click', 'input', 'change', 'submit', 'keydown', 'keyup', 'keypress', 'focus', 'blur', 'focusin', 'focusout', 'mouseover', 'mouseout', 'mousedown', 'mouseup'];
   var LOST_ANCHOR_WARNED = {};
+  var LOST_OPEN_WARNED = {};
+  var RETAINED_OPEN = {};
 
   var afterPatchHooks = [];
   var readyHooks = [];
@@ -397,6 +399,10 @@ window.WebUIEngine = (function () {
 
       if (event.type === 'submit') {
         event.preventDefault();
+        flushPendingInputs(
+          event.target && event.target.closest ? (event.target.closest('form') || event.target) : event.target,
+          componentId
+        );
       }
 
       var eventData = extractEventData(event, componentEl);
@@ -563,17 +569,19 @@ window.WebUIEngine = (function () {
       var now = Date.now();
 
       if (!inputTimers[key]) {
-        inputTimers[key] = { timer: null, data: eventData, eventType: event.type, lastSent: now };
+        inputTimers[key] = { timer: null, data: eventData, eventType: event.type, lastSent: now, el: event.target, flush: null };
       }
       var entry = inputTimers[key];
       entry.data = eventData;
       entry.eventType = event.type;
+      entry.el = event.target;
 
-      var flush = function () {
+      entry.flush = function () {
         if (entry.timer) {
           clearTimeout(entry.timer);
           entry.timer = null;
         }
+        entry.flush = null;
         entry.lastSent = Date.now();
         send({
           type: 'event',
@@ -584,14 +592,26 @@ window.WebUIEngine = (function () {
       };
 
       if (now - entry.lastSent >= config.debounceMaxWaitMs) {
-        flush();
+        entry.flush();
         return;
       }
 
       if (entry.timer) {
         clearTimeout(entry.timer);
       }
-      entry.timer = setTimeout(flush, config.debounceInputMs);
+      entry.timer = setTimeout(entry.flush, config.debounceInputMs);
+    }
+
+    function flushPendingInputs(formEl, componentId) {
+      for (var key in inputTimers) {
+        var entry = inputTimers[key];
+        if (!entry || !entry.timer || !entry.flush) continue;
+        var sameField = formEl && entry.el && formEl.contains && formEl.contains(entry.el);
+        var sameComponent = componentId && key.indexOf(componentId + ':') === 0;
+        if (sameField || sameComponent) {
+          entry.flush();
+        }
+      }
     }
 
     function reset(config_) {
@@ -605,6 +625,9 @@ window.WebUIEngine = (function () {
     var lastSeq = -1;
     var pending = {};
     var settleMs = 5000;
+    var transitionInFlight = false;
+    var callbackPending = false;
+    var queued = [];
 
 
     function patch(fragments, seq, optimistic) {
@@ -620,19 +643,80 @@ window.WebUIEngine = (function () {
 
       log.debug('Patching ' + fragments.length + ' fragment(s)' + (seq !== undefined ? ' seq=' + seq : ''));
 
-      var reduced = document.matchMedia && document.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      var transition = (!optimistic && !reduced && typeof document.startViewTransition === 'function')
-        ? document.startViewTransition
-        : null;
-      if (transition) {
-        var applied = false;
-        try {
-          transition(function () { applyFragments(fragments, optimistic); });
-          applied = true;
-        } catch (e) { }
-        if (!applied) { applyFragments(fragments, optimistic); }
-      } else {
-        applyFragments(fragments, optimistic);
+      if (optimistic) {
+        applyFragments(fragments, true);
+        return;
+      }
+      enqueue(fragments);
+    }
+
+    function enqueue(fragments) {
+      for (var i = 0; i < fragments.length; i++) {
+        var f = fragments[i];
+        var coalesced = false;
+        if (f.op !== 'append') {
+          for (var j = 0; j < queued.length; j++) {
+            if (queued[j].id === f.id) { queued[j] = f; coalesced = true; break; }
+          }
+        }
+        if (!coalesced) { queued.push(f); }
+      }
+      flush(false);
+    }
+
+    function flush(waited) {
+      if (!queued.length) return;
+      if (callbackPending) return;
+      var batch = queued;
+      queued = [];
+      if (!waited && !transitionInFlight && wantsTransition(batch)) {
+        runTransition(batch);
+        return;
+      }
+      applyFragments(batch, false);
+    }
+
+    function wantsTransition(fragments) {
+      if (typeof document.startViewTransition !== 'function') return false;
+      var mm = (typeof window.matchMedia === 'function') ? window.matchMedia : null;
+      if (mm && mm('(prefers-reduced-motion: reduce)').matches) return false;
+      for (var i = 0; i < fragments.length; i++) {
+        var f = fragments[i];
+        if (f && (f.op === 'append' || f.op === 'text')) return false;
+        if (f && f.transition === false) return false;
+        var el = f && f.id ? document.getElementById(f.id) : null;
+        if (el && el.closest && el.closest('[data-webui-transition="off"]')) return false;
+      }
+      return true;
+    }
+
+    function runTransition(fragments) {
+      transitionInFlight = true;
+      callbackPending = true;
+      var started = false;
+      var done = function () { transitionInFlight = false; callbackPending = false; flush(true); };
+      try {
+        var vt = document.startViewTransition(function () {
+          applyFragments(fragments, false);
+          callbackPending = false;
+          flush(true);
+        });
+        started = true;
+        var fin = vt && vt.finished;
+        if (fin && typeof fin.then === 'function') {
+          fin.then(done, done);
+        } else {
+          transitionInFlight = false;
+          callbackPending = false;
+        }
+      } catch (e) {
+        started = false;
+      }
+      if (!started) {
+        transitionInFlight = false;
+        callbackPending = false;
+        applyFragments(fragments, false);
+        flush(true);
       }
     }
 
@@ -640,21 +724,68 @@ window.WebUIEngine = (function () {
       var changed = [];
       for (var i = 0; i < fragments.length; i++) {
         var f = fragments[i];
-        if (!f.id || f.html === undefined) {
+        if (!f.id || (f.html === undefined && f.op !== 'text')) {
           if (optimistic) continue;
           log.warn('Invalid fragment at index ' + i);
           continue;
         }
+        var op = (f.op === undefined || f.op === null) ? 'replace' : String(f.op);
+        if (op !== 'replace' && op !== 'append' && op !== 'text') {
+          log.warn('Unknown fragment op "' + op + '" for #' + f.id + ' — skipped');
+          continue;
+        }
         if (optimistic) {
-          armPending(f.id);
+          if (op === 'replace') { armPending(f.id); }
         } else {
           clearPending(f.id);
+        }
+        if (op === 'text') {
+          setTextContent(f.id, f.text === undefined || f.text === null ? '' : String(f.text));
+          var textNode = document.getElementById(f.id);
+          if (textNode) { changed.push(textNode); }
+          continue;
+        }
+        if (op === 'append') {
+          var added = appendChildFragment(f.id, f.html, f.before);
+          if (added) { changed.push(added); }
+          continue;
         }
         replaceElement(f.id, f.html);
         var node = document.getElementById(f.id);
         if (node) { changed.push(node); }
       }
       if (changed.length) { runHooks(afterPatchHooks, changed); }
+    }
+
+    function setTextContent(id, value) {
+      var el = document.getElementById(id);
+      if (!el) { log.warn('Element not found: #' + id); return; }
+      if (el.textContent === value) { return; }
+      if (el.childNodes.length === 1 && el.firstChild.nodeType === 3) {
+        el.firstChild.data = value;
+        return;
+      }
+      el.textContent = value;
+    }
+
+    function appendChildFragment(id, html, before) {
+      var container = document.getElementById(id);
+      if (!container) { log.warn('Element not found: #' + id); return null; }
+      var fragment = sanitizeFragment(html, container);
+      var first = fragment.firstChild;
+      if (!first) { return null; }
+      if (first.nodeType === 1 && first.id && document.getElementById(first.id)) {
+        return null;
+      }
+      var anchor = null;
+      if (before) {
+        anchor = document.getElementById(before);
+        if (anchor && !container.contains(anchor)) { anchor = null; }
+        if (!anchor) { log.warn('append anchor #' + before + ' not found in #' + id + ' — appended at the end'); }
+      }
+      if (anchor) { container.insertBefore(fragment, anchor); }
+      else { container.appendChild(fragment); }
+      return first.nodeType === 1 ? first : container;
     }
 
     function armPending(id) {
@@ -784,7 +915,45 @@ window.WebUIEngine = (function () {
           state['focus:' + active.id] = { focus: true };
         }
       }
+      if (root.tagName === 'DETAILS') {
+        state['details:r'] = { open: !!root.open };
+      }
+      var detailsAll = root.querySelectorAll('details');
+      for (var d = 0; d < detailsAll.length; d++) {
+        state['details:' + detailsKey(detailsAll[d], d)] = { open: !!detailsAll[d].open };
+      }
       return state;
+    }
+
+    function detailsKey(el, index) {
+      if (el.getAttribute) {
+        var k = el.getAttribute('data-webui-key');
+        if (k) return 'k:' + k;
+        if (el.id) return 'id:' + el.id;
+      }
+      return 'i:' + index;
+    }
+
+    function findDroppedDetail(stateKey) {
+      var dk = stateKey.slice(8);
+      if (dk.indexOf('k:') === 0) {
+        var v = dk.slice(2);
+        if (!v || v.indexOf('"') >= 0 || v.indexOf('\\') >= 0) return null;
+        try { return document.querySelector('[data-webui-key="' + v + '"]'); } catch (e) { return null; }
+      }
+      if (dk.indexOf('id:') === 0) return document.getElementById(dk.slice(3));
+      return null;
+    }
+
+    function retainOpen(fragmentId, stateKey, open) {
+      var box = RETAINED_OPEN[fragmentId] || (RETAINED_OPEN[fragmentId] = {});
+      box[stateKey] = open;
+      var keys = Object.keys(box);
+      if (keys.length > 400) {
+        var oldest = keys[0];
+        delete box[oldest];
+        log.debug('evicted retained open state for #' + fragmentId + ' (' + oldest + ')');
+      }
     }
 
     function saveScroll(el, key, state) {
@@ -864,6 +1033,45 @@ window.WebUIEngine = (function () {
           }
         } catch (e) { }
       }
+      var restoredOpen = {};
+      if (root.tagName === 'DETAILS' && state['details:r']) {
+        restoredOpen['details:r'] = true;
+        if (!!root.open !== !!state['details:r'].open) { root.open = !!state['details:r'].open; }
+      }
+      var detailsNow = root.querySelectorAll('details');
+      for (var dn = 0; dn < detailsNow.length; dn++) {
+        var det = detailsNow[dn];
+        var dk = 'details:' + detailsKey(det, dn);
+        var rec = state[dk];
+        if (!rec) continue;
+        restoredOpen[dk] = true;
+        if (!!det.open !== !!rec.open) { det.open = !!rec.open; }
+      }
+      var retained = RETAINED_OPEN[fragmentId];
+      if (retained) {
+        for (var rk in retained) {
+          if (restoredOpen[rk]) { delete retained[rk]; continue; }
+          var rel = findDroppedDetail(rk);
+          if (!rel) continue;
+          if (!!rel.open !== !!retained[rk]) { rel.open = !!retained[rk]; }
+          delete retained[rk];
+        }
+        if (!Object.keys(retained).length) delete RETAINED_OPEN[fragmentId];
+      }
+      for (var ok in state) {
+        if (ok.indexOf('details:') !== 0 || restoredOpen[ok]) continue;
+        var dk2 = ok.slice(8);
+        if (dk2.indexOf('k:') === 0 || dk2.indexOf('id:') === 0) {
+          retainOpen(fragmentId, ok, !!state[ok].open);
+          continue;
+        }
+        if (!state[ok].open) continue;
+        var warnKey = fragmentId + '|' + ok;
+        if (!LOST_OPEN_WARNED[warnKey]) {
+          LOST_OPEN_WARNED[warnKey] = true;
+          log.warn('Patch for #' + fragmentId + ' dropped a row with captured open state (' + ok + ') — the state cannot be restored');
+        }
+      }
     }
 
     function reset() {
@@ -874,6 +1082,9 @@ window.WebUIEngine = (function () {
         }
       }
       pending = {};
+      queued = [];
+      transitionInFlight = false;
+      callbackPending = false;
     }
 
     function setSettle(ms) {
