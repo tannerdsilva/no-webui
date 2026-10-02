@@ -107,30 +107,47 @@ const out = await page.evaluate(async () => {
 	let textRules = null;
 	if (total === 0 && linkTags.length) {
 		const cssText = await (await fetch(linkTags[0])).text();
-		// brace-aware scan (one nesting level is enough for @media/@layer blocks)
-		const scan = [];
-		let depth = 0, start = 0;
-		for (let i = 0; i < cssText.length; i++) {
-			const c = cssText[i];
-			if (c === '{') {
-				if (depth === 0) { const sel = cssText.slice(start, i).trim(); scan.push({ sel, open: i }); }
-				depth++;
-			} else if (c === '}') {
-				depth--;
-				if (depth === 0) { const top = scan[scan.length - 1]; if (top && top.open !== undefined) { top.text = cssText.slice(top.open + 1, i); top.end = i; } }
-				if (depth === 0) start = i + 1;
+		// a recursive parse: the shipped sheet wraps every rule in `@layer webui { … }`
+		// (and the utility layer), so a one-level scan sees no rules at all. grouping
+		// at-rules are descended into; non-cascading ones (`@keyframes`, `@font-face`,
+		// `@property`) are not — a class selector cannot match inside them.
+		const rules = [];
+		const parseBlocks = (from, to) => {
+			let i = from, start = from;
+			while (i < to) {
+				const c = cssText[i];
+				if (c === '{') {
+					const prelude = cssText.slice(start, i).trim();
+					let depth = 1, j = i + 1;
+					while (j < to && depth) {
+						if (cssText[j] === '{') depth++;
+						else if (cssText[j] === '}') depth--;
+						j++;
+					}
+					if (prelude.startsWith('@')) {
+						if (/^@(layer|media|supports|container|scope)\b/.test(prelude)) parseBlocks(i + 1, j - 1);
+					} else {
+						rules.push({ sel: prelude, body: cssText.slice(i + 1, j - 1) });
+					}
+					i = j;
+					start = j;
+					continue;
+				}
+				if (c === ';') start = i + 1;
+				i++;
 			}
-		}
+		};
+		parseBlocks(0, cssText.length);
+
 		let deadText = 0, applicableText = 0, partialText = 0, noClassText = 0;
 		let deadBytes = 0, applicableBytes = 0;
 		const textSpec = { singleClass: 0, multiClass: 0, id: 0, elementOnly: 0 };
 		let textImportant = 0;
 		const refsOfApplicable = new Set();
 		const declaredFromText = new Set();
-		for (const block of scan) {
-			const sel = block.sel;
-			if (/^@/.test(sel)) { applicableText++; continue; } // at-rule wrapper: count its inner rules only
-			const body = block.text || '';
+		for (const rule of rules) {
+			const sel = rule.sel;
+			const body = rule.body;
 			if (body.includes('!important')) textImportant++;
 			if (/:root/.test(sel)) {
 				for (const d of body.match(/--[A-Za-z0-9_-]+\s*:/g) || []) declaredFromText.add(d.replace(/\s*:$/, ''));
@@ -151,7 +168,7 @@ const out = await page.evaluate(async () => {
 			else partialText++;
 		}
 		textRules = {
-			topLevelBlocks: scan.length, rulesFromText: noClassText + applicableText + deadText + partialText,
+			rulesFromText: rules.length,
 			noClassText, applicableText, deadText, partialText,
 			bytesAllText: cssText.length, applicableBytes, deadBytes,
 			deadByteFraction: +((deadBytes / cssText.length) || 0).toFixed(3),
