@@ -287,6 +287,163 @@ await page.emulateMedia({ reducedMotion: null });
 if (vtPatch === "7") ok("patches apply under prefers-reduced-motion (guard path)");
 else bad(`reduced-motion patch failed: ${JSON.stringify(vtPatch)}`);
 
+// 6c-bis. transition policy: hot patches must not start overlapping view
+// transitions, a consumer can refuse the animation per fragment or per region,
+// and refusal never blocks the patch (it applies synchronously). measured
+// pre-change: every authoritative patch animated, so a token stream cross-faded
+// the whole page at token rate; and a refused patch could be clobbered by an
+// older patch's deferred animation callback.
+{
+  const policy = await page.evaluate(async () => {
+    const inst = window.WebUIEngine._getInstance();
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    let vt = 0;
+    const orig = document.startViewTransition.bind(document);
+    document.startViewTransition = (cb) => { vt++; return orig(cb); };
+    const html = (n) => '<div id="counter-value" class="counter-value" role="status"><span>' + n + '</span></div>';
+    const text = () => document.querySelector("#counter-value").textContent.trim();
+    await sleep(300);
+
+    // (a) instrument check: an allowed patch animates exactly once
+    inst.patch([{ id: "counter-value", html: html(21) }]);
+    await sleep(350);
+    const afterAllowed = vt;
+
+    // (b) per-fragment refusal: applies synchronously, does not animate
+    inst.patch([{ id: "counter-value", html: html(22), transition: false }]);
+    const flagImmediate = text();
+    await sleep(350);
+    const afterFlag = vt;
+
+    // (c) region refusal: applies synchronously, does not animate
+    const host = document.getElementById("counter-value").parentElement;
+    host.setAttribute("data-webui-transition", "off");
+    inst.patch([{ id: "counter-value", html: html(23) }]);
+    const regionImmediate = text();
+    await sleep(350);
+    const afterRegion = vt;
+    host.removeAttribute("data-webui-transition");
+
+    // (d) never overlap: two rapid patches animate once, no clobber from the
+    // first patch's deferred callback; the latest value must win
+    inst.patch([{ id: "counter-value", html: html(24) }]);
+    inst.patch([{ id: "counter-value", html: html(25) }]);
+    await sleep(350);
+    const afterOverlap = vt;
+
+    document.startViewTransition = orig;
+    return { afterAllowed, afterFlag, afterRegion, afterOverlap, flagImmediate, regionImmediate, text: text() };
+  });
+  if (policy.afterAllowed === 1) ok("an allowed patch animates exactly once (instrument check)");
+  else bad(`allowed patch transitions: ${policy.afterAllowed} (expected 1)`);
+  if (policy.afterFlag === 1 && policy.flagImmediate === "22") ok("per-fragment transition:false applies synchronously without animating");
+  else bad(`flag-refused patch: transitions ${policy.afterFlag} (expected 1 total), immediate ${JSON.stringify(policy.flagImmediate)} (expected 22)`);
+  if (policy.afterRegion === 1 && policy.regionImmediate === "23") ok('data-webui-transition="off" region applies synchronously without animating');
+  else bad(`region-refused patch: transitions ${policy.afterRegion} (expected 1 total), immediate ${JSON.stringify(policy.regionImmediate)} (expected 23)`);
+  if (policy.afterOverlap === 2) ok("overlapping patches animate once (second applies unanimated)");
+  else bad(`overlap transitions: ${policy.afterOverlap} (expected 2 total)`);
+  if (policy.text === "25") ok("no clobber: the latest patch wins against the earlier patch's deferred callback");
+  else bad(`counter after policy probes: ${JSON.stringify(policy.text)} (expected 25)`);
+}
+
+// 6c-ter. details open state is user state: a replace patch must not close a
+// row the user opened (nor re-open one they closed). captured per stable key
+// (data-webui-key / id / structural index) and re-applied after the swap.
+{
+  const detailsState = await page.evaluate(async () => {
+    const inst = window.WebUIEngine._getInstance();
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const html = '<div id="details-probe"><details class="probe-details" id="probe-a"><summary>a</summary><div>body</div></details><details class="probe-details" id="probe-b"><summary>b</summary><div>body2</div></details></div>';
+    const host = document.createElement("div");
+    host.innerHTML = html;
+    document.body.appendChild(host.firstChild);
+    const a = () => document.getElementById("probe-a");
+    const b = () => document.getElementById("probe-b");
+    a().open = true;
+    await sleep(120);
+    inst.patch([{ id: "details-probe", html }]);
+    await sleep(120);
+    const afterReplace = { aOpen: a().open, bOpen: b().open };
+    a().open = false;
+    await sleep(120);
+    inst.patch([{ id: "details-probe", html }]);
+    await sleep(120);
+    const afterClose = { aOpen: a().open, bOpen: b().open };
+    a().open = true;
+    await sleep(120);
+    inst.patch([{ id: "details-probe", html: '<div id="details-probe"><details class="probe-details" id="probe-b"><summary>b</summary><div>body2</div></details></div>' }]);
+    await sleep(120);
+    const afterDrop = { count: document.querySelectorAll("#details-probe details").length, bOpen: b() ? b().open : null };
+    document.getElementById("details-probe").remove();
+    return { afterReplace, afterClose, afterDrop };
+  });
+  if (detailsState.afterReplace.aOpen === true && detailsState.afterReplace.bOpen === false) ok("an open details survives a replace patch; a closed sibling stays closed");
+  else bad(`details open state across patch: ${JSON.stringify(detailsState.afterReplace)}`);
+  if (detailsState.afterClose.aOpen === false) ok("a user-closed details stays closed across a patch");
+  else bad(`closed details re-opened: ${JSON.stringify(detailsState.afterClose)}`);
+  if (detailsState.afterDrop.count === 1 && detailsState.afterDrop.bOpen === false) ok("a dropped details row loses its captured state without crashing the patch");
+  else bad(`dropped-row handling: ${JSON.stringify(detailsState.afterDrop)}`);
+}
+
+// 6c-quater. patch ops: append inserts one subtree (anchor honored, idempotent
+// by the child's own id), text writes the target's text content — both apply
+// synchronously and neither animates.
+{
+  const ops = await page.evaluate(async () => {
+    const inst = window.WebUIEngine._getInstance();
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    let vt = 0;
+    const orig = document.startViewTransition.bind(document);
+    document.startViewTransition = (cb) => { vt++; return orig(cb); };
+    const host = document.createElement("div");
+    host.id = "ops-probe";
+    host.innerHTML = '<div id="ops-list"><span id="ops-last">end</span></div><span id="ops-text"></span>';
+    document.body.appendChild(host);
+    await sleep(60);
+
+    inst.patch([{ id: "ops-list", op: "append", html: '<span id="ops-new">new</span>', before: "ops-last" }]);
+    const afterAppend = { order: Array.from(document.querySelectorAll("#ops-list > *")).map((e) => e.id), count: document.querySelectorAll("#ops-list > *").length };
+    inst.patch([{ id: "ops-list", op: "append", html: '<span id="ops-new">new</span>' }]);
+    const afterRepeat = document.querySelectorAll("#ops-new").length;
+    inst.patch([{ id: "ops-list", op: "append", html: '<span id="ops-tail">tail</span>' }]);
+    const afterTail = Array.from(document.querySelectorAll("#ops-list > *")).map((e) => e.id);
+
+    inst.patch([{ id: "ops-text", op: "text", text: "streamed tokens" }]);
+    const textValue = document.getElementById("ops-text").textContent;
+    // steady-state writes must be pure characterData: no element churn at all
+    let textAdds = 0, textRemoves = 0, textChars = 0;
+    const textObs = new MutationObserver((muts) => {
+      for (const m of muts) {
+        if (m.type === "childList") { textAdds += m.addedNodes.length; textRemoves += m.removedNodes.length; }
+        else if (m.type === "characterData") { textChars++; }
+      }
+    });
+    textObs.observe(document.getElementById("ops-text"), { childList: true, characterData: true, subtree: true });
+    inst.patch([{ id: "ops-text", op: "text", text: "streamed tokens 2" }]);
+    inst.patch([{ id: "ops-text", op: "text", text: "streamed tokens 3" }]);
+    await sleep(30);
+    textObs.disconnect();
+    const textValue2 = document.getElementById("ops-text").textContent;
+    const vts = vt;
+
+    document.startViewTransition = orig;
+    host.remove();
+    return { afterAppend, afterRepeat, afterTail, textValue, textValue2, textAdds, textRemoves, textChars, vts };
+  });
+  if (ops.afterAppend.order.join(",") === "ops-new,ops-last" && ops.afterAppend.count === 2) ok("append inserts one child before the anchor");
+  else bad(`append before-anchor: ${JSON.stringify(ops.afterAppend)}`);
+  if (ops.afterRepeat === 1) ok("append is idempotent by child id (repeat skipped)");
+  else bad(`append repeat count: ${ops.afterRepeat} (expected 1)`);
+  if (ops.afterTail.join(",") === "ops-new,ops-last,ops-tail") ok("anchorless append lands at the end");
+  else bad(`append tail order: ${JSON.stringify(ops.afterTail)}`);
+  if (ops.textValue === "streamed tokens" && ops.textValue2 === "streamed tokens 3") ok("text op writes the target's text content");
+  else bad(`text op values: ${JSON.stringify([ops.textValue, ops.textValue2])}`);
+  if (ops.textAdds === 0 && ops.textRemoves === 0 && ops.textChars === 2) ok("steady-state text writes are pure characterData (zero element churn)");
+  else bad(`text write churn: +${ops.textAdds}/-${ops.textRemoves}, charData ${ops.textChars} (expected 0/0/2)`);
+  if (ops.vts === 0) ok("append and text ops never start a view transition");
+  else bad(`op transitions: ${ops.vts} (expected 0)`);
+}
+
 // 6d. reconnect indicator (engine mode): the framework status chip exists
 // hidden, appears on transport disconnect, clears on reconnect. its visibility
 // is engine-owned (an inline display write), so both states must hold with
