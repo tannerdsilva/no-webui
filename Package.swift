@@ -123,6 +123,7 @@ let package = Package(
             name: "WebUI",
             dependencies: [
                 "WebUICore",
+                "WebUIContinuumMacros",
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "RAW", package: "rawdog"),
                 .product(name: "RAW_sha256", package: "rawdog"),
@@ -266,6 +267,19 @@ let package = Package(
         // ── @Theme Macro ────────────────────────────────────────
         .macro(
             name: "WebUIDesignSystemMacros",
+            dependencies: [
+                .product(name: "SwiftSyntax", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
+                .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
+            ]
+        ),
+
+        // ── @HotView / @HotClass Macros (the continuum surface) ─
+        // host-compiled compiler plugin (swift-syntax, already vendored above).
+        // its declarations live inert in `WebUI`; the implementation must never
+        // enter a wasm-compiled chain — a compiler plugin cannot cross-build.
+        .macro(
+            name: "WebUIContinuumMacros",
             dependencies: [
                 .product(name: "SwiftSyntax", package: "swift-syntax"),
                 .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
