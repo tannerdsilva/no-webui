@@ -263,6 +263,14 @@ extension Feed: ContinuumServerPath {
 		#expect(text.contains("grants: []"))
 		#expect(text.contains("IslandBudget(maxBytes: 0, maxGzipBytes: nil)"))
 	}
+
+	@Test("the expansion synthesizes no Codable — the embed gate (c-to-d.md)")
+	func embedCodableGate() {
+		let text = expandedText(of: completeFeedFixture)
+		#expect(!text.contains("Codable"))
+		#expect(!text.contains("JSONEncoder"))
+		#expect(!text.contains("JSONDecoder"))
+	}
 }
 
 // MARK: - negative cases

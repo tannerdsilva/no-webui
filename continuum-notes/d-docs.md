@@ -187,8 +187,12 @@ for `@HotView("feed", imports: [ClockCapability.self], budget: IslandBudget(...)
 - builder negative path (full-vocabulary view in a hot body): the compiler emits
   the fix-hint message with file/line (verified by a module-level typecheck
   probe; recorded in the lane report).
+- argument typing at the use site (verified by probe): `imports: [String.self]`
+  fails with "cannot convert '[String.Type]' to '[any HostCapability.Type]'";
+  `budget: 4096` fails with "cannot convert 'Int' to 'IslandBudget'".
 - `swift test --filter placementHintSurfacePins` — green.
-- final full `swift build` + `swift test` — see the lane report.
+- final full `swift build` + `swift test` — 9 bundles · 1108 tests · 119 suites ·
+  0 failures (see the lane report).
 
 ## doc fragments (wave 2, for the orchestrator)
 
