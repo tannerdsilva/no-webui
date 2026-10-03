@@ -7,10 +7,17 @@
 ///   own id makes the append idempotent (a repeat is skipped).
 /// - `.text`: `text` becomes the id's text content — the token-append primitive.
 ///   The target must be a text-only element.
+/// - `.remove`: delete `#id` from the document.
+/// - `.attr`: set ONE attribute (`name` allowlisted, `value` escaped) on `#id`.
+/// - `.move`: reorder `#id` within its parent (before the `before` sibling when
+///   named, at the end otherwise) — never a re-insert.
 public enum FragmentOp: String, Sendable, Codable, Equatable, Hashable {
     case replace
     case append
     case text
+    case remove
+    case attr
+    case move
 }
 
 public struct FragmentUpdate: Sendable, Codable, Equatable, Hashable {
@@ -25,14 +32,21 @@ public struct FragmentUpdate: Sendable, Codable, Equatable, Hashable {
     /// `.text` payload.
     public let text: String?
     /// `.append` anchor: insert before this child id (default: at the end).
+    /// `.move` anchor: reorder before this sibling id (default: at the end).
     public let before: String?
+    /// `.attr` attribute name (allowlisted on the engine side).
+    public let name: String?
+    /// `.attr` attribute value.
+    public let value: String?
     public init(
         id: String,
         html: String,
         transition: Bool? = nil,
         op: FragmentOp? = nil,
         text: String? = nil,
-        before: String? = nil
+        before: String? = nil,
+        name: String? = nil,
+        value: String? = nil
     ) {
         self.id = id
         self.html = html
@@ -40,6 +54,8 @@ public struct FragmentUpdate: Sendable, Codable, Equatable, Hashable {
         self.op = op
         self.text = text
         self.before = before
+        self.name = name
+        self.value = value
     }
 
     /// Insert `html` as a child of `#id` (before the named child when given)
@@ -51,6 +67,21 @@ public struct FragmentUpdate: Sendable, Codable, Equatable, Hashable {
     /// Write `value` into `#id`'s text content.
     public static func text(id: String, value: String, transition: Bool? = nil) -> FragmentUpdate {
         FragmentUpdate(id: id, html: "", transition: transition, op: .text, text: value)
+    }
+
+    /// Delete `#id` from the document.
+    public static func remove(id: String, transition: Bool? = nil) -> FragmentUpdate {
+        FragmentUpdate(id: id, html: "", transition: transition, op: .remove)
+    }
+
+    /// Set one attribute (`name` allowlisted, `value` escaped) on `#id`.
+    public static func attr(id: String, name: String, value: String, transition: Bool? = nil) -> FragmentUpdate {
+        FragmentUpdate(id: id, html: "", transition: transition, op: .attr, name: name, value: value)
+    }
+
+    /// Reorder `#id` within its parent, before the `before` sibling when given.
+    public static func move(id: String, before: String? = nil, transition: Bool? = nil) -> FragmentUpdate {
+        FragmentUpdate(id: id, html: "", transition: transition, op: .move, before: before)
     }
 }
 
@@ -226,6 +257,12 @@ extension WSOutgoing {
                 }
                 if let before = fragment.before {
                     encoded["before"] = .string(before)
+                }
+                if let name = fragment.name {
+                    encoded["name"] = .string(name)
+                }
+                if let value = fragment.value {
+                    encoded["value"] = .string(value)
                 }
                 return .object(encoded)
             })

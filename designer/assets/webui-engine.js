@@ -308,6 +308,17 @@ window.WebUIEngine = (function () {
       log.debug('Event delegation unmounted');
     }
 
+    function echoInput(event) {
+      var target = event.target;
+      if (!target || !target.getAttribute) return;
+      var echoId = target.getAttribute('data-webui-echo');
+      if (!echoId) return;
+      var value = target.value === undefined || target.value === null ? '' : String(target.value);
+      if (typeof fragmentPatcher.echo === 'function') {
+        fragmentPatcher.echo(echoId, value);
+      }
+    }
+
     function applyPrediction(componentEl, componentId) {
       var raw = componentEl.getAttribute('data-optimistic');
       if (!raw) return;
@@ -333,6 +344,9 @@ window.WebUIEngine = (function () {
     }
 
     function handleEvent(event) {
+      if (event.type === 'input') {
+        echoInput(event);
+      }
       if (event.type === 'keydown') {
         var treeRow = event.target && event.target.closest && event.target.closest('.tree--interactive [role=treeitem]');
         if (treeRow && (event.key === 'Enter' || event.key === ' ')) {
@@ -628,6 +642,13 @@ window.WebUIEngine = (function () {
     var transitionInFlight = false;
     var callbackPending = false;
     var queued = [];
+    var warnedOnce = {};
+
+    function warnOnce(key, message) {
+      if (warnedOnce[key]) return;
+      warnedOnce[key] = true;
+      log.warn(message);
+    }
 
 
     function patch(fragments, seq, optimistic) {
@@ -653,10 +674,16 @@ window.WebUIEngine = (function () {
     function enqueue(fragments) {
       for (var i = 0; i < fragments.length; i++) {
         var f = fragments[i];
+        var op = (f.op === undefined || f.op === null) ? 'replace' : String(f.op);
         var coalesced = false;
-        if (f.op !== 'append') {
-          for (var j = 0; j < queued.length; j++) {
-            if (queued[j].id === f.id) { queued[j] = f; coalesced = true; break; }
+        if (op !== 'append' && op !== 'remove') {
+          for (var j = queued.length - 1; j >= 0; j--) {
+            var queuedOp = (queued[j].op === undefined || queued[j].op === null) ? 'replace' : String(queued[j].op);
+            if (queued[j].id === f.id && queuedOp !== 'remove') {
+              queued[j] = f;
+              coalesced = true;
+              break;
+            }
           }
         }
         if (!coalesced) { queued.push(f); }
@@ -682,7 +709,7 @@ window.WebUIEngine = (function () {
       if (mm && mm('(prefers-reduced-motion: reduce)').matches) return false;
       for (var i = 0; i < fragments.length; i++) {
         var f = fragments[i];
-        if (f && (f.op === 'append' || f.op === 'text')) return false;
+        if (f && (f.op === 'append' || f.op === 'text' || f.op === 'remove' || f.op === 'attr' || f.op === 'move')) return false;
         if (f && f.transition === false) return false;
         var el = f && f.id ? document.getElementById(f.id) : null;
         if (el && el.closest && el.closest('[data-webui-transition="off"]')) return false;
@@ -724,23 +751,35 @@ window.WebUIEngine = (function () {
       var changed = [];
       for (var i = 0; i < fragments.length; i++) {
         var f = fragments[i];
-        if (!f.id || (f.html === undefined && f.op !== 'text')) {
+        var op = (f.op === undefined || f.op === null) ? 'replace' : String(f.op);
+        if (!f.id) {
           if (optimistic) continue;
           log.warn('Invalid fragment at index ' + i);
           continue;
         }
-        var op = (f.op === undefined || f.op === null) ? 'replace' : String(f.op);
-        if (op !== 'replace' && op !== 'append' && op !== 'text') {
-          log.warn('Unknown fragment op "' + op + '" for #' + f.id + ' — skipped');
+        if (op === 'replace' || op === 'append') {
+          if (f.html === undefined) {
+            if (optimistic) continue;
+            log.warn('Invalid fragment at index ' + i);
+            continue;
+          }
+        }
+        if (op !== 'replace' && op !== 'append' && op !== 'text' && op !== 'remove' && op !== 'attr' && op !== 'move') {
+          warnOnce('op:' + op, 'Unknown fragment op "' + op + '" for #' + f.id + ' — skipped');
           continue;
         }
         if (optimistic) {
+          if (op !== 'replace' && op !== 'append') {
+            warnOnce('opt:' + op, 'Fragment op "' + op + '" for #' + f.id + ' is not allowed in optimistic patches — skipped');
+            continue;
+          }
           if (op === 'replace') { armPending(f.id); }
         } else {
           clearPending(f.id);
         }
         if (op === 'text') {
           setTextContent(f.id, f.text === undefined || f.text === null ? '' : String(f.text));
+          clearEcho(f.id);
           var textNode = document.getElementById(f.id);
           if (textNode) { changed.push(textNode); }
           continue;
@@ -750,11 +789,39 @@ window.WebUIEngine = (function () {
           if (added) { changed.push(added); }
           continue;
         }
+        if (op === 'remove') {
+          var removed = removeFragmentElement(f.id);
+          if (removed) { changed.push(removed); }
+          continue;
+        }
+        if (op === 'attr') {
+          var attrNode = applyAttrFragment(f);
+          if (attrNode) { changed.push(attrNode); }
+          continue;
+        }
+        if (op === 'move') {
+          var moved = moveFragmentElement(f);
+          if (moved) { changed.push(moved); }
+          continue;
+        }
         replaceElement(f.id, f.html);
+        clearEcho(f.id);
         var node = document.getElementById(f.id);
         if (node) { changed.push(node); }
       }
       if (changed.length) { runHooks(afterPatchHooks, changed); }
+    }
+
+    var echoOverlay = {};
+    function echo(id, value) {
+      var el = document.getElementById(id);
+      if (!el) return false;
+      echoOverlay[id] = true;
+      setTextContent(id, value);
+      return true;
+    }
+    function clearEcho(id) {
+      delete echoOverlay[id];
     }
 
     function setTextContent(id, value) {
@@ -786,6 +853,59 @@ window.WebUIEngine = (function () {
       if (anchor) { container.insertBefore(fragment, anchor); }
       else { container.appendChild(fragment); }
       return first.nodeType === 1 ? first : container;
+    }
+
+    var ATTR_ALLOW_EXACT = { 'class': true };
+    var ATTR_ALLOW_PREFIX = ['aria-', 'data-'];
+    function attrNameAllowed(name) {
+      if (ATTR_ALLOW_EXACT[name]) return true;
+      for (var i = 0; i < ATTR_ALLOW_PREFIX.length; i++) {
+        if (name.indexOf(ATTR_ALLOW_PREFIX[i]) === 0) return true;
+      }
+      return false;
+    }
+
+    function removeFragmentElement(id) {
+      var el = document.getElementById(id);
+      if (!el) { log.warn('Element not found: #' + id); return null; }
+      var parent = el.parentNode;
+      el.remove();
+      return parent || el;
+    }
+
+    function applyAttrFragment(f) {
+      var el = document.getElementById(f.id);
+      if (!el) { log.warn('Element not found: #' + f.id); return null; }
+      var name = f.name === undefined || f.name === null ? '' : String(f.name);
+      if (!name) {
+        warnOnce('attr-no-name', 'attr fragment for #' + f.id + ' missing name — skipped');
+        return null;
+      }
+      if (!attrNameAllowed(name)) {
+        warnOnce('attr-name:' + name, 'attr fragment for #' + f.id + ' names "' + name + '" — not on the allowlist, skipped');
+        return null;
+      }
+      var value = f.value === undefined || f.value === null ? '' : String(f.value);
+      el.setAttribute(name, value);
+      return el;
+    }
+
+    function moveFragmentElement(f) {
+      var el = document.getElementById(f.id);
+      if (!el) { log.warn('Element not found: #' + f.id); return null; }
+      var parent = el.parentNode;
+      if (!parent) { log.warn('move fragment for #' + f.id + ' has no parent — skipped'); return null; }
+      var anchor = null;
+      if (f.before) {
+        anchor = document.getElementById(f.before);
+        if (anchor && anchor.parentNode !== parent) {
+          log.warn('move anchor #' + f.before + ' is not a sibling of #' + f.id + ' — appended at the end');
+          anchor = null;
+        }
+        if (!anchor) { log.warn('move anchor #' + f.before + ' not found — appended at the end'); }
+      }
+      parent.insertBefore(el, anchor);
+      return el;
     }
 
     function armPending(id) {
@@ -1091,7 +1211,7 @@ window.WebUIEngine = (function () {
       settleMs = ms;
     }
 
-    return { patch: patch, reset: reset, setSettle: setSettle, sanitize: sanitizeFragment };
+    return { patch: patch, reset: reset, setSettle: setSettle, sanitize: sanitizeFragment, echo: echo, echoOverlay: echoOverlay };
   }
 
   var UNSAFE_PROTOCOLS = /^(javascript|data|vbscript):/i;
