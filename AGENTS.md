@@ -10,27 +10,41 @@ one Package.swift, one family — the swiftui-for-web stack:
    modifiers, css system, html document assembly, websocket protocol, js
    runtime. the host of the design-system assets (embedded at build time).
    actively developed — this is where most work happens.
-2. **WebUIDesignSystem** — the nexus design system: 225 css custom properties
-   (tokens) and 22 styled components. mature, stable.
+2. **WebUIDesignSystem** — the nexus design system: 174 css custom properties
+   (the `:root` token vocabulary) and 133 component types. mature, stable. the
+   counts are measured, not asserted — re-measure rather than trust them:
+   the authoritative token count is `DesignToken.tokenCount` in the generated
+   `DesignTokens+Generated.swift` (every `swift build` prints it: "generated … (174
+   tokens)"), and
+   `grep -rhoE '^public struct WebUI[A-Za-z]+' Sources/WebUIDesignSystemCore/*.swift | sort -u | wc -l`.
 3. **WebUIAuth** — authentication + sessions: identity model, session tokens,
    cookies, in-memory session store behind an `AuthSessionStore` protocol,
    argon2id password verification,
    constant-time compare, `AuthContext`.
 
+4. **WebUIChart / WebUIServer / WebUIBlocks** — the surface around the core: a
+   declarative chart library (`Documentation/CHARTS.md`), the NIO server that
+   hosts a page plus its assets and websocket, and the standalone page
+   scaffolds (dashboard, login, signup, four sidebar variants, patterns),
+   served one per process by `WebUIBlocksServer`.
+
 the low-level core libraries (ip, futures, fifo, pthread) were removed from
 the manifest — the package is web-ui only now.
 
-## first law — comments allowed in swift, none in shipped web assets
+## first law — comments allowed in swift, none in shipped bytes
 
 comments are welcome in swift source. `///` doc comments and `//` line comments
 are fine anywhere a comment helps — libraries, executables, plugins, tests.
 `// MARK:` remains the convention for structural navigation.
 
-the one place comments stay forbidden is the distributed web surface: the html,
-css, and js shipped to clients. `designer/assets/design-system.css`,
-`designer/assets/webui-runtime.js`, and every generated html document go over
-the wire verbatim — comments there are payload weight and leak implementation
-detail. keep the bytes the client receives free of comments.
+the one place comments stay forbidden is the bytes a client receives: the served
+html, css, and js. `WebUIAssetTool` enforces it — `WebUICore.ProseGuard` scans
+the payloads it embeds (`webui-runtime.js`, `webui-engine.js`, `webui-shell.js`,
+and the minified sheet) on every build and fails naming file, line and text. the
+css working file is the one place prose may *live*: `design-system.css` carries
+the designer's notes and the build minifies them away, so the file the designer
+edits and the bytes the client receives differ by exactly that one transform —
+and nothing else.
 
 framework-level prose documentation still belongs in `Documentation/*.md`;
 inline comments explain code, markdown files explain architecture and APIs.
@@ -39,7 +53,7 @@ inline comments explain code, markdown files explain architecture and APIs.
 
 ```bash
 swift build             # includes the WebUIAssetPlugin + WebUIIconPlugin + WebUIWasmPlugin (auto-generates Assets+Generated.swift + DesignTokens+Generated.swift + IconLibrary.swift + Wasm+Generated.swift)
-swift test              # 702 tests, 85 suites
+swift test              # 816 tests — re-count rather than trust: grep -rc '@Test' Tests/ | awk -F: '{s+=$2} END {print s}'
 swift run WebUIExample  # example server on :9090
 ```
 
@@ -47,18 +61,17 @@ the wasm client is a separate product built with the official swift 6.4 wasm sdk
 (the swiftly-hosted `swift-6.4-RELEASE` toolchain — the Xcode frontend cannot
 read the sdk's prebuilt modules and lacks `swift-autolink-extract`; wasm commands
 need the swiftly shim, not `source ~/.swiftly/env.sh`, which is
-PATH-order-dependent in spawn contexts). the *native* way to produce the
-artifact is the `wasm-client` plugin verb (see below) — it wraps the raw
+PATH-order-dependent in spawn contexts). the *native* way to produce an
+island artifact is the `wasm-island` plugin verb (see below) — it wraps the raw
 invocation in an isolated scratch build root:
 
 ```bash
-swift package --disable-sandbox plugin wasm-client [--product TheirClient] [--no-strip]
-# verify modes (browser-hosted once env imports are linked; wasmkit can no
-# longer instantiate the shipped module — it is chamber-only by design)
+swift package --disable-sandbox plugin wasm-island [--product TheirIsland] [--no-strip]
+# verify modes (an island is browser-hosted once its env imports are linked)
 node designer/browser-smoke.mjs
 ```
 
-the `wasm-client` verb cross-builds into `.build/wasm-client-scratch` (an
+the `wasm-island` verb cross-builds into `.build/wasm-island-scratch` (an
 isolated build root — the plugin invocation holds the package `.build` lock,
 so building into the package's own `.build` deadlocks), strips custom sections
 (name table + DWARF) by default (`--no-strip` keeps readable devtools stack
@@ -70,16 +83,8 @@ during every host build.
 pages are engine-first: the default client runtime is `webui-engine.js`
 (`HTMLDocument`/`WebUIDocument` emit the `webui-config` meta + engine script
 automatically; `includeRuntime: false` ships no client at all — no script, no
-config meta). the wasm client is an explicit opt-in via
-`clientMode: ClientBoot(flavor: .wasm, wasmURL: …)` — it emits the `webui-wasm`
-contract + chamber/boot scripts + the client csp, and needs the
-content-addressed artifact built first (`wasm-client` verb). serving those
-routes is the host's job (`WebUIBoot` exposes the build-time hash for the
-immutable route + `wasmProductURL(productName:)` for consumers' own
-artifacts). the `WebUIWasmPlugin` embeds the artifact when present and emits a
-soft absent carrier when not: engine-only hosts build green, and a wasm-mode
-page whose artifact is missing 404s its routes loudly until `wasm-client`
-runs.
+config meta). the wasm monolith client was deleted — the engine is the client runtime, and
+wasm survives as capability islands declared per page (see `NEXT_ARCHITECTURE.md`).
 
 all project tooling is command plugins — there are no shell scripts. see
 `Documentation/ASSEMBLY.md` for the full stage map and `designer/README.md`
@@ -94,7 +99,6 @@ for the designer workflow.
 | `fullstack-smoke` | `swift package --disable-sandbox plugin fullstack-smoke` | self-contained gate: spawns the server, drives live WebSocket round-trips (click/echo/redirect/optimistic) via node, tears down. |
 | `probe` | `swift package plugin probe [port]` | connect-based port check (bind-probe is sandbox-denied). |
 | `showcase` | `swift package plugin showcase --allow-writing-to-package-directory` | regenerates `designer/previews/showcase.html` directly (declared `writeToPackageDirectory`). add `--output <path>` for ad-hoc targets. |
-| `wasm-client` | `swift package --disable-sandbox plugin wasm-client [--product X] [--no-strip]` | cross-builds the wasm client product with the official sdk into `.build/wasm-client-scratch` (isolated root; in-package `.build` would deadlock), strips custom sections by default, copies the artifact to the canonical serving path. |
 
 svg icon toolset (an executable target, not a plugin — the plugin
 `WebUIIconPlugin` runs `generate` automatically during every build):
@@ -179,7 +183,10 @@ invocation. gates host their own server, check, and tear down in one call.
   `data-component-id` + `data-event` and register the handler in one step. the
   runtime only delivers the event a component declares — a click-only
   component never receives hover/press noise — and every click carries
-  `targetId`/`targetClass` so a container handler can tell what was clicked.
+  `targetId`/`targetClass` so a container handler can tell what was clicked — `targetId` resolves to the
+  nearest id-bearing element *inside* the component boundary (a click usually
+  lands on a label or icon child, not the item); clicking the component itself
+  reports none.
   `focus`/`blur` are delivered via the bubbling `focusin`/`focusout` and
   normalized to the declared event name.
 - **typed component handlers** — `ElementRef` + `controlAttributes(id:event:handler:)`
@@ -217,18 +224,25 @@ invocation. gates host their own server, check, and tear down in one call.
   (deployment-guarded).
 - **fragment save/restore** — scroll position and non-form `[tabindex]` focus
   survive a patch alongside value/checked/caret for form controls.
+- **cascade layers** — the sheet ships inside `@layer webui, webui.utilities;`
+  (declared in `design-system.css`), and the asset tool wraps the prepended
+  `LayoutStyles` rules in `webui.utilities`. unlayered css outranks the framework
+  by cascade origin, so an app overrides without specificity games and without
+  `!important`; the theme sheet stays *unlayered* for the same reason (a scheme
+  must outrank the base sheet's tokens). pinned structurally by
+  `Tests/WebUITests/CascadeLayerTests.swift` and in a real browser by
+  `designer/browser-smoke.mjs`.
+- **inline scripts need their nonce in the csp** — `HTMLDocument` emits the
+  pre-paint theme prelude inline, so the served default policy carries the render
+  nonce (`ClientBoot.csp(nonce:)`); a host policy that names no `'nonce-…'` source
+  suppresses the prelude with a warning instead of shipping a script the browser
+  refuses.
 - **RenderContext** — `@TaskLocal` context for component ID generation and
   handler registration. must be set before rendering.
 - **HTMLDocument** — assembles complete HTML with auto-generated CSP and nonce.
 - **ObserverList** — thread-safe collection of Observable conformers. max 100
   observers by default.
 - **CSRFProtection** — stateless HMAC-SHA256 tokens. no server-side storage.
-- **client-runtime test isolation** — every test that touches the
-  `ClientRuntime` statics (`boot()`/`bootSearch()`/`router`/`nameIndex`) must
-  live in the single `.serialized` `ClientRuntimeTests` suite. a concurrent
-  suite's `bootSearch()` registers a dozen handlers into the shared router,
-  and a read that lands between `boot()` and that registration fails
-  `handlerCount` — a linux-exposed flake, not a logic bug.
 
 ### asset embedding
 
@@ -349,8 +363,34 @@ swift build
 swift test
 swift package --disable-sandbox plugin smoke
 swift package --disable-sandbox plugin fullstack-smoke
-node designer/browser-smoke.mjs     # requires node + playwright (chromium)
+node designer/browser-smoke.mjs      # requires node + playwright (chromium)
+node designer/showcase-ws-smoke.mjs  # stable-id dispatch gate against the showcase server
+node designer/blocks-sweep.mjs     # p6 blocks gate: one server per block, 320/768/1440 in both themes, no-overflow + parts assertions
+node designer/chart-mobile-audit.mjs # chart width gate: 6 viewports x 2 themes; painted text >= 11px AND every plot fully visible from 390px, tips reachable, no page overflow (WEBUI_CHART_AUDIT_SERVER overrides the binary for a scratch build)
+node designer/rtl-audit.mjs        # p7 direction gate: both directions x both themes x 3 viewports, mirrored-order assertions with an ltr control
 ```
+
+the dispatch gate exists because the other four steps cannot see this failure: `smoke`
+checks served bytes, `fullstack-smoke` drives the *smoke* page, and the unit pins count
+handler registrations without ever dispatching one. `showcase-ws-smoke` spawns
+`WebUIShowcaseServer`, clicks a stable-id control (`controlAttributes`, e.g. a table sort
+header) in a real browser, captures the websocket frames and requires both the outbound
+`event` and an inbound `update`. a click that sends but never receives is exactly the
+class of break that shipped invisibly on :9092.
+
+**this gate is GREEN, and it is the honest observer the earlier revision lacked.** it is
+a *raw* client: it fetches the page over HTTP, reads the stable control ids out of the
+served markup, connects its own socket and asserts a non-empty `update` reply — no browser,
+no page patching, nothing inferred. first green run: 27 stable-id controls, all three probed
+sort headers answered with one fragment each.
+
+**what it corrected:** an earlier browser-based revision of this gate, which captured frames
+by patching `WebSocket` *inside the page*, reported "sent but never answered" for every
+probe. that was an instrument artifact (the engine assigns `onmessage` on the instance at
+connect time, so a post-load hook is blind; a pre-boot hook perturbs the page). the server
+had been answering correctly the whole time. lesson recorded in
+`.hermes/plans/2026-09-26_094442-verification-rearchitecture.md`: never patch the runtime you
+are measuring, and make every probe assert its own preconditions.
 
 ### fixing a security issue
 
@@ -364,6 +404,12 @@ node designer/browser-smoke.mjs     # requires node + playwright (chromium)
 
 ## pitfalls
 
+- **new files inside a target's source dir warn on every build.** swiftpm reports
+  `found 1 file(s) which are unhandled; explicitly declare them as resources or exclude
+  from the target`. for a test fixture (e.g. `Tests/WebUITests/orphan-class-baseline.txt`)
+  declare it in the target's `resources: [.copy("…")]` and read it via `Bundle.module`
+  (keep a package-root-relative fallback for runners that don't vend the bundle). a file
+  placed *outside* every target dir — like `designer/url-payloads.json` — needs neither.
 - **generated files** are auto-generated and live under `.build/` (gitignored):
   `Assets+Generated.swift` (the `WebUI` target's embedded assets), `IconLibrary.swift`
   (the `WebUICore` target's icon catalog), and `DesignTokens+Generated.swift`
@@ -381,9 +427,9 @@ node designer/browser-smoke.mjs     # requires node + playwright (chromium)
   reports `server did not become ready — run with --disable-sandbox`.
 - **the `.build` lock** — a running plugin (e.g. `serve`) blocks every other
   `swift package` command until it exits. never launch a gate while `serve` is up.
-- **smoke pins the interactive count** — the smoke gate asserts exactly 24
+- **smoke pins the interactive count** — the smoke gate asserts exactly 25
   `data-component-id` attributes on the smoke page (3 counter + 2 progress +
-  1 echo + 12 routed table controls + 6 routed chart bars). adding or removing
+  1 echo + 1 column menu + 12 routed table controls + 6 routed chart bars). adding or removing
   an interactive component there means updating the expected count in
   `WebUISmokePlugin.swift` (the fullstack driver's `>=6` check is tolerant).
   the same page is what `browser-smoke` drives for optimistic + scroll

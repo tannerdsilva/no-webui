@@ -58,16 +58,70 @@ public enum HTMLClassValidator {
 		let known = definedClasses().union(extra)
 		let prefixes = _prefixes.withLock { $0 }
 		var unknown = Set<String>()
-		let attr = /class\s*=\s*["']([^"']*)["']/
-		for match in html.matches(of: attr) {
-			for token in match.output.1.split(whereSeparator: \.isWhitespace) {
-				let name = String(token)
-				if known.contains(name) { continue }
-				if prefixes.contains(where: { name.hasPrefix($0) }) { continue }
-				unknown.insert(name)
-			}
+		for name in classTokens(in: html) {
+			if known.contains(name) { continue }
+			if prefixes.contains(where: { name.hasPrefix($0) }) { continue }
+			unknown.insert(name)
 		}
 		return unknown.sorted()
+	}
+
+	/// class tokens the sheet defines that no supplied html emits — the inverse
+	/// of `undefinedClasses(in:)`. the forward check catches "styled nothing";
+	/// this one catches "styled but unreachable from any api". `extra` carries
+	/// js-toggled and page-scoped names so they never read as orphans.
+	public static func orphanClasses(in htmls: [String], extra: Set<String> = []) -> [String] {
+		var emitted = Set<String>()
+		for html in htmls { emitted.formUnion(classTokens(in: html)) }
+		return definedClasses().subtracting(emitted).subtracting(extra).sorted()
+	}
+
+	/// every class token appearing on a `class="..."` attribute in `html`.
+	///
+	/// a byte scanner, not `Swift Regex`: this runs over a whole rendered page
+	/// (the showcase is ~166 KB), and the regex form cost ~42 ms per page — more
+	/// than the page's own render. the scan below is a single pass with no
+	/// backtracking and no per-match allocation beyond the token itself.
+	private static func classTokens(in html: String) -> Set<String> {
+		var tokens = Set<String>()
+		let bytes = Array(html.utf8)
+		let n = bytes.count
+		// ascii codes
+		let c: UInt8 = 0x63, l: UInt8 = 0x6C, a: UInt8 = 0x61, s: UInt8 = 0x73
+		let eq: UInt8 = 0x3D, dq: UInt8 = 0x22, sq: UInt8 = 0x27
+		var i = 0
+		while i < n {
+			guard bytes[i] == c else { i += 1; continue }
+			// literal `class`
+			guard i + 5 <= n, bytes[i + 1] == l, bytes[i + 2] == a,
+				  bytes[i + 3] == s, bytes[i + 4] == s else { i += 1; continue }
+			var j = i + 5
+			while j < n, isASCIISpace(bytes[j]) { j += 1 }
+			guard j < n, bytes[j] == eq else { i += 1; continue }
+			j += 1
+			while j < n, isASCIISpace(bytes[j]) { j += 1 }
+			guard j < n, bytes[j] == dq || bytes[j] == sq else { i += 1; continue }
+			let quote = bytes[j]
+			j += 1
+			let valueStart = j
+			while j < n, bytes[j] != quote { j += 1 }
+			// split the value on ascii whitespace
+			var t = valueStart
+			while t < j {
+				while t < j, isASCIISpace(bytes[t]) { t += 1 }
+				let tokenStart = t
+				while t < j, !isASCIISpace(bytes[t]) { t += 1 }
+				if t > tokenStart {
+					tokens.insert(String(decoding: bytes[tokenStart..<t], as: UTF8.self))
+				}
+			}
+			i = j
+		}
+		return tokens
+	}
+
+	private static func isASCIISpace(_ b: UInt8) -> Bool {
+		b == 0x20 || b == 0x09 || b == 0x0A || b == 0x0D || b == 0x0B || b == 0x0C
 	}
 
 	/// run a report and route each undefined class through `onUndefined` once.
@@ -91,8 +145,9 @@ public enum HTMLClassValidator {
 		var classes = Set<String>()
 		for match in css.matches(of: candidate) {
 			// the match range is a character index into `css`, so the utf8 view
-			// index init cannot fail (structurally guaranteed) — unwrap.
-			let lower = String.UTF8View.Index(match.range.lowerBound, within: css)!
+			// index init does not fail for this input — but skip the candidate
+			// rather than trap if a future pattern breaks that assumption.
+			guard let lower = String.UTF8View.Index(match.range.lowerBound, within: css) else { continue }
 			let pos = css.utf8.distance(from: css.utf8.startIndex, to: lower)
 			if pos > 0 {
 				let prev = bytes[pos - 1]

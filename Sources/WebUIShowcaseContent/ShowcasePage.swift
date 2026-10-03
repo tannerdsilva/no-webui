@@ -174,7 +174,7 @@ public struct ShowcasePage: Sendable {
                                 Label("Email:").class("demo-label")
                                 Input(id: "demo-email", placeholder: "user@example.com", type: .email)
                                 Label("Password:").class("demo-label")
-                                Input(id: "demo-password", placeholder: "••••••••", type: .password)
+                                Input(id: "demo-password", placeholder: "", type: .password)
                                 Label("Number:").class("demo-label")
                                 Input(id: "demo-number", placeholder: "0", type: .number)
                                 Label("Search:").class("demo-label")
@@ -372,7 +372,10 @@ public struct ShowcasePage: Sendable {
                         	// select, expand) — typed handlers mutate the
                         	// server-side state; the table region is re-patched
                         	// with post-state markup via the typed `me` ref.
-                        	interactiveTable(state: state)
+                        	VStack(spacing: 12) {
+                        		columnMenu(state: state)
+                        		interactiveTable(state: state)
+                        	}
                         }
                     }
                 }
@@ -556,7 +559,7 @@ public struct ShowcasePage: Sendable {
                                 .backgroundColor("var(--color-warning-soft)")
                         }
                         demoCard("Chained Modifiers") {
-                            Text("Chained: font → padding → background → border → corner radius")
+                            Text("Chained: font  padding  background  border  corner radius")
                                 .font(size: 18, weight: "600")
                                 .padding(16)
                                 .backgroundColor("var(--color-info-soft)")
@@ -571,7 +574,7 @@ public struct ShowcasePage: Sendable {
                 // 9. Design System
                 section("Design System", "design-system") {
                     VStack(spacing: 16) {
-                        Heading("All 16 WebUI components", level: .h2)
+                        Heading("Component catalog", level: .h2)
 
                         demoCard("WebUIButton — all variants") {
                             VStack(spacing: 12) {
@@ -756,6 +759,174 @@ public struct ShowcasePage: Sendable {
                             }
                             .onDismiss { me, _ in [me.remove()] }
                         }
+                        demoCard("WebUISeparator - rule, labelled, glyph, vertical") {
+                            VStack(spacing: 8) {
+                                HStack(alignment: .center, spacing: 16) {
+                                    Text("left")
+                                    WebUISeparator(orientation: .vertical)
+                                    Text("right")
+                                }
+                                WebUISeparator()
+                                WebUISeparator("or")
+                                WebUISeparator(icon: .chevronDown)
+                                WebUISeparator(strong: true)
+                            }
+                        }
+                        demoCard("WebUIKbd - key, combo, sizes") {
+                            HStack(alignment: .center, spacing: 16) {
+                                WebUIKbd("K")
+                                WebUIKbd(["Ctrl", "K"])
+                                WebUIKbd(["Ctrl", "Shift", "P"], separator: "+")
+                                WebUIKbd("Esc", size: .small)
+                                WebUIKbd("Enter", size: .large)
+                            }
+                        }
+                        demoCard("WebUIAspectRatio - wide, standard, photo, square, portrait, tall") {
+                            VStack(spacing: 12) {
+                                HStack(alignment: .top, spacing: 12) {
+                                    WebUIAspectRatio(.wide, label: "21 / 9").width("220px")
+                                    WebUIAspectRatio(.standard, label: "16 / 9").width("180px")
+                                    WebUIAspectRatio(.photo, label: "4 / 3").width("130px")
+                                    WebUIAspectRatio(.square, label: "1 / 1").width("90px")
+                                }
+                                HStack(alignment: .top, spacing: 12) {
+                                    WebUIAspectRatio(.portrait, label: "3 / 4").width("90px")
+                                    WebUIAspectRatio(.tall, label: "9 / 16").width("90px")
+                                }
+                            }
+                        }
+                        demoCard("WebUICircularProgress - tones, sizes, indeterminate") {
+                            HStack(alignment: .center, spacing: 24) {
+                                WebUICircularProgress(value: 0.72, label: "72", sublabel: "%", ariaLabel: "Storage used")
+                                WebUICircularProgress(value: 1, label: "100", sublabel: "%", tone: .success, ariaLabel: "Checks passed")
+                                WebUICircularProgress(value: 0.35, tone: .warning, size: .small, ariaLabel: "Warning level")
+                                WebUICircularProgress(value: 0.6, tone: .danger, size: .large, ariaLabel: "Error rate")
+                                WebUICircularProgress(value: 0, indeterminate: true, ariaLabel: "Loading")
+                            }
+                        }
+                        demoCard("WebUIInputGroup - glyph, prefix, suffix, error") {
+                            VStack(spacing: 12) {
+                                WebUIInputGroup(placeholder: "Search", icon: .search, suffix: "Ctrl+K")
+                                WebUIInputGroup(placeholder: "0.00", prefix: "$", suffix: "USD", type: .number)
+                                WebUIInputGroup(placeholder: "you", prefix: "https://", suffix: ".example.com")
+                                WebUIInputGroup(placeholder: "amount", prefix: "$", suffix: "over limit", state: .error)
+                            }
+                        }
+                        demoCard("WebUIBanner - info, success, warning, danger, dismissible") {
+                            VStack(spacing: 12) {
+                                WebUIBanner(variant: .info, message: "A new version is available.")
+                                WebUIBanner(variant: .success, title: "Deploy finished", message: "All 24 checks passed.")
+                                WebUIBanner(variant: .warning, message: "Your session expires in 5 minutes.")
+                                WebUIBanner(variant: .danger, title: "Payment failed", message: "The card was declined.")
+                                WebUIBanner(variant: .info, message: "This banner can be dismissed.", dismissible: true, id: "banner-demo")
+                                    .onDismiss { me, _ in [me.remove()] }
+                            }
+                        }
+                        demoCard("WebUIActivityFeed - grouped, with times") {
+                            WebUIActivityFeed([
+                                WebUIActivityFeed.Group("Today", items: [
+                                    WebUIActivityFeed.Item(icon: .checkCircle, text: "Deploy finished on production", time: "2h"),
+                                    WebUIActivityFeed.Item(icon: .user, text: "Dana joined the workspace", time: "5h"),
+                                ]),
+                                WebUIActivityFeed.Group("Yesterday", items: [
+                                    WebUIActivityFeed.Item(icon: .bell, text: "Alert rule triggered twice", time: "1d"),
+                                    WebUIActivityFeed.Item(icon: .search, text: "Index rebuild completed", time: "1d"),
+                                ]),
+                            ])
+                        }
+                        demoCard("WebUICard - anatomy slots and variants") {
+                            VStack(spacing: 16) {
+                                WebUICard(
+                                    variant: .outlined,
+                                    eyebrow: "Uptime",
+                                    title: "99.98%",
+                                    description: "Rolling 30 days",
+                                    headerIcon: .activity,
+                                    text: "Two incidents, both under five minutes.",
+                                    footerMeta: "updated 2m ago",
+                                    actions: {
+                                        WebUIButton("Inspect", variant: .ghost, size: .sm)
+                                        WebUIButton("Share", variant: .primary, size: .sm)
+                                    }
+                                ) {
+                                    Text("The body keeps its own padding; every anatomy slot is optional.")
+                                }
+                                HStack(alignment: .top, spacing: 16) {
+                                    WebUICard(variant: .hover) { Text("hover") }
+                                    WebUICard(variant: .compact) { Text("compact") }
+                                    WebUICard(variant: .disabled) { Text("disabled") }
+                                }
+                                WebUICard(variant: .horizontal, title: "Horizontal", description: "media beside the body", media: .image, mediaBadge: "PREVIEW") {
+                                    Text("card--horizontal moves the media block into the leading column.")
+                                }
+                            }
+                        }
+                        demoCard("WebUIField - label, note, counter, helper") {
+                            VStack(spacing: 16) {
+                                WebUIField(label: "Workspace name", controlID: "field-name", required: true, count: "4 / 32", helper: "Shown to everyone in the org.") {
+                                    WebUIInput(placeholder: "acme", id: "field-name")
+                                }
+                                WebUIField(label: "API key", note: "invalid", noteKind: .error, helper: "Regenerate it from the console.", helperIsError: true) {
+                                    WebUIInput(placeholder: "key_...", id: "field-key")
+                                }
+                                WebUIField(label: "Domain", note: "available", noteKind: .success) {
+                                    WebUIInput(placeholder: "acme.dev", id: "field-domain")
+                                }
+                            }
+                        }
+                        demoCard("WebUIItem - rows with hover-revealed actions") {
+                            Div {
+                                WebUIItem(title: "web-01", subtitle: "us-east-1", meta: "42 ms", icon: .server, selected: true) {
+                                    WebUIButton("Open", variant: .ghost, size: .sm)
+                                    WebUIButton("Restart", variant: .danger, size: .sm)
+                                }
+                                WebUIItem(title: "api-01", subtitle: "eu-west-2", meta: "18 ms", icon: .server) {
+                                    WebUIButton("Open", variant: .ghost, size: .sm)
+                                }
+                                WebUIItem(title: "search-01", subtitle: "us-west-2", meta: "61 ms", icon: .server)
+                            }
+                        }
+                        demoCard("WebUIToggleGroup - filter chips") {
+                            WebUIToggleGroup(options: [
+                                WebUIToggleGroup.Option("all", "All", selected: true),
+                                WebUIToggleGroup.Option("web", "Web"),
+                                WebUIToggleGroup.Option("api", "API"),
+                                WebUIToggleGroup.Option("search", "Search", selected: true),
+                            ], id: "filter-chips")
+                        }
+                        demoCard("WebUIScrollTop - with progress ring") {
+                            Div(class: "scroll-top-stage") {
+                                Paragraph("The affordance floats over its stage and its ring fills with scroll progress.")
+                                WebUIScrollTop(progress: 0.35, id: "to-top")
+                            }
+                        }
+                        demoCard("WebUINavbar - search slot and hamburger") {
+                            VStack(spacing: 12) {
+                                WebUINavbar(
+                                    brand: "Acme",
+                                    links: [WebUINavbar.Link("Overview", href: "#", active: true), WebUINavbar.Link("Runs", href: "#")],
+                                    search: WebUINavbar.Search(placeholder: "Search runs", shortcut: "Ctrl K", id: "nav-search"),
+                                    mobileMenu: true
+                                ) {
+                                    WebUIButton("New run", variant: .primary, size: .sm)
+                                }
+                            }
+                        }
+                        demoCard("WebUIMenu - header, search, sections, item chrome") {
+                            HStack(alignment: .top, spacing: 16) {
+                                WebUIMenu(items: [
+                                    WebUIMenu.Item("Profile", icon: .user),
+                                    WebUIMenu.Item("Settings", icon: .settings, hint: "Ctrl ,"),
+                                    WebUIMenu.Item("Invite teammates", icon: .plus, dividerBefore: true),
+                                ], header: "Account", panel: true)
+                                WebUIMenu(items: [
+                                    WebUIMenu.Item("Overview", active: true),
+                                    WebUIMenu.Item("Members", avatar: "DA", section: "Team"),
+                                    WebUIMenu.Item("Billing", submenu: true),
+                                    WebUIMenu.Item("Delete workspace", danger: true, dividerBefore: true),
+                                ], search: "Find a page", panel: true)
+                            }
+                        }
                     }
                 }
 
@@ -801,7 +972,7 @@ public struct ShowcasePage: Sendable {
                         }
 
                         demoCard("WebUISearchField") {
-                            WebUISearchField(placeholder: "Filter conversations…", id: "showcase-search")
+                            WebUISearchField(placeholder: "Filter conversations", id: "showcase-search")
                         }
 
                         demoCard("WebUIListView") {
@@ -816,12 +987,12 @@ public struct ShowcasePage: Sendable {
                         }
 
                         demoCard("WebUIComposer") {
-                            WebUIComposer(placeholder: "Message…", inputID: "showcase-input", id: "showcase-composer")
+                            WebUIComposer(placeholder: "Message", inputID: "showcase-input", id: "showcase-composer")
                         }
 
                         demoCard("WebUIPanel") {
                             WebUIPanel(title: "Workspace", subtitle: "2", edge: .leading) {
-                                WebUISearchField(placeholder: "Filter…", id: "showcase-panel-search")
+                                WebUISearchField(placeholder: "Filter", id: "showcase-panel-search")
                                 WebUITree(
                                     nodes: [WebUITree.Node(id: "a", label: "arc-agent", icon: .folder, children: [
                                         WebUITree.Node(id: "s", label: "Sources", icon: .folder, children: [
@@ -846,7 +1017,7 @@ public struct ShowcasePage: Sendable {
                                     Raw(counterValueHTML(state.count))
                                 }
                                 HStack(spacing: 12) {
-                                    WebUIButton("−", variant: .primary, size: .lg, id: "btn-decrement", onTap: { _ in
+                                    WebUIButton("", variant: .primary, size: .lg, id: "btn-decrement", onTap: { _ in
                                         state.count -= 1
                                         return [FragmentUpdate(id: "counter-value", html: counterValueHTML(state.count))]
                                     })
@@ -903,6 +1074,51 @@ public struct ShowcasePage: Sendable {
                                 Raw(tabContentHTML(state.activeTab))
                             }
                         }
+                        demoCard("Chat - live websocket round-trip") {
+                            VStack(spacing: 12) {
+                                Paragraph("Send a message: it round-trips over the websocket and the server appends it.")
+                                liveChat(state: state)
+                                Form(action: "#", method: "post", id: "chat-form") {
+                                    VStack(spacing: 12) {
+                                        Label("Message:").class("demo-label")
+                                        Input(id: "chat-input", name: "message", placeholder: "Say something...", type: .text)
+                                        WebUIButton("Send", variant: .primary, id: "chat-send")
+                                    }
+                                }
+                                .onSubmit { event in
+                                    let text = event.string("message") ?? ""
+                                    guard !text.isEmpty else { return [] }
+                                    state.appendChat(text)
+                                    return [FragmentUpdate(id: "live-chat", html: liveChat(state: state).render())]
+                                }
+                            }
+                        }
+                        demoCard("WebUIMessage, WebUIMarker, WebUIAttachment") {
+                            VStack(spacing: 16) {
+                                WebUIMessage(name: "Dana", text: "Deploy is green.", time: "09:12")
+                                WebUIMessage(
+                                    name: "You",
+                                    text: "Shipping the docs now.",
+                                    time: "09:14",
+                                    own: true,
+                                    reactions: [WebUIChatBubble.Reaction(label: "\u{1F44D}", count: 2, active: true)]
+                                )
+                                WebUIMarker("Yesterday")
+                                WebUIMarker("Pinned", icon: .clock, spread: false)
+                                HStack(alignment: .center, spacing: 12) {
+                                    WebUIAttachment(name: "release-notes.md", meta: "12 KB - markdown")
+                                    WebUIAttachment(name: "screenshot.png", meta: "uploading...", state: .uploading)
+                                }
+                                WebUIAttachment(
+                                    name: "dataset.csv",
+                                    meta: "rejected: over quota",
+                                    state: .error,
+                                    removable: true,
+                                    id: "att-demo"
+                                )
+                                .onDismiss { me, _ in [me.remove()] }
+                            }
+                        }
                     }
                 }
 
@@ -910,7 +1126,9 @@ public struct ShowcasePage: Sendable {
                 section("Charts", "charts") {
                     VStack(spacing: 16) {
                         Heading("WebUIChart suite", level: .h2)
-                        Paragraph("Server-rendered inline-SVG charts mirroring the SwiftUI Charts API. No JS dependencies — styling comes from the design-system tokens, and it reflows in dark mode automatically.")
+                        Paragraph("Server-rendered inline-SVG charts mirroring the SwiftUI Charts API. No JS dependencies — styling comes from the design-system tokens, and it reflows in dark mode automatically. Each chart declares the width it was designed for (320 units here), so its 12px labels stay 12px and the plot is fully visible at any container width; a container below 92% of that width pans the plot rather than shrinking the text.")
+                    }
+                    Grid(columns: .custom("repeat(auto-fit, minmax(min(100%, 344px), 1fr))"), spacing: 16) {
                         demoCard("Grouped bars") {
                             VStack(spacing: 0) {
                                 Chart {
@@ -921,6 +1139,7 @@ public struct ShowcasePage: Sendable {
                                     }
                                 }
                                 .chartTitle("Revenue by quarter")
+                                .chartHeight(150)
                             }
                         }
                         demoCard("Stacked bars") {
@@ -932,6 +1151,7 @@ public struct ShowcasePage: Sendable {
                                     }
                                 }
                                 .chartTitle("Requests by service")
+                                .chartHeight(150)
                             }
                         }
                         demoCard("Line + points + area") {
@@ -951,6 +1171,7 @@ public struct ShowcasePage: Sendable {
                                     }
                                 }
                                 .chartTitle("Weekly growth")
+                                .chartHeight(150)
                                 .chartYScale(.linear(domain: 0...42))
                             }
                         }
@@ -964,6 +1185,7 @@ public struct ShowcasePage: Sendable {
                                 }
                                 .chartTitle("Platform share")
                                 .chartHeight(300)
+                                .chartAspectRatio(1)
                             }
                         }
                         demoCard("Donut + selection") {
@@ -976,6 +1198,7 @@ public struct ShowcasePage: Sendable {
                                 }
                                 .chartTitle("Platform share")
                                 .chartHeight(300)
+                                .chartAspectRatio(1)
                                 .chartInnerRadius(0.55)
                                 .chartAngularInset(1.5)
                                 .chartXSelection(value: .category("iOS"))
@@ -994,19 +1217,78 @@ public struct ShowcasePage: Sendable {
                                         .lineStyle(ChartLineStyle(width: 2, dash: [6, 4]))
                                 }
                                 .chartTitle("Against target")
+                                .chartHeight(150)
                                 .chartYScale(.linear(domain: 0...30))
                             }
                         }
                         demoCard("Heatmap") {
                             VStack(spacing: 0) {
                                 Chart(heatmapCells())
-                                    .chartTitle("Activity by hour × day")
+                                    .chartTitle("Activity by hour  day")
+                                .chartHeight(150)
                             }
                         }
                         demoCard("Empty state") {
                             VStack(spacing: 0) {
                                 Chart([])
                                     .chartTitle("No data yet")
+                            }
+                        }
+                        demoCard("Radar") {
+                            VStack(spacing: 0) {
+                                Chart {
+                                    RadarMark([("speed", 8), ("reliability", 6), ("cost", 4), ("support", 7), ("reach", 5)], series: "eu")
+                                        .foregroundStyle(by: "eu")
+                                    RadarMark([("speed", 5), ("reliability", 9), ("cost", 7), ("support", 3), ("reach", 8)], series: "us")
+                                        .foregroundStyle(by: "us")
+                                }
+                                .chartTitle("Service profile")
+                                .chartHeight(300)
+                                .chartAspectRatio(1)
+                            }
+                        }
+                        demoCard("Radial gauge") {
+                            VStack(spacing: 0) {
+                                Chart {
+                                    RadialMark(value: 72, of: 100, series: "cpu")
+                                        .foregroundStyle(by: "cpu")
+                                }
+                                .chartTitle("CPU headroom")
+                                .chartHeight(260)
+                                .chartAspectRatio(1)
+                                .chartLegend(position: .hidden)
+                            }
+                        }
+                        demoCard("Area + gradient") {
+                            VStack(spacing: 0) {
+                                Chart {
+                                    ForEach(Array([12.0, 18.0, 15.0, 24.0, 31.0, 27.0, 38.0].enumerated().map { (x: Double($0.offset + 1), y: $0.element) })) { p in
+                                        Group {
+                                            AreaMark(x: .value("Week", p.x), y: .value("Value", p.y))
+                                                .foregroundStyle(by: "signups")
+                                                .areaGradient(.fade(.explicit("var(--color-chart-3)")))
+                                            LineMark(x: .value("Week", p.x), y: .value("Value", p.y))
+                                                .foregroundStyle(by: "signups")
+                                                .interpolation(.catmullRom)
+                                        }
+                                    }
+                                }
+                                .chartTitle("Weekly signups")
+                                .chartHeight(150)
+                                .chartLegend(position: .hidden)
+                            }
+                        }
+                        demoCard("Negative values") {
+                            VStack(spacing: 0) {
+                                Chart {
+                                    ForEach([("Jan", -18.0), ("Feb", 12.0), ("Mar", -7.0), ("Apr", 23.0), ("May", -11.0)]) { d in
+                                        BarMark(x: .value("Month", d.0), y: .value("Change", d.1))
+                                            .foregroundStyle(by: "net")
+                                    }
+                                }
+                                .chartTitle("Net change")
+                                .chartHeight(150)
+                                .chartLegend(position: .hidden)
                             }
                         }
                     }
@@ -1043,7 +1325,7 @@ public struct ShowcasePage: Sendable {
                         }
                         demoCard("Border Radius Tokens") {
                             HStack(spacing: 8) {
-                                radiusSample("--radius-sm", "2px")
+                                radiusSample("--radius-sm", "4px")
                                 radiusSample("--radius-md", "6px")
                                 radiusSample("--radius-lg", "8px")
                                 radiusSample("--radius-xl", "12px")
@@ -1144,7 +1426,7 @@ public struct ShowcasePage: Sendable {
                         }
                     }
                 }
-            }.padding(32)
+            }
         }
 
     // MARK: - Helpers
@@ -1230,6 +1512,9 @@ public struct ShowcasePage: Sendable {
                 .width("40px").height("40px")
                 .backgroundColor("var(--color-bg-inset)")
                 .border("1px solid var(--color-border-strong)")
+                // the sample must actually wear the token it names — otherwise
+                // five identical squares document nothing
+                .cornerRadius("var(\(token))")
             Text(token).font(size: 10)
             Text(value).font(size: 10)
         }
@@ -1257,7 +1542,7 @@ public struct ShowcasePage: Sendable {
           <rect width="240" height="150" rx="10" fill="url(#bg)"/>
           <circle cx="58" cy="52" r="16" fill="#6366f1"/>
           <path d="M24 118 L78 74 L112 104 L150 66 L216 118 Z" fill="#6366f1" opacity="0.85"/>
-          <text x="120" y="138" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="12" fill="#3730a3">240 × 150 — inline svg</text>
+          <text x="120" y="138" text-anchor="middle" font-family="-apple-system, sans-serif" font-size="12" fill="#3730a3">240  150 — inline svg</text>
         </svg>
         """
         return svg

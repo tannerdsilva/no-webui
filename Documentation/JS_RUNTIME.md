@@ -1,7 +1,9 @@
-> **SUPERSEDED** — the inline JS runtime described here was retired in the
-> wasm-always migration. Pages now always emit the `webui-wasm` client contract
-> (chamber + content-addressed artifact) and patch the DOM over the `/ws`
-> authority channel; see `ARCHITECTURE.md` and `WASM_BOOTSTRAP.md`.
+> **SUPERSEDED** — the inline JS runtime described here was retired by the
+> engine-first architecture (`NEXT_ARCHITECTURE.md`): pages emit the engine
+> (`ClientBoot` → `webui-engine.js`) and the wasm chamber it once named has been
+> deleted; wasm survives only as capability islands. the runtime still ships for
+> hosts that serve `WebUIRuntime.source` or the legacy `HTMLDocument` path, so this
+> remains its reference.
 
 # JS Runtime
 
@@ -265,29 +267,29 @@ on `beforeunload`, which disconnects the WebSocket, unmounts event delegation,
 resets the fragment patcher, clears the state store, and removes the
 `popstate` listener it registered.
 
-## Chamber (webui-client.js)
-
-client mode replaces this runtime's *brain* with wasm; the chamber
-(`designer/assets/webui-client.js`, ~200 comment-free lines, embedded as
-`WebUIAssets.client`) stays mechanical:
-
-- **instantiate** the wasm with a hand-rolled WASI adapter (34 `wasi_snapshot_preview1`
-  functions) + the 8 `env` bridge imports (the chamber must implement all of
-  them or `WebAssembly.instantiate` fails — pinned by `WasmIntegrityTests`).
-- **boot**: call `_start`, then `webui_render_page` (hydrate probe) or
-  `webui_init` (interactive boot, mounts the returned page into the target);
-  reads `webui-config`/`webui-wasm` metas emitted by `ClientBoot`.
-- **dispatch**: delegated `input`/`click` on `[data-component-id]` → envelope
-  `{component,event,data}` (+ `renderToken` when a transport is wired) →
-  write to `webui_input_ptr` → `webui_handle_event` → patch by fragment id.
-- **transport seam**: `holder.transport.send` is the only way wasm talks to the
-  server; local-only pages leave it null and the websocket stays silent.
-
 ## Public API
 
 ```javascript
 WebUIRuntime.init(opts)      // Initialize the runtime
 WebUIRuntime.destroy()       // Clean up all resources
+WebUIRuntime.on.afterPatch(fn)  // Run after every applied fragment batch
+WebUIRuntime.on.ready(fn)    // Run once the runtime is live
 WebUIRuntime._reset()        // For testing: reset singleton
 WebUIRuntime._getInstance()  // For testing: get current instance
 ```
+
+## Host extension points
+
+the runtime has no opinion about what a host does once the DOM has changed —
+typeset math, restore scroll, enhance tables — so it exposes the moment instead of
+the behaviour. `on.afterPatch` runs after every applied fragment batch; `on.ready`
+runs once the runtime is live (and immediately if it is registered after boot, so a
+host that loads its overlay as a second script is not silently skipped). a throwing
+hook is caught and logged, never allowed to break a patch. registration is
+module-scope, so hooks survive `destroy()` + `init()`.
+
+the engine — the default client runtime — carries the same seam as
+`WebUIEngine.on.afterPatch(fn)` / `on.ready(fn)`, and hands `afterPatch` the
+mutated subtree so an enhancement can scope itself. `webui-runtime.js` remains for
+hosts that still serve `WebUIRuntime.source` or use the legacy `HTMLDocument`
+path.

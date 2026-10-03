@@ -10,9 +10,14 @@ public struct WebUIDocument: View {
     public let bodyAttributes: String
     public let devMode: Bool
     public let lang: String
+    /// the document's base direction (`ltr` / `rtl`); nil omits the attribute.
+    public let dir: String?
     public let includeRuntime: Bool
     public let runtimeConfig: RuntimeConfig?
     public let contentSecurityPolicy: String?
+    /// Directives merged per name into the effective policy (the framework's nonce-aware
+    /// default, or ``contentSecurityPolicy`` when set) — see `HTMLDocument`.
+    public let contentSecurityPolicyExtras: String?
     public let theme: WebUITheme
     public let clientMode: ClientBoot?
     public let rawStyles: [String]
@@ -21,6 +26,12 @@ public struct WebUIDocument: View {
     /// `/__assets/css` — hosts serve the same bytes via
     /// `DesignSystemAssets.minifiedCss`). pass `nil` to inline like before.
     public let stylesheetURL: String?
+    /// A content-addressed theme catalog (see ``ThemeSheet``) to LINK after the base sheet.
+    ///
+    /// When set, the inline theme is skipped: the sheet is immutable-cached, so a second
+    /// navigation transfers zero theme bytes. Pair it with a ``ThemeSheet``'s `url`, and hand
+    /// the same sheet to `WebUIServerConfig.themeSheet` so the route exists.
+    public let themeStylesheetURL: String?
     /// dev-time class validation: when true, the rendered document is scanned
     /// against the shipped sheet and every undefined class is routed through
     /// `HTMLClassValidator.onUndefined`. catches typo'd class names that
@@ -35,12 +46,15 @@ public struct WebUIDocument: View {
         clientMode: ClientBoot? = nil,
         devMode: Bool = false,
         lang: String = "en",
+        dir: String? = nil,
         includeRuntime: Bool = true,
         runtimeConfig: RuntimeConfig? = nil,
         contentSecurityPolicy: String? = nil,
+        contentSecurityPolicyExtras: String? = nil,
         theme: WebUITheme = .standard,
         rawStyles: [String] = [],
         stylesheetURL: String? = DesignSystemAssets.stylesheetURL,
+        themeStylesheetURL: String? = nil,
         checkClasses: Bool = false
     ) {
         self.title = title
@@ -51,12 +65,15 @@ public struct WebUIDocument: View {
         self.clientMode = clientMode
         self.devMode = devMode
         self.lang = lang
+        self.dir = dir
         self.includeRuntime = includeRuntime
         self.runtimeConfig = runtimeConfig
         self.contentSecurityPolicy = contentSecurityPolicy
+        self.contentSecurityPolicyExtras = contentSecurityPolicyExtras
         self.theme = theme
         self.rawStyles = rawStyles
         self.stylesheetURL = stylesheetURL
+        self.themeStylesheetURL = themeStylesheetURL
         self.checkClasses = checkClasses
     }
 
@@ -70,7 +87,11 @@ public struct WebUIDocument: View {
         // the theme block lands after the base sheet, so its `:root`
         // overrides win the cascade. `.standard` contributes nothing and the
         // document stays byte-identical to the unthemed one.
-        let themeCSS = theme.stylesheet()
+        // a LINKED theme sheet wins over an inline one: it is content-addressed, so the
+        // browser caches it and a second navigation transfers zero theme bytes. inlining is
+        // what made the theme ride every page (the plan's B7).
+        let linksThemeSheet = themeStylesheetURL != nil
+        let themeCSS = linksThemeSheet ? "" : theme.stylesheet()
         var rawStyles: [String]
         if stylesheetURL != nil {
             // linked sheet mode: only theme + page-scoped styles stay inline.
@@ -93,11 +114,17 @@ public struct WebUIDocument: View {
             clientMode: clientMode,
             devMode: devMode,
             lang: lang,
+            dir: dir,
             includeRuntime: includeRuntime,
             runtimeConfig: runtimeConfig,
             contentSecurityPolicy: contentSecurityPolicy,
+            contentSecurityPolicyExtras: contentSecurityPolicyExtras,
             preMinifiedStyles: true,
-            stylesheetURL: stylesheetURL
+            stylesheetURL: stylesheetURL,
+            themeStylesheetURL: themeStylesheetURL,
+            // inline mode carries the sheet in rawStyles (see the rawStyles
+            // block above) — the missing-sheet diagnostics must stay quiet
+            inlinedComponentStyles: stylesheetURL == nil
         )
         let html = doc.render()
         if checkClasses {

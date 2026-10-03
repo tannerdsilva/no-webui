@@ -158,10 +158,12 @@ private struct JSONParser {
         if peek()?.value == 0x7D { advance(); return .object(object) }
         while true {
             skipWhitespace()
-            guard peek()?.value == 0x22 else { throw JSONError.invalidToken(peek() ?? Unicode.Scalar(0xFFFD)!) }
+            guard let quote = peek() else { throw JSONError.unexpectedEnd }
+            guard quote.value == 0x22 else { throw JSONError.invalidToken(quote) }
             let key = try parseString()
             skipWhitespace()
-            guard peek()?.value == 0x3A else { throw JSONError.invalidToken(peek() ?? Unicode.Scalar(0xFFFD)!) }
+            guard let colon = peek() else { throw JSONError.unexpectedEnd }
+            guard colon.value == 0x3A else { throw JSONError.invalidToken(colon) }
             advance()
             object[key] = try parseValue()
             skipWhitespace()

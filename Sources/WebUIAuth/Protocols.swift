@@ -12,24 +12,6 @@ public enum AuthStoreError: Error, Equatable, Sendable {
 	case malformedRecord(String)
 }
 
-// MARK: - UserStore
-
-/// the backend's source of identities. the framework never assumes how the
-/// backend stores users — only that it can resolve a username to an identity
-/// (or nil). password verification is the `Authenticator`'s job.
-public protocol UserStore: Sendable {
-	func identity(forUsername username: String) async throws -> Identity?
-}
-
-// MARK: - Authenticator
-
-/// verifies presented credentials and returns the authenticated identity.
-/// `nil` means the credentials are invalid (or the user does not exist) —
-/// the framework treats both identically to avoid leaking existence.
-public protocol Authenticator: Sendable {
-	func authenticate(_ credential: Credential) async throws -> Identity?
-}
-
 // MARK: - AuthSessionStore
 
 /// persistence contract for authentication sessions.

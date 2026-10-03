@@ -21,46 +21,94 @@ window.WebUIEngine = (function () {
   var LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3, silent: 4 };
   var EVENT_TYPES = ['click', 'input', 'change', 'submit', 'keydown', 'keyup', 'keypress', 'focus', 'blur', 'focusin', 'focusout', 'mouseover', 'mouseout', 'mousedown', 'mouseup'];
   var LOST_ANCHOR_WARNED = {};
+  var LOST_OPEN_WARNED = {};
+  var RETAINED_OPEN = {};
+
+  var afterPatchHooks = [];
+  var readyHooks = [];
+  var hookLog = null;
+
+  function runHooks(hooks, arg) {
+    for (var i = 0; i < hooks.length; i++) {
+      try {
+        hooks[i](arg);
+      } catch (e) {
+        if (hookLog) { hookLog.error('engine hook failed: ' + e); }
+      }
+    }
+  }
 
   (function () {
     var mql = null;
     try { mql = window.matchMedia('(prefers-color-scheme: dark)'); } catch (e) { }
-    var saved = null;
-    try { saved = localStorage.getItem('webui-theme'); } catch (e) { }
-    var choice = (saved === 'light' || saved === 'dark') ? saved : 'system';
+    var savedMode = null, savedScheme = null;
+    try {
+      savedMode = localStorage.getItem('webui-theme');
+      savedScheme = localStorage.getItem('webui-scheme');
+    } catch (e) { }
+    var serverMode = document.documentElement.getAttribute('data-theme');
+    var mode = (savedMode === 'light' || savedMode === 'dark' || savedMode === 'system')
+      ? savedMode
+      : (serverMode === 'light' || serverMode === 'dark' || serverMode === 'system') ? serverMode : 'system';
+    var scheme = savedScheme || null;
 
     function sysDark() { return mql ? mql.matches : false; }
+
     function reflect() {
-      if (choice === 'system' ? sysDark() : choice === 'dark') {
-        document.documentElement.setAttribute('data-theme', 'dark');
-      } else {
-        document.documentElement.removeAttribute('data-theme');
+      var root = document.documentElement;
+      root.setAttribute('data-theme', mode);
+      if (scheme) {
+        root.setAttribute('data-scheme', scheme);
       }
     }
     function press() {
-      var btns = document.querySelectorAll('[data-theme-choice]');
-      for (var i = 0; i < btns.length; i++) {
-        btns[i].setAttribute('aria-pressed', btns[i].getAttribute('data-theme-choice') === choice ? 'true' : 'false');
+      var modes = document.querySelectorAll('[data-theme-choice]');
+      for (var i = 0; i < modes.length; i++) {
+        modes[i].setAttribute('aria-pressed', modes[i].getAttribute('data-theme-choice') === mode ? 'true' : 'false');
+      }
+      var schemes = document.querySelectorAll('[data-scheme-choice]');
+      for (var j = 0; j < schemes.length; j++) {
+        schemes[j].setAttribute('aria-pressed', schemes[j].getAttribute('data-scheme-choice') === scheme ? 'true' : 'false');
       }
     }
-    function apply(next) {
-      choice = next;
+    function announce() {
+      try {
+        document.dispatchEvent(new CustomEvent('webui:theme', {
+          detail: { scheme: scheme, mode: mode }
+        }));
+      } catch (e) { }
+    }
+    function applyMode(next) {
+      mode = next;
       try { localStorage.setItem('webui-theme', next); } catch (e) { }
       reflect();
       press();
+      announce();
+    }
+    function applyScheme(next) {
+      scheme = next;
+      try { localStorage.setItem('webui-scheme', next); } catch (e) { }
+      reflect();
+      press();
+      announce();
     }
     document.addEventListener('click', function (e) {
       var t = e.target;
-      while (t && t !== document.documentElement && !(t.getAttribute && t.getAttribute('data-theme-choice'))) {
+      while (t && t !== document.documentElement && !(t.getAttribute &&
+             (t.getAttribute('data-theme-choice') || t.getAttribute('data-scheme-choice')))) {
         t = t.parentNode;
       }
       if (!t || t === document.documentElement || !t.getAttribute) { return; }
+      var nextScheme = t.getAttribute('data-scheme-choice');
+      if (nextScheme) { applyScheme(nextScheme); return; }
       var next = t.getAttribute('data-theme-choice');
       if (next !== 'light' && next !== 'dark' && next !== 'system') { return; }
-      apply(next);
+      applyMode(next);
     });
     if (mql && mql.addEventListener) {
-      mql.addEventListener('change', function () { if (choice === 'system') { reflect(); } });
+      mql.addEventListener('change', function () {
+        if (mode === 'system') { reflect(); announce(); }
+      });
     }
     reflect();
     function pressInitial() { press(); }
@@ -351,6 +399,10 @@ window.WebUIEngine = (function () {
 
       if (event.type === 'submit') {
         event.preventDefault();
+        flushPendingInputs(
+          event.target && event.target.closest ? (event.target.closest('form') || event.target) : event.target,
+          componentId
+        );
       }
 
       var eventData = extractEventData(event, componentEl);
@@ -421,9 +473,13 @@ window.WebUIEngine = (function () {
       return null;
     }
 
-    function clickTargetData(target) {
+    function clickTargetData(target, componentEl) {
       var data = {};
-      if (target && target.id) data.targetId = target.id;
+      var owner = target;
+      while (owner && owner !== componentEl && owner.nodeType === 1 && !owner.id) {
+        owner = owner.parentNode;
+      }
+      if (owner && owner !== componentEl && owner.nodeType === 1 && owner.id) data.targetId = owner.id;
       if (target && typeof target.className === 'string' && target.className) data.targetClass = target.className;
       return data;
     }
@@ -445,7 +501,7 @@ window.WebUIEngine = (function () {
       var target = event.target;
       switch (event.type) {
         case 'click':
-          return clickTargetData(target);
+          return clickTargetData(target, componentEl);
 
         case 'input':
         case 'change':
@@ -513,17 +569,19 @@ window.WebUIEngine = (function () {
       var now = Date.now();
 
       if (!inputTimers[key]) {
-        inputTimers[key] = { timer: null, data: eventData, eventType: event.type, lastSent: now };
+        inputTimers[key] = { timer: null, data: eventData, eventType: event.type, lastSent: now, el: event.target, flush: null };
       }
       var entry = inputTimers[key];
       entry.data = eventData;
       entry.eventType = event.type;
+      entry.el = event.target;
 
-      var flush = function () {
+      entry.flush = function () {
         if (entry.timer) {
           clearTimeout(entry.timer);
           entry.timer = null;
         }
+        entry.flush = null;
         entry.lastSent = Date.now();
         send({
           type: 'event',
@@ -534,14 +592,26 @@ window.WebUIEngine = (function () {
       };
 
       if (now - entry.lastSent >= config.debounceMaxWaitMs) {
-        flush();
+        entry.flush();
         return;
       }
 
       if (entry.timer) {
         clearTimeout(entry.timer);
       }
-      entry.timer = setTimeout(flush, config.debounceInputMs);
+      entry.timer = setTimeout(entry.flush, config.debounceInputMs);
+    }
+
+    function flushPendingInputs(formEl, componentId) {
+      for (var key in inputTimers) {
+        var entry = inputTimers[key];
+        if (!entry || !entry.timer || !entry.flush) continue;
+        var sameField = formEl && entry.el && formEl.contains && formEl.contains(entry.el);
+        var sameComponent = componentId && key.indexOf(componentId + ':') === 0;
+        if (sameField || sameComponent) {
+          entry.flush();
+        }
+      }
     }
 
     function reset(config_) {
@@ -555,6 +625,9 @@ window.WebUIEngine = (function () {
     var lastSeq = -1;
     var pending = {};
     var settleMs = 5000;
+    var transitionInFlight = false;
+    var callbackPending = false;
+    var queued = [];
 
 
     function patch(fragments, seq, optimistic) {
@@ -570,37 +643,149 @@ window.WebUIEngine = (function () {
 
       log.debug('Patching ' + fragments.length + ' fragment(s)' + (seq !== undefined ? ' seq=' + seq : ''));
 
-      var reduced = document.matchMedia && document.matchMedia('(prefers-reduced-motion: reduce)').matches;
-      var transition = (!optimistic && !reduced && typeof document.startViewTransition === 'function')
-        ? document.startViewTransition
-        : null;
-      if (transition) {
-        var applied = false;
-        try {
-          transition(function () { applyFragments(fragments, optimistic); });
-          applied = true;
-        } catch (e) { }
-        if (!applied) { applyFragments(fragments, optimistic); }
-      } else {
-        applyFragments(fragments, optimistic);
+      if (optimistic) {
+        applyFragments(fragments, true);
+        return;
+      }
+      enqueue(fragments);
+    }
+
+    function enqueue(fragments) {
+      for (var i = 0; i < fragments.length; i++) {
+        var f = fragments[i];
+        var coalesced = false;
+        if (f.op !== 'append') {
+          for (var j = 0; j < queued.length; j++) {
+            if (queued[j].id === f.id) { queued[j] = f; coalesced = true; break; }
+          }
+        }
+        if (!coalesced) { queued.push(f); }
+      }
+      flush(false);
+    }
+
+    function flush(waited) {
+      if (!queued.length) return;
+      if (callbackPending) return;
+      var batch = queued;
+      queued = [];
+      if (!waited && !transitionInFlight && wantsTransition(batch)) {
+        runTransition(batch);
+        return;
+      }
+      applyFragments(batch, false);
+    }
+
+    function wantsTransition(fragments) {
+      if (typeof document.startViewTransition !== 'function') return false;
+      var mm = (typeof window.matchMedia === 'function') ? window.matchMedia : null;
+      if (mm && mm('(prefers-reduced-motion: reduce)').matches) return false;
+      for (var i = 0; i < fragments.length; i++) {
+        var f = fragments[i];
+        if (f && (f.op === 'append' || f.op === 'text')) return false;
+        if (f && f.transition === false) return false;
+        var el = f && f.id ? document.getElementById(f.id) : null;
+        if (el && el.closest && el.closest('[data-webui-transition="off"]')) return false;
+      }
+      return true;
+    }
+
+    function runTransition(fragments) {
+      transitionInFlight = true;
+      callbackPending = true;
+      var started = false;
+      var done = function () { transitionInFlight = false; callbackPending = false; flush(true); };
+      try {
+        var vt = document.startViewTransition(function () {
+          applyFragments(fragments, false);
+          callbackPending = false;
+          flush(true);
+        });
+        started = true;
+        var fin = vt && vt.finished;
+        if (fin && typeof fin.then === 'function') {
+          fin.then(done, done);
+        } else {
+          transitionInFlight = false;
+          callbackPending = false;
+        }
+      } catch (e) {
+        started = false;
+      }
+      if (!started) {
+        transitionInFlight = false;
+        callbackPending = false;
+        applyFragments(fragments, false);
+        flush(true);
       }
     }
 
     function applyFragments(fragments, optimistic) {
+      var changed = [];
       for (var i = 0; i < fragments.length; i++) {
         var f = fragments[i];
-        if (!f.id || f.html === undefined) {
+        if (!f.id || (f.html === undefined && f.op !== 'text')) {
           if (optimistic) continue;
           log.warn('Invalid fragment at index ' + i);
           continue;
         }
+        var op = (f.op === undefined || f.op === null) ? 'replace' : String(f.op);
+        if (op !== 'replace' && op !== 'append' && op !== 'text') {
+          log.warn('Unknown fragment op "' + op + '" for #' + f.id + ' — skipped');
+          continue;
+        }
         if (optimistic) {
-          armPending(f.id);
+          if (op === 'replace') { armPending(f.id); }
         } else {
           clearPending(f.id);
         }
+        if (op === 'text') {
+          setTextContent(f.id, f.text === undefined || f.text === null ? '' : String(f.text));
+          var textNode = document.getElementById(f.id);
+          if (textNode) { changed.push(textNode); }
+          continue;
+        }
+        if (op === 'append') {
+          var added = appendChildFragment(f.id, f.html, f.before);
+          if (added) { changed.push(added); }
+          continue;
+        }
         replaceElement(f.id, f.html);
+        var node = document.getElementById(f.id);
+        if (node) { changed.push(node); }
       }
+      if (changed.length) { runHooks(afterPatchHooks, changed); }
+    }
+
+    function setTextContent(id, value) {
+      var el = document.getElementById(id);
+      if (!el) { log.warn('Element not found: #' + id); return; }
+      if (el.textContent === value) { return; }
+      if (el.childNodes.length === 1 && el.firstChild.nodeType === 3) {
+        el.firstChild.data = value;
+        return;
+      }
+      el.textContent = value;
+    }
+
+    function appendChildFragment(id, html, before) {
+      var container = document.getElementById(id);
+      if (!container) { log.warn('Element not found: #' + id); return null; }
+      var fragment = sanitizeFragment(html, container);
+      var first = fragment.firstChild;
+      if (!first) { return null; }
+      if (first.nodeType === 1 && first.id && document.getElementById(first.id)) {
+        return null;
+      }
+      var anchor = null;
+      if (before) {
+        anchor = document.getElementById(before);
+        if (anchor && !container.contains(anchor)) { anchor = null; }
+        if (!anchor) { log.warn('append anchor #' + before + ' not found in #' + id + ' — appended at the end'); }
+      }
+      if (anchor) { container.insertBefore(fragment, anchor); }
+      else { container.appendChild(fragment); }
+      return first.nodeType === 1 ? first : container;
     }
 
     function armPending(id) {
@@ -730,7 +915,45 @@ window.WebUIEngine = (function () {
           state['focus:' + active.id] = { focus: true };
         }
       }
+      if (root.tagName === 'DETAILS') {
+        state['details:r'] = { open: !!root.open };
+      }
+      var detailsAll = root.querySelectorAll('details');
+      for (var d = 0; d < detailsAll.length; d++) {
+        state['details:' + detailsKey(detailsAll[d], d)] = { open: !!detailsAll[d].open };
+      }
       return state;
+    }
+
+    function detailsKey(el, index) {
+      if (el.getAttribute) {
+        var k = el.getAttribute('data-webui-key');
+        if (k) return 'k:' + k;
+        if (el.id) return 'id:' + el.id;
+      }
+      return 'i:' + index;
+    }
+
+    function findDroppedDetail(stateKey) {
+      var dk = stateKey.slice(8);
+      if (dk.indexOf('k:') === 0) {
+        var v = dk.slice(2);
+        if (!v || v.indexOf('"') >= 0 || v.indexOf('\\') >= 0) return null;
+        try { return document.querySelector('[data-webui-key="' + v + '"]'); } catch (e) { return null; }
+      }
+      if (dk.indexOf('id:') === 0) return document.getElementById(dk.slice(3));
+      return null;
+    }
+
+    function retainOpen(fragmentId, stateKey, open) {
+      var box = RETAINED_OPEN[fragmentId] || (RETAINED_OPEN[fragmentId] = {});
+      box[stateKey] = open;
+      var keys = Object.keys(box);
+      if (keys.length > 400) {
+        var oldest = keys[0];
+        delete box[oldest];
+        log.debug('evicted retained open state for #' + fragmentId + ' (' + oldest + ')');
+      }
     }
 
     function saveScroll(el, key, state) {
@@ -810,6 +1033,45 @@ window.WebUIEngine = (function () {
           }
         } catch (e) { }
       }
+      var restoredOpen = {};
+      if (root.tagName === 'DETAILS' && state['details:r']) {
+        restoredOpen['details:r'] = true;
+        if (!!root.open !== !!state['details:r'].open) { root.open = !!state['details:r'].open; }
+      }
+      var detailsNow = root.querySelectorAll('details');
+      for (var dn = 0; dn < detailsNow.length; dn++) {
+        var det = detailsNow[dn];
+        var dk = 'details:' + detailsKey(det, dn);
+        var rec = state[dk];
+        if (!rec) continue;
+        restoredOpen[dk] = true;
+        if (!!det.open !== !!rec.open) { det.open = !!rec.open; }
+      }
+      var retained = RETAINED_OPEN[fragmentId];
+      if (retained) {
+        for (var rk in retained) {
+          if (restoredOpen[rk]) { delete retained[rk]; continue; }
+          var rel = findDroppedDetail(rk);
+          if (!rel) continue;
+          if (!!rel.open !== !!retained[rk]) { rel.open = !!retained[rk]; }
+          delete retained[rk];
+        }
+        if (!Object.keys(retained).length) delete RETAINED_OPEN[fragmentId];
+      }
+      for (var ok in state) {
+        if (ok.indexOf('details:') !== 0 || restoredOpen[ok]) continue;
+        var dk2 = ok.slice(8);
+        if (dk2.indexOf('k:') === 0 || dk2.indexOf('id:') === 0) {
+          retainOpen(fragmentId, ok, !!state[ok].open);
+          continue;
+        }
+        if (!state[ok].open) continue;
+        var warnKey = fragmentId + '|' + ok;
+        if (!LOST_OPEN_WARNED[warnKey]) {
+          LOST_OPEN_WARNED[warnKey] = true;
+          log.warn('Patch for #' + fragmentId + ' dropped a row with captured open state (' + ok + ') — the state cannot be restored');
+        }
+      }
     }
 
     function reset() {
@@ -820,6 +1082,9 @@ window.WebUIEngine = (function () {
         }
       }
       pending = {};
+      queued = [];
+      transitionInFlight = false;
+      callbackPending = false;
     }
 
     function setSettle(ms) {
@@ -1152,6 +1417,7 @@ window.WebUIEngine = (function () {
   }
 
   var _statusEl = null;
+  var _statusText = null;
   var _statusTimer = null;
   function ensureStatus() {
     if (_statusEl || !document.body) { return; }
@@ -1159,6 +1425,7 @@ window.WebUIEngine = (function () {
     _statusEl = document.createElement('div');
     _statusEl.className = 'engine-status';
     _statusEl.setAttribute('role', 'status');
+    _statusEl.style.display = 'none';
     var dot = document.createElement('span');
     dot.className = 'engine-status__dot';
     var text = document.createElement('span');
@@ -1166,6 +1433,7 @@ window.WebUIEngine = (function () {
     text.textContent = 'reconnecting\u2026';
     _statusEl.appendChild(dot);
     _statusEl.appendChild(text);
+    _statusText = text;
     document.body.appendChild(_statusEl);
   }
   document.addEventListener('webui:disconnected', function () {
@@ -1174,12 +1442,16 @@ window.WebUIEngine = (function () {
     if (_statusTimer) { clearTimeout(_statusTimer); }
     _statusTimer = setTimeout(function () {
       _statusEl.className = 'engine-status engine-status--visible';
+      _statusEl.style.display = 'inline-flex';
     }, 400);
     updateStatusMirrors('reconnecting');
   });
   document.addEventListener('webui:connected', function () {
     if (_statusTimer) { clearTimeout(_statusTimer); _statusTimer = null; }
-    if (_statusEl) { _statusEl.className = 'engine-status'; }
+    if (_statusEl) {
+      _statusEl.className = 'engine-status';
+      _statusEl.style.display = 'none';
+    }
     updateStatusMirrors('connected');
   });
 
@@ -1187,6 +1459,9 @@ window.WebUIEngine = (function () {
     var els = document.querySelectorAll('[data-webui-status]');
     for (var i = 0; i < els.length; i++) {
       els[i].setAttribute('data-webui-state', state);
+    }
+    if (_statusText) {
+      _statusText.textContent = state === 'connected' ? 'connected' : 'reconnecting\u2026';
     }
   }
 
@@ -1223,6 +1498,7 @@ window.WebUIEngine = (function () {
 
     eventDelegator.mount();
 
+    hookLog = log;
     wsClient.connect();
 
     var bootIslands = function () {
@@ -1257,6 +1533,8 @@ window.WebUIEngine = (function () {
       popstateHandler: popstateHandler,
     };
 
+    runHooks(readyHooks, document);
+
     log.info('WebUI Engine initialized');
   }
 
@@ -1279,6 +1557,11 @@ window.WebUIEngine = (function () {
   return {
     init: init,
     destroy: destroy,
+
+    on: {
+      afterPatch: function (fn) { if (typeof fn === 'function') { afterPatchHooks.push(fn); } },
+      ready: function (fn) { if (typeof fn === 'function') { readyHooks.push(fn); } },
+    },
 
     _reset: function () { instance = null; },
     _getInstance: function () { return instance; },

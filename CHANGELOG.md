@@ -4,8 +4,175 @@ all notable changes to this project are documented here.
 
 ## [unreleased]
 
+### runtime — streaming patch ops and calm patches
+
+- **`FragmentUpdate` gains ops.** `append` inserts one subtree as a child of the
+  target (anchored via `before`, idempotent by the child's own id, never coalesced);
+  `text` writes the target's text content — in steady state the text node's data is
+  mutated, so a token stream costs characterData writes and zero element churn.
+  Absent op = `replace` (unchanged; emits no `op` on the wire). Unknown ops warn and
+  skip rather than guess.
+- **transition policy.** A patch animates only when the consumer allows it: no
+  per-fragment `transition:false`, no `data-webui-transition="off"` ancestor region,
+  no transition already in flight, no `prefers-reduced-motion`. `append`/`text` never
+  animate; refused transitions still apply synchronously. Measured pre-change: one
+  view transition per push on a token stream (108–368 per turn).
+- **`details[open]` survives a patch.** The engine's save/restore captures and
+  re-applies `details` open state per stable key (`data-webui-key` / id / structural
+  index); a captured-open row the replacement drops warns once per key. Measured
+  pre-change: a reasoning row opened mid-stream was re-emitted collapsed by the next
+  push.
+- **queued application, last-write-wins.** Patches apply in order; same-target
+  `replace`/`text` updates collapse to the newest, and applications serialize behind
+  an in-flight transition — an older deferred animation callback can no longer clobber
+  a newer update. Also: the engine's reduced-motion guard now reads
+  `window.matchMedia` (`document.matchMedia` does not exist in current Chromium, so
+  the guard had been dead code).
+
+### assets (additive)
+
+- **the asset toolkit ships** — the machinery no-webui already runs for its own sheet,
+  engine and shell, as three host-facing products: `WebUIShippedAsset` (the protocol
+  generated code conforms to, in `WebUICore`), `WebUIBuild` (host-side gzip, emitter and
+  manifest), `WebUIEmbedPlugin` (embeds a target's `Assets/webui-assets.json` on every
+  build) and `WebUIAsset` (server-side url + registration + cache from one value). a
+  consumer stops hand-rolling hashing, compression, embedding, address/registration pairing
+  and cache headers. see `Documentation/ASSETS.md`.
+- `WebUIServerAsset` gains `immutable:`; `WebUIAssetTool` gains
+  `--embed-manifest <json> --output <swift>`; manifest entries may pin
+  `ceilingBytes`/`ceilingGzipBytes`, enforced at embed time (the build refuses before
+  anything ships), and `plugin budget` reports one row per consumer entry.
+- `ThemeSheet` gains an optional pre-compressed variant and its route negotiates
+  (`Content-Encoding` + `Vary`) — the url is unchanged (`/__assets/theme.<sha256>`).
+
+### theming (breaking)
+
+- **`ColorScheme` is now `ThemeMode`**, `WebUITheme` carries a **light/dark pair** instead of
+  one `scheme:`, and `stylesheet()` takes a **`ThemeScope`**. in-place breaks — no alongside
+  type, no deprecation window, no shim. `ColorScheme` is the name consumers give their *own*
+  scheme type (arc's 27-scheme enum is exactly that), and a theme that means different things
+  in two modes cannot be one palette. every in-tree call site moved in the same commits.
+- `@Theme(base: Base.self)` — themes **inherit**. `static let` members are overrides layered
+  per palette over the base's, so a scheme states the tokens it changes (11) instead of all of
+  them (35). `light`/`dark` members replace the reserved `scheme`; a theme naming itself as its
+  own base is an expansion error.
+- `WebUIThemeProvider` gains `themeID`/`themeLabel`/`themeSwatch` (defaulted, so an existing
+  conformer still compiles) and `ThemeCatalog` collects providers into `all`/`defaultTheme`, so
+  a picker renders from the catalog rather than a hand-written list. catalog integrity — unique
+  ids, a default that is a member, every `base` resolving — is tested.
+- **one sheet carries every scheme.** `ThemeScope.attribute` emits
+  `:root[data-scheme="…"][data-theme="light|dark"]` plus a `prefers-color-scheme` pass, so a
+  scheme switch costs no round trip and no server render; the `.root` default keeps a
+  single-theme page byte-identical.
+- **the engine owns switching**: scheme + mode, persisted in `localStorage`, `system` following
+  `prefers-color-scheme`, and a `webui:theme` event. a stored choice is applied by a
+  **pre-paint prelude** — a comment-free inline script carrying the render nonce, so the stored
+  palette is never flashed over — and the prelude's storage keys are asserted against the
+  engine's.
+- `ThemeSheet` serves the rendered catalog from a **content-addressed url**
+  (`/__assets/theme.<sha256>`), so the theme no longer rides `rawStyles` and a second
+  navigation transfers zero theme bytes. the address is computed from the bytes, so the url a
+  page links and the url a server serves cannot disagree.
+- `WebUITheme`/`ThemePalette`/`ThemeEntry` are **`Codable`**, keyed by css token name, which is
+  what lets the catalog ship to the client as data (encode → decode → identical css).
+- `TokenAlias("--bg", .colorBg)` declares an app's own property vocabulary **in Swift** against
+  `DesignToken` and emits the indirection `--bg: var(--color-bg)`, so a mistyped token is a
+  missing enum case instead of a missing colour.
+- contrast is swept for **every theme × mode** from the typed catalog
+  (`DeploymentIntegrityTests`) rather than 50-odd hand-written pairs that rot.
+
+### css delivery — the cascade is now explicit
+
+- **the sheet ships in cascade layers.** `@layer webui, webui.utilities;` wraps the
+  framework's rules — components in `webui`, the layout primitives the asset tool
+  prepends in `webui.utilities` — so **unlayered css outranks the framework by cascade
+  origin, not by specificity**: an app's own stylesheet, `rawStyles`, and the theme
+  sheet win outright, and restyling a component never needs `!important` or matching
+  selector weight. measured before the change: 704 of the sheet's 2,511 rules sat above
+  single-class specificity, so an override like `.button--icon.button--sm` could only be
+  beaten by escalating to the same weight. the browser gate now proves the consequence
+  on the deployed page (a single-class consumer rule beats a two-class framework rule),
+  and `CascadeLayerTests` scans the served bytes, failing if any rule escapes the layers.
+  theme sheets stay *unlayered* by design, so a theme outranks the base sheet's tokens.
+  this is a consumer-visible change by intent: css that used to tie or lose to the
+  framework now wins.
+
+### engine & assets
+
+- assets are compressed at **build** time (the tool runs the host `gzip`) and `WebUIServer`
+  negotiates `Accept-Encoding`, sending `Vary` whenever a variant exists — so the sheet leaves
+  the server at its compressed size (321,262 → 44,991 gz) while a client that asks for nothing
+  still gets the bytes it always did. no runtime compressor is linked.
+- `plugin budget` gates the shipped surface against a pinned table (engine, sheet raw+gz,
+  shell, per-island) and reports retired artifacts; every ceiling carries 5-15% headroom and
+  names the measurement it came from. the served numbers come from the build manifest, not the
+  working files — a budget on the wrong number is a false sense of safety.
+- `WebUIEngine.on.afterPatch(fn)` / `on.ready(fn)` — the post-patch seam a consumer needs to
+  re-run enhancement work (math, table tooling) against the mutated subtree instead of
+  rescanning the whole DOM on every mutation.
+- `HTMLDocument.contentSecurityPolicyExtras` (and `WebUIDocument`'s forwarding parameter) lets a
+  host add directives — `img-src … https:`, a `font-src`, a `form-action` — without restating the
+  policy. extras **merge per directive name** into the effective policy (the nonce-aware default,
+  or an explicit `contentSecurityPolicy`), so a repeated name replaces the base's directive and
+  every name the host did not mention, including the render nonce, is carried over. the case that
+  motivated it: a host that restated the policy to add two directives lost the nonce, and
+  `HTMLDocument` then suppressed the pre-paint theme prelude rather than ship an inline script the
+  browser refuses — a stored scheme flashed on every load, with only a log line to say why.
+- `WebUIAssetTool --used-tokens <path> [--guard-css <path>]` prunes the sheet's `:root` token
+  surface to the reachable set (T9): a catalog resolving 40 of the 174 tokens emits a 40-token
+  sheet, `--guard-css` keeps anything a consumer's own stylesheet still resolves, the counts
+  land in the build manifest, and a name the sheet does not declare fails the build. omitted,
+  the sheet ships whole — byte-identical to before.
+- `WebUIServerAsset.gzip` — a host may register a **pre-compressed** variant of any asset, and
+  the server negotiates it exactly like the framework's own sheet and engine: `Content-Encoding:
+  gzip` for a client whose `Accept-Encoding` allows it, `Vary: Accept-Encoding` whenever a
+  variant exists (including on the plain response — or a shared cache would hand the compressed
+  bytes to a client that never asked). the server still compresses nothing at runtime; a host
+  builds both forms in its own tooling and passes both.
+- the engine's mode fallback no longer discards a **server-rendered** default: with no stored
+  choice it keeps the `data-theme` the server rendered, a stored choice still wins, and only a
+  page rendering neither falls back to `system`. `data-scheme` already behaved this way — not
+  storing a choice is not the same as choosing nothing — and the pre-paint prelude always had
+  this shape; the engine was the odd one out, and a host's server-side default mode was
+  silently replaced on every fresh client. `designer/theme-default-probe.mjs` is the gate
+  (it drives a synthesised page whose only theme code is the engine), and it refuses to run
+  against a port that is already serving: an earlier revision of it passed while measuring a
+  **stale** server left over from the previous run.
+- **the shipped payloads are prose-free, checked at build time.** `WebUICore.ProseGuard` reads
+  comments only where each language says one can start — a `//` inside a string literal is not a
+  comment — and the asset tool runs it over every payload a client can receive: the runtime, the
+  engine, the shell, and the minified sheet. a comment fails the build naming file, line and text.
+  the runtime had been shipping a seven-line "Host extension points" note plus a `///` line
+  verbatim (11 comment lines, −698 bytes); the engine's and shell's comment-free pins never
+  covered it, and the plan's `grep -c '//'` lint was never built. the note now lives in
+  `Documentation/JS_RUNTIME.md`, where prose belongs.
+
+### fixed
+
+- **the orphan-class ratchet no longer hears prose.** `orphanBaselineIsTight` measured
+  "reachable" as "mentioned anywhere in swift", so the english word `comment` — in a prose note,
+  or in a message string such as `"would ship N comment(s) to clients"` — declared the sheet's
+  genuinely orphaned `.comment` class reachable and demanded its deletion from the baseline: the
+  ratchet would have rotted a real orphan on the strength of a mention. tightness now measures
+  **emissions** (a rendered page, plus the engine's own js-only class names), while the mention
+  scan stays what it was written to be — the *growth* direction's lenient floor.
+- **a generated csp authorizes the inline theme prelude.** `ClientBoot.csp(nonce:)`
+  splices the render's nonce into the default policy. before this, the served default
+  policy named no nonce source, so the pre-paint prelude was **blocked by the browser**
+  on every reference page — measured: the browser smoke gate and the block sweeps both
+  reported `script-src 'self' 'wasm-unsafe-eval'` violations and a stored theme never
+  applied before paint. a host policy that names no nonce source now *suppresses* the
+  prelude (with a warning naming the fix) instead of shipping a script the browser will
+  refuse. `preludeTag` is emitted only when the effective policy can run it.
+
 ### developer experience
 
+- `WebUIServerService` — hosts a `WebUIServer` as a `Service`, so a long-lived
+  page server starts and stops inside a `ServiceGroup` (ordered startup,
+  graceful shutdown) instead of owning its own process lifecycle. a bind
+  failure propagates out of `run()`, so a server that cannot listen fails
+  startup rather than reporting itself ready. `swift-service-lifecycle` is a
+  new dependency of the `WebUIServer` target.
 - `WebUIServer` now injects its router as the render context around `render()`
   (`RenderContext.$current.withValue`): handlers a page wires through
   `.onX`/`controlAttributes` register into the server's router directly, so
@@ -19,6 +186,30 @@ all notable changes to this project are documented here.
 
 ### consumer experience
 
+- `WebUIServer.broadcast(_:)` — server-initiated fragment pushes, with no
+  inbound event to answer. the server tracks its connected pages and writes an
+  `update` to each, which is what streaming a turn, reporting background
+  progress, or refreshing a panel that changed on disk needs.
+  `connectedPages` exposes the live count. a socket whose render token the
+  server rejects is already closed, so a push cannot reach a stale page from a
+  former session.
+- `WebUIServerConfig.assets` — a host can now serve its own assets (vendor
+  css/js, woff2 fonts, app scripts) through the same server that serves the
+  framework's, via `WebUIServerAsset.text(_:_:contentType:cacheSeconds:)` and
+  `.bytes(_:_:contentType:cacheSeconds:)` (the `bytes` case keeps binary
+  payloads off the `String` path). no second http server for asset paths. the
+  framework routes (`/__assets/css*`, the engine, the shell) are matched first,
+  so a host asset can neither shadow nor disable them.
+- `WebUIServer` request-aware render —
+  `init(requestRender:router:config:logger:)` hands the page closure a
+  `WebUIServerRequest` (path + decoded query), so a host can render
+  `/index.html?s=<id>` deep links. the zero-argument `init(render:...)` is
+  unchanged and now simply ignores the request.
+- `WebUIServer` strips the query string before routing. previously the whole
+  `uri` was matched, so `/__assets/css?v=9` — and any query-bearing page url —
+  404'd. cache-busting query strings and deep links now resolve. `+` decodes to
+  a space and `%XX` to its byte; a malformed escape is preserved verbatim
+  rather than dropped.
 - showcase is now a **live** page: `WebUIShowcaseServer` wires a shared
   `ShowcaseState` through the server's router and the interactive demos
   round-trip for real — click counter (−/+/Reset with optimistic reset), form
@@ -43,6 +234,196 @@ all notable changes to this project are documented here.
   connect-src); an explicit `clientMode` still wins. the parameter had drifted
   inert during the engine-first flip and a loose `<script>` pin masked it —
   the pins are hardened and the static showcase artifact is script-free again.
+
+### charts
+
+- `RadarMark` and `RadialMark`: a closed polygon per series over shared axes, and
+  a *stroked* gauge arc (track + value arc + centered percentage, clamped
+  0...100). `chartAspectRatio` makes the square viewBox a gauge wants expressible.
+- `AreaMark(...).areaGradient(_:)`: an area fill from a `<linearGradient>` whose id
+  is derived from the gradient's own contents, so it is stable across renders and
+  collision-free between charts sharing a page.
+- css-only hover tips on bars, points, sectors and radar vertices (revealed by
+  `:hover + .chart__tip` - no javascript, no new event), with the divergences
+  documented in `Documentation/CHARTS.md`.
+- **negative values render correctly**: bar edges are normalized (a negative datum
+  used to collapse to a zero-height rect) and the bar domain always spans zero.
+  charts also carry intrinsic `width`/`height` now - without them a `viewBox`-only
+  svg fell back to the 300x150 replaced-element default and every chart rendered at
+  ~0.47 scale, axis labels included.
+
+- **chart text keeps its size**: the figure publishes the width it was laid out
+  for (`--chart-w`), renders at it, may compress to 92% — 12px labels still paint
+  11.04px — and pans below that. before this, in-svg text multiplied by the
+  container's scale, so a 390px viewport painted 10px axis labels at **3.6px**.
+  the plot is inline-size-contained (so the pan works in any container) and the
+  figure declares its own width (a chart contributes no intrinsic width, so a
+  content-sized container collapses to its text). chart text moves onto
+  `--font-size-xs`.
+- the figure's **accessible name is the chart's title** when one is set
+  (`.chartAccessibilityLabel(_:)` still wins), instead of `Chart with N marks` —
+  and the singular case reads `Chart with 1 mark`.
+- the **inert scroll API is removed**: `ChartScrollAxes`,
+  `ChartConfig.scrollAxes`, `ChartConfig.visibleDomain`, `.chartScrollableAxes(_:)`
+  and `.chartXVisibleDomain(_:)` shipped with no reader anywhere (no renderer, no
+  runtime, no css), so every call was already a no-op — see the note in
+  `Documentation/STABILITY.md`. the replacement for the intent is the plot's pan
+  behaviour or a declared design width via `.chartHeight` / `.chartAspectRatio`.
+- `designer/chart-mobile-audit.mjs`: a gate over six viewports × two themes that
+  asserts painted text ≥ 11px, the **visible fraction** of every plot, label
+  collisions, tip reachability and page overflow (five assertions per slide,
+  six from 390px up).
+- the showcase charts section is a responsive gallery — `chartHeight(150)` plots
+  in `Grid(columns: .custom("repeat(auto-fit, minmax(min(100%, 344px), 1fr))"))`
+  tracks — so every chart is fully visible from a 390px viewport up, 1-up on a
+  phone and 3-up at 1440px.
+
+### data table
+
+- `WebUITable.hiddenColumns` (server-owned column visibility), plus the client fix
+  that made composite controls work at all: a click's `targetId` now resolves to
+  the nearest id-bearing element *inside* the component, so a menu item reports
+  itself instead of omitting the id - which had made the server answer nothing.
+
+### blocks
+
+- `WebUIBlocks` (library) and `WebUIBlocksServer`: seven standalone page scaffolds
+  - dashboard, login, signup, four sidebar variants - plus a patterns block
+  (carousel, menubar, questionnaire), served one per process with no showcase
+  dependency. composition only: every class a block emits already exists in the
+  sheet, and a pin proves it.
+
+### direction
+
+- `HTMLDocument`/`WebUIDocument` gain `dir:` (emitted on `<html>`, omitted when
+  unset, invalid values dropped). the sheet's flow-relative rules are logical now
+  (`margin-inline-*`, `padding-inline-*`, `border-inline-*`,
+  `text-align: start|end`); what stays physical is the arrow/chevron geometry,
+  documented and pinned by a ratchet.
+
+### long tail
+
+- `WebUICarousel` (css scroll-snap on a focusable track, so the arrow keys scroll
+  it) and `WebUIMenubar` (panels open on hover and on `:focus-within`, so it is
+  keyboard reachable) - both zero-js, divergences documented. a css-only
+  split-pane was **scrapped**, with the probe recorded: a `flex: 1` pane cannot be
+  resized by `resize`, and css cannot let a handle move a sibling.
+
+### verification
+
+- new gates: `designer/blocks-sweep.mjs` (every block, 320/768/1440, both themes,
+  no-overflow and parts assertions) and `designer/rtl-audit.mjs` (both directions,
+  both themes, with an ltr control). the pin that enumerates every class a block
+  emits has now caught three pre-existing orphan classes - css emitted by shipped
+  components with no rules in the sheet.
+
+### the wasm monolith client is deleted
+
+- `WebUIClientRuntime`, `WebUIClient` (and their test target), the `WebUIWasmPlugin`
+  artifact carrier, the `wasm-client` plugin verb, the chamber/boot/worker assets and
+  `WebUIBoot` are gone. **the engine is the client runtime**; wasm survives only as
+  capability islands (`WebUIIslandCore`, `WebUIValidateIsland`, the `wasm-island`
+  verb, `WebUIWasmTool`), which share the same toolchain and `WebUISharedCore` leaf.
+- why: the chamber fetched and instantiated a 55 mb module (~12 mb brotli) on every
+  app-mode page for work the ~37 kb engine does, and it could not render server
+  views. `NEXT_ARCHITECTURE.md` records the measurement.
+- `ClientBoot` survives, describing the engine boot only; the smoke preview's
+  `WEBUI_BOOT=wasm` mode, its client routes and the demo pages are gone with the
+  path. the six `WASM_*.md` design documents were deleted outright (git history
+  keeps them). the consumer skill no longer promises a link-able client product.
+
+### public surface
+
+- **three dead public symbols removed** (measured: no non-comment reference
+  outside their own declaration, no conformer, no renderer):
+  - `AnyView` (`WebUICore`) — the framework's erasure idiom is `[any View]`, so
+    the wrapper was both unused and misleading about the intended shape.
+  - `UserStore` and `Authenticator` (`WebUIAuth`) — a never-implemented identity
+    seam: nothing in the repo conformed to either, and no shipped API accepted
+    them. `Credential` and `Identity` stay as the data vocabulary, and a host
+    wires its own verifier directly (as `WebUIAuthExample` does).
+  `Documentation/API.md` (three table rows) and `AUTH_SESSIONS.md` (the protocol
+  sketch, plus a note on why no seam is shipped) were updated in the same
+  commit. the frozen surface is untouched — none of the three was listed.
+- `Documentation/STABILITY.md` now records **measured consumption** of the
+  frozen surface: 9 frozen names have no library and no demo consumer (the
+  `APISurfaceTests` pin is their only exerciser), and 16 showcase-rendered
+  components sit *outside* the promise. the promise itself is unchanged; the
+  mismatch is documented rather than implied, and every name is listed as a
+  candidate for review at the next major.
+- **`CSRFProtection.token(for:…)` no longer leaks the crypto dependency's error
+  type.** it is public and `throws`, but an hmac failure propagated `RAW_hmac`'s
+  error — a caller could not catch it without importing rawdog. the failure is
+  now caught and rethrown as `CSRFError.signingFailed`, a case that was declared
+  and documented but never actually thrown. a caller that previously matched the
+  hmac error must match `CSRFError` instead; the success path is byte-identical.
+  the cause is collapsed on purpose — no caller can act differently on which
+  internal step failed.
+- doc truth: `AUTH_SESSIONS.md`'s login flow named `PasswordAuthenticator` (no
+  such type — now `PasswordVerifier`), and its entropy note described the
+  `.signingFailed` throw before the code produced one. both corrected (the
+  second by fixing the code, above).
+- `Documentation/IMPLEMENTATION_PLAN.md` (688 lines; self-declared "historical
+  plan") removed, matching the wasm-design-doc precedent — git history keeps it.
+  its four inbound references (`Documentation/API.md`, `Documentation/README.md`,
+  `README.md`, `Sources/WebUIAuth/WebUIAuth.swift`) were updated in the same
+  commit.
+- `CHANGELOG.md` itself carried a stray generator placeholder token in the
+  wasm-deletion section (it had swallowed a word); removed.
+- **the render path's additive surface** (the render-buffer arc: `S0`–`S4a`):
+  `View` gains `render(into buffer: inout HTMLBuffer)` and `ViewModifier` gains
+  `decorate(_:into:)`, both *defaulted* requirements — a conformer that
+  implements only `render()` / `apply(to:)` keeps rendering byte-identically,
+  which is what keeps this a minor. `HTMLBuffer` is a `public` **type** (a
+  protocol requirement is implicitly as visible as its protocol, and the
+  requirements name it) while **every member stays `package`**: this is the
+  framework's own render path, and the members open with the 2.0 flip, when
+  `render(into:)` becomes the requirement and `render()` a deprecated
+  convenience. pinned by `APISurfaceTests.renderBufferAdditionsPin` and
+  documented in `Documentation/API.md`'s View Protocol table. measured on the
+  reference box (Debug, interleaved passes): page render ≈ -11% against the
+  pre-arc tree, with byte-identity held on every page, every gate, and both
+  platforms. the rest of the design-system migration was scoped, measured
+  neutral, and deliberately deferred to the flip.
+
+### server: linux + speed
+
+- **the server runs on linux.** three apple-only dependencies were removed, each
+  verified on a linux box rather than reasoned about: `CryptoKit` (the stylesheet
+  content hash — now the framework's own `SHA256` over rawdog, digest
+  byte-identical, so the content-addressed css url did not move), the
+  `WebUICompression` C target (`compression.h` is apple's libcompression — and it
+  backed `GzipEncoder`, which **no call site ever invoked**: `respond(gzip:)`
+  accepted the flag and ignored it, so every page and asset shipped uncompressed
+  while claiming gzip), and a missing `libm` link for the zero-dep leaf
+  (`Double.rounded()` lowers to a `round` call, which no island product otherwise
+  pulls in). the test target also needed `FoundationNetworking` and a guard for
+  `URLSessionWebSocketTask`, neither of which exists in swift-corelibs-foundation.
+- **class validation is 7.8× faster.** `HTMLClassValidator.classTokens` ran a
+  swift regex over the whole rendered document — 30.7 ms of every 166 KB page.
+  it is now a single-pass byte scanner at 3.9 ms, measured A/B on identical
+  input. the orphan ratchet's guarantees are unchanged (all 816 tests, including
+  the ratchet, still pass).
+- **page latency on the reference box fell 40%** (p50 66.08 → 39.68 ms) and
+  throughput rose 73% (15 → 26 req/s) — the render is the whole cost, and both
+  figures track the validator's speedup. the page is byte-identical (166,167 B).
+- transport: **keep-alive** replaces `Connection: close` (200/200 requests now
+  reuse one socket instead of none), **tcp_nodelay** is set on accepted children
+  (nio sets it for client channels only), `respond` writes the body into the
+  channel's buffer in one copy instead of two, and the framework's own assets
+  (320 KB css, engine, shell) are pre-encoded once at startup instead of per
+  request. the read-idle reaper and the 256-connection admission gate are
+  unchanged, so the bound on live connections still holds.
+- `WebUIShowcaseServer` gains `--render-bench N` (an instrumented render profile:
+  page with/without validation, a synthetic node tree, the id/escape/growth
+  micro-paths, and a scanner A/B) and `--no-class-check`.
+- profiles disproved three plausible micro-optimizations and one attempt:
+  `nextComponentID` (mutex + string alloc) is under 0.5 µs, the `htmlEscape`
+  guard under 3 µs, and `reserveCapacity` changes nothing for 2,850 appends. a
+  utf-8 byte-scan rewrite of `htmlEscape` measured *slower* (4.15% of render cpu
+  against 2.05%) and was reverted, with the result recorded in the code. the
+  render is flat and arc/string-bound: no symbol exceeds 4.5%, and the remaining
+  cost is ~5.7 µs per node — the case for the buffer-based v2 render path.
 
 ## [1.0.0] — stability epoch (2026-09-20)
 

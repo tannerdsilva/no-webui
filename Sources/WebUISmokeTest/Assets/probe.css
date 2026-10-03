@@ -1,0 +1,4 @@
+/* the embed plugin's dogfood payload. this file is not compiled into the server: a build
+   reads it through `Assets/webui-assets.json`, minifies it, prose-gates it, and emits a
+   `WebUIShippedAsset` type (`ProbeAsset`) the smoke server serves at /ui/probe.css. */
+.probe-embedded { color: teal; }

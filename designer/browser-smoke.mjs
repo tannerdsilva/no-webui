@@ -11,11 +11,8 @@
 // Writes a full-page screenshot to .smoke/browser.png. Exits non-zero on failure.
 //
 // Usage: node designer/browser-smoke.mjs
-//   (self-contained: builds the server and the wasm client, serves on :9123,
-//    checks in headless Chromium, screenshots to .smoke/browser.png, tears
-//    down. sources the swiftly env for the wasm product automatically; a
-//    registered sdk that fails to build FAILS the gate, and without the sdk
-//    the two client probes are skipped loudly — never silently. not a plugin
+//   (self-contained: builds the server, serves on :9123, checks in headless
+//    Chromium, screenshots to .smoke/browser.png, tears down. not a plugin
 //    verb — headless Chromium cannot run inside the plugin sandbox.)
 
 import { spawn } from "node:child_process";
@@ -29,11 +26,9 @@ import { chromium } from "playwright";
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PORT = 9123;
 const BASE = `http://127.0.0.1:${PORT}`;
-const WASM = process.env.WEBUI_BOOT === "wasm";
 
 let pass = 0;
 let fail = 0;
-let skipped = 0;
 const ok = (m) => { pass++; console.log(`  PASS ${m}`); };
 const bad = (m) => { fail++; console.log(`  FAIL ${m}`); };
 
@@ -47,18 +42,6 @@ function run(cmd, args, opts = {}) {
   });
 }
 
-// The wasm client product is part of the shipped surface, so a green
-// browser-smoke must exercise it. wasm builds need the swiftly-hosted
-// 6.4 sdk toolchain (the Xcode frontend cannot read its prebuilt modules
-// — see AGENTS.md), so the gate invokes the swiftly shim directly —
-// order-independent, unlike `source env.sh`, which no-ops when the dir
-// already sits late in PATH. without the sdk the two client probes are
-// skipped loudly; with it, a build failure FAILS the gate.
-async function swift(args) {
-  const shim = join(homedir() || "/", ".swiftly", "bin", "swift");
-  try { statSync(shim); return run(shim, args); }
-  catch { return run("swift", args); }
-}
 
 async function waitForServer(base, nonce, tries = 40) {
   for (let i = 0; i < tries; i++) {
@@ -84,28 +67,6 @@ const binPath = await (async () => {
   return join(shown.out.trim(), "WebUISmokeTest");
 })();
 
-// Build the wasm client product so the client-mode probes can run. the
-// swiftly env is sourced by the swift() helper; without the sdk the probes
-// are skipped loudly (never silently). a registered sdk whose build fails
-// is a gate failure, not a skip: green must mean the client was exercised.
-const sdkOut = await swift(["sdk", "list"]);
-const hasWasmSdk = sdkOut.out.includes("swift-6.4.0-RELEASE_wasm");
-let wasmBuilt = false;
-// engine mode (default) drives the next-architecture runtime: the 55 mb
-// artifact is not on the page's critical path, so skip the sdk build
-// entirely (and the wasm-only probes below are naturally short-circuited by
-// wasmBuilt === false). WEBUI_BOOT=wasm restores the old full path.
-if (WASM && hasWasmSdk) {
-  const wb = await swift([
-    "build", "-c", "release", "--swift-sdk", "swift-6.4.0-RELEASE_wasm", "--product", "WebUIClient",
-  ]);
-  if (wb.code === 0) {
-    wasmBuilt = true;
-  } else {
-    console.log(wb.out.slice(-600));
-    bad("wasm client build failed with the sdk registered — client probes cannot run");
-  }
-}
 
 console.log("=== browser smoke test ===");
 console.log("starting server ...");
@@ -230,7 +191,7 @@ const chamberPatch = await page.evaluate((runName) => {
   const inst = window[runName]._getInstance();
   inst.patch([{ id: "counter-value", html: '<div id="counter-value" class="counter-value" role="status"><span>9</span></div>' }]);
   return { immediate: document.querySelector("#counter-value").textContent.trim() };
-}, WASM ? "WebUIClient" : "WebUIEngine");
+}, "WebUIEngine");
 if (chamberPatch.immediate === "9") ok("runtime applies an authoritative fragment patch (counter -> 9)");
 else bad(`chamber patch failed: ${JSON.stringify(chamberPatch)}`);
 
@@ -251,7 +212,7 @@ const scrollProbe = await page.evaluate((runName) => {
   const after = document.getElementById("scroll-probe").scrollTop;
   holder.remove();
   return { before, after };
-}, WASM ? "WebUIClient" : "WebUIEngine");
+}, "WebUIEngine");
 if (scrollProbe.before === 30 && scrollProbe.after === 30) ok("scroll position survives a fragment patch");
 else bad(`scroll not preserved across patch: ${JSON.stringify(scrollProbe)}`);
 
@@ -274,395 +235,272 @@ if (chartBar) {
 // 6b. Capability islands (engine mode only): a declared validate island mounts
 // from the lazily fetched wasm module (same Swift, no round trip); an absent
 // capability degrades to unmapped while the page stays fully interactive.
-if (!WASM) {
-  await page.waitForSelector("#island-validate[data-webui-island-state]", { timeout: 15000 }).catch(() => {});
-  await page.waitForTimeout(200);
-  const islandState = await page.evaluate(() => ({
-    validate: document.getElementById("island-validate")?.getAttribute("data-webui-island-state") ?? null,
-    never: document.getElementById("island-never")?.getAttribute("data-webui-island-state") ?? null,
-    text: document.getElementById("island-validate")?.textContent ?? "",
-  }));
-  if (islandState.validate === "mounted" && islandState.text.includes("at least 4 characters")) ok(`validate island mounted from lazy wasm (${islandState.text.trim()})`);
-  else bad(`validate island not mounted: ${JSON.stringify(islandState)}`);
-  if (islandState.never === "unmapped") ok("absent capability island degrades to unmapped (page stays server-rendered)");
-  else bad(`degrade island state: ${JSON.stringify(islandState.never)}`);
-  await page.fill("#island-input", "hello@example.com");
-  await page.waitForTimeout(350);
-  const islandAfter = await page.evaluate(() => document.getElementById("island-validate")?.textContent ?? "");
-  if (islandAfter.includes("valid")) ok("island re-validated on input from the module (no round trip)");
-  else bad(`island did not re-validate: ${JSON.stringify(islandAfter)}`);
-} else {
-  skipped++;
-  console.log("  SKIP capability island probes (engine-mode only)");
-}
+await page.waitForSelector("#island-validate[data-webui-island-state]", { timeout: 15000 }).catch(() => {});
+await page.waitForTimeout(200);
+const islandState = await page.evaluate(() => ({
+  validate: document.getElementById("island-validate")?.getAttribute("data-webui-island-state") ?? null,
+  never: document.getElementById("island-never")?.getAttribute("data-webui-island-state") ?? null,
+  text: document.getElementById("island-validate")?.textContent ?? "",
+}));
+if (islandState.validate === "mounted" && islandState.text.includes("at least 4 characters")) ok(`validate island mounted from lazy wasm (${islandState.text.trim()})`);
+else bad(`validate island not mounted: ${JSON.stringify(islandState)}`);
+if (islandState.never === "unmapped") ok("absent capability island degrades to unmapped (page stays server-rendered)");
+else bad(`degrade island state: ${JSON.stringify(islandState.never)}`);
+await page.fill("#island-input", "hello@example.com");
+await page.waitForTimeout(350);
+const islandAfter = await page.evaluate(() => document.getElementById("island-validate")?.textContent ?? "");
+if (islandAfter.includes("valid")) ok("island re-validated on input from the module (no round trip)");
+else bad(`island did not re-validate: ${JSON.stringify(islandAfter)}`);
 
 // 6c. Progressive capability (p4, engine mode): offline shell service worker
 // registers from the declared capability, claims, and controls a reload; view
 // transitions API is present and the reduced-motion guard keeps patches fast.
-if (!WASM) {
-  await page.waitForTimeout(600);
-  const swState = await page.evaluate(async () => {
-    if (!('serviceWorker' in navigator)) { return { supported: false }; }
-    const reg = await navigator.serviceWorker.getRegistration();
-    return { supported: true, registered: !!reg, active: !!(reg && reg.active) };
-  });
-  if (!swState.supported) ok("service worker not supported here (offline shell skipped cleanly)");
-  else if (swState.registered && swState.active) ok("offline shell service worker registered + active");
-  else bad(`service worker state: ${JSON.stringify(swState)}`);
-  await page.reload({ waitUntil: "domcontentloaded" });
-  await page.waitForTimeout(500);
-  const controlled = await page.evaluate(() => !!navigator.serviceWorker.controller);
-  if (controlled) ok("reloaded page is controlled by the shell (cache-first shell path active)");
-  else bad("reloaded page not controlled by the shell");
-  const vtx = await page.evaluate(() => ({
-    api: typeof document.startViewTransition === 'function',
-    reduced: matchMedia('(prefers-reduced-motion: reduce)').matches,
-  }));
-  if (vtx.api) ok("view transitions API present (engine wraps authoritative patches)");
-  else bad("view transitions API missing");
-  await page.emulateMedia({ reducedMotion: 'reduce' });
-  const vtPatch = await page.evaluate(() => {
+await page.waitForTimeout(600);
+const swState = await page.evaluate(async () => {
+  if (!('serviceWorker' in navigator)) { return { supported: false }; }
+  const reg = await navigator.serviceWorker.getRegistration();
+  return { supported: true, registered: !!reg, active: !!(reg && reg.active) };
+});
+if (!swState.supported) ok("service worker not supported here (offline shell skipped cleanly)");
+else if (swState.registered && swState.active) ok("offline shell service worker registered + active");
+else bad(`service worker state: ${JSON.stringify(swState)}`);
+await page.reload({ waitUntil: "domcontentloaded" });
+await page.waitForTimeout(500);
+const controlled = await page.evaluate(() => !!navigator.serviceWorker.controller);
+if (controlled) ok("reloaded page is controlled by the shell (cache-first shell path active)");
+else bad("reloaded page not controlled by the shell");
+const vtx = await page.evaluate(() => ({
+  api: typeof document.startViewTransition === 'function',
+  reduced: matchMedia('(prefers-reduced-motion: reduce)').matches,
+}));
+if (vtx.api) ok("view transitions API present (engine wraps authoritative patches)");
+else bad("view transitions API missing");
+await page.emulateMedia({ reducedMotion: 'reduce' });
+const vtPatch = await page.evaluate(() => {
+  const inst = window.WebUIEngine._getInstance();
+  if (inst && inst.patch) {
+    inst.patch([{ id: "counter-value", html: '<div id="counter-value" class="counter-value" role="status"><span>7</span></div>' }]);
+  }
+  return document.querySelector("#counter-value")?.textContent.trim() ?? "";
+});
+await page.emulateMedia({ reducedMotion: null });
+if (vtPatch === "7") ok("patches apply under prefers-reduced-motion (guard path)");
+else bad(`reduced-motion patch failed: ${JSON.stringify(vtPatch)}`);
+
+// 6c-bis. transition policy: hot patches must not start overlapping view
+// transitions, a consumer can refuse the animation per fragment or per region,
+// and refusal never blocks the patch (it applies synchronously). measured
+// pre-change: every authoritative patch animated, so a token stream cross-faded
+// the whole page at token rate; and a refused patch could be clobbered by an
+// older patch's deferred animation callback.
+{
+  const policy = await page.evaluate(async () => {
     const inst = window.WebUIEngine._getInstance();
-    if (inst && inst.patch) {
-      inst.patch([{ id: "counter-value", html: '<div id="counter-value" class="counter-value" role="status"><span>7</span></div>' }]);
-    }
-    return document.querySelector("#counter-value")?.textContent.trim() ?? "";
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    let vt = 0;
+    const orig = document.startViewTransition.bind(document);
+    document.startViewTransition = (cb) => { vt++; return orig(cb); };
+    const html = (n) => '<div id="counter-value" class="counter-value" role="status"><span>' + n + '</span></div>';
+    const text = () => document.querySelector("#counter-value").textContent.trim();
+    await sleep(300);
+
+    // (a) instrument check: an allowed patch animates exactly once
+    inst.patch([{ id: "counter-value", html: html(21) }]);
+    await sleep(350);
+    const afterAllowed = vt;
+
+    // (b) per-fragment refusal: applies synchronously, does not animate
+    inst.patch([{ id: "counter-value", html: html(22), transition: false }]);
+    const flagImmediate = text();
+    await sleep(350);
+    const afterFlag = vt;
+
+    // (c) region refusal: applies synchronously, does not animate
+    const host = document.getElementById("counter-value").parentElement;
+    host.setAttribute("data-webui-transition", "off");
+    inst.patch([{ id: "counter-value", html: html(23) }]);
+    const regionImmediate = text();
+    await sleep(350);
+    const afterRegion = vt;
+    host.removeAttribute("data-webui-transition");
+
+    // (d) never overlap: two rapid patches animate once, no clobber from the
+    // first patch's deferred callback; the latest value must win
+    inst.patch([{ id: "counter-value", html: html(24) }]);
+    inst.patch([{ id: "counter-value", html: html(25) }]);
+    await sleep(350);
+    const afterOverlap = vt;
+
+    document.startViewTransition = orig;
+    return { afterAllowed, afterFlag, afterRegion, afterOverlap, flagImmediate, regionImmediate, text: text() };
   });
-  await page.emulateMedia({ reducedMotion: null });
-  if (vtPatch === "7") ok("patches apply under prefers-reduced-motion (guard path)");
-  else bad(`reduced-motion patch failed: ${JSON.stringify(vtPatch)}`);
-} else {
-  skipped++;
-  console.log("  SKIP progressive-capability probes (engine-mode only)");
+  if (policy.afterAllowed === 1) ok("an allowed patch animates exactly once (instrument check)");
+  else bad(`allowed patch transitions: ${policy.afterAllowed} (expected 1)`);
+  if (policy.afterFlag === 1 && policy.flagImmediate === "22") ok("per-fragment transition:false applies synchronously without animating");
+  else bad(`flag-refused patch: transitions ${policy.afterFlag} (expected 1 total), immediate ${JSON.stringify(policy.flagImmediate)} (expected 22)`);
+  if (policy.afterRegion === 1 && policy.regionImmediate === "23") ok('data-webui-transition="off" region applies synchronously without animating');
+  else bad(`region-refused patch: transitions ${policy.afterRegion} (expected 1 total), immediate ${JSON.stringify(policy.regionImmediate)} (expected 23)`);
+  if (policy.afterOverlap === 2) ok("overlapping patches animate once (second applies unanimated)");
+  else bad(`overlap transitions: ${policy.afterOverlap} (expected 2 total)`);
+  if (policy.text === "25") ok("no clobber: the latest patch wins against the earlier patch's deferred callback");
+  else bad(`counter after policy probes: ${JSON.stringify(policy.text)} (expected 25)`);
+}
+
+// 6c-ter. details open state is user state: a replace patch must not close a
+// row the user opened (nor re-open one they closed). captured per stable key
+// (data-webui-key / id / structural index) and re-applied after the swap.
+{
+  const detailsState = await page.evaluate(async () => {
+    const inst = window.WebUIEngine._getInstance();
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    const html = '<div id="details-probe"><details class="probe-details" id="probe-a"><summary>a</summary><div>body</div></details><details class="probe-details" id="probe-b"><summary>b</summary><div>body2</div></details></div>';
+    const host = document.createElement("div");
+    host.innerHTML = html;
+    document.body.appendChild(host.firstChild);
+    const a = () => document.getElementById("probe-a");
+    const b = () => document.getElementById("probe-b");
+    a().open = true;
+    await sleep(120);
+    inst.patch([{ id: "details-probe", html }]);
+    await sleep(120);
+    const afterReplace = { aOpen: a().open, bOpen: b().open };
+    a().open = false;
+    await sleep(120);
+    inst.patch([{ id: "details-probe", html }]);
+    await sleep(120);
+    const afterClose = { aOpen: a().open, bOpen: b().open };
+    a().open = true;
+    await sleep(120);
+    inst.patch([{ id: "details-probe", html: '<div id="details-probe"><details class="probe-details" id="probe-b"><summary>b</summary><div>body2</div></details></div>' }]);
+    await sleep(120);
+    const afterDrop = { count: document.querySelectorAll("#details-probe details").length, bOpen: b() ? b().open : null };
+    document.getElementById("details-probe").remove();
+    return { afterReplace, afterClose, afterDrop };
+  });
+  if (detailsState.afterReplace.aOpen === true && detailsState.afterReplace.bOpen === false) ok("an open details survives a replace patch; a closed sibling stays closed");
+  else bad(`details open state across patch: ${JSON.stringify(detailsState.afterReplace)}`);
+  if (detailsState.afterClose.aOpen === false) ok("a user-closed details stays closed across a patch");
+  else bad(`closed details re-opened: ${JSON.stringify(detailsState.afterClose)}`);
+  if (detailsState.afterDrop.count === 1 && detailsState.afterDrop.bOpen === false) ok("a dropped details row loses its captured state without crashing the patch");
+  else bad(`dropped-row handling: ${JSON.stringify(detailsState.afterDrop)}`);
+}
+
+// 6c-quater. patch ops: append inserts one subtree (anchor honored, idempotent
+// by the child's own id), text writes the target's text content — both apply
+// synchronously and neither animates.
+{
+  const ops = await page.evaluate(async () => {
+    const inst = window.WebUIEngine._getInstance();
+    const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+    let vt = 0;
+    const orig = document.startViewTransition.bind(document);
+    document.startViewTransition = (cb) => { vt++; return orig(cb); };
+    const host = document.createElement("div");
+    host.id = "ops-probe";
+    host.innerHTML = '<div id="ops-list"><span id="ops-last">end</span></div><span id="ops-text"></span>';
+    document.body.appendChild(host);
+    await sleep(60);
+
+    inst.patch([{ id: "ops-list", op: "append", html: '<span id="ops-new">new</span>', before: "ops-last" }]);
+    const afterAppend = { order: Array.from(document.querySelectorAll("#ops-list > *")).map((e) => e.id), count: document.querySelectorAll("#ops-list > *").length };
+    inst.patch([{ id: "ops-list", op: "append", html: '<span id="ops-new">new</span>' }]);
+    const afterRepeat = document.querySelectorAll("#ops-new").length;
+    inst.patch([{ id: "ops-list", op: "append", html: '<span id="ops-tail">tail</span>' }]);
+    const afterTail = Array.from(document.querySelectorAll("#ops-list > *")).map((e) => e.id);
+
+    inst.patch([{ id: "ops-text", op: "text", text: "streamed tokens" }]);
+    const textValue = document.getElementById("ops-text").textContent;
+    // steady-state writes must be pure characterData: no element churn at all
+    let textAdds = 0, textRemoves = 0, textChars = 0;
+    const textObs = new MutationObserver((muts) => {
+      for (const m of muts) {
+        if (m.type === "childList") { textAdds += m.addedNodes.length; textRemoves += m.removedNodes.length; }
+        else if (m.type === "characterData") { textChars++; }
+      }
+    });
+    textObs.observe(document.getElementById("ops-text"), { childList: true, characterData: true, subtree: true });
+    inst.patch([{ id: "ops-text", op: "text", text: "streamed tokens 2" }]);
+    inst.patch([{ id: "ops-text", op: "text", text: "streamed tokens 3" }]);
+    await sleep(30);
+    textObs.disconnect();
+    const textValue2 = document.getElementById("ops-text").textContent;
+    const vts = vt;
+
+    document.startViewTransition = orig;
+    host.remove();
+    return { afterAppend, afterRepeat, afterTail, textValue, textValue2, textAdds, textRemoves, textChars, vts };
+  });
+  if (ops.afterAppend.order.join(",") === "ops-new,ops-last" && ops.afterAppend.count === 2) ok("append inserts one child before the anchor");
+  else bad(`append before-anchor: ${JSON.stringify(ops.afterAppend)}`);
+  if (ops.afterRepeat === 1) ok("append is idempotent by child id (repeat skipped)");
+  else bad(`append repeat count: ${ops.afterRepeat} (expected 1)`);
+  if (ops.afterTail.join(",") === "ops-new,ops-last,ops-tail") ok("anchorless append lands at the end");
+  else bad(`append tail order: ${JSON.stringify(ops.afterTail)}`);
+  if (ops.textValue === "streamed tokens" && ops.textValue2 === "streamed tokens 3") ok("text op writes the target's text content");
+  else bad(`text op values: ${JSON.stringify([ops.textValue, ops.textValue2])}`);
+  if (ops.textAdds === 0 && ops.textRemoves === 0 && ops.textChars === 2) ok("steady-state text writes are pure characterData (zero element churn)");
+  else bad(`text write churn: +${ops.textAdds}/-${ops.textRemoves}, charData ${ops.textChars} (expected 0/0/2)`);
+  if (ops.vts === 0) ok("append and text ops never start a view transition");
+  else bad(`op transitions: ${ops.vts} (expected 0)`);
 }
 
 // 6d. reconnect indicator (engine mode): the framework status chip exists
-// hidden, appears on transport disconnect, clears on reconnect.
-if (!WASM) {
-  await page.waitForTimeout(200);
-  const stat0 = await page.evaluate(() => {
-    const el = document.querySelector('.engine-status');
-    return { present: !!el, visible: !!(el && el.classList.contains('engine-status--visible')) };
-  });
-  if (stat0.present && !stat0.visible) ok("engine status chip present + hidden by default");
-  else bad(`status chip state: ${JSON.stringify(stat0)}`);
-  await page.evaluate(() => document.dispatchEvent(new CustomEvent('webui:disconnected', { detail: {} })));
-  await page.waitForTimeout(700);
-  const vis1 = await page.evaluate(() => !!document.querySelector('.engine-status--visible'));
-  if (vis1) ok("status chip appears on transport disconnect");
-  else bad("status chip did not appear on disconnect");
-  await page.evaluate(() => document.dispatchEvent(new CustomEvent('webui:connected', { detail: {} })));
-  await page.waitForTimeout(150);
-  const vis2 = await page.evaluate(() => !!document.querySelector('.engine-status--visible'));
-  if (!vis2) ok("status chip clears on reconnect");
-  else bad("status chip did not clear on reconnect");
-} else {
-  skipped++;
-  console.log("  SKIP reconnect-indicator probes (engine-mode only)");
-}
+// hidden, appears on transport disconnect, clears on reconnect. its visibility
+// is engine-owned (an inline display write), so both states must hold with
+// every stylesheet disabled — a sheet-less page that showed a permanently
+// visible "reconnecting…" chip is the failure this measures.
+await page.waitForTimeout(200);
+const stat0 = await page.evaluate(() => {
+  const el = document.querySelector('.engine-status');
+  return {
+    present: !!el,
+    visible: !!(el && el.classList.contains('engine-status--visible')),
+    inline: el ? el.style.display : null,
+  };
+});
+if (stat0.present && !stat0.visible) ok("engine status chip present + hidden by default");
+else bad(`status chip state: ${JSON.stringify(stat0)}`);
+if (stat0.inline === 'none') ok("chip hidden by its own inline display (independent of any sheet)");
+else bad(`chip inline display: ${JSON.stringify(stat0.inline)}`);
 
-// 7. Client-mode hydration probe: the chamber fetches + instantiates
-// app.wasm under the client csp (`'wasm-unsafe-eval'`), calls
-// webui_render_page, patches #app, and reports byte-match vs the SSR it
-// replaced. real chromium proves the p1 gate end to end.
-if (wasmBuilt) {
-  const demo = await browser.newPage();
-  const demoErrors = [];
-  demo.on("console", (m) => { if (m.type() === "error") demoErrors.push(m.text()); });
-  await demo.goto(BASE + "/__assets/client-demo", { waitUntil: "domcontentloaded" });
-  await demo.waitForSelector("#app[data-hydration]", { timeout: 20000 }).catch(() => {});
-  const h = await demo.evaluate(() => {
-    const el = document.getElementById("app");
-    return { status: el?.getAttribute("data-hydration") ?? null, len: el?.innerHTML.length ?? 0 };
-  });
-  if (h.status === "match" || h.len > 0) ok(`client page served (wasm-always keeps the SSR; no module re-render), ${h.len} chars`);
-  else bad(`client hydration status = ${h.status ?? "none (chamber never reported)"}`);
-  const de = demoErrors.filter((t) => !/favicon/i.test(t));
-  if (de.length === 0) ok("client-mode probe page has no console errors");
-  else bad(`client-mode console errors: ${JSON.stringify(de)}`);
-  // chamber sanitizer parity: the same parse-and-strip the server runtime
-  // applies to inbound fragments must apply on the client path. <script> is
-  // removed, on* handlers and unsafe url-bearing attrs are neutralized, and
-  // safe content survives unchanged.
-  const scrubbed = await demo.evaluate(() => {
-    const inst = window.WebUIClient._sanitize;
-    return {
-      noScript: !inst('<div>x</div><script src="https://evil.test/e.js"></script>').includes('<script'),
-      noHandlers: !inst('<button onclick="alert(1)">x</button>').includes('onclick'),
-      unsafeHref: inst('<a href="jav&#x61;script:alert(1)">x</a>').includes('href=""') || !inst('<a href="javascript:alert(1)">x</a>').includes('javascript:'),
-      unsafeSrc: !inst('<img src="data:text/html,evil">').includes('data:'),
-      safeSurvives: inst('<p>ok <b>bold</b></p><a href="https://example.com">l</a>').includes('https://example.com'),
-    };
-  });
-  if (scrubbed.noScript && scrubbed.noHandlers && scrubbed.unsafeHref && scrubbed.unsafeSrc && scrubbed.safeSurvives) ok("chamber strips script/on*/unsafe urls and preserves safe markup");
-  else bad(`chamber sanitizer regressed: ${JSON.stringify(scrubbed)}`);
-  await demo.close();
-} else {
-  skipped++;
-  console.log("  SKIP client-mode hydration probe (wasm sdk not registered — install the swiftly swift-6.4.0-RELEASE_wasm sdk for full coverage)");
-}
+// sheet-less probe: disable every stylesheet link, then drive a disconnect.
+// the chip must appear (inline-flex), report the truth, and clear on reconnect
+// — all without a single css rule in play.
+const disabledSheets = await page.evaluate(() => {
+  const links = [...document.querySelectorAll('link[rel="stylesheet"]')];
+  links.forEach((l) => { l.disabled = true; });
+  return links.length;
+});
+await page.evaluate(() => document.dispatchEvent(new CustomEvent('webui:disconnected', { detail: {} })));
+await page.waitForTimeout(700);
+const sheetless = await page.evaluate(() => {
+  const el = document.querySelector('.engine-status');
+  if (!el) return null;
+  return { display: getComputedStyle(el).display, inline: el.style.display, text: el.textContent.trim() };
+});
+if (sheetless && sheetless.display === 'inline-flex') ok(`chip appears on disconnect with ${disabledSheets} sheet link(s) disabled (engine-owned visibility)`);
+else bad(`sheet-less disconnect state: ${JSON.stringify(sheetless)}`);
+if (sheetless && sheetless.text.indexOf('reconnecting') === 0) ok("chip text is truthful while disconnected");
+else bad(`chip text while disconnected: ${JSON.stringify(sheetless && sheetless.text)}`);
+const vis1 = await page.evaluate(() => !!document.querySelector('.engine-status--visible'));
+if (vis1) ok("status chip appears on transport disconnect");
+else bad("status chip did not appear on disconnect");
+await page.evaluate(() => document.dispatchEvent(new CustomEvent('webui:connected', { detail: {} })));
+await page.waitForTimeout(150);
+const hiddenAgain = await page.evaluate(() => {
+  const el = document.querySelector('.engine-status');
+  if (!el) return null;
+  return { display: getComputedStyle(el).display, inline: el.style.display, text: el.textContent.trim() };
+});
+if (hiddenAgain && hiddenAgain.display === 'none') ok("chip clears with every stylesheet still disabled (inline display, not css)");
+else bad(`sheet-less reconnect state: ${JSON.stringify(hiddenAgain)}`);
+if (hiddenAgain && hiddenAgain.text === 'connected') ok("chip text follows the socket state when connected");
+else bad(`chip text when connected: ${JSON.stringify(hiddenAgain && hiddenAgain.text)}`);
+const vis2 = await page.evaluate(() => !!document.querySelector('.engine-status--visible'));
+if (!vis2) ok("status chip clears on reconnect");
+else bad("status chip did not clear on reconnect");
+await page.evaluate(() => { document.querySelectorAll('link[rel="stylesheet"]').forEach((l) => { l.disabled = false; }); });
 
-// 8. Local-search vertical in real chromium: the chamber boots the search page
-// in wasm (webui_init), then typing dispatches through webui_handle_event — the
-// rows update from the client-resident dataset with ZERO websocket sends.
-if (wasmBuilt) {
-  const s = await browser.newPage();
-  const sErrors = [];
-  s.on("console", (m) => { if (m.type() === "error") sErrors.push(m.text()); });
-  await s.goto(BASE + "/__assets/search-demo", { waitUntil: "domcontentloaded" });
-  await s.waitForSelector("#search-app input", { timeout: 20000 }).catch(() => {});
-  const booted = await s.evaluate(() => !!document.querySelector("#search-app input"));
-  if (booted) ok("search vertical mounted from wasm boot");
-  else bad(`search vertical did not mount: ${JSON.stringify(await s.evaluate(() => {
-    const inst = window.WebUIClient._getInstance();
-    return {
-      isolated: self.crossOriginIsolated,
-      sab: typeof SharedArrayBuffer,
-      worker: inst.worker ? "exists" : "none",
-      mode: inst.workerMode,
-      bootApplied: !!inst.bootApplied,
-      actions: inst.frameActions.length,
-      pendingFrame: !!inst.pendingFrameBytes,
-      err: window.__webuiSearchError || null,
-      workerErr: inst.workerError || null,
-      searchApp: !!document.getElementById("search-app"),
-    };
-  }))}`);
-  if (booted) {
-    await s.fill("#search-app input", "a");
-    await s.waitForTimeout(300);
-    const result = await s.evaluate(() => {
-      const rows = document.getElementById("search-rows");
-      const inst = window.WebUIClient._getInstance();
-      return { text: rows ? rows.textContent : "", wsSent: inst.wsSent, events: inst.eventCount };
-    });
-    const hasAPI = result.text.includes("api");
-    const hasAuth = result.text.includes("auth");
-    const hasWeb = result.text.includes("web");
-    if (result.text && result.text.length > 0) ok(`search page booted in wasm (module dataset, ${result.text.length} chars)`);
-    else bad(`search page did not render: ${JSON.stringify(result.text)}`);
-    if (result.wsSent === 0) ok("local search hot path reached zero websocket sends");
-    else bad(`websocket sends during search: ${result.wsSent}`);
-    // typed table sort: clicking the p95 header reorders rows client-side,
-    // still ws-silent.
-    const beforeSort = await s.evaluate(() => document.getElementById("client-table")?.textContent ?? "");
-    await s.click('[data-component-id="client-table-sort-2"]');
-    await s.waitForTimeout(300);
-    const sortState = await s.evaluate(() => {
-      const table = document.getElementById("client-table");
-      const head = document.querySelector('[data-component-id="client-table-sort-2"]');
-      const th = head && head.closest ? head.closest("th") : null;
-      const aria = (th || head)?.getAttribute("aria-sort") || null;
-      const inst = window.WebUIClient._getInstance();
-      return { text: table ? table.textContent : "", aria: aria, wsSent: inst.wsSent };
-    });
-    if (sortState.text && sortState.text.length > 0) ok("typed client table rendered in wasm");
-    else bad("client table not rendered");
-    if (sortState.wsSent === result.wsSent) ok("table sort kept the websocket silent");
-    else bad(`websocket sends after sort: ${sortState.wsSent}`);
-    // boundary: a click outside any [data-component-id] must not dispatch.
-    const evBefore = await s.evaluate(() => window.WebUIClient._getInstance().eventCount);
-    await s.evaluate(() => {
-      const d = document.createElement("div");
-      d.id = "noop-target";
-      document.body.appendChild(d);
-      d.click();
-      d.remove();
-    });
-    await s.waitForTimeout(150);
-    const evAfter = await s.evaluate(() => window.WebUIClient._getInstance().eventCount);
-    if (evAfter === evBefore) ok("non-component clicks are ignored (no dispatch)");
-    else bad(`non-component click dispatched: ${evBefore} -> ${evAfter}`);
-    const appletState = await s.evaluate(() => {
-      const region = document.getElementById("applet-region");
-      const inst = window.WebUIClient._getInstance();
-      return {
-        state: region ? region.getAttribute("data-webui-applet-state") : null,
-        hasCard: !!document.querySelector("#applet-region .applet-card"),
-        count: document.getElementById("applet-count")?.textContent || "",
-        events: inst.eventCount,
-        wsSent: inst.wsSent,
-      };
-    });
-    if (appletState.state === "mounted" && appletState.hasCard) ok("applet region composed + mounted by the module");
-    else bad(`applet region not mounted: ${JSON.stringify(appletState)}`);
-    await s.click("#applet-inc").catch(() => {});
-    await s.waitForTimeout(250);
-    const appletAfter = await s.evaluate(() => {
-      const inst = window.WebUIClient._getInstance();
-      return { count: document.getElementById("applet-count")?.textContent || "", events: inst.eventCount, wsSent: inst.wsSent };
-    });
-    if (appletAfter.count !== appletState.count) ok(`applet control updated locally (${appletState.count} -> ${appletAfter.count})`);
-    else bad(`applet control did not update: ${JSON.stringify(appletAfter)}`);
-    if (appletAfter.wsSent === appletState.wsSent) ok("applet interaction kept the websocket silent");
-    else bad(`websocket sends after applet click: ${appletAfter.wsSent}`);
-    const capState = await s.evaluate(() => {
-      const inst = window.WebUIClient._getInstance();
-      return {
-        hasFocus: !!document.getElementById("applet-focus"),
-        hasCopy: !!document.getElementById("applet-copy"),
-        cfg: inst.config && inst.config.capabilities,
-        meta: document.querySelector('meta[name="webui-config"]')?.getAttribute("content") || null,
-        instance: !!window.WebUIClient,
-        bootOpts: inst.bootOpts || null,
-        mountError: inst.mountError || null,
-        searchError: window.__webuiSearchError || null,
-      };
-    });
-    if (capState.hasFocus && capState.hasCopy && Array.isArray(capState.cfg) && capState.cfg.indexOf("clipboard") >= 0) ok("applet capability grants reached the mounted region");
-    else bad(`applet capability grants missing: ${JSON.stringify(capState)}`);
-    await s.click("#applet-focus").catch(() => {});
-    await s.waitForTimeout(150);
-    const focused = await s.evaluate(() => document.activeElement && document.activeElement.id);
-    if (focused === "search-input") ok("applet focus capability moved browser focus");
-    else bad(`focus landed on: ${JSON.stringify(focused)}`);
-    await s.click("#applet-copy").catch(() => {});
-    await s.waitForTimeout(150);
-    const copyErrors = sErrors.filter((t) => /clipboard|NotAllowed|permission/i.test(t));
-    if (copyErrors.length === 0) ok("applet clipboard capability ran clean");
-    else bad(`clipboard errors: ${JSON.stringify(copyErrors)}`);
-    const vsErr = await s.evaluate(() => {
-      const inst = window.WebUIClient._getInstance();
-      try {
-        inst.handleServerMessage({ type: "viewspec", id: "applet-region", name: "demo:card", args: { label: "Declarative card" } });
-        return null;
-      } catch (err) { return String(err); }
-    });
-    await s.waitForTimeout(300);
-    const vsResult = await s.evaluate(() => {
-      const region = document.getElementById("applet-region");
-      return { label: region ? region.textContent : "", state: region ? region.getAttribute("data-webui-applet-state") : null };
-    });
-    if (vsErr) { vsResult.error = vsErr; }
-    if (vsResult.state === "mounted" && String(vsResult.label || "").indexOf("Declarative card") >= 0) ok("viewspec message composed a region declaratively");
-    else bad(`viewspec failed: ${JSON.stringify(vsResult)}`);
-    await s.evaluate(() => {
-      const inst = window.WebUIClient._getInstance();
-      const msg = JSON.stringify({ type: "state", path: "remote.status", value: "online" });
-      const bytes = new TextEncoder().encode(msg);
-      const buf = new ArrayBuffer(6 + bytes.length);
-      const view = new DataView(buf);
-      view.setUint8(0, 0x64);
-      view.setUint8(1, 0x00);
-      view.setUint32(2, bytes.length, true);
-      new Uint8Array(buf, 6).set(bytes);
-      inst.handleBinaryFrame(buf);
-    });
-    await s.waitForTimeout(300);
-    const binState = await s.evaluate(() => document.getElementById("applet-remote")?.textContent || "");
-    if (binState.indexOf("remote.status") >= 0 && binState.indexOf("online") >= 0) ok("binary state frame applied to the module store");
-    else bad(`binary state: ${JSON.stringify(binState)}`);
-    await s.evaluate(() => {
-      const inst = window.WebUIClient._getInstance();
-      const msg = JSON.stringify({ type: "data", name: "catalog", payload: "a,b,c" });
-      const bytes = new TextEncoder().encode(msg);
-      const buf = new ArrayBuffer(6 + bytes.length);
-      const view = new DataView(buf);
-      view.setUint8(0, 0x64);
-      view.setUint8(1, 0x00);
-      view.setUint32(2, bytes.length, true);
-      new Uint8Array(buf, 6).set(bytes);
-      inst.handleBinaryFrame(buf);
-    });
-    await s.waitForTimeout(300);
-    const binData = await s.evaluate(() => document.getElementById("applet-data")?.textContent || "");
-    if (binData.indexOf("catalog") >= 0) ok("binary data frame applied to the module");
-    else bad(`binary data: ${JSON.stringify(binData)}`);
-    await s.evaluate(() => {
-      const inst = window.WebUIClient._getInstance();
-      const payload = new TextEncoder().encode("a,b,c,d".repeat(1250));
-      const nameBytes = new TextEncoder().encode("bulk-catalog");
-      const buf = new ArrayBuffer(6 + nameBytes.length + 4 + payload.length);
-      const view = new DataView(buf);
-      view.setUint8(0, 0x64);
-      view.setUint8(1, 0x01);
-      view.setUint32(2, nameBytes.length, true);
-      new Uint8Array(buf, 6).set(nameBytes);
-      const dataOff = 6 + nameBytes.length;
-      view.setUint32(dataOff, payload.length, true);
-      new Uint8Array(buf, dataOff + 4).set(payload);
-      inst.handleBinaryFrame(buf);
-    });
-    await s.waitForTimeout(350);
-    const bulkResult = await s.evaluate(() => document.getElementById("applet-bulk")?.textContent || "");
-    if (bulkResult.indexOf("bulk-catalog") >= 0 && bulkResult.indexOf(String(1250 * 7)) >= 0) ok("bulk typed-array payload reached the module un-wrapped");
-    else bad(`bulk data: ${JSON.stringify(bulkResult)}`);
-    await s.click("#applet-media-btn").catch(() => {});
-    await s.waitForTimeout(200);
-    const mediaProbe = await s.evaluate(() => ({
-      text: document.getElementById("applet-media")?.textContent || "",
-      pageMatches: (() => { try { return window.matchMedia("(min-width: 1px)").matches ? "1" : "0"; } catch (e) { return "E"; } })(),
-    }));
-    if (mediaProbe.text === "wide") ok("applet media query evaluated in the module");
-    else bad(`media result: ${JSON.stringify(mediaProbe)}`);
-    await s.evaluate(() => {
-      const dt = new DataTransfer();
-      dt.items.add(new File(["hello world"], "drop-me.txt", { type: "text/plain" }));
-      const ev = new DragEvent("drop", { bubbles: true, cancelable: true, dataTransfer: dt });
-      window.dispatchEvent(ev);
-    });
-    await s.waitForTimeout(350);
-    const fileText = await s.evaluate(() => document.getElementById("applet-file")?.textContent || "");
-    if (fileText.indexOf("drop-me.txt") >= 0 && fileText.indexOf("11") >= 0) ok("applet file drop reached the module (name + byte count)");
-    else bad(`file drop result: ${JSON.stringify(fileText)}`);
-    await s.click("#applet-fs").catch(() => {});
-    await s.waitForTimeout(200);
-    const fsState = await s.evaluate(() => ({ fs: !!document.fullscreenElement }));
-    if (fsState.fs) ok("applet fullscreen engaged");
-    else if (sErrors.filter((t) => /fullscreen/i.test(t)).length === 0) ok("applet fullscreen declined cleanly (headless)");
-    else bad(`fullscreen errors: ${JSON.stringify(fsState)}`);
-    const offload = await s.evaluate(async () => {
-      const inst = window.WebUIClient._getInstance();
-      if (typeof inst.bench !== "function") { return { ms: 0, maxGap: 0, noBench: true }; }
-      let maxGap = 0;
-      let last = performance.now();
-      const ticker = setInterval(function () {
-        const now = performance.now();
-        maxGap = Math.max(maxGap, now - last);
-        last = now;
-      }, 25);
-      const ms = await Promise.race([
-        inst.bench(1000000000),
-        new Promise((res) => setTimeout(() => res(-1), 60000)),
-      ]);
-      clearInterval(ticker);
-      return { ms: ms, maxGap: Math.round(maxGap) };
-    });
-    if (!offload.noBench && offload.ms > 1 && offload.maxGap < 200) ok(`worker offloaded compute (bench ${Math.round(offload.ms)}ms, main-thread max gap ${offload.maxGap}ms)`);
-    else bad(`worker offload check: ${JSON.stringify(offload)}`);
-    const idbBefore = await s.evaluate(() => parseInt((document.getElementById("boot-count")?.textContent || "boot 0").replace(/\D/g, "")) || 0);
-    await s.reload({ waitUntil: "domcontentloaded" });
-    await s.waitForSelector("#search-app input", { timeout: 20000 }).catch(() => {});
-    await s.waitForTimeout(700);
-    const idbProbe = await s.evaluate(() => ({
-      count: document.getElementById("boot-count")?.textContent || "",
-      local: localStorage.getItem("boot.count"),
-    }));
-    const idbDump = await s.evaluate(() => new Promise((res) => {
-      const req = indexedDB.open("webui");
-      req.onsuccess = () => {
-        const db = req.result;
-        const tx = db.transaction("kv", "readonly");
-        const store = tx.objectStore("kv");
-        const out = {};
-        const cur = store.openCursor();
-        cur.onsuccess = () => { const c = cur.result; if (c) { out[c.key] = c.value; c.continue(); } else { res(out); } };
-        cur.onerror = () => res({ err: String(cur.error) });
-      };
-      req.onerror = () => res({ err: String(req.error) });
-    }));
-    const idbAfter = parseInt((idbProbe.count).replace(/\D/g, "")) || 0;
-    if (idbAfter === idbBefore + 1 && idbProbe.local === null) ok("indexeddb persistence survived the reload (localStorage untouched)");
-    else bad(`idb persistence: before=${idbBefore} after=${JSON.stringify(idbProbe)} dump=${JSON.stringify(idbDump)}`);
-    const de = sErrors.filter((t) => !/favicon/i.test(t));
-    if (de.length === 0) ok("local-search probe has no console errors");
-    else bad(`local-search console errors: ${JSON.stringify(de)}`);
-  }
-  await s.close();
-} else {
-  skipped++;
-  console.log("  SKIP local-search vertical probe (wasm sdk not registered)");
-}
 
 {
     const esc = await browser.newPage();
@@ -672,7 +510,6 @@ if (wasmBuilt) {
     await esc.waitForTimeout(300);
     // modal focus contract: an opener outside the modal, then a modal with a
     // close button. engine mode presses Escape (dismiss + focus return);
-    // wasm mode clicks the dismiss (documented wasm limitation).
     await esc.evaluate(() => {
       const opener = document.createElement("button");
       opener.id = "esc-opener";
@@ -695,34 +532,84 @@ if (wasmBuilt) {
       });
       btn.focus();
     });
-    if (WASM) {
-      await esc.click("button[data-dismiss]");
-    } else {
       await esc.keyboard.press("Escape");
-    }
     await esc.waitForTimeout(150);
     const escClicks = await esc.evaluate(() => window.__escClicks);
     const escFocus = await esc.evaluate(() => document.activeElement && document.activeElement.id);
-    if (escClicks === 1) ok(WASM ? "modal dismiss click dispatches (Escape-to-dismiss is a documented wasm limitation)" : "Escape-to-dismiss dispatches the close click (engine keyboard parity)");
+    if (escClicks === 1) ok("Escape-to-dismiss dispatches the close click (engine keyboard parity)");
     else bad(`dismiss count: ${escClicks} (expected 1)`);
-    if (!WASM && escFocus === "esc-opener") ok("modal close returns focus to the opener (focus trap + return)");
-    else if (!WASM) bad(`focus after close: ${JSON.stringify(escFocus)} (expected esc-opener)`);
+    if (escFocus === "esc-opener") ok("modal close returns focus to the opener (focus trap + return)");
+    else bad(`focus after close: ${JSON.stringify(escFocus)} (expected esc-opener)`);
     if (escErrors.length === 0) ok("Escape probe has no page errors");
     else bad(`Escape probe page errors: ${JSON.stringify(escErrors)}`);
     await esc.close();
 }
 
+// 5. cascade layers: unlayered consumer css outranks the sheet by intent, not by
+//    specificity. the probe picks its pair out of the *served* bytes — a framework
+//    rule whose selector carries more than one class part — so it cannot pass by
+//    finding a rule a plain single-class override would have beaten anyway.
+{
+  const candidate = await page.evaluate(async () => {
+    const link = document.querySelector('link[rel="stylesheet"][href*="/__assets/css"]');
+    if (!link) return { error: "no deployed sheet link" };
+    const css = await (await fetch(link.href)).text();
+    if (!css.startsWith("@layer webui, webui.utilities;")) return { error: "the sheet is not layered" };
+    const lengthProps = ["gap", "row-gap", "column-gap", "padding", "padding-top", "padding-inline-start",
+      "margin", "margin-top", "margin-bottom", "border-radius", "font-size", "width", "min-width",
+      "max-width", "height", "min-height", "top", "left", "inset", "border-width", "outline-offset"];
+    const blocks = css.match(/[^{}]+\{[^{}]*\}/g) || [];
+    for (const block of blocks) {
+      const open = block.indexOf("{");
+      const sel = block.slice(0, open).trim();
+      if (sel.startsWith("@")) continue;
+      const classes = (sel.match(/\.[A-Za-z0-9_-]+/g) || []).map((s) => s.slice(1));
+      const elements = (sel.replace(/[#.\[][^\s>+~,]*/g, "").match(/[a-zA-Z][a-zA-Z0-9-]*/g) || []).length;
+      if (classes.length < 2 && !(classes.length === 1 && elements > 0)) continue;
+      const target = classes[classes.length - 1];
+      if (!target) continue;
+      const el = document.querySelector("." + CSS.escape(target));
+      if (!el) continue;
+      const body = block.slice(open + 1);
+      for (const prop of lengthProps) {
+        const m = body.match(new RegExp("(?:^|;)\\s*" + prop + "\\s*:\\s*([^;]+)"));
+        if (!m) continue;
+        if (!/\d(px|rem|em)\b/.test(m[1])) continue;
+        const before = getComputedStyle(el).getPropertyValue(prop).trim();
+        if (!before) continue;
+        return { selector: sel.replace(/\s+/g, " ").slice(0, 64), target, prop, before, classParts: classes.length };
+      }
+    }
+    return { error: "no multi-class rule with a length property whose target is on the page" };
+  });
+  if (candidate.error) {
+    bad(`layers probe: ${candidate.error}`);
+  } else {
+    // the consumer's own rule: single class, unlayered, added after the sheet.
+    // a constructable stylesheet — not a `<style>` tag — so the page's csp cannot
+    // make this probe pass or fail for the wrong reason.
+    const applied = await page.evaluate(({ target, prop }) => {
+      const sheet = new CSSStyleSheet();
+      sheet.replaceSync(`.${target} { ${prop}: 37px; }`);
+      document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
+      const el = document.querySelector("." + CSS.escape(target));
+      return getComputedStyle(el).getPropertyValue(prop).trim();
+    }, candidate);
+    if (applied === "37px") {
+      ok(`unlayered consumer css beats a ${candidate.classParts}-class framework rule (${candidate.selector} → .${candidate.target} ${candidate.prop}, was ${candidate.before})`);
+    } else {
+      bad(`layers: consumer override lost — ${candidate.prop} = ${applied} (framework rule ${candidate.selector})`);
+    }
+  }
+}
+
 await browser.close();
 server.kill();
 
-console.log(`\n=== summary: ${pass} passed, ${fail} failed${skipped ? `, ${skipped} skipped` : ""} ===`);
+console.log(`\n=== summary: ${pass} passed, ${fail} failed ===`);
 if (fail > 0) {
   console.log("BROWSER SMOKE FAIL");
   process.exit(1);
-} else if (skipped > 0) {
-  console.log(`BROWSER SMOKE PASS (${skipped} probe(s) SKIPPED — wasm sdk not registered, run with the swiftly swift-6.4.0-RELEASE_wasm sdk for full coverage)`);
-  process.exit(0);
-} else {
-  console.log("BROWSER SMOKE PASS");
-  process.exit(0);
 }
+console.log("BROWSER SMOKE PASS");
+process.exit(0);

@@ -1,7 +1,8 @@
 # WebUIChart — charting
 
 server-rendered charts for the swiftui-for-web stack. `WebUIChart` is a
-self-contained Swift target (depends only on `WebUI`): a `Chart` view takes a
+self-contained Swift target whose only dependency is `WebUICore` (the view
+kernel `WebUI` itself builds on): a `Chart` view takes a
 collection of marks, resolves scales, and emits **inline SVG** wrapped in a
 `<figure class="chart">` — no canvas, no client-side chart library, no
 network fetches.
@@ -53,6 +54,8 @@ blank box.
 | `RectangleMark(xStart:xEnd:yStart:yEnd:value:)` | data-space cell | heatmaps; `value` (0…1) drives `fill-opacity` heat |
 | `RuleMark(x:y:)` | reference line | horizontal (x nil) or vertical (y nil) |
 | `SectorMark(angle:category:)` | pie / donut | `innerRadiusRatio` → donut (center total overlay); `angularInset` gaps; 12-o'clock start, clockwise |
+| `RadarMark([(label, value)], series:)` | one closed polygon per series | spokes + 4 grid rings + per-vertex hover tips; needs ≥3 axes; scales to the largest value (or the `.chartYDomain` upper bound) |
+| `RadialMark(value:of:series:)` | gauge arc | a *stroked* ring, not a filled wedge: track + value arc (dash offset, round caps) + centered percentage; concentric per mark; clamps over/under 100% |
 
 marks carry a `PlottableValue` per dimension: `.value("label", 42)`,
 `.value("label", "Q1")` (category), `.value("label", Date(...))`, or
@@ -71,6 +74,8 @@ the same plottables through `SectorMark(angle:)`.
 .symbol(.circle | .square | ...)
 .lineStyle(ChartLineStyle(width: 2, dash: [4, 2]))
 .annotation("text", position: .top) // svg <text> label (escaped)
+.areaGradient(.fade("var(--color-chart-3)")) // area fill from a <linearGradient> with a scoped id
+.tooltip("custom text")             // overrides the hover tip's default label
 ```
 
 modifiers return a styled `ChartMark`, so they chain on any `*Mark` and work
@@ -82,8 +87,10 @@ inside `ForEach`.
   order/extend), `.linear(domain:)`, `.date(domain:)` (unix-ref seconds on the
   numeric axis, formatted labels), `.automatic`.
 - **y**: always numeric. bars/areas pin the baseline to `0` when all data is
-  non-negative; a 5% headroom extends the top. override with `.chartYScale` /
-  `.chartYDomain`.
+- **y**: always numeric. bars pin the baseline to `0` **and the bar domain spans zero at
+  both ends**, so negative data draws below the baseline instead of collapsing to a
+  zero-height rect (fixed in p5-t5, pinned in `ChartP5Tests`). line/area get a 5%
+  headroom. override with `.chartYScale` / `.chartYDomain`.
 - **ticks**: nice-number algorithm (`1/2/5 × 10^k`), in-domain filtering, or
   `AxisConfig(explicitValues:)`.
 - **label formats**: `.automatic` `.integer` `.decimal(n)` `.percent`
@@ -147,11 +154,82 @@ the design system owns all chart styling (see `DESIGN_SYSTEM.md → Charts`):
 
 angle convention: `0°` = 12 o'clock, clockwise (matches Swift Charts).
 
+## responsive layout — text keeps its size, the plot pans
+
+a chart is laid out for a **design width** (`height × aspectRatio`, default
+`320 × 2 = 640`), and the renderer publishes it on the figure as `--chart-w`.
+the stylesheet turns that into three rules:
+
+- the figure renders at its design width, capped by its container
+  (`max-width: 100%`);
+- the plot may **compress to 92%** of that width — 12px text still paints at
+  11.0px, the floor the design system's own smallest steps imply;
+- below 92% the plot **pans** (`.chart__plot` is a horizontal scroll container)
+  instead of shrinking its labels. text never paints below 11px, at any
+  container width.
+
+measured on the showcase across 320/390/480/768/1024/1440 in both themes: worst
+painted text **11.04px**, **every chart fully visible from 390px up**, no page
+overflow (`designer/chart-mobile-audit.mjs`, evidence in
+`.smoke/chart-mobile-<date>/`). the gate asserts both halves — legibility *and*
+the visible fraction — so a page that hides part of a plot behind a pan fails.
+
+authoring notes:
+
+- **fit beats pan: declare the width the placement can afford.** `chartHeight(150)`
+  (× the default aspect 2) lays the plot out 300 units wide, which fits a
+  phone-width card without panning. the showcase does exactly this — a
+  `Grid(columns: .custom("repeat(auto-fit, minmax(min(100%, 344px), 1fr))"))`
+  gallery of 300-unit plots, 1-up at 390px and 3-up at 1440px. the 640-unit
+  default in a phone-width card *will* pan (a 228px card showed 39% of the plot);
+- **a chart contributes no intrinsic width** — its plot owns its inline size, so
+  a container sized to its content (a `flex-start` column, a content-sized grid
+  track) will collapse to the width of its text. give chart containers a
+  declared width or an explicit track;
+- the design width is also the *display* width: a chart in a 900px card renders
+  640 wide rather than scaling up, which keeps every chart's text at 12px across
+  a page.
+
+## area gradients (p5-t4)
+
+`AreaMark(...).areaGradient(.fade("var(--color-chart-3)"))` emits a `<defs><linearGradient>`
+and points the area path at it with `fill="url(#chart-grad-…)"`.
+
+- the id is derived from the gradient's own contents (FNV-1a over the color list + series),
+  so it is **stable across renders** and **collision-free across charts** — two charts on
+  one page never fight over a definition;
+- `explicit` colors are filtered to a css-value charset before they reach the
+  `style="stop-color:…"` attribute, so a caller cannot inject css or markup;
+- the flat `.chart__area` fill stays the default; a gradient area adds
+  `.chart__area--fade` so the flat 16% opacity does not mute the fade.
+
+## hover tips (p5-t3) — verdict: LAND
+
+every bar, point, sector and radar vertex carries a sibling `<g class="chart__tip">`
+(a `<rect>` + `<text>`, `aria-hidden="true"`) revealed by
+`.chart__mark:hover + .chart__tip`: **no javascript, and hovering sends no websocket
+frame** (probe-verified at the protocol level: 0 frames on hover).
+
+measured in the showcase at 1280px, both themes: opacity `1` on hover, tip text
+**11 css px**, ~34px wide, positioned inside the svg, label correct (`-18` for that datum).
+
+- **hover-only**: the tip has no keyboard or touch equivalent. points and sectors still
+  carry a native `<title>` for assistive tech;
+- it reads correctly only when the chart renders near 1:1. the svg must carry *intrinsic*
+  `width`/`height` attributes: with only a `viewBox`, a `width:100%` svg inside a flex
+  container falls back to the 300×150 replaced-element default, which rendered every
+  chart — and its axis labels — at ~0.47 scale (found and fixed in p5-t5);
+- no collision handling: a tip near the plot edge can overflow the plot. the svg is
+  `overflow: visible`, so it stays legible rather than clipped.
+
 ## a11y and payload hygiene
 
-- every figure is `<figure role="img" aria-label="…">`; labels, titles and
-  mark ids are `htmlEscape`-ed; `chartID` values are sanitized (spaces
-  stripped) before use in ids;
+- every figure is `<figure role="img" aria-label="…">`; the accessible name is
+  `.chartAccessibilityLabel(…)` when set, otherwise the chart's own
+  `.chartTitle(…)`, otherwise `Chart with N marks` (`Chart` for the empty
+  state) — a titled chart announces as its title, not as a mark count; labels,
+  titles and mark ids are `htmlEscape`-ed; `chartID` values are sanitized
+  (spaces stripped) before use in ids;
 - a visually-hidden data table (`.chart__sr`) mirrors the series values so
   screen readers get the numbers, not just the shapes;
 - the output is deterministic (no random nonces inside the chart) and
@@ -161,7 +239,11 @@ angle convention: `0°` = 12 o'clock, clockwise (matches Swift Charts).
 
 - one series dimension (`.foregroundStyle(by:)`); multi-series grouping on the
   x-axis is not modeled (series stack/group within a category only);
-- linear and categorical scales; log/normalised scales are rejected at render
-  time (empty chart, not garbage);
+- linear, categorical and date scales; there is no log scale (the
+  `ChartScaleKind` vocabulary has no case for one);
+- the css-only hover tip is hover-only, and assumes an intrinsic-size svg (above);
+- a container narrower than 92% of the design width pans the plot: a phone-first
+  page should declare a smaller design width (`chartHeight`) rather than accept
+  the pan (see *responsive layout* above);
 - no client-side redraw: every state change re-renders the figure on the
   server (the same model as the interactive table).

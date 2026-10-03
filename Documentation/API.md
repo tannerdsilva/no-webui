@@ -7,10 +7,20 @@
 | Protocol | Requirement | Notes |
 |---|---|---|
 | `View` | `func render() -> String` | pure function, no side effects, `Sendable` |
+| `View` | `func render(into buffer: inout HTMLBuffer)` | *defaulted* requirement: writes into a shared render buffer; the default falls back to `render()`, so a view that implements only `render()` renders byte-identically |
 | `ViewModifier` | `func apply(to html: String) -> String` | wraps rendered html with attributes or styles |
+| `ViewModifier` | `func decorate<C: View>(_ content: C, into buffer: inout HTMLBuffer)` | *defaulted* requirement: applies the modifier through the buffer; the default applies to `content.render()` |
 | `ModifiedView<Content: View, M: ViewModifier>` | `View` | type-preserving wrapper returned by every modifier |
-| `AnyView` | `View` | type-erased wrapper; erases the concrete view type |
 | `EmptyView` | `View` | renders nothing |
+
+the buffer route is the framework's own render path, not yet consumer API:
+`HTMLBuffer` is a `public` *type* — a protocol requirement is implicitly as
+visible as its protocol, and the requirements name it — while **every member
+stays `package`**. a consumer can see the type in a signature but cannot
+construct or write through one; the members open up with the 2.0 flip, when
+`render(into:)` becomes the requirement and `render()` a deprecated
+convenience (`STABILITY.md`). both additions are additive in the 1.x sense:
+an existing conformer keeps compiling and rendering identically.
 
 ### ViewBuilder
 
@@ -73,7 +83,7 @@ every attribute parameter (`id`, `class`, `name`, `for`, `data-status`,
 | `.cornerRadius(_ value: Int)` | `style="border-radius:Npx"` |
 | `.width(_ value: String)` | `style="width:..."` |
 | `.height(_ value: String)` | `style="height:..."` |
-| `.class(_ name: String)` | `class="..."` |
+| `.class(_ name: String)` | `class="..."` — **replaces** classes the view already emits (the later value wins in the attribute merge; `.class` on a `VStack`/`WebUICard` drops its `vstack`/`card__body` classes). wrap the view in `Div(class:)` to add one |
 | `.id(_ id: String)` | `id="..."` |
 | `.attribute(_ key: String, _ value: String)` | emits `key="value"` on the root element (e.g. `data-prevent-enter="false"`) |
 | `.showIf(_ condition: Bool)` | `display:none` when false |
@@ -131,8 +141,16 @@ every attribute parameter (`id`, `class`, `name`, `for`, `data-status`,
 
 | Type | Parameters | Description |
 |---|---|---|
-| `HTMLDocument` | title, body, styles, rawStyles, scripts, contentSecurityPolicy, includeRuntime, runtimeConfig, devMode, head, bodyAttributes, lang, preMinifiedStyles | complete HTML document with auto-generated CSP and nonce. shipped css is minified (comments + blank lines stripped) unless `preMinifiedStyles: true` embeds the caller-provided combined sheet verbatim (used by `WebUIDocument`'s hoisted sheet) |
+| `HTMLDocument` | title, body, styles, rawStyles, scripts, contentSecurityPolicy, contentSecurityPolicyExtras, includeRuntime, runtimeConfig, devMode, head, bodyAttributes, lang, preMinifiedStyles, stylesheetURL, themeStylesheetURL, inlinedComponentStyles | complete HTML document with auto-generated CSP and nonce. shipped css is minified (comments + blank lines stripped) unless `preMinifiedStyles: true` embeds the caller-provided combined sheet verbatim (used by `WebUIDocument`'s hoisted sheet) |
 | `WebUIDocument` | same as HTMLDocument | HTML document with the full design system css — the record sheet (layout rules + embedded css) is minified once into `WebUIDocument.minifiedDesignStyles` and embedded verbatim on every render (`preMinifiedStyles: true`), removing the old per-render minify of ~300 kb css (~11 ms in release → <0.01 ms) |
+
+`contentSecurityPolicyExtras` is the seam for a host that needs one more directive than
+the policy it would otherwise get: its directives are **merged per name** into the
+effective policy (the nonce-aware default, or `contentSecurityPolicy` when that is set),
+so an extra replaces the default's directive of the same name and everything else —
+including the render nonce — is carried over. restating the whole policy instead names no
+nonce source, and `HTMLDocument` then suppresses the pre-paint theme prelude rather than
+emit an inline script the browser refuses.
 
 `runtimeConfig` (a `RuntimeConfig?`) changes only the runtime bootstrap: with a
 non-empty config the page emits `WebUIRuntime.init({...})`; with no config the
@@ -147,32 +165,45 @@ to the page's router and reject stale pages from other sessions — see
 `WebSocketProtocol` and the auth docs. only keys that are set are emitted;
 string values are hand-escaped into safe json string literals.
 
+`stylesheetURL` and `themeStylesheetURL` are the two sheet slots, emitted in that
+order *before* the inline `<style>`: the base sheet (the design-system component css)
+first, then a sheet that must win collisions — same specificity, later source order,
+which is why that slot exists rather than a `<link>` in `head:` (a `head` sheet
+renders *before* the base sheet and silently loses the collisions).
+
+`HTMLDocument.diagnostics(body:head:stylesheetURL:inlinedComponentStyles:)` answers,
+purely and without logging, which wiring misconfigurations apply to a document;
+`render()` logs each through the `webui.document` logger, unconditionally rather than
+only in debug builds — the failure mode is silent (markup renders "fine" while
+individual glyphs detonate):
+
+| diagnostic | condition |
+|---|---|
+| `.headStylesheetWithoutBaseStylesheet` | `head:` carries a stylesheet link while `stylesheetURL:` is nil |
+| `.frameworkMarkupWithoutStylesheet` | the body emits framework icon markup (`class="icon"`) while `stylesheetURL:` is nil |
+
+a host that inlined the component sheet itself (`rawStyles` carries
+`DesignSystemAssets.minifiedCss`) sets `inlinedComponentStyles: true` to suppress the
+missing-sheet diagnostics — `WebUIDocument`'s inline mode (`stylesheetURL: nil`) does
+exactly that.
+
 ### Client Mode (wasm)
 
 client-mode pages flip with one argument:
 
 - `ClientBoot(wasmURL:mode:config:scriptURLs:)` — the boot configuration.
-  `wasmURL` is the content-addressed artifact url the host serves; `mode`
-  selects `.hydrate` (ssr-compat render probe) or `.app` (full interactive
-  boot); `config` carries only-set `RuntimeConfig` knobs (transport knobs stay
-  js-owned; behavior knobs ride the emitted `webui-config` meta); `scriptURLs`
-  default to `ClientBoot.defaultScriptURLs` (`/ui/webui-client.js`,
-  `/ui/webui-app-boot.js`) — hosts under other prefixes pass their own.
-  `ClientBoot.defaultCSP` is the client policy (`'self'` + `'wasm-unsafe-eval'`,
-  never `'unsafe-inline'` in script-src).
+  `config` carries only-set `RuntimeConfig` knobs (transport knobs stay
+  js-owned; behavior knobs ride the emitted `webui-config` meta).
+  `ClientBoot.defaultCSP` is the policy (`'self'` + `'wasm-unsafe-eval'` for
+  capability islands, never `'unsafe-inline'` in script-src).
+  `ClientBoot.defaultEngineScriptURL` is `/ui/webui-engine.js`.
 - `HTMLDocument(…, clientMode: ClientBoot?)` and
   `WebUIDocument(…, clientMode: ClientBoot?)` — `.none` (default) is
-  byte-identical to legacy output; `.client` emits the `webui-wasm` meta
-  contract + external chamber/boot scripts, substitutes the client csp (an
-  explicit `contentSecurityPolicy` still wins), and suppresses the inline
-  server runtime.
-- `WebUIBoot.wasmProductURL()` / `WebUIBoot.wasmHash(of:)` — server-side
-  helpers: locate the release `WebUIClient.wasm` product and content-address
-  it (`sha256` hex) for the immutable-cache route. serving the artifact is the
-  host server's job; the framework only emits bytes.
-- the chamber is served by the host and hosted by the browser
-  (`designer/assets/webui-client.js`); the wasm client is built separately with
-  the wasm sdk (`swift build -c release --swift-sdk … --product WebUIClient`).
+  byte-identical to legacy output; a boot emits the `webui-config` meta plus the
+  engine script and suppresses the inline server runtime (an explicit
+  `contentSecurityPolicy` still wins; `contentSecurityPolicyExtras` extends whichever
+  policy applies without losing its nonce). the wasm *client* mode this parameter
+  also described was deleted; wasm is per-page capability islands now.
 
 ### CSS
 
@@ -222,17 +253,30 @@ servers use the capped path) |
 
 ### WebUIDocument
 
-`HTMLDocument` variant that ships `LayoutStyles.complete` plus the full
-`WebUIAssets.css` (the nexus design system, 169 `:root` CSS custom properties).
-the css is minified at render time, so served pages carry no comments and no
-blank lines. see `Documentation/DESIGN_SYSTEM.md` for the complete token and
-component catalog.
+`HTMLDocument` variant that ships the design system: the shared sheet
+(`designer/assets/design-system.css`, 174 `:root` custom properties, wrapped in
+`@layer webui, webui.utilities`) plus `LayoutStyles.complete`, minified once into
+`DesignSystemAssets.minifiedCss` and linked (or inlined) as the content-addressed
+`/__assets/css.<sha256>`. the served bytes carry no comments. see
+`Documentation/DESIGN_SYSTEM.md` for the cascade, the token catalog, and the
+theming surface.
 
-accepts `theme: WebUITheme = .standard` — a themed document appends the
-theme's css (`:root` overrides + app rules) after the design sheet, so later
-source order wins the cascade for every token the components resolve through
-`var(--…)`. `.standard` (the default) contributes nothing and renders
-byte-identical to the unthemed document.
+because every framework rule is layered, **a page's own css wins without
+specificity games**: `rawStyles`, an app stylesheet, and the theme sheet are
+unlayered, so they outrank the framework by cascade origin — `!important` and
+selector-weight escalation are never required.
+
+`stylesheetURL` defaults to the content-addressed design-system sheet
+(`DesignSystemAssets.stylesheetURL`), so a `WebUIDocument` page is styled out of
+the box; core `HTMLDocument` defaults it to nil (it takes no design-system
+dependency) — a host on the core path wires both sheets itself, and gets a
+logged diagnostic when it does not. `themeStylesheetURL` is the slot for a host
+sheet that must win collisions against the base.
+
+accepts `theme: WebUITheme = .standard` — a themed document appends the theme's
+css (`:root` overrides + app rules, unlayered) after the design sheet.
+`.standard` (the default) contributes nothing and renders byte-identical to the
+unthemed document.
 
 accepts `checkClasses: Bool = false` — when true the rendered document is
 scanned against the shipped sheet and every undefined class is routed through
@@ -256,30 +300,35 @@ are not defined in the shipped sheet".
 
 ### Theme
 
-per-page custom aesthetics on top of the shipped design system, without a
-fork of the framework css.
+per-page (or per-scheme) custom aesthetics on top of the shipped design system,
+without a fork of the framework css. the emitted theme css is **unlayered**: it
+outranks the layered base sheet, and in turn loses to the app's own css.
 
 | Type | Role |
 |---|---|
-| `DesignToken` | generated enum of the 169 `:root`-scoped tokens from `design-system.css` (the only custom properties a later `:root` override can restyle). **generated into the wasm-clean `WebUIDesignSystemCore` target** (`DesignTokens+Generated.swift`) so the client build can reference it without rawdog. case name = camelCased css name (`color-primary-solid` → `.colorPrimarySolid`), `rawValue` = the exact kebab name, `cssVariable` = `--<rawValue>`. component-scoped custom properties (`.btn { --btn-bg: … }`) are excluded by construction — restyle those via theme `rules`. |
-| `ColorScheme` | `.automatic` / `.light` / `.dark`. a fixed scheme declares `color-scheme:` on `:root`; `.dark` is the dark-first choice. |
-| `WebUITheme` | value type in `WebUIDesignSystemCore` (wasm-clean, re-exported via `WebUIDesignSystem`): `tokens: [DesignToken: String]`, `customTokens: [String: String]` (app-invented `--name` keys), `scheme: ColorScheme`, `rules: [CSSRule]`. `.standard` is the empty theme; `.overlaying(_:)` layers a partial theme (dynamic accent) over a static one; `stylesheet()` renders deterministically (color-scheme, then tokens sorted by css name, then rules). |
-| `WebUIThemeProvider` | protocol with `static var theme: WebUITheme`. the default yields `.standard`, so hand-written conformers compile for free. |
-| `@Theme` | attached macro: turns a struct of `static let` members into a `WebUIThemeProvider`. reserved members `scheme`, `rules`, `customTokens` map to the three non-token axes; every other `static let <name> = <value>` is a token override whose member name must be a `DesignToken` case (compiler-validated at the expansion site). |
+| `DesignToken` | generated enum of the 174 `:root`-scoped tokens from `design-system.css` (the only custom properties a later `:root` override can restyle). **generated into the wasm-clean `WebUIDesignSystemCore` target** (`DesignTokens+Generated.swift`) so the client build can reference it without rawdog. case name = camelCased css name (`color-primary-solid` → `.colorPrimarySolid`), `rawValue` = the exact kebab name, `cssVariable` = `--<rawValue>`. component-scoped custom properties (`.btn { --btn-bg: … }`) are excluded by construction — restyle those via a theme's `rules`. |
+| `ThemeMode` | `.automatic` / `.light` / `.dark`. a fixed mode emits `color-scheme:`; `.automatic` emits nothing and follows the OS. (renamed from `ColorScheme` — which is the name an app gives its *own* scheme type.) |
+| `ThemePalette` | one mode's overrides: `tokens: [DesignToken: String]` + `customTokens: [String: String]` (app-invented `--name` keys). `.overlaying(_:)` merges per key. |
+| `WebUITheme` | `palette`, `dark` (the dark override palette), `defaultMode`, `rules: [CSSRule]` (escape hatch, last resort), `aliases: [TokenAlias]`. `.standard` is the empty theme; `.overlaying(_:)` merges per palette; `stylesheet(scope:)` renders deterministically (declarations sorted by css name, so the bytes are stable and cacheable). |
+| `ThemeScope` | `.root` (one theme on `:root`, the default) or `.attribute(id:)` (scoped to `:root[data-scheme="<id>"][data-theme="light\|dark"]`, so one page can ship every scheme). |
+| `TokenAlias` | `TokenAlias("--bg", .colorBg)` — an app's own property name bound to a token; emits the indirection `--bg: var(--color-bg)`, so a token override updates every alias and a typo is a missing enum case. |
+| `WebUIThemeProvider` | protocol with `static var theme: WebUITheme` plus identity (`themeID`/`themeLabel`/`themeSwatch`, all defaulted), so a hand-written conformer compiles for free. |
+| `ThemeCatalog` | `static var all: [any WebUIThemeProvider.Type]` + `static var defaultTheme`, with `entries` / `stylesheet()` / `theme(for:)` rendering the whole set — what a client-side switcher renders from. |
+| `@Theme` | attached macro: turns a struct of `static let` members into a `WebUIThemeProvider`. reserved members `palette`, `dark`, `defaultMode`, `rules`, `customTokens` map to the axes of `WebUITheme`; every other `static let <name> = <value>` is a token override whose member name must be a `DesignToken` case (compile error otherwise). `@Theme(base: Other.self)` layers the declared overrides over another provider, per palette. |
 
 ```swift
 import WebUIDesignSystem
 
-@Theme
-struct NexusDark {
-    static let scheme = ColorScheme.dark
-    static let colorPrimarySolid = "#6c8cff"
-    static let colorBg = "#101014"
+@Theme(base: NexusBase.self)
+struct Poseidon {
+    static let defaultMode = ThemeMode.dark
+    static let colorPrimarySolid = "#268BD2"
     static let customTokens = ["--chat-user-bubble": "#2a2a2e"]
-    static let rules: [CSSRule] = [.chatBubble, .streamDots]
+    static let rules: [CSSRule] = [.chatBubble]
+    static let aliases = [TokenAlias("--bg", .colorBg)]
 }
 
-let page = WebUIDocument(body: body, theme: NexusDark.theme)
+let page = WebUIDocument(body: body, theme: Poseidon.theme)
 ```
 
 a dynamic overlay rides on top of a static theme:
@@ -287,9 +336,26 @@ a dynamic overlay rides on top of a static theme:
 ```swift
 let doc = WebUIDocument(
     body: body,
-    theme: NexusDark.theme.overlaying(WebUITheme(tokens: [.colorPrimarySolid: userAccent]))
+    theme: Poseidon.theme.overlaying(
+        WebUITheme(palette: ThemePalette(tokens: [.colorPrimarySolid: userAccent]))
+    )
 )
 ```
+
+a scheme *set* ships as a catalog, and the catalog serializes to the client as
+data (`WebUITheme`/`ThemePalette`/`ThemeEntry` are `Codable`):
+
+```swift
+enum SchemeCatalog: ThemeCatalog {
+    static var all: [any WebUIThemeProvider.Type] { [Poseidon.self, …] }
+    static var defaultTheme: any WebUIThemeProvider.Type { Poseidon.self }
+}
+```
+
+`.standard` contributes nothing: a page themed `.standard` renders byte-identical
+to an unthemed one. catalog integrity (unique ids, a default that is a member,
+every `base` resolving) and the emitted scope shape are pinned by the theme
+suites.
 
 ### Components
 
@@ -345,19 +411,32 @@ Chart {
 ```
 
 - **marks:** `BarMark`, `LineMark`, `AreaMark`, `PointMark`, `RectangleMark`,
-  `RuleMark`, `SectorMark` (pie/donut via `innerRadiusRatio`).
+  `RuleMark`, `SectorMark` (pie/donut via `innerRadiusRatio`), `RadarMark`
+  (one closed polygon per series, needs ≥3 axes), `RadialMark` (a stroked gauge
+  ring with a centred percentage).
 - **plottables:** `.value("label", Int|Double|String|Date)` — strings/dates
   make the axis categorical (or formatted-numeric); `yStart`/`yEnd` ranges.
 - **modifiers:** `.foregroundStyle(by:)` / `.foregroundStyle("var")`,
   `.opacity`, `.cornerRadius`, `.stacking`, `.interpolation`
   (`.linear`/`.monotone`/`.cardinal(t)`/`.catmullRom`/`.stepStart`/`.stepEnd`),
-  `.symbol`, `.lineStyle`, `.annotation`.
+  `.symbol`, `.lineStyle`, `.annotation`, `.areaGradient(.fade("var")|…)`,
+  `.tooltip("text")`.
 - **chart modifiers:** `.chartTitle`, `.chartID` (stable mark ids for WS
-  interactivity), `.chartSelection(axis:value:)`, `.chartXScale` /
-  `.chartYScale` (`.linear(domain:)`, `.date(domain:)`, `.categorical(domain:)`),
-  `.chartXAxis` / `.chartYAxis` (`AxisConfig`: grid, ticks,
-  `labelFormat`), `.chartLegend(position:)`, `.chartPlotStyle`,
-  `.chartAccessibilityLabel`.
+  interactivity), `.onSelectMark { me, category in … }` (typed mark handler),
+  `.chartSelection(axis:value:)` / `.chartXSelection` / `.chartYSelection`,
+  `.chartXScale` / `.chartYScale`
+  (`.linear(domain:)`, `.date(domain:)`, `.categorical(domain:)`),
+  `.chartXDomain` / `.chartYDomain`, `.chartXAxis` / `.chartYAxis`
+  (`AxisConfig`: grid, ticks, `labelFormat`), `.chartLegend(position:)`,
+  `.chartForegroundStyleScale(domain:range:)`, `.chartInnerRadius`,
+  `.chartAngularInset`, `.chartAccessibilityLabel`, and the layout pair
+  `.chartHeight` / `.chartAspectRatio` (together they set the **design width**).
+- **width:** a chart is laid out for a design width (`height × aspectRatio`,
+  default `320 × 2 = 640`), renders at that width, may compress to 92% of it —
+  12px text still paints 11.04px — and pans below that, so labels never paint
+  under 11px at any container width. a chart contributes no intrinsic width, so
+  a container that sizes to its content needs a declared width or a grid track.
+  `Documentation/CHARTS.md` → *responsive layout* has the recipe.
 - **polar:** all `SectorMark` (or a single `.angle` value per mark) → pie;
   `innerRadiusRatio > 0` → donut with a center total.
 
@@ -385,8 +464,8 @@ WebUIIconCustom(name: "custom", body: "<path d=\"M12 2l9 10-9 10-9-10z\"/>")
 ## WebUIServer
 
 one-call serving of a no-webui page: http page route, the framework asset
-routes (engine, shell, client boot, css, wasm artifact) with cache headers,
-`/ws` upgrade, `EventRouter` dispatch, ping/pong, read-idle reaping, and an
+routes (stylesheet, engine, shell) with cache headers, host assets, `/ws`
+upgrade, `EventRouter` dispatch, ping/pong, read-idle reaping, and an
 admission cap — replaces the NIO boilerplate reference hosts used to copy.
 
 ```swift
@@ -402,15 +481,79 @@ try await server.start()                       // serves until stop() / process 
 - `render` is called per request (fresh CSP nonce each time — the documented
   best practice) and registers handlers into the same `router`; re-rendering
   replaces registrations idempotently (stable ids or auto `c0..` order both
-  work when the tree is deterministic).
+  work when the tree is deterministic). the request-aware
+  `WebUIServer(requestRender:router:config:logger:)` instead receives a
+  `WebUIServerRequest` (`path` + decoded `query`), which is what a deep link
+  like `/index.html?s=<id>` needs.
 - `WebUIServerConfig` tunes host/port, admission cap, read-idle seconds,
-  asset cache seconds, and the page path (default `/`).
-- routes: page path + `/index.html`, `/__assets/css`, `/ui/webui-engine.js`,
-  `/ui/webui-shell.js`, `/ui/webui-client.js`, `/ui/webui-app-boot.js`,
-  `/__assets/webui-client.<sha>.wasm` (immutable cache); 404/405 elsewhere;
+  asset cache seconds, the page path (default `/`), and `assets` — the host's
+  own served files (see below).
+- routes: page path + `/index.html`, `/__assets/css`,
+  `/__assets/css.<sha256>` (immutable), `/ui/webui-engine.js`,
+  `/ui/webui-shell.js`; then `config.assets`; 404/405 elsewhere.
   `Service-Worker-Allowed: /` + security headers on every response.
-- `WebUIServer` is an actor: `stop()` closes the listener and shuts down the
-  event loop group.
+- the query string is stripped before routing, so `/__assets/css?v=9` and a
+  query-bearing page url both resolve. `+` decodes to a space, `%XX` to its
+  byte, and a malformed escape is preserved verbatim rather than dropped.
+- `broadcast(_ updates:)` pushes fragments to every connected page with no
+  inbound event to answer — streaming turns, background progress, a panel that
+  changed on disk. the engine applies an update by element id, so a page that
+  does not render the id ignores it. `connectedPages` reports the live count.
+  a socket whose render token the server rejects is already closed, so a push
+  cannot reach a stale page from a former session.
+- `WebUIServer` is an actor. `stop()` closes the listener; the accept loop
+  drains the connections already accepted and shuts the event loop group down
+  itself, so a handler never schedules work on a stopped loop.
+
+### host assets
+
+`WebUIServerConfig.assets` serves files the framework does not ship — vendor
+css/js, woff2 fonts, app scripts — without standing up a second http server:
+
+```swift
+let config = WebUIServerConfig(
+    port: 9090,
+    assets: [
+        .text("/ui/app.css", appCSS, contentType: "text/css; charset=utf-8", cacheSeconds: 3600),
+        .bytes("/ui/font.woff2", fontBytes, contentType: "font/woff2", cacheSeconds: 31536000),
+    ]
+)
+```
+
+`WebUIServerAsset.Body.bytes` keeps binary payloads off the `String` path. the
+framework routes are matched first, so a host asset can neither shadow nor
+disable the stylesheet, the engine, or the shell. `cacheSeconds: nil` (the
+default) emits `no-store`.
+
+`gzip:` takes a **pre-compressed** variant of the same body, negotiated exactly
+like the framework's own sheet and engine: a client whose `Accept-Encoding`
+allows gzip gets those bytes with `Content-Encoding: gzip`, and `Vary:
+Accept-Encoding` goes out whenever a variant exists — including on the plain
+response, or a shared cache would hand it to a client that never asked. the
+server compresses nothing at runtime, so a host builds both forms (`gzip -c`
+in its own asset tooling) and passes both:
+
+```swift
+.text("/ui/app.css", appCSS, contentType: "text/css; charset=utf-8",
+      cacheSeconds: 31536000, gzip: appCSSGzip)
+```
+
+### hosting as a Service
+
+`WebUIServerService` wraps the server for `swift-service-lifecycle`, so a
+long-lived page server starts and stops inside a `ServiceGroup` instead of
+owning its own process lifecycle:
+
+```swift
+let group = ServiceGroup(
+    services: [WebUIServerService(server: server)],
+    logger: logger
+)
+try await group.run()
+```
+
+a bind failure propagates out of `run()`, so a server that cannot listen fails
+startup rather than reporting itself ready.
 
 see `Sources/WebUIExample/main.swift` — the reference server is now ~100
 lines of page + state, with the pipeline entirely inside `WebUIServer`.
@@ -430,8 +573,7 @@ A SwiftNIO-based HTTP/WebSocket server that serves a live counter + echo page.
 ## WebUIAuth
 
 authentication + sessions foundation for WebUI backends. design rationale and
-threat model live in `Documentation/AUTH_SESSIONS.md`; the execution breakdown
-in `Documentation/IMPLEMENTATION_PLAN.md`.
+threat model live in `Documentation/AUTH_SESSIONS.md`.
 
 ### Identity model
 
@@ -453,8 +595,6 @@ in `Documentation/IMPLEMENTATION_PLAN.md`.
 
 | Protocol | Job |
 |---|---|
-| `UserStore.identity(forUsername:) async throws -> Identity?` | backend resolves a username to an identity |
-| `Authenticator.authenticate(_ credential:) async throws -> Identity?` | verifies credentials; `nil` for invalid OR unknown (never leaks existence) |
 | `AuthSessionStore` | `create` / `find(tokenHash:)` / `touch` / `invalidate(id:)` / `invalidateAll(for:)` / `listSessions(for:)` / `purgeExpired(before:)` — `AuthStoreError` = `.duplicateSession`, `.notFound`, `.malformedRecord` |
 
 ### Stores
@@ -536,3 +676,65 @@ tuned for small hosts (a 2 gb / 4-core box).
 not a deployment template: session caps per user and per-session state
 containers are deferred (see the plan); the Argon2 cap, sweep, and render-token
 binding described above are shipped.
+
+## WebUIBuild
+
+the host-side build library the asset toolkit is made of: deterministic gzip, the
+generated-source emitter, and the manifest. host-only by construction — it may import
+Foundation, and the client build never links it. `Documentation/ASSETS.md` is the full
+article (the two recipes, the manifest reference, the measured constraints that fix the
+shape); this is the surface map.
+
+```swift
+// a consumer's tool: one call between the render and the file
+let receipt = try WebUIAssetBuilder.emit(
+    shipped: sheet, typeName: "MySheet",
+    options: .init(minify: true, prose: .check, contentType: "text/css; charset=utf-8"),
+    to: output
+)
+// a target's manifest: every entry becomes a WebUIShippedAsset conformance
+let receipts = try WebUIAssetBuilder.embed(
+    manifest: try WebUIAssetManifest.load(from: manifestURL), to: generatedURL
+)
+```
+
+- `gzip(_ data: Data) -> Data?`, `gzip(_ text: String) -> Data?` — deterministic
+  `gzip -n -9 -c`; `nil` when the build host has no working `gzip`, in which case the caller
+  ships the raw bytes. the payload round-trips through a temporary file, never a two-pipe
+  dance (which deadlocks once output outgrows the pipe buffer).
+- `WebUIAssetBuilder.emit(shipped:typeName:options:to:) -> Emitted` — one payload in, one
+  `WebUIShippedAsset` conformance named `typeName` out. the payload rides base64: no escaping
+  can silently change bytes, and a byte literal is slow for the type checker at asset sizes.
+- `WebUIAssetBuilder.Options` — `minify: Bool` (the framework's own `minifyCSS`),
+  `prose: ProsePolicy` (`.off` | `.check`, the guard over the payload *as it will ship*),
+  `contentType: String` (required; also decides the prose grammar).
+- `Emitted` — the build's receipt: `typeName`, `bytes`, `gzipBytes: Int?`, `stamp`. for a
+  directory bag the stamp is a build record (the digest of the sorted name+bytes stream),
+  not a url address.
+- `WebUIAssetManifest.load(from:)` — validated loading of `Assets/webui-assets.json`
+  (`WebUIAssetManifest.Entry.Kind`: `file` | `text` | `directory`; optional `ceilingBytes` /
+  `ceilingGzipBytes` pins, enforced during `embed`). unknown keys, unknown kinds, missing
+  required fields, non-utf-8 text payloads and missing paths fail naming the entry.
+- `ProsePolicy`, `ProseFinding` (the public re-exposure of the package-level guard's
+  findings: `line` + `text`), and `WebUIBuildError` (`invalidTypeName`, `proseWouldShip`,
+  `malformedManifest`, `missingAsset`, `overCeiling` — every case's `description` names the
+  entry a build should fix).
+
+### the toolkit's other halves
+
+- `WebUIShippedAsset` (`WebUICore`) — the protocol generated code conforms to:
+  `contentType`, `stamp` (the first 12 hex of the sha256 of `body`), `body: [UInt8]`,
+  `gzip: [UInt8]?`. foundation-free, because generated code must conform without linking a
+  server, the view dsl or a runtime.
+- `WebUIAsset` (`WebUIServer`) — one value owning bytes, content type, variant and cache
+  policy: `url` is the bare path plus `?v=<12 hex>`, `registration` is the bare path with a
+  year-long `immutable` cache and the variant attached. `WebUIAsset(_ shipped:path:)` takes a
+  generated conformance. registering the *stamped* path answers 404 — pinned as a test.
+- `WebUIServerAsset.immutable` (defaulted `false`) — appends `, immutable` to the host
+  asset's cache policy.
+- `ThemeSheet.gzip: [UInt8]?` (`WebUIDesignSystem`) — the catalog sheet's optional
+  pre-compressed variant; its route now negotiates (`Content-Encoding` + `Vary`) like every
+  other asset route, while the url stays `/__assets/theme.<sha256>`.
+- `WebUIEmbedPlugin` — the build-tool plugin: `<target>/Assets/webui-assets.json` in, one
+  generated file out, every referenced file declared as an input. attach it and
+  `exclude: ["Assets"]` the target so swiftpm stops warning about files it does not compile.

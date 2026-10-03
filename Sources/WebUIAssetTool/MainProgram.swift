@@ -1,4 +1,6 @@
 import Foundation
+import WebUIBuild
+import WebUICore
 
 @main
 enum WebUIAssetTool {
@@ -8,14 +10,14 @@ enum WebUIAssetTool {
 
         var cssInput: String?
         var jsInput: String?
-        var clientInput: String?
-        var clientBootInput: String?
-        var clientSearchBootInput: String?
-        var workerInput: String?
         var engineInput: String?
         var shellInput: String?
         var outputPath: String?
         var tokensOutputPath: String?
+        var manifestOutputPath: String?
+        var usedTokensPath: String?
+        var guardCSSPaths: [String] = []
+        var embedManifestPath: String?
 
         var iterator = args.makeIterator()
         while let flag = iterator.next() {
@@ -24,14 +26,6 @@ enum WebUIAssetTool {
                 cssInput = iterator.next()
             case "--js-input":
                 jsInput = iterator.next()
-            case "--client-input":
-                clientInput = iterator.next()
-            case "--client-boot-input":
-                clientBootInput = iterator.next()
-            case "--client-search-boot-input":
-                clientSearchBootInput = iterator.next()
-            case "--worker-input":
-                workerInput = iterator.next()
             case "--engine-input":
                 engineInput = iterator.next()
             case "--shell-input":
@@ -40,14 +34,69 @@ enum WebUIAssetTool {
                 outputPath = iterator.next()
             case "--tokens-output":
                 tokensOutputPath = iterator.next()
+            case "--manifest-output":
+                manifestOutputPath = iterator.next()
+            case "--used-tokens":
+                usedTokensPath = iterator.next()
+            case "--guard-css":
+                if let path = iterator.next() { guardCSSPaths.append(path) }
+            case "--embed-manifest":
+                embedManifestPath = iterator.next()
             default:
                 break
             }
         }
 
         guard outputPath != nil || tokensOutputPath != nil else {
-            print("usage: WebUIAssetTool --css-input <path> --js-input <path> --client-input <path> --client-boot-input <path> --client-search-boot-input <path> --worker-input <path> --engine-input <path> --shell-input <path> --output <path> [--tokens-output <path>]")
+            print("usage: WebUIAssetTool --css-input <path> --js-input <path> --engine-input <path> --shell-input <path> --output <path> [--tokens-output <path>] [--manifest-output <path>] [--used-tokens <path>] [--guard-css <path>]… | --embed-manifest <json> --output <path>")
             exit(1)
+        }
+
+        // the consumer-manifest mode: one command, no framework inputs — this is what a
+        // consumer's build plugin invokes over an `Assets/webui-assets.json`.
+        if let embedManifestPath {
+            guard let outputPath else {
+                print("usage: --embed-manifest requires --output <path>")
+                exit(1)
+            }
+            do {
+                let manifest = try WebUIAssetManifest.load(from: URL(fileURLWithPath: embedManifestPath))
+                let receipts = try WebUIAssetBuilder.embed(
+                    manifest: manifest, to: URL(fileURLWithPath: outputPath)
+                )
+                let total = receipts.reduce(0) { $0 + $1.bytes }
+                print("embedded \(receipts.count) asset(s) into \(outputPath) (\(total) bytes)")
+                for receipt in receipts {
+                    let gz = receipt.gzipBytes.map { ", \($0) gz" } ?? ""
+                    print("  \(receipt.typeName): \(receipt.bytes) bytes\(gz), sha \(receipt.stamp)")
+                }
+                // the receipt a budget gate reads: what shipped, per type, plus the
+                // manifest's own pins — the gate never has to re-parse the manifest.
+                if let manifestOutputPath {
+                    let embedded: [[String: Any]] = zip(manifest.entries, receipts).map { pair -> [String: Any] in
+                        let (entry, receipt) = pair
+                        var row: [String: Any] = [
+                            "type": receipt.typeName,
+                            "raw": receipt.bytes,
+                            "gz": receipt.gzipBytes ?? 0,
+                        ]
+                        if let ceiling = entry.ceilingBytes { row["ceilingBytes"] = ceiling }
+                        if let ceiling = entry.ceilingGzipBytes { row["ceilingGzipBytes"] = ceiling }
+                        return row
+                    }
+                    let payload: [String: Any] = [
+                        "manifest": embedManifestPath,
+                        "embedded": embedded,
+                    ]
+                    if let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]) {
+                        try? data.write(to: URL(fileURLWithPath: manifestOutputPath))
+                    }
+                }
+            } catch {
+                print("error: \(error)")
+                exit(1)
+            }
+            exit(0)
         }
 
         var cssContent = ""
@@ -58,25 +107,6 @@ enum WebUIAssetTool {
         var jsContent = ""
         if let jsInput {
             jsContent = try String(contentsOfFile: jsInput, encoding: .utf8)
-        }
-
-        var clientContent = ""
-        if let clientInput {
-            clientContent = try String(contentsOfFile: clientInput, encoding: .utf8)
-        }
-
-        var clientBootContent = ""
-        if let clientBootInput {
-            clientBootContent = try String(contentsOfFile: clientBootInput, encoding: .utf8)
-        }
-
-        var clientSearchBootContent = ""
-        if let clientSearchBootInput {
-            clientSearchBootContent = try String(contentsOfFile: clientSearchBootInput, encoding: .utf8)
-        }
-        var workerContent = ""
-        if let workerInput {
-            workerContent = try String(contentsOfFile: workerInput, encoding: .utf8)
         }
 
         var engineContent = ""
@@ -104,33 +134,128 @@ enum WebUIAssetTool {
         }
 
         if let outputPath {
+            // T9: prune the `:root` token surface to the reachable set *before* anything is
+            // minified, compressed or embedded — see TokenPruning. With no `--used-tokens`
+            // there is no oracle to prune against and the sheet ships whole, byte-identical
+            // to every build before this step existed.
+            var pruning: TokenPruning.Outcome?
+            if let usedTokensPath {
+                guard cssInput != nil else {
+                    print("usage: --used-tokens requires --css-input")
+                    exit(1)
+                }
+                do {
+                    let outcome = try TokenPruning.performing(
+                        css: cssContent,
+                        usedTokensPath: usedTokensPath,
+                        guardPaths: guardCSSPaths
+                    )
+                    cssContent = outcome.css
+                    pruning = outcome
+                    print("pruned \(outcome.dropped.count) of \(outcome.dropped.count + outcome.kept.count) distinct tokens (\(outcome.emittedTokens) kept, \(outcome.declarations) :root declarations)")
+                } catch {
+                    print("error: \(error)")
+                    exit(1)
+                }
+            }
+
+            // the layout primitives are the framework's utility layer: above the
+            // sheet's component rules, below anything unlayered. the order
+            // statement is repeated here because layer order is set by first
+            // mention and this block is prepended to the sheet (which declares the
+            // same order — a repeat is a no-op).
+            let cssMinified = minifyCSS(
+                "@layer webui, webui.utilities;\n\n@layer webui.utilities {\n"
+                    + CSSStylesheet(LayoutStyles.complete).render()
+                    + "\n}\n\n" + cssContent
+            )
+            // the compression helpers live in WebUIBuild now: the tool is a CLI over the
+            // same library a consumer's tool calls, so the bytes come from one implementation.
+            let cssGz = WebUIBuild.gzip(cssMinified)
+            let jsGz = jsInput.flatMap { _ in WebUIBuild.gzip(jsContent) }
+            let engineGz = engineInput.flatMap { _ in WebUIBuild.gzip(engineContent) }
+            let shellGz = shellInput.flatMap { _ in WebUIBuild.gzip(shellContent) }
+
+            // the first law, enforced where the payloads are fixed: prose never
+            // reaches a client. the working sheet may carry designer notes —
+            // `minifyCSS` strips them before embedding — but the js assets have no
+            // strip step, so their source must be clean. a comment in any payload
+            // below fails the build here, naming file, line and text, rather than
+            // shipping (a prose-filled release is exactly what nobody notices).
+            let payloads: [(label: String, text: String, language: ProseGuard.Language)] = [
+                (jsInput ?? "webui-runtime.js", jsContent, .javaScript),
+                (engineInput ?? "webui-engine.js", engineContent, .javaScript),
+                (shellInput ?? "webui-shell.js", shellContent, .javaScript),
+                ("design-system.css (minified)", cssMinified, .css),
+            ]
+            var proseFound = false
+            for payload in payloads {
+                let findings = ProseGuard.findings(in: payload.text, language: payload.language)
+                guard !findings.isEmpty else { continue }
+                proseFound = true
+                print("error: \(payload.label) would ship \(findings.count) comment(s) to clients:")
+                for finding in findings.prefix(12) {
+                    print("  \(payload.label):\(finding.line): \(finding.text)")
+                }
+            }
+            if proseFound {
+                print("  the shipped bytes are the client's — keep the note in Documentation/*.md, or in the css working file, which is minified before embedding.")
+                exit(1)
+            }
+
             let generated = try generateAssetsSource(
-                css: cssContent, js: jsContent, client: clientContent,
-                clientBoot: clientBootContent, clientSearchBoot: clientSearchBootContent,
-                worker: workerContent, engine: engineContent, shell: shellContent
+                css: cssContent, js: jsContent, engine: engineContent, shell: shellContent,
+                cssMinified: cssMinified,
+                cssGzip: cssGz?.base64EncodedString() ?? "",
+                jsGzip: jsGz?.base64EncodedString() ?? "",
+                engineGzip: engineGz?.base64EncodedString() ?? "",
+                shellGzip: shellGz?.base64EncodedString() ?? ""
             )
 
             try generated.write(toFile: outputPath, atomically: true, encoding: .utf8)
 
             let cssBytes = cssContent.utf8.count
             let jsBytes = jsContent.utf8.count
-            let clientBytes = clientContent.utf8.count
-            let bootBytes = clientBootContent.utf8.count
-            let searchBytes = clientSearchBootContent.utf8.count
-            let workerBytes = workerContent.utf8.count
             let engineBytes = engineContent.utf8.count
             let shellBytes = shellContent.utf8.count
-            print("generated \(outputPath) (\(cssBytes) bytes CSS, \(jsBytes) bytes JS, \(clientBytes) bytes client, \(bootBytes) bytes boot, \(searchBytes) bytes search boot, \(workerBytes) bytes worker, \(engineBytes) bytes engine, \(shellBytes) bytes shell)")
+            print("generated \(outputPath) (\(cssBytes) bytes CSS, \(jsBytes) bytes JS, \(engineBytes) bytes engine, \(shellBytes) bytes shell)")
+
+            // the SERVED numbers, for the budget gate. `plugin budget` otherwise has to
+            // measure the working files, and the sheet differs from what ships by ~15%
+            // (it is minified) — a budget on the wrong number is a false sense of safety.
+            if let manifestOutputPath {
+                var served: [String: Any] = [
+                    "sheet": ["raw": cssMinified.utf8.count, "gz": cssGz?.count ?? 0,
+                              "workingRaw": cssBytes],
+                    "engine": ["raw": engineBytes, "gz": engineGz?.count ?? 0],
+                    "shell": ["raw": shellBytes, "gz": shellGz?.count ?? 0],
+                    "webui-runtime.js": ["raw": jsBytes, "gz": jsGz?.count ?? 0],
+                ]
+                // pruning is a build-time decision, so its effect belongs in the build-time
+                // record: a sheet that quietly stopped declaring 134 tokens should be
+                // visible in the manifest a budget gate reads, not inferred from byte counts.
+                if let pruning {
+                    served["tokens"] = [
+                        "emitted": pruning.emittedTokens,
+                        "pruned": pruning.dropped.count,
+                        "declarations": pruning.declarations,
+                    ]
+                }
+                let payload: [String: Any] = ["served": served]
+                if let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys]) {
+                    try? data.write(to: URL(fileURLWithPath: manifestOutputPath))
+                }
+            }
         }
     }
 
-    static func generateAssetsSource(css: String, js: String, client: String, clientBoot: String, clientSearchBoot: String, worker: String, engine: String, shell: String) throws -> String {
+    static func generateAssetsSource(
+        css: String, js: String, engine: String, shell: String,
+        cssMinified: String,
+        cssGzip: String, jsGzip: String, engineGzip: String, shellGzip: String
+    ) throws -> String {
         let escapedCSS = css.replacingOccurrences(of: "\\", with: "\\\\")
         let escapedJS = js.replacingOccurrences(of: "\\", with: "\\\\")
-        let escapedClient = client.replacingOccurrences(of: "\\", with: "\\\\")
-        let escapedBoot = clientBoot.replacingOccurrences(of: "\\", with: "\\\\")
-        let escapedSearchBoot = clientSearchBoot.replacingOccurrences(of: "\\", with: "\\\\")
-        let escapedWorker = worker.replacingOccurrences(of: "\\", with: "\\\\")
         let escapedEngine = engine.replacingOccurrences(of: "\\", with: "\\\\")
         let escapedShell = shell.replacingOccurrences(of: "\\", with: "\\\\")
 
@@ -140,26 +265,6 @@ enum WebUIAssetTool {
             .joined(separator: "\n")
 
         let indentedJS = escapedJS
-            .split(separator: "\n", omittingEmptySubsequences: false)
-            .map { "    \($0)" }
-            .joined(separator: "\n")
-
-        let indentedClient = escapedClient
-            .split(separator: "\n", omittingEmptySubsequences: false)
-            .map { "    \($0)" }
-            .joined(separator: "\n")
-
-        let indentedBoot = escapedBoot
-            .split(separator: "\n", omittingEmptySubsequences: false)
-            .map { "    \($0)" }
-            .joined(separator: "\n")
-
-        let indentedSearchBoot = escapedSearchBoot
-            .split(separator: "\n", omittingEmptySubsequences: false)
-            .map { "    \($0)" }
-            .joined(separator: "\n")
-
-        let indentedWorker = escapedWorker
             .split(separator: "\n", omittingEmptySubsequences: false)
             .map { "    \($0)" }
             .joined(separator: "\n")
@@ -174,8 +279,15 @@ enum WebUIAssetTool {
             .map { "    \($0)" }
             .joined(separator: "\n")
 
+        let escapedMinified = cssMinified.replacingOccurrences(of: "\\", with: "\\\\")
+        let indentedMinified = escapedMinified
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map { "    \($0)" }
+            .joined(separator: "\n")
+
         let assets = """
         import Foundation
+        import WebUICore
         public enum WebUIAssets {
             public static let css: String = \"\"\"
         \(indentedCSS)
@@ -183,24 +295,32 @@ enum WebUIAssetTool {
             public static let js: String = \"\"\"
         \(indentedJS)
             \"\"\"
-            public static let client: String = \"\"\"
-        \(indentedClient)
-            \"\"\"
-            public static let clientBoot: String = \"\"\"
-        \(indentedBoot)
-            \"\"\"
-            public static let clientSearchBoot: String = \"\"\"
-        \(indentedSearchBoot)
-            \"\"\"
-            public static let worker: String = \"\"\"
-        \(indentedWorker)
-            \"\"\"
             public static let engine: String = \"\"\"
         \(indentedEngine)
             \"\"\"
             public static let shell: String = \"\"\"
         \(indentedShell)
             \"\"\"
+            /// the sheet exactly as it ships: minified at BUILD time, so the served
+            /// bytes are build-time-known and therefore compressible at build time.
+            public static let cssMinified: String = \"\"\"
+        \(indentedMinified)
+            \"\"\"
+            /// pre-compressed variants, base64 (a 52k-element `[UInt8]` literal is
+            /// slow to type-check). `nil` means the build host had no `gzip`; the
+            /// server then falls back to the raw bytes rather than serving nothing.
+            private static let cssGzipBase64 = "\(cssGzip)"
+            private static let jsGzipBase64 = "\(jsGzip)"
+            private static let engineGzipBase64 = "\(engineGzip)"
+            private static let shellGzipBase64 = "\(shellGzip)"
+            public static let cssGzip: [UInt8]? = decodeGzip(cssGzipBase64)
+            public static let jsGzip: [UInt8]? = decodeGzip(jsGzipBase64)
+            public static let engineGzip: [UInt8]? = decodeGzip(engineGzipBase64)
+            public static let shellGzip: [UInt8]? = decodeGzip(shellGzipBase64)
+            private static func decodeGzip(_ text: String) -> [UInt8]? {
+                guard !text.isEmpty, let bytes = Base64.decode(text), !bytes.isEmpty else { return nil }
+                return bytes
+            }
         }
         """
 

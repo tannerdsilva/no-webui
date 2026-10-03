@@ -1,5 +1,5 @@
 // MARK: - CSSDeclaration
-public struct CSSDeclaration: Sendable, Equatable {
+public struct CSSDeclaration: Sendable, Equatable, Codable {
     public let property: String
     public let value: String
     public init(_ property: String, _ value: String) {
@@ -9,7 +9,7 @@ public struct CSSDeclaration: Sendable, Equatable {
 }
 
 // MARK: - CSSRule
-public struct CSSRule: Sendable, Equatable {
+public struct CSSRule: Sendable, Equatable, Codable {
     public let selector: String
     public let declarations: [CSSDeclaration]
     public init(_ selector: String, _ declarations: [CSSDeclaration]) {

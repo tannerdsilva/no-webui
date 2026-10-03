@@ -110,13 +110,22 @@ token). The detailed table is in `Documentation/ARCHITECTURE.md`.
 
 - **No-prefix BEM classes** (`.button`, `.button--primary`, `.card`,
   `.list__item`); `br-` appears only in keyframe names.
-- **Token-only values** in component CSS; tokens single-sourced in the CSS (the
-  Swift `WebUITheme` palette is legacy — don't trust or duplicate it).
-- **No comments in shipped web assets** (`design-system.css`,
-  `webui-runtime.js`, generated documents); comments live in Swift and
-  `Documentation/*.md`.
-- **Dark mode** via `@media (prefers-color-scheme: dark)` remapping the
-  semantic tokens — design and verify both themes.
+- **Token-only values** in component CSS; tokens single-sourced in the CSS
+  (`design-system.css` is the vocabulary's source of truth — the Swift
+  `WebUITheme`/`@Theme` surface is the *typed* way to restate them, not a second
+  palette to keep in sync).
+- **Cascade layers.** the sheet ships in `@layer webui, webui.utilities`, so
+  *unlayered* css always wins: an app's own sheet, `rawStyles`, and the theme sheet
+  outrank the framework by origin. restyling a component needs no `!important` and
+  no matching specificity.
+- **Comments**: `design-system.css` may carry designer notes (the build minifies
+  them away); the served payloads — the minified sheet, the runtime, the engine,
+  the shell — are comment-free, and `ProseGuard` fails the build if one appears.
+  comments otherwise live in Swift and `Documentation/*.md`.
+- **Dark mode** is engine-driven: the sheet's dark rules are re-keyed on
+  `[data-theme="dark"]` and a pre-paint prelude applies the stored choice before
+  first paint (the prelude is inline and carries the render nonce — the page's CSP
+  names it). design and verify both themes.
 - **Icons, never emoji**; each icon slot needs an explicit CSS box.
 
 ## Maintainer pitfalls

@@ -1,0 +1,6 @@
+{
+  "types": [
+    { "name": "ProbeAsset", "kind": "file", "path": "probe.css",
+      "contentType": "text/css; charset=utf-8", "minify": true, "prose": "check" }
+  ]
+}

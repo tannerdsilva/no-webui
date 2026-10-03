@@ -1001,6 +1001,58 @@ func wsOutgoingUpdateWithoutSeq() throws {
     #expect(!json.contains("\"seq\""))
 }
 
+@Test("WSOutgoing.update encodes the per-fragment transition flag")
+func wsOutgoingUpdateTransitionFlag() throws {
+    let msg = WSOutgoing.update(fragments: [
+        FragmentUpdate(id: "animated", html: "<p>A</p>"),
+        FragmentUpdate(id: "hot", html: "<p>B</p>", transition: false)
+    ])
+    // the data-free jsonText path is the wire encoder (broadcast + per-connection).
+    let json = msg.jsonText
+    #expect(json.contains("\"transition\":false"))
+    // exactly one fragment carries the flag — the default stays absent.
+    #expect(json.components(separatedBy: "\"transition\"").count == 2)
+    // the Codable path agrees and never emits an explicit null.
+    let encoder = JSONEncoder()
+    encoder.outputFormatting = [.withoutEscapingSlashes]
+    let encoded = String(data: try encoder.encode(msg), encoding: .utf8)!
+    #expect(encoded.contains("\"transition\":false"))
+    #expect(!encoded.contains("\"transition\":null"))
+}
+
+@Test("WSOutgoing.update encodes append and text ops")
+func wsOutgoingUpdateOps() throws {
+    let msg = WSOutgoing.update(fragments: [
+        FragmentUpdate.append(id: "chat-inner", html: "<div id=\"msg-1\">m</div>", before: "live-turn"),
+        FragmentUpdate.text(id: "live-turn-body", value: "hello"),
+        FragmentUpdate(id: "plain", html: "<p>x</p>"),
+    ])
+    let json = msg.jsonText
+    #expect(json.contains("\"op\":\"append\""))
+    #expect(json.contains("\"before\":\"live-turn\""))
+    #expect(json.contains("\"op\":\"text\""))
+    #expect(json.contains("\"text\":\"hello\""))
+    // exactly the two op fragments carry "op"; the default replace emits none.
+    #expect(json.components(separatedBy: "\"op\"").count == 3)
+}
+
+@Test("FragmentUpdate ops round-trip")
+func fragmentUpdateOpsRoundTrip() throws {
+    let appended = FragmentUpdate.append(id: "c", html: "<div id=\"k\">k</div>", before: "anchor")
+    let appendBack = try JSONDecoder().decode(FragmentUpdate.self, from: try JSONEncoder().encode(appended))
+    #expect(appendBack.op == .append)
+    #expect(appendBack.before == "anchor")
+    let texted = FragmentUpdate.text(id: "t", value: "v")
+    let textBack = try JSONDecoder().decode(FragmentUpdate.self, from: try JSONEncoder().encode(texted))
+    #expect(textBack.op == .text)
+    #expect(textBack.text == "v")
+    // legacy payloads (no op fields) decode with a nil op = replace.
+    let legacy = Data("{\"id\":\"legacy\",\"html\":\"<p>L</p>\"}".utf8)
+    let legacyBack = try JSONDecoder().decode(FragmentUpdate.self, from: legacy)
+    #expect(legacyBack.op == nil)
+    #expect(legacyBack.text == nil)
+}
+
 @Test("WSOutgoing.redirect encodes with replace")
 func wsOutgoingRedirect() throws {
     let msg = WSOutgoing.redirect(url: "/login", replace: true)
@@ -1167,6 +1219,18 @@ func fragmentUpdateRoundTrip() throws {
     let decoded = try JSONDecoder().decode(FragmentUpdate.self, from: data)
     #expect(decoded.id == "test-id")
     #expect(decoded.html == "<div>Content</div>")
+    #expect(decoded.transition == nil)
+    #expect(!String(data: data, encoding: .utf8)!.contains("\"transition\""))
+    // the per-fragment transition flag round-trips.
+    let flagged = FragmentUpdate(id: "hot", html: "<p>B</p>", transition: false)
+    let flaggedData = try encoder.encode(flagged)
+    let flaggedDecoded = try JSONDecoder().decode(FragmentUpdate.self, from: flaggedData)
+    #expect(flaggedDecoded.transition == false)
+    // legacy payloads (no flag) decode with the transition policy in charge.
+    let legacy = Data("{\"id\":\"legacy\",\"html\":\"<p>L</p>\"}".utf8)
+    let legacyDecoded = try JSONDecoder().decode(FragmentUpdate.self, from: legacy)
+    #expect(legacyDecoded.id == "legacy")
+    #expect(legacyDecoded.transition == nil)
 }
 
 // MARK: - Event Handling Tests

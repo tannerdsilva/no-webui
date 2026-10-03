@@ -66,19 +66,28 @@ func extractTags(_ html: String) -> [String] {
 func validateTagBalance(_ html: String, sourceLocation: SourceLocation = #_sourceLocation) -> Bool {
     let tags = extractTags(html)
     var stack: [String] = []
+    var history: [String] = []
     let voidElements: Set<String> = ["br", "hr", "img", "input", "meta", "link", "area", "base", "col", "embed", "source", "track", "wbr"]
 
     for tag in tags {
+        history.append(tag)
+        if history.count > 12 {
+            history.removeFirst()
+        }
         if tag.hasPrefix("/") {
             let closeTag = String(tag.dropFirst())
             if stack.last == closeTag {
                 stack.removeLast()
             } else {
+                print("validateTagBalance: closing </\(closeTag)> does not match <\(stack.last ?? "nothing")> — recent tags: \(history)")
                 return false
             }
         } else if !voidElements.contains(tag) {
             stack.append(tag)
         }
+    }
+    if !stack.isEmpty {
+        print("validateTagBalance: unclosed at end: \(stack) — recent tags: \(history)")
     }
     return stack.isEmpty
 }
@@ -1711,13 +1720,28 @@ struct CompanionPrimitiveTests {
         #expect(html.contains("aria-current=\"page\""))
         #expect(html.contains("href=\"/s1\""))
         #expect(validateTagBalance(html))
-        // short trail => no collapse
+        // short trail => no collapse, AND the current segment still renders
+        // (regression: the tail loop ran zero times when not collapsed, so the
+        // current was dropped and the trail ended in a dangling separator)
         let short = WebUIBreadcrumb(
             items: [WebUIBreadcrumb.Item("Home", href: "/")],
             current: WebUIBreadcrumb.Item("Here")
         ).render()
         #expect(short.range(of: "breadcrumb__ellipsis") == nil)
         #expect(short.contains("class=\"breadcrumb\""))
+        #expect(short.contains(">Here</span>"), "current segment missing: \(short)")
+        #expect(short.contains("aria-current=\"page\""))
+        #expect(validateTagBalance(short))
+    }
+
+    @Test("a breadcrumb with no parent items renders just the current segment")
+    func breadcrumbBareCurrent() {
+        let html = WebUIBreadcrumb(items: [], current: WebUIBreadcrumb.Item("Only")).render()
+        #expect(html.contains(">Only</span>"), "current segment missing: \(html)")
+        #expect(html.contains("breadcrumb__item--current"))
+        // no parent items means nothing to separate
+        #expect(!html.contains("breadcrumb__separator"))
+        #expect(validateTagBalance(html))
     }
 
     @Test("WebUIBreadcrumb slash variant and javascript: href degrade to plain text")

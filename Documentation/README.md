@@ -9,7 +9,7 @@ zero external CSS/JS frameworks — the entire UI compiles into the binary.
 | Module | Path | Purpose |
 |---|---|---|
 | `WebUI` | `Sources/WebUI/` | Core: View protocol, ViewBuilder, primitives, layouts, modifiers, CSS system, HTML document assembly, WebSocket protocol, JS runtime, native svg iconography (`WebUIIcon`, `IconName`) |
-| `WebUIDesignSystem` | `Sources/WebUIDesignSystem/` | Design system: 225 CSS custom properties (tokens), 22 styled components (Button, Card, Input, Modal, etc.) |
+| `WebUIDesignSystem` | `Sources/WebUIDesignSystem/` | Design system: 205 CSS custom properties (tokens), 133 component types (Button, Card, Input, Modal, …) |
 | `WebUIAuth` | `Sources/WebUIAuth/` | Authentication + sessions: identity model, session tokens, cookies, the `AuthSessionStore` protocol + in-memory store, Argon2id password verification (thread-pool offloaded in the reference server), constant-time compare, `AuthContext` — a persistent store is backend-provided (the LMDB store was removed from the package 2026-09) |
 | `WebUIAssetTool` | `Sources/WebUIAssetTool/` | Build-time executable that embeds CSS + JS as Swift string constants |
 | `WebUIIconTool` | `Sources/WebUIIconTool/` | Build-time + standalone svg icon toolset (`generate`/`lint`/`list`/`stats`/`render-preview`) that turns `designer/icons/icon-manifest.json` into the `IconName` catalog (see `Documentation/ICONS.md`) |
@@ -51,8 +51,7 @@ Client event → EventRouter.handle() → [FragmentUpdate] → WS send → DOM p
 
 See `Documentation/ARCHITECTURE.md` for the complete flow. For the login page +
 session authentication design (protocols, cookie layer, WebSocket binding,
-hardening deltas), see `Documentation/AUTH_SESSIONS.md`; for the item-by-item
-execution breakdown, see `Documentation/IMPLEMENTATION_PLAN.md`.
+hardening deltas), see `Documentation/AUTH_SESSIONS.md`.
 
 ## Tooling
 

@@ -489,3 +489,58 @@ public struct WebUIThemeToggle: View {
         """
     }
 }
+
+
+// MARK: WebUI Item
+/// a list row composed from the sheet's `list__*` parts: an optional leading
+/// glyph, a title/subtitle body, a trailing meta line, and hover-revealed
+/// actions. the hide/reveal is the sheet's density treatment for management
+/// rows (`.list__item:hover .list__actions`), not an accident.
+public struct WebUIItem: View {
+    public let title: String
+    public let subtitle: String?
+    /// trailing monospace meta, e.g. "42 ms".
+    public let meta: String?
+    public let icon: IconName?
+    public let selected: Bool
+    public let id: String?
+    public let actions: [any View]
+
+    public init(
+        title: String,
+        subtitle: String? = nil,
+        meta: String? = nil,
+        icon: IconName? = nil,
+        selected: Bool = false,
+        id: String? = nil,
+        @ViewBuilder actions: () -> [any View] = { [] }
+    ) {
+        self.title = title
+        self.subtitle = subtitle
+        self.meta = meta
+        self.icon = icon
+        self.selected = selected
+        self.id = id
+        self.actions = actions()
+    }
+
+    public func render() -> String {
+        var html = "<div class=\"list__item\(selected ? " list__item--selected" : "")\""
+        if let id { html += " id=\"\(htmlEscape(id))\"" }
+        html += ">"
+        if let icon {
+            html += "<span class=\"list__icon\">" + WebUIIcon(icon, size: .small).render() + "</span>"
+        }
+        html += "<span class=\"list__body\"><span class=\"list__title\">\(htmlEscape(title))</span>"
+        if let subtitle { html += "<span class=\"list__sub\">\(htmlEscape(subtitle))</span>" }
+        html += "</span>"
+        if let meta { html += "<span class=\"list__meta\">\(htmlEscape(meta))</span>" }
+        if !actions.isEmpty {
+            html += "<span class=\"list__actions\">"
+            for action in actions { html += "<span class=\"list__action\">" + action.render() + "</span>" }
+            html += "</span>"
+        }
+        html += "</div>"
+        return html
+    }
+}

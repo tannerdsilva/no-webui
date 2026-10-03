@@ -9,6 +9,14 @@ import WebUIDesignSystem
 /// server is the source of truth, every patch re-emits post-state markup.
 /// public so the showcase server can own one instance and share it with
 /// both the render closure and the wired handlers.
+/// one line of the chat demo: which side it renders on, the text, and the label
+/// the bubble shows as a timestamp.
+struct ChatLine: Sendable {
+	var side: String
+	var text: String
+	var time: String
+}
+
 public final class ShowcaseState: Sendable {
 	public init() {}
 
@@ -25,6 +33,12 @@ public final class ShowcaseState: Sendable {
 		var rowsPerPage = 25
 		var treeExpanded: Set<String> = ["src", "ui"]
 		var treeSelected: String? = "view"
+		var hiddenColumns: Set<Int> = []
+		var chat: [ChatLine] = [
+			ChatLine(side: "received", text: "Deploy went out at 09:12.", time: "09:12"),
+			ChatLine(side: "sent", text: "Watching the dashboards.", time: "09:13"),
+			ChatLine(side: "received", text: "All green on my side.", time: "09:14"),
+		]
 	}
 
 	private let values = Mutex(Values())
@@ -76,6 +90,21 @@ public final class ShowcaseState: Sendable {
 	var treeSelected: String? {
 		get { values.withLock { $0.treeSelected } }
 		set { values.withLock { $0.treeSelected = newValue } }
+	}
+
+	var hiddenColumns: Set<Int> {
+		get { values.withLock { $0.hiddenColumns } }
+		set { values.withLock { $0.hiddenColumns = newValue } }
+	}
+
+	var chat: [ChatLine] {
+		get { values.withLock { $0.chat } }
+		set { values.withLock { $0.chat = newValue } }
+	}
+
+	/// append one outgoing line: the chat demo's server-side mutation.
+	func appendChat(_ text: String) {
+		values.withLock { $0.chat.append(ChatLine(side: "sent", text: text, time: "just now")) }
 	}
 
 	var tableSort: (column: Int, direction: WebUITable.SortDirection)? {
@@ -136,6 +165,57 @@ func contentTabs(state: ShowcaseState) -> WebUITabs {
 	)
 }
 
+/// the live chat demo: a bottom-anchored scroller over the server-held lines,
+/// with a typing indicator pinned at the newest edge. the scroller reverses its
+/// children internally, so this list stays chronological.
+func liveChat(state: ShowcaseState) -> WebUIMessageScroller {
+	WebUIMessageScroller(height: "22rem", id: "live-chat", ariaLabel: "Live conversation") {
+		WebUIMarker("Live session")
+		for line in state.chat {
+			WebUIChatBubble(
+				line.text,
+				side: line.side == "sent" ? .sent : .received,
+				time: line.time,
+				receipt: line.side == "sent" ? .delivered : nil
+			)
+		}
+		WebUITypingIndicator(inline: true)
+	}
+}
+
+/// the column-visibility control for the interactive table demo. it is a plain
+/// `WebUIMenu` whose selection is dispatched by `targetId` — the container-handler
+/// pattern — and whose effect is host state: toggling an index re-renders the menu
+/// (for the check marks) and the table (which simply stops emitting that column).
+func columnMenu(state: ShowcaseState) -> WebUIMenu {
+	let columns = ["Service", "Region", "p95"]
+	return WebUIMenu(
+		items: columns.enumerated().map { index, name in
+			WebUIMenu.Item(
+				name,
+				icon: state.hiddenColumns.contains(index) ? .xCircle : .checkCircle
+			)
+		},
+		id: "column-menu",
+		onSelect: { event in
+			guard let raw = event.string("targetId"),
+			      let last = raw.split(separator: "-").last,
+			      let index = Int(last) else { return [] }
+			if state.hiddenColumns.contains(index) {
+				state.hiddenColumns.remove(index)
+			} else {
+				state.hiddenColumns.insert(index)
+			}
+			return [
+				FragmentUpdate(id: "column-menu", html: columnMenu(state: state).render()),
+				FragmentUpdate(id: "demo-interactive", html: interactiveTable(state: state).render()),
+			]
+		},
+		header: "Columns",
+		panel: true
+	)
+}
+
 func interactiveTable(state: ShowcaseState) -> WebUITable {
 	WebUITable(
 		headers: ["Service", "Region", "p95"],
@@ -151,6 +231,7 @@ func interactiveTable(state: ShowcaseState) -> WebUITable {
 		alignments: [.leading, .leading, .trailing],
 		id: "demo-interactive",
 		sortableColumns: [0, 1, 2],
+		hiddenColumns: state.hiddenColumns,
 		sort: state.tableSort,
 		selectable: true,
 		rowIds: ["web", "api", "search"],

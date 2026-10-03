@@ -12,6 +12,7 @@ import NIOWebSocket
 import Synchronization
 import WebUI
 import WebUIDesignSystem
+import WebUIBlocks
 import WebUIChart
 import WebUISmokeShared
 
@@ -28,6 +29,7 @@ final class SmokeState: Sendable {
 		var tableSelected: Set<String> = []
 		var tableExpanded: Set<String> = []
 		// interactive chart demo (chart selection: click a bar → server re-renders)
+		var hiddenColumns: Set<Int> = []
 		var chartSelected: String? = nil
 	}
 	private let values = Mutex(Values())
@@ -60,6 +62,10 @@ final class SmokeState: Sendable {
 		get { values.withLock { $0.tableExpanded } }
 		set { values.withLock { $0.tableExpanded = newValue } }
 	}
+	var hiddenColumns: Set<Int> {
+		get { values.withLock { $0.hiddenColumns } }
+		set { values.withLock { $0.hiddenColumns = newValue } }
+	}
 	var chartSelected: String? {
 		get { values.withLock { $0.chartSelected } }
 		set { values.withLock { $0.chartSelected = newValue } }
@@ -68,12 +74,50 @@ final class SmokeState: Sendable {
 
 // MARK: - Interactive table demo data
 
+/// the base direction for the page: `WEBUI_DIR=rtl` renders every surface
+/// mirrored, which is how the interactive page gets an rtl pass.
+let smokeDir = ProcessInfo.processInfo.environment["WEBUI_DIR"]
+
 let smokeTableRecords: [(id: String, name: String, region: String, ms: Int, detail: String)] = [
 	("web", "web", "us-east-1", 42, "8 instances · 99.98% SLA · canary 10% to v2.14"),
 	("api", "api", "eu-west-2", 18, "4 instances · 99.95% SLA · zero-downtime deploys"),
 	("search", "search", "us-west-2", 61, "12 shards · 99.9% SLA · 3 warm nodes"),
 	("auth", "auth", "ap-south-1", 9, "3 instances · 100% SLA · hardware-backed keys"),
 ]
+
+/// the column-visibility control for the smoke table: a plain `WebUIMenu`
+/// dispatched by `targetId` (the container-handler pattern), whose effect is
+/// host state. the handler re-emits the menu (check marks) and the table
+/// (which stops emitting the hidden column) - the p4 surface, on the page the
+/// full-stack gate drives.
+func smokeColumnMenuHTML(state: SmokeState) -> String {
+	let columns = ["Name", "Region", "p95"]
+	return WebUIMenu(
+		items: columns.enumerated().map { index, name in
+			WebUIMenu.Item(
+				name,
+				icon: state.hiddenColumns.contains(index) ? .xCircle : .checkCircle
+			)
+		},
+		id: "smoke-column-menu",
+		onSelect: { event in
+			guard let raw = event.string("targetId"),
+			      let last = raw.split(separator: "-").last,
+			      let index = Int(last) else { return [] }
+			if state.hiddenColumns.contains(index) {
+				state.hiddenColumns.remove(index)
+			} else {
+				state.hiddenColumns.insert(index)
+			}
+			return [
+				FragmentUpdate(id: "smoke-column-menu", html: smokeColumnMenuHTML(state: state)),
+				FragmentUpdate(id: "interactive-table", html: interactiveTableHTML(state: state)),
+			]
+		},
+		header: "Columns",
+		panel: true
+	).render()
+}
 
 func interactiveTableHTML(state: SmokeState) -> String {
 	let col = state.tableSortColumn
@@ -103,6 +147,7 @@ func interactiveTableHTML(state: SmokeState) -> String {
 		alignments: [.leading, .leading, .trailing],
 		id: "interactive-table",
 		sortableColumns: [0, 1, 2],
+		hiddenColumns: state.hiddenColumns,
 		sort: (col, asc ? .ascending : .descending),
 		selectable: true,
 		rowIds: sorted.map { $0.id },
@@ -277,6 +322,12 @@ func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
 				// truth for sort, selection and expansion.
 				WebUICard(variant: .outlined) {
 					Heading("Table (sort · select · expand)", level: .h3)
+					Div(class: "smoke__columns") {
+						Raw(smokeColumnMenuHTML(state: state))
+						Div(class: "smoke__chart-hint") {
+							Text("Use the Columns menu to hide one - the server owns the state.")
+						}
+					}
 					Div(id: "interactive-table-anchor", class: "table-wrap") {
 						Raw(interactiveTableHTML(state: state))
 					}
@@ -298,6 +349,69 @@ func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
 						Text("Click a bar to toggle its selection.")
 					}
 				}
+				// p5 surface: the polar marks and the gradient fill, shown so the
+				// preview reflects the whole chart library. static — no handlers,
+				// so no data-component-id and the interactive-count pin is
+				// unaffected by this card (the routed chart is the one above).
+				WebUICard(variant: .elevated) {
+					Heading("Charts (radar · radial · gradient)", level: .h3)
+					Div(class: "grid grid--2") {
+						Chart {
+							RadarMark([("speed", 8), ("reliability", 6), ("cost", 4), ("support", 7), ("reach", 5)], series: "eu")
+								.foregroundStyle(by: "eu")
+							RadarMark([("speed", 5), ("reliability", 9), ("cost", 7), ("support", 3), ("reach", 8)], series: "us")
+								.foregroundStyle(by: "us")
+						}
+						.chartTitle("Radar")
+						.chartHeight(260)
+						.chartAspectRatio(1)
+						Chart {
+							RadialMark(value: 72, of: 100, series: "cpu")
+								.foregroundStyle(by: "cpu")
+						}
+						.chartTitle("Radial gauge")
+						.chartHeight(260)
+						.chartAspectRatio(1)
+						.chartLegend(position: .hidden)
+					}
+					Chart {
+						ForEach(Array([12.0, 18.0, 15.0, 24.0, 31.0, 27.0, 38.0].enumerated().map { (x: Double($0.offset + 1), y: $0.element) })) { p in
+							Group {
+								AreaMark(x: .value("Week", p.x), y: .value("Requests", p.y))
+									.foregroundStyle(by: "requests")
+									.areaGradient(.fade(.explicit("var(--color-chart-3)")))
+								LineMark(x: .value("Week", p.x), y: .value("Requests", p.y))
+									.foregroundStyle(by: "requests")
+									.interpolation(.catmullRom)
+							}
+						}
+					}
+					.chartTitle("Area with a gradient fill")
+					.chartHeight(240)
+					.chartLegend(position: .hidden)
+				}
+				// p7 surface: the zero-js long tail. the entries carry no href, so
+				// they render as plain rows — nothing interactive, nothing to wire.
+				WebUICard(variant: .elevated) {
+					Heading("Carousel · Menubar (no client script)", level: .h3)
+					WebUIMenubar(items: [
+						WebUIMenubar.Item("File", entries: [.init("New"), .init("Open"), .init("Export")]),
+						WebUIMenubar.Item("View", entries: [.init("Zoom in"), .init("Zoom out"), .init("Reset")]),
+						WebUIMenubar.Item("Help", entries: [.init("Shortcuts")]),
+					], id: "smoke-menubar")
+					WebUICarousel(id: "smoke-carousel", label: "Smoke slides", slides: [
+						VStack(alignment: .leading, spacing: 8) {
+							Heading("Scroll-snap", level: .h3)
+							Paragraph("Focus the track and press the arrow keys — it scrolls natively, with no script.")
+						}
+						.padding(16),
+						VStack(alignment: .leading, spacing: 8) {
+							Heading("Dots are anchors", level: .h3)
+							Paragraph("They jump to a slide; tracking the current one would need script, so it is not claimed.")
+						}
+						.padding(16),
+						])
+				}
 				WebUICard(variant: .elevated) {
 					Heading("Island validation (same Swift in wasm)", level: .h3)
 					Div(class: "smoke__island-row") {
@@ -313,18 +427,12 @@ func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
 			}
 		}
 	}
-	// the gate-drive mode switch: WEBUI_BOOT=wasm boots the same interactive
-	// page through the explicit wasm client (chamber + artifact); the default
-	// (unset or =engine) boots the engine — the framework default after the
-	// next-architecture flip.
-	let wasmMode = ProcessInfo.processInfo.environment["WEBUI_BOOT"] == "wasm"
 		return WebUIDocument(
 			title: "Design System Full-Stack Smoke Test",
 			body: body,
 			head: smokePageStyle,
-			clientMode: wasmMode
-				? ClientBoot(wasmURL: clientWasmURL(WebUIBoot.wasmSHA256), config: RuntimeConfig(), flavor: .wasm)
-				: ClientBoot(config: RuntimeConfig(capabilities: ["validate", "never-built", "offline"]), flavor: .engine)
+			clientMode: ClientBoot(config: RuntimeConfig(capabilities: ["validate", "never-built", "offline"])),
+			dir: smokeDir,
 		).render()
 	}
 
@@ -388,20 +496,17 @@ struct SmokeApp {
 	let router: EventRouter
 	let pageHTML: String
 	let connectionGate: ConnectionGate
-	let clientWasm: [UInt8]
-	let clientWasmHash: String
 	let islandValidate: [UInt8]
-	let clientDemoPage: String
-	let searchDemoPage: String
 }
 
 /// read a release wasm product (built separately with the wasm sdk) so the
 /// smoke server can serve it as a first-class static asset. an absent
 /// artifact yields empty bytes and the route 404s (gates build it first).
 func readWasmArtifact(_ product: String) -> [UInt8] {
-	guard let url = WebUIBoot.wasmProductURL(productName: product) else { return [] }
+	let url = URL(fileURLWithPath: ".build/out/Products/Release-webassembly-wasm32/\(product).wasm")
+	guard FileManager.default.fileExists(atPath: url.path) else { return [] }
 	let path = url.path
-	let fd = open(path, O_RDONLY)
+	let fd = open(path, O_RDONLY | O_CLOEXEC)
 	guard fd >= 0 else { return [] }
 	defer { close(fd) }
 	var st = stat()
@@ -415,46 +520,13 @@ func readWasmArtifact(_ product: String) -> [UInt8] {
 	return bytes
 }
 
-/// the content-addressed wasm url (immutable-cached) or the no-store alias
-/// when the artifact is absent.
-func clientWasmURL(_ hash: String) -> String {
-	hash.isEmpty ? "/__assets/app.wasm" : "/__assets/app.\(hash).wasm"
-}
 
 /// the client-mode hydration probe page (clientMode contract emitted by the
 /// framework — the smoke server only supplies the artifact url + script urls).
-func makeClientDemoPage(wasmHash: String) -> String {
-	let body = HydrationView().render()
-	let boot = ClientBoot(
-		wasmURL: clientWasmURL(wasmHash),
-		mode: .hydrate,
-		scriptURLs: ["/__assets/webui-client.js", "/__assets/client-demo-boot.js"]
-	)
-	return HTMLDocument(
-		title: "WebUI Client Render — Hydration Probe",
-		body: "<div id=\"app\" class=\"smoke\">\(body)</div>",
-		clientMode: boot,
-		includeRuntime: false
-	).render()
-}
 
 /// the local-search vertical page. the wasm boots the search page (webui_init),
 /// mounts it into `#search-app`, and dispatches delegated events entirely in
 /// wasm — the websocket stays silent on the hot path.
-func makeSearchDemoPage(wasmHash: String) -> String {
-	let boot = ClientBoot(
-		wasmURL: clientWasmURL(wasmHash),
-		mode: .app,
-		config: RuntimeConfig(capabilities: ["focus", "clipboard", "broadcast", "files", "fullscreen", "media"], persistence: "indexeddb"),
-		scriptURLs: ["/__assets/webui-client.js", "/__assets/search-demo-boot.js"]
-	)
-	return HTMLDocument(
-		title: "WebUI Client Render — Local Search",
-		body: "<div id=\"search-app\" class=\"search\"></div>",
-		clientMode: boot,
-		includeRuntime: false
-	).render()
-}
 
 enum SmokeUpgradeResult: Sendable {
 	case websocket(NIOAsyncChannel<WebSocketFrame, WebSocketFrame>)
@@ -477,19 +549,13 @@ extension SmokeApp {
 		let router = EventRouter()
 		let page = renderSmokePage(state: state, router: router)
 		let connectionGate = ConnectionGate(maximum: intFlag(named: "--max-connections", default: 256))
-		let clientWasm = readWasmArtifact("WebUIClient")
-		let wasmHash = WebUIBoot.wasmHash(of: clientWasm)
 		let islandValidate = readWasmArtifact("WebUIValidateIsland")
 		let app = SmokeApp(
 			state: state,
 			router: router,
 			pageHTML: page,
 			connectionGate: connectionGate,
-			clientWasm: clientWasm,
-			clientWasmHash: wasmHash,
 			islandValidate: islandValidate,
-			clientDemoPage: makeClientDemoPage(wasmHash: wasmHash),
-			searchDemoPage: makeSearchDemoPage(wasmHash: wasmHash)
 		)
 		let logger = Logger(label: "webui.smoketest")
 		logger.info("full-stack smoke page rendered (\(page.utf8.count) bytes)")
@@ -646,38 +712,6 @@ extension SmokeApp {
 					try await respond405(channel: channel.channel)
 					return
 				}
-				if head.uri == "/__assets/app.wasm" {
-					guard !self.clientWasm.isEmpty else {
-						try await respond404(channel: channel.channel)
-						return
-					}
-					// the fixed-name alias stays no-store (gates + probes fetch by
-					// name and must never see a stale binary).
-					try await respond(channel: channel.channel, bytes: self.clientWasm, contentType: "application/wasm")
-					return
-				}
-				if !self.clientWasmHash.isEmpty, head.uri == "/__assets/app.\(self.clientWasmHash).wasm" {
-					// the content-addressed timer: immutable cache for a year; the
-					// hash changes with the binary, so this route can never go stale.
-					try await respond(
-						channel: channel.channel,
-						bytes: self.clientWasm,
-						contentType: "application/wasm",
-						cacheControl: "public, max-age=31536000, immutable"
-					)
-					return
-				}
-				if head.uri.hasPrefix("/__assets/webui-client."), head.uri.hasSuffix(".wasm") {
-					// the framework's wasm-always default client route —
-					// content-addressed & immutable.
-					try await respond(
-						channel: channel.channel,
-						bytes: self.clientWasm,
-						contentType: "application/wasm",
-						cacheControl: "public, max-age=31536000, immutable"
-					)
-					return
-				}
 				if head.uri == "/__assets/webui-validate.wasm" {
 					// the validate capability island (next architecture d3);
 					// the engine fetches it lazily when a page declares the
@@ -702,28 +736,32 @@ extension SmokeApp {
 				case let cssURL where cssURL.hasPrefix("/__assets/css."):
 					text = DesignSystemAssets.minifiedCss; contentType = "text/css; charset=utf-8"
 					cacheControl = "public, max-age=31536000, immutable"
-				case "/ui/webui-client.js":
-					text = WebUIAssets.client; contentType = "text/javascript; charset=utf-8"
-				case "/ui/webui-app-boot.js":
-					text = WebUIAssets.clientBoot; contentType = "text/javascript; charset=utf-8"
+				case let blocks where blocks == "/blocks" || blocks.hasPrefix("/blocks/"):
+					// the blocks surface, served by this same preview process:
+					// /blocks is the index, /blocks/<name> one standalone scaffold.
+					let name = String(blocks.dropFirst("/blocks".count))
+						.trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+					if name.isEmpty {
+						text = WebUIBlocks.indexPage(dir: smokeDir)
+					} else if let block = Block(rawValue: name) {
+						text = WebUIBlocks.page(for: block, dir: smokeDir)
+					} else {
+						text = "<!DOCTYPE html><html><body><h1>unknown block</h1>"
+							+ "<p><a href=\"/blocks\">all blocks</a></p></body></html>"
+					}
+					contentType = "text/html; charset=utf-8"
+				case "/ui/probe.css":
+					// the embed plugin's dogfood: this payload is not a string in this
+					// file — it is `ProbeAsset`, a type a build produced from
+					// `Assets/webui-assets.json` (minified, prose-gated).
+					text = ProbeAsset.text; contentType = ProbeAsset.contentType
+					cacheControl = "public, max-age=31536000, immutable"
 				case "/ui/webui-engine.js":
 					text = WebUIAssets.engine; contentType = "text/javascript; charset=utf-8"
 					cacheControl = "public, max-age=3600"
 				case "/ui/webui-shell.js":
 					text = WebUIAssets.shell; contentType = "text/javascript; charset=utf-8"
 					cacheControl = "public, max-age=3600"
-				case "/__assets/webui-client.js":
-					text = WebUIAssets.client; contentType = "text/javascript; charset=utf-8"
-				case "/__assets/webui-worker.js":
-					text = WebUIAssets.worker; contentType = "text/javascript; charset=utf-8"
-				case "/__assets/client-demo-boot.js":
-					text = WebUIAssets.clientBoot; contentType = "text/javascript; charset=utf-8"
-				case "/__assets/search-demo-boot.js":
-					text = WebUIAssets.clientSearchBoot; contentType = "text/javascript; charset=utf-8"
-				case "/__assets/client-demo":
-					text = self.clientDemoPage; contentType = "text/html; charset=utf-8"
-				case "/__assets/search-demo":
-					text = self.searchDemoPage; contentType = "text/html; charset=utf-8"
 				case "/", "/index.html":
 					text = self.pageHTML; contentType = "text/html; charset=utf-8"
 				default:
@@ -733,8 +771,8 @@ extension SmokeApp {
 				try await respond(channel: channel.channel, body: text, contentType: contentType, cacheControl: cacheControl)
 			}
 		}
-	}
 
+	}
 	private func respond(channel: Channel, body: String, contentType: String, status: HTTPResponseStatus = .ok, cacheControl: String = "no-store") async throws {
 		var head = HTTPResponseHead(version: .http1_1, status: status)
 		head.headers.replaceOrAdd(name: "Content-Type", value: contentType)
@@ -800,6 +838,7 @@ extension SmokeApp {
 		try await channel.writeAndFlush(HTTPPart<HTTPResponseHead, ByteBuffer>.end(nil)).get()
 	}
 }
+
 
 // MARK: - Entry point
 

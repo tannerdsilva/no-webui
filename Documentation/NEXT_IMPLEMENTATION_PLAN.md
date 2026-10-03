@@ -305,3 +305,7 @@ tables are linked, not stubbed).
 - **r5 (scope creep):** p3 is explicitly conditional; p4 only after p1–p2 land.
   the value ordering is p0→p1 (consumer fix) then p2 (dev parity) — everything
   after is polish, not gate.
+
+> **note (post-deletion):** the wasm monolith client and its targets have been
+> deleted; the engine is the client runtime and wasm survives as capability
+> islands. the phases below describe that migration's history.

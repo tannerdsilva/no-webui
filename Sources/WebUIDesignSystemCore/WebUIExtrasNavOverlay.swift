@@ -15,18 +15,40 @@ public struct WebUINavbar: View {
             self.label = label; self.href = href; self.active = active
         }
     }
+    /// the navbar's search slot: a field plus an optional key hint.
+    public struct Search: Sendable {
+        public let placeholder: String
+        /// key hint rendered in the trailing kbd, e.g. "Ctrl K".
+        public let shortcut: String?
+        public let id: String?
+        public init(placeholder: String = "Search", shortcut: String? = nil, id: String? = nil) {
+            self.placeholder = placeholder
+            self.shortcut = shortcut
+            self.id = id
+        }
+    }
     public let brand: String?
     public let links: [Link]
     public let actions: [any View]
     public let sticky: Bool
+    /// search slot; `nil` renders no field.
+    public let search: Search?
+    /// hamburger for the narrow breakpoint (the sheet hides it above it).
+    public let mobileMenu: Bool
+    /// accessible name for the hamburger.
+    public let mobileMenuLabel: String
     /// stable container id; when set with `onNavigate` each link self-wires
     /// (`targetId == "<id>-link-<index>"`).
     public let id: String?
     public let onNavigate: EventHandler?
     public init(brand: String? = nil, links: [Link] = [], sticky: Bool = false,
+                search: Search? = nil, mobileMenu: Bool = false,
+                mobileMenuLabel: String = "Menu",
                 id: String? = nil, onNavigate: EventHandler? = nil,
                 @ViewBuilder actions: () -> [any View]) {
         self.brand = brand; self.links = links; self.sticky = sticky
+        self.search = search; self.mobileMenu = mobileMenu
+        self.mobileMenuLabel = mobileMenuLabel
         self.id = id; self.onNavigate = onNavigate; self.actions = actions()
     }
 
@@ -41,6 +63,14 @@ public struct WebUINavbar: View {
         if let brand {
             html += "<a class=\"navbar__brand\" href=\"/\"><span class=\"navbar__brand-mark\"></span>\(htmlEscape(brand))</a>"
         }
+        if let search {
+            html += "<label class=\"navbar__search\" role=\"search\">"
+            html += "<input type=\"search\""
+            if let sid = search.id { html += " id=\"\(htmlEscape(sid))\"" }
+            html += " placeholder=\"\(htmlEscape(search.placeholder))\" aria-label=\"\(htmlEscape(search.placeholder))\">"
+            if let shortcut = search.shortcut { html += "<kbd>\(htmlEscape(shortcut))</kbd>" }
+            html += "</label>"
+        }
         if !links.isEmpty {
             html += "<div class=\"navbar__links\">"
             for (index, link) in links.enumerated() {
@@ -53,6 +83,11 @@ public struct WebUINavbar: View {
             html += "<div class=\"navbar__actions\">"
             for a in actions { html += a.render() }
             html += "</div>"
+        }
+        if mobileMenu {
+            html += "<button class=\"navbar__hamburger\" type=\"button\" aria-label=\"\(htmlEscape(mobileMenuLabel))\">"
+            html += "<span></span><span></span><span></span>"
+            html += "</button>"
         }
         html += "</nav>"
         return html
@@ -659,21 +694,48 @@ public struct WebUIMenu: View {
         public let icon: IconName?
         public let destructive: Bool
         public let disabled: Bool
+        /// leading initials chip instead of a glyph.
+        public let avatar: String?
+        /// muted second line under the label.
+        public let hint: String?
+        /// marks the item as the current one.
+        public let active: Bool
+        /// danger treatment (the newer spelling of `destructive`).
+        public let danger: Bool
+        /// opens a submenu; the sheet draws the trailing chevron via `::after`.
+        public let submenu: Bool
+        /// renders a rule above this item.
+        public let dividerBefore: Bool
+        /// renders a section label above this item.
+        public let section: String?
         public init(_ label: String, shortcut: String? = nil, icon: IconName? = nil,
-                    destructive: Bool = false, disabled: Bool = false) {
+                    destructive: Bool = false, disabled: Bool = false,
+                    avatar: String? = nil, hint: String? = nil, active: Bool = false,
+                    danger: Bool = false, submenu: Bool = false,
+                    dividerBefore: Bool = false, section: String? = nil) {
             self.label = label; self.shortcut = shortcut; self.icon = icon
             self.destructive = destructive; self.disabled = disabled
+            self.avatar = avatar; self.hint = hint; self.active = active
+            self.danger = danger; self.submenu = submenu
+            self.dividerBefore = dividerBefore; self.section = section
         }
     }
     public let items: [Item]
+    /// heading above the items.
+    public let header: String?
+    /// search placeholder; renders a `menu__search` row above the items.
+    public let search: String?
+    /// panelled treatment (`menu__panel`) for a floating menu.
+    public let panel: Bool
     /// stable container id; when set with `onSelect` each item self-wires
     /// (`targetId == "<id>-item-<index>"`).
     public let id: String?
     public let onSelect: EventHandler?
-    public init(items: [Item], id: String? = nil, onSelect: EventHandler? = nil) {
+    public init(items: [Item], id: String? = nil, onSelect: EventHandler? = nil,
+                header: String? = nil, search: String? = nil, panel: Bool = false) {
         self.items = items; self.id = id; self.onSelect = onSelect
+        self.header = header; self.search = search; self.panel = panel
     }
-
     public func render() -> String {
         let attrs: String
         if let id, let onSelect {
@@ -681,14 +743,31 @@ public struct WebUIMenu: View {
         } else {
             attrs = ""
         }
-        var html = "<div class=\"menu\"\(attrs) role=\"menu\">"
+        var html = "<div class=\"menu\(panel ? " menu__panel" : "")\""
+        if let id { html += " id=\"\(htmlEscape(id))\"" }
+        html += "\(attrs) role=\"menu\">"
+        if let header { html += "<div class=\"menu__header\">\(htmlEscape(header))</div>" }
+        if let search {
+            html += "<div class=\"menu__search\">"
+            html += "<input type=\"search\" placeholder=\"\(htmlEscape(search))\" aria-label=\"\(htmlEscape(search))\">"
+            html += "</div>"
+        }
         for (index, item) in items.enumerated() {
+            if let section = item.section { html += "<span class=\"menu__section\">\(htmlEscape(section))</span>" }
+            if item.dividerBefore { html += "<div class=\"menu__divider\"></div>" }
             var cls = "menu__item"
             if item.destructive { cls += " menu__item--destructive" }
+            if item.danger { cls += " menu__item--danger" }
+            if item.active { cls += " menu__item--active" }
+            if item.submenu { cls += " menu__item--has-sub" }
             let itemID = id.map { " id=\"\(htmlEscape("\($0)-item-\(index)"))\"" } ?? ""
             html += "<button class=\"\(cls)\"\(itemID) role=\"menuitem\"\(item.disabled ? " disabled" : "")>"
+            if let avatar = item.avatar {
+                html += "<span class=\"menu__avatar\"><span class=\"avatar avatar--initials avatar--sm\">\(htmlEscape(avatar))</span></span>"
+            }
             if let icon = item.icon { html += "<span class=\"menu__icon\">\(WebUIIcon(icon, size: .small).render())</span>" }
             html += "<span class=\"menu__label\">\(htmlEscape(item.label))</span>"
+            if let hint = item.hint { html += "<span class=\"menu__hint\">\(htmlEscape(hint))</span>" }
             if let shortcut = item.shortcut { html += "<span class=\"menu__shortcut\">\(htmlEscape(shortcut))</span>" }
             html += "</button>"
         }
@@ -857,5 +936,145 @@ private extension Array where Element: Hashable {
         var seen = Set<Element>(); var out: [Element] = []
         for e in self where seen.insert(e).inserted { out.append(e) }
         return out
+    }
+}
+
+// MARK: WebUI Separator
+/// a rule between or across content. the sheet's divider family carries four
+/// shapes: plain, strong, vertical, and a labelled rule. the label form is the
+/// two-line pair (text between the lines, e.g. "or"); the glyph form puts an
+/// icon badge on the line itself.
+public struct WebUISeparator: View {
+    public enum Orientation: Sendable { case horizontal, vertical }
+
+    public let orientation: Orientation
+    /// text rendered between two lines. ignored when `icon` is set.
+    public let label: String?
+    /// glyph rendered on the line. wins over `label`.
+    public let icon: IconName?
+    public let strong: Bool
+
+    public init(
+        _ label: String? = nil,
+        orientation: Orientation = .horizontal,
+        icon: IconName? = nil,
+        strong: Bool = false
+    ) {
+        self.orientation = orientation
+        self.label = label
+        self.icon = icon
+        self.strong = strong
+    }
+
+    public func render() -> String {
+        if orientation == .vertical {
+            return "<div class=\"divider divider--vertical\" role=\"separator\" aria-orientation=\"vertical\"></div>"
+        }
+        if let icon {
+            let glyph = WebUIIcon(icon, size: .slot).render()
+            return "<div class=\"divider divider--icon\(strong ? " divider--strong" : "")\" role=\"separator\"><span class=\"divider__label\">\(glyph)</span></div>"
+        }
+        if let label {
+            return "<div class=\"divider-divider\" role=\"separator\"><span class=\"divider-divider__label\">\(htmlEscape(label))</span></div>"
+        }
+        return "<div class=\"divider\(strong ? " divider--strong" : "")\" role=\"separator\"></div>"
+    }
+}
+
+// MARK: WebUI Kbd
+/// a keyboard key or combination. one key renders bare; several render as a
+/// combo whose keys sit adjacently (the macOS convention, `⌘K`) or with a
+/// separator glyph between them (`separator: "+"`).
+public struct WebUIKbd: View {
+    public enum Size: String, Sendable {
+        case small = "kbd--sm"
+        case medium = ""
+        case large = "kbd--lg"
+    }
+
+    public let keys: [String]
+    public let size: Size
+    /// glyph placed between keys. `nil` places them adjacently without one.
+    public let separator: String?
+
+    public init(_ key: String, size: Size = .medium) {
+        self.keys = [key]
+        self.size = size
+        self.separator = nil
+    }
+
+    public init(_ keys: [String], size: Size = .medium, separator: String? = nil) {
+        self.keys = keys
+        self.size = size
+        self.separator = separator
+    }
+
+    private func keyHTML(_ key: String) -> String {
+        let sizeClass = size.rawValue.isEmpty ? "" : " \(size.rawValue)"
+        return "<kbd class=\"kbd\(sizeClass)\">\(htmlEscape(key))</kbd>"
+    }
+
+    public func render() -> String {
+        guard keys.count > 1 else { return keyHTML(keys.first ?? "") }
+        var html = "<span class=\"kbd-combo\">"
+        for (index, key) in keys.enumerated() {
+            if index > 0, let separator, !separator.isEmpty {
+                html += "<span class=\"kbd-sep\">\(htmlEscape(separator))</span>"
+            }
+            html += keyHTML(key)
+        }
+        html += "</span>"
+        return html
+    }
+}
+
+
+// MARK: WebUI Scroll Top
+/// a floating back-to-top affordance. `progress` (0...1) adds the ring around
+/// it, reusing the circular-progress classes the sheet already styles for
+/// `scroll-top--ring`. position it against a `position: relative` ancestor.
+public struct WebUIScrollTop: View {
+    /// 0...1 scroll progress; `nil` renders the icon-only button.
+    public let progress: Double?
+    public let icon: IconName
+    public let label: String
+    public let id: String?
+    public let onTap: EventHandler?
+
+    public init(
+        progress: Double? = nil,
+        icon: IconName = .arrowUp,
+        label: String = "Back to top",
+        id: String? = nil,
+        onTap: EventHandler? = nil
+    ) {
+        self.progress = progress
+        self.icon = icon
+        self.label = label
+        self.id = id
+        self.onTap = onTap
+    }
+
+    public func render() -> String {
+        let attrs: String
+        if let id, let onTap {
+            attrs = controlAttributes(id: id, event: .click, handler: onTap)
+        } else {
+            attrs = ""
+        }
+        var html = "<button class=\"scroll-top\(progress != nil ? " scroll-top--ring" : "")\" type=\"button\" aria-label=\"\(htmlEscape(label))\""
+        if let id { html += " id=\"\(htmlEscape(id))\"" }
+        html += attrs + ">"
+        if let progress {
+            let clamped = progress < 0 ? 0 : (progress > 1 ? 1 : progress)
+            let offset = webuiFixedPoint((1 - clamped) * 100, places: 1)
+            html += "<svg class=\"scroll-top__ring\" viewBox=\"0 0 36 36\" aria-hidden=\"true\">"
+            html += "<circle class=\"ring__track\" cx=\"18\" cy=\"18\" r=\"15.915\"/>"
+            html += "<circle class=\"ring__fill\" cx=\"18\" cy=\"18\" r=\"15.915\" stroke-dasharray=\"100\" stroke-dashoffset=\"\(offset)\"/>"
+            html += "</svg>"
+        }
+        html += "<span class=\"scroll-top__icon\">" + WebUIIcon(icon, size: .medium).render() + "</span>"
+        html += "</button>"
+        return html
     }
 }

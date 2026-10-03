@@ -1,7 +1,7 @@
 ---
 name: webui-design-system
 description: "Use when BUILDING a frontend in your own Swift project with the no-webui public API: add the dependency, author views/components in Swift, wire live server round-trips, apply design tokens/theming, and serve + verify the page. For any kind of app UI — a shell, a dashboard, a chat-style page, a tool — see the 'Build your UI in Swift' section and the references index. (Maintaining the no-webui package itself — its designer assets, icon pipeline, showcase generation, smoke gates — is repo work documented in the repo's README/AGENTS.md, not this skill.)"
-version: 1.14.0
+version: 1.15.0
 author: Hermes Agent
 license: MIT
 platforms: [macos]
@@ -154,47 +154,19 @@ and JS runtime embedded, an auto-generated CSP + nonce, and the theme.
 ## Client mode (run the same UI in wasm)
 
 The same `View`/`ViewModifier` core can run **inside the browser** — the
-client-mode page flips with one argument, and the wasm artifact is produced by
-a plugin verb from the no-webui dependency (no raw `swift build --swift-sdk`
-invocation, no memorized flags):
-
-```bash
-# one extra step, per rebuild — replaces the raw wasm-sdk build command
-swift package --disable-sandbox plugin wasm-client --product TheirClient
-# then a normal host build serves client-mode pages
-swift build
-swift run TheirServer
-```
-
-- **`wasm-client`** cross-builds the named client product with the official
-  wasm sdk into an isolated `.build/wasm-client-scratch` (a scratch root is
-  required: the plugin invocation holds the package build lock). it **strips
-  custom sections by default** (name table + DWARF — ~15% smaller artifact,
-  no behavior change); pass `--no-strip` to keep readable stack traces in
-  devtools. requires `--disable-sandbox` (like the serve/smoke verbs).
-- **products for consumers**: `WebUIClientRuntime`, `WebUICore`,
-  `WebUIDesignSystemCore`, `WebUIClient` are library/executable products of
-  no-webui — your client target links `WebUIClientRuntime` + `WebUICore` and
-  installs the runtime wiring (`ClientExecutor.install()` +
-  `ClientRuntime.boot()`), mirroring the reference `WebUIClient` reactor.
-- **flip the page**: `HTMLDocument(…, clientMode: ClientBoot(wasmURL: …))` /
-  `WebUIDocument(…, clientMode: …)`. `wasmURL` is the url your server serves
-  the artifact at (use `WebUIBoot.wasmProductURL(productName: "TheirClient")`
-  to resolve it, and `WebUIBoot.wasmSHA256` for the build-time content hash
-  that feeds the immutable-cached route).
-- **artifact is required**: the framework's `WebUIWasmPlugin` hard-fails if the
-  wasm artifact is absent — wasm is the sole client runtime, so build it first
-  (`wasm-client` verb). there is no soft `present=false` carrier and no
-  `WEBUI_REQUIRE_WASM` switch anymore.
-- **the artifact must exist before the host build** — the plugin validates +
-  hashes it into the carrier during `swift build`, so build `wasm-client`
-  first, then `swift build`. (This is the same two-invocation rule the
-  framework's own gates follow.)
-
-Client mode runs the same render core in wasm: local event routing, optimistic
-patches, client state store, and an auth-presence mirror, with the websocket
-demoted to the authority channel. See `Documentation/WASM_NATIVE_BUILD_SPIKE.md`
-in the repo for the full build-integration design.
+- **the client runtime is the engine** (`/ui/webui-engine.js`, shipped by the
+  framework): a consumer app links `WebUICore` and nothing else. the published
+  `WebUIClientRuntime` / `.wasm` client product **was deleted** — the engine plus
+  per-page wasm capability islands is the client architecture now.
+- **capability islands are the wasm path**: cross-build one with
+  `swift package --disable-sandbox plugin wasm-island --product TheirIsland`
+  (isolated scratch root; custom sections stripped by default; needs
+  `--disable-sandbox`), declare the capability on the page, and the engine
+  lazy-loads it — degrading to the base path when the artifact is absent. the
+  repo's `WebUIValidateIsland` is the reference island: one Foundation-free core,
+  compiled to wasm and exercised natively by the same tests.
+- **if you came here for a wasm *client* app: that path is gone.** migrate to the
+  engine, or to an island for the specific local behaviour you needed.
 
 ## Tokens & theming
 
@@ -202,8 +174,9 @@ in the repo for the full build-integration design.
   Use `.four` (16px) etc. for padding/gaps, never raw px.
 - **ColorToken**: `.primary`, `.text`, `.textMuted`, `.textFaint`, `.border`,
   `.background`, `.backgroundRaised`, `.success`, `.warning`, `.danger`, …
-  → `var(--color-*)`. `WebUITheme`'s Swift palette is legacy — the CSS tokens are
-  the source of truth.
+  → `var(--color-*)`. the CSS file is the vocabulary's source of truth; the Swift
+  `WebUITheme`/`@Theme` surface (`DesignToken` keys) is the typed way to restate
+  them — a token override there is compiler-checked.
 - **Semantic tokens** (in `design-system.css`): light bg `#f4f6f8`, raised
   `#ffffff`; dark bg `#060910`, raised `#0c111c`; primary indigo `#6366f1`
   (light action fill `#4f46e5`; dark link `#818cf8`); radii `--radius-md` 6px
@@ -215,8 +188,10 @@ in the repo for the full build-integration design.
   override beats the OS either way. `WebUIThemeToggle` (System/Light/Dark)
   drives it client-side with `localStorage` persistence, no round trip.
   Design and verify **both** themes; never hardcode a theme. On a page-scoped
-  tweak, put it in `WebUIDocument.rawStyles` (lands after the sheet, so it
-  extends without overriding the shared defaults).
+  tweak, put it in `WebUIDocument.rawStyles` — and note that **unlayered css
+  always wins**: the sheet ships in `@layer webui, webui.utilities`, so rawStyles,
+  an app stylesheet, and the theme sheet outrank the framework by cascade origin.
+  no `!important`, no matching specificity.
 
 ### The `*__body` padding convention (key gotcha)
 
@@ -272,6 +247,30 @@ The live layer: the runtime opens a WebSocket and forwards DOM events as
   takes remaining space); `stretch()` = full cross-axis height/width without
   growing. Use `stretch()` on fixed-width sidebars/rails, `fill()` on the region
   that should consume the rest. See `references/css-layout-shrink-stretch.md`.
+
+## Charts (`WebUIChart`)
+
+`WebUIChart` is a separate product — add it beside `WebUI` in your dependencies.
+It renders inline SVG inside a `<figure class="chart">`, styled entirely by the
+design-system tokens, with no client charting library.
+
+- **declare the width you designed for.** A chart lays out for
+  `height × aspectRatio` (default `320 × 2 = 640`) and renders at that width: it
+  does not scale up, may compress to 92%, and **pans** below that, so labels
+  never paint under 11px at any container width. Choose the design width from the
+  placement — `chartHeight(150)` = a 300-unit plot that fits a phone card, while
+  the 640-unit default inside a 390px card shows only ~39% of the plot.
+- **a chart contributes no intrinsic width** (its plot owns its inline size), so
+  a container that sizes to its content — a `VStack(.leading)`, a content-sized
+  grid track — collapses to the width of its own text. Give chart containers a
+  declared width or an explicit grid track: the same trap as *Filling the space*,
+  with a bigger blast radius.
+- **interactive marks:** `.chartID("sales")` plus `.onSelectMark { me, category in … }`
+  wires each painted bar/sector as its own routed component and hands you the
+  clicked category with an `ElementRef` to the chart root — no `targetId`
+  string-matching, and re-rendered figures keep routing.
+- deep guide (marks, scales, axes, selection, gradients, the full width
+  contract): `Documentation/CHARTS.md` in the package checkout.
 
 ## Serve your page (your server must do this)
 
@@ -342,6 +341,14 @@ in its `README.md`, `AGENTS.md`, and `Documentation/*`; reach for those (or the
   `__body`, not the container). See the `*__body` section above.
 - **`/ws` console error at load** → the runtime is on but your server doesn't
   upgrade `/ws` / answer pings.
+- **A chart collapses to the width of its own text** → charts contribute no
+  intrinsic width; give the container a declared width or a grid track, and pick
+  the design width (`chartHeight`) for the smallest placement (see *Charts*).
+- **`.class("x")` on a component replaces its own classes** → the attribute merge
+  keeps the *later* value, so a `VStack(spacing: 32).class("mine")` loses
+  `vstack spacing-32 align-flex-start` and its layout silently changes. wrap it
+  in `Div(class: "mine") { … }` instead, or scope the rule in css to the classes
+  the component already emits (`.parent > .vstack { … }`).
 - **String escaping in Swift HTML literals** — a doubled backslash (`\\`) renders
   a literal `\`; write single `\(…)`. Prefer multiline string literals.
 - **Nested ternary inside interpolation** breaks the parser — compute the

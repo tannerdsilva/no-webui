@@ -22,6 +22,10 @@ struct WebUIProbePlugin: CommandPlugin {
             return
         }
         defer { close(fd) }
+        // keep the probe socket out of any child's descriptor table; darwin's
+        // overlay does not import SOCK_CLOEXEC, so set it after the fact (this
+        // probe is single-threaded, so the gap is immaterial).
+        _ = fcntl(fd, F_SETFD, FD_CLOEXEC)
 
         var addr = sockaddr_in()
         addr.sin_family = sa_family_t(AF_INET)

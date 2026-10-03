@@ -20,9 +20,15 @@ public enum HMACSHA256 {
 		var hmac = try RAW_hmac.HMAC<RAW_sha256.Hasher>(key: key)
 		try hmac.update(message: message)
 		var digest = [UInt8](repeating: 0, count: 32)
-		try digest.withUnsafeMutableBytes { buffer in
-			try hmac.finish(into: buffer.baseAddress!)
+		// the buffer is non-empty, so its base address is never nil; a nil base
+		// would mean the hasher and the buffer disagree about the digest size,
+		// which must fail loudly rather than yield an all-zero digest.
+		let finished = try digest.withUnsafeMutableBytes { buffer -> Bool in
+			guard let base = buffer.baseAddress else { return false }
+			try hmac.finish(into: base)
+			return true
 		}
+		precondition(finished, "HMAC-SHA256 digest buffer has no base address")
 		return digest
 	}
 
@@ -32,6 +38,39 @@ public enum HMACSHA256 {
 
 	public static func hex(message: String, key: String) throws -> String? {
 		try hex(message: [UInt8](message.utf8), key: [UInt8](key.utf8))
+	}
+}
+
+// MARK: - SHA-256
+
+/// plain sha-256 over rawdog's implementation. it exists because `CryptoKit`
+/// is apple-only: the design system hashes its stylesheet into a content
+/// address, and that hash has to be computable on linux too. the digest is
+/// identical to any conforming implementation, so addresses derived from it
+/// are stable across platforms.
+public enum SHA256 {
+	/// lowercase hex of `sha256(bytes)`.
+	public static func hex(_ bytes: [UInt8]) -> String {
+		var hasher = RAW_sha256.Hasher()
+		bytes.withUnsafeBytes { buffer in
+			hasher.update(buffer)
+		}
+		var out = [UInt8](repeating: 0, count: 32)
+		// `finish(into:)` fails only on a buffer-size mismatch, and 32 bytes is
+		// exactly the sha-256 digest size: a failure means the hasher contract
+		// moved underneath us. fail loudly — a silently truncated digest would
+		// mint a wrong content address for the stylesheet.
+		let finished = out.withUnsafeMutableBytes { buffer -> Bool in
+			guard let base = buffer.baseAddress else { return false }
+			do {
+				try hasher.finish(into: base)
+				return true
+			} catch {
+				return false
+			}
+		}
+		precondition(finished, "RAW_sha256.finish failed on a 32-byte buffer")
+		return bytesToHex(out)
 	}
 }
 
@@ -59,7 +98,8 @@ public enum SecureRandom {
 		guard count > 0 else { return count == 0 ? [] : nil }
 		var out = [UInt8](repeating: 0, count: count)
 		#if os(Linux)
-		let fd = open("/dev/urandom", O_RDONLY)
+		// O_CLOEXEC: the entropy descriptor must never leak into a spawned child.
+		let fd = open("/dev/urandom", O_RDONLY | O_CLOEXEC)
 		guard fd >= 0 else { return nil }
 		defer { close(fd) }
 		var offset = 0
@@ -75,7 +115,10 @@ public enum SecureRandom {
 		return out
 		#else
 		let status = out.withUnsafeMutableBytes { (ptr) -> Int32 in
-			SecRandomCopyBytes(kSecRandomDefault, count, ptr.baseAddress!)
+			// non-empty buffer ⇒ non-nil base address; treat a nil base like an
+			// entropy failure, which is what this function's optional reports.
+			guard let base = ptr.baseAddress else { return errSecParam }
+			return SecRandomCopyBytes(kSecRandomDefault, count, base)
 		}
 		guard status == errSecSuccess else { return nil }
 		return out

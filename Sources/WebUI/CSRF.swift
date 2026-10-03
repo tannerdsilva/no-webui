@@ -28,7 +28,17 @@ public enum CSRFProtection {
         // login-token store, which would reject the second one as consumed.
         let nonce = UUID().uuidString.replacingOccurrences(of: "-", with: "")
         let payload = "\(formID):\(Int(expires)):\(nonce)"
-        let signature = try hmacSHA256(key: secret, message: payload)
+        let signature: String
+        do {
+            signature = try hmacSHA256(key: secret, message: payload)
+        } catch {
+            // a signing failure must surface as this module's own error. letting
+            // the hmac layer's error escape a public `throws` would force every
+            // caller to import the crypto dependency just to catch it, and no
+            // caller can act differently on which internal step failed — so the
+            // cause is collapsed on purpose rather than leaked.
+            throw CSRFError.signingFailed
+        }
         return Base64.encode([UInt8]("\(payload):\(signature)".utf8))
     }
     public static func validate(_ token: String, for formID: String, secret: String) -> Bool {

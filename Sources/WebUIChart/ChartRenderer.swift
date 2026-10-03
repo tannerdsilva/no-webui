@@ -23,6 +23,8 @@ struct ChartRenderer {
 			return emptyState
 		}
 		let hasPolar = marks.contains { $0.spec.kind == .sector }
+		if marks.contains(where: { $0.spec.kind == .radar }) { return renderRadar() }
+		if marks.contains(where: { $0.spec.kind == .radial }) { return renderRadial() }
 		return hasPolar ? renderPolar() : renderCartesian()
 	}
 
@@ -109,8 +111,28 @@ struct ChartRenderer {
 
 	// MARK: Figure / empty state
 
+	/// Open the figure element. `extra` carries the kind class (`chart--pie`,
+	/// `chart--radar`, ...); the design width rides along as `--chart-w` so the
+	/// stylesheet can hold the plot at its laid-out size and pan it rather than
+	/// shrink its text below legibility.
+	private func figureOpen(_ extra: String, label: String, metrics m: Metrics) -> String {
+		var html = "<figure class=\"chart\(extra)\""
+		if let safeId { html += " id=\"\(htmlEscape(safeId))\"" }
+		html += " style=\"--chart-w:\(m.width)px\" role=\"img\" aria-label=\"\(htmlEscape(label))\">"
+		return html
+	}
+
+	/// Open the plot: the scroll container that holds the svg at its design
+	/// width. a container narrower than the design pans it — it never shrinks
+	/// the labels into illegibility (the pre-p6 behaviour: 3.6px at 390px).
+	private func plotOpen(_ m: Metrics) -> String {
+		"<div class=\"chart__plot\"><svg class=\"chart__svg\" viewBox=\"0 0 \(m.width) \(m.height)\" width=\"\(m.width)\" height=\"\(m.height)\" role=\"presentation\">"
+	}
+
+	private var plotClose: String { "</svg></div>" }
+
 	private var emptyState: String {
-		let label = htmlEscape(ariaLabel ?? config.accessLabel ?? "Chart")
+		let label = htmlEscape(accessibleName(fallback: "Chart"))
 		var html = "<figure class=\"chart chart--empty\""
 		if let safeId { html += " id=\"\(htmlEscape(safeId))\"" }
 		html += " role=\"img\" aria-label=\"\(label)\">"
@@ -120,25 +142,36 @@ struct ChartRenderer {
 		return html
 	}
 
+	/// The accessible name for the figure: an explicit
+	/// `chartAccessibilityLabel` wins, then a caller-supplied
+	/// `config.accessLabel`, then the chart's own title — the name a sighted
+	/// reader already has for the chart — and only then `fallback`.
+	/// the title outranks the count because "Revenue by quarter" identifies
+	/// the chart; "6 marks" does not.
+	private func accessibleName(fallback: String) -> String {
+		if let explicit = ariaLabel, !explicit.isEmpty { return explicit }
+		if let caller = config.accessLabel, !caller.isEmpty { return caller }
+		if let title = config.title, title.contains(where: { !$0.isWhitespace }) { return title }
+		return fallback
+	}
+
 	private func ariaDescription() -> String {
-		ariaLabel ?? config.accessLabel ?? "Chart with \(marks.count) marks"
+		let n = marks.count
+		return accessibleName(fallback: "Chart with \(n) \(n == 1 ? "mark" : "marks")")
 	}
 
 	// MARK: Polar (pie / donut)
 
 	private func renderPolar() -> String {
 		let m = metrics()
-		let label = htmlEscape(ariaDescription())
-		var html = "<figure class=\"chart chart--pie\""
-		if let safeId { html += " id=\"\(htmlEscape(safeId))\"" }
-		html += " role=\"img\" aria-label=\"\(label)\">"
+		var html = figureOpen(" chart--pie", label: ariaDescription(), metrics: m)
 		if let title = config.title { html += "<figcaption class=\"chart__title\">\(htmlEscape(title))</figcaption>" }
 
 		// total
 		let sectors = marks.filter { $0.spec.kind == .sector }
 		let total = sectors.reduce(0.0) { $0 + ($1.spec.angle?.value.numericValue ?? 0) }
 		guard total > 0 else {
-			html += "<svg class=\"chart__svg\" viewBox=\"0 0 \(m.width) \(m.height)\"></svg>"
+			html += plotOpen(m) + plotClose
 			html += "</figure>"
 			return html
 		}
@@ -150,7 +183,7 @@ struct ChartRenderer {
 		let innerR = outerR * holeRatio
 		let gap = sectors.first?.spec.angularInset ?? config.angularInset ?? 0
 
-		html += "<svg class=\"chart__svg\" viewBox=\"0 0 \(m.width) \(m.height)\" role=\"presentation\">"
+		html += plotOpen(m)
 		var startAngle = 0.0  // 0° = 12 o'clock, clockwise (geometry convention)
 		let selectedValue = config.selection?.value
 		for (i, sector) in sectors.enumerated() {
@@ -174,10 +207,12 @@ struct ChartRenderer {
 				)
 			}
 			let pct = Int((value / total * 100).rounded())
-			html += "<g\(attrs)><title>\(htmlEscape(sectorLabel)): \(pct)%</title><path d=\"\(path)\"/></g>"
+			html += "<g\(attrs)><title>\(htmlEscape(sectorLabel)): \(pct)%</title><path d=\"\(path)\"/>"
+			if let tip = tipSVG(x: cx, y: cy - outerR * 0.6, mark: sector, fallback: value, text: "\(sectorLabel): \(pct)%") { html += tip }
+			html += "</g>"
 			startAngle += sweep
 		}
-		html += "</svg>"
+		html += plotClose
 
 		if holeRatio > 0 {
 			html += "<figcaption class=\"chart__donut-center\">"
@@ -206,7 +241,6 @@ struct ChartRenderer {
 
 	private func renderCartesian() -> String {
 		let m = metrics()
-		let label = htmlEscape(ariaDescription())
 		let xIsCategorical = isCategoricalX
 		let xBands = xAxisCategories
 		let (yLo, yHi) = yDomain
@@ -216,13 +250,13 @@ struct ChartRenderer {
 		let yDomainFinal = config.yDomain ?? explicitDomain(config.yScale) ?? yLo...yHi
 		let yScale = ChartLinearScale(domain: yDomainFinal, rangeStart: Double(m.plotBottom), rangeEnd: Double(m.plotTop), inverted: true)  // inverted: up = high
 
-		var html = "<figure class=\"chart\""
-		if let safeId { html += " id=\"\(htmlEscape(safeId))\"" }
-		html += " role=\"img\" aria-label=\"\(label)\">"
+		var html = figureOpen("", label: ariaDescription(), metrics: m)
 		if let title = config.title { html += "<figcaption class=\"chart__title\">\(htmlEscape(title))</figcaption>" }
 
-		html += "<div class=\"chart__plot\">"
-		html += "<svg class=\"chart__svg\" viewBox=\"0 0 \(m.width) \(m.height)\" role=\"presentation\">"
+		html += plotOpen(m)
+
+		let defs = gradientDefs()
+		if !defs.isEmpty { html += "<defs>\(defs)</defs>" }
 
 		// gridlines + axis ticks (behind marks)
 		html += renderGrid(m: m, yScale: yScale, xLinear: xLinear, xBanded: xBanded, xIsCategorical: xIsCategorical, xBands: xBands)
@@ -238,7 +272,7 @@ struct ChartRenderer {
 		// axis labels (front)
 		html += renderAxisLabels(m: m, yScale: yScale, xLinear: xLinear, xBanded: xBanded, xIsCategorical: xIsCategorical, xBands: xBands)
 
-		html += "</svg></div>"
+		html += plotClose
 
 		// legend
 		if config.legend.position != .hidden {
@@ -327,8 +361,8 @@ struct ChartRenderer {
 			if let ye = mark.spec.yEnd?.value.numericValue { vals.append(ye) }
 		}
 		guard let lo0 = vals.min(), let hi0 = vals.max() else { return (0, 1) }
-		let lo = hasBars ? min(lo0, 0) : lo0
-		if hasBars { return (lo, hi0) }
+		if hasBars { return (min(lo0, 0), max(hi0, 0)) }
+		let lo = lo0
 		let span = hi0 - lo
 		let headroom = span > 0 ? span * 0.08 : 1
 		return (lo, hi0 + headroom)
@@ -479,8 +513,8 @@ struct ChartRenderer {
 			byCategory[c, default: []].append((sIndex, bar.spec.y?.value.numericValue ?? 0, bar))
 		}
 
-		for c in xBands where !(byCategory[c]?.isEmpty ?? true) {
-			let group = byCategory[c]!
+		for c in xBands {
+			guard let group = byCategory[c], !group.isEmpty else { continue }
 			let bandX = banded.position(of: c)
 			let bandW = banded.bandWidth
 			switch stacking {
@@ -543,9 +577,17 @@ struct ChartRenderer {
 			}
 		}
 		let title = markTitle(mark, value: value)
-		out += "<g\(opacityAttr(mark))>\(title)<rect\(attrs) x=\"\(fmt(x))\" y=\"\(fmt(topY))\" width=\"\(fmt(max(0, w)))\" height=\"\(fmt(max(0, botY - topY)))\" rx=\"\(fmt(rx))\"/></g>"
+		// a stacked or centered base sits above the value when the datum is
+		// negative, so the edges are normalized here: the rect is always
+		// emitted top-down with a non-negative height and the bar hangs
+		// below the zero line instead of collapsing to nothing.
+		let topEdge = min(topY, botY)
+		let bottomEdge = max(topY, botY)
+		out += "<g\(opacityAttr(mark))>\(title)<rect\(attrs) x=\"\(fmt(x))\" y=\"\(fmt(topEdge))\" width=\"\(fmt(max(0, w)))\" height=\"\(fmt(max(0, bottomEdge - topEdge)))\" rx=\"\(fmt(rx))\"/>"
+		if let tip = tipSVG(x: x + w / 2, y: topEdge, mark: mark, fallback: value) { out += tip }
+		out += "</g>"
 		if let ann = mark.spec.annotation {
-			out += annotation(ann, x: x + w / 2, y: topY, yScale: ChartLinearScale(domain: 0...1, rangeStart: 0, rangeEnd: 1), position: .top)
+			out += annotation(ann, x: x + w / 2, y: topEdge, yScale: ChartLinearScale(domain: 0...1, rangeStart: 0, rangeEnd: 1), position: .top)
 		}
 		return out
 	}
@@ -625,6 +667,11 @@ struct ChartRenderer {
 		let lineD = ChartGeometry.linePath(points: pts.map { (px: $0.x, py: $0.y) }, interpolation: interpolation)
 		let zeroY = yScale.position(0)
 		let d = "\(lineD) L\(fmt(last.x)),\(fmt(zeroY)) L\(fmt(first.x)),\(fmt(zeroY)) Z"
+		if let gradient = pts.first?.mark.spec.gradient {
+			let id = gradient.scopedId(series: series)
+			let opacity = pts.first.map { opacityAttr($0.mark) } ?? ""
+			return "<path class=\"chart__mark chart__area chart__area--fade\" d=\"\(d)\" fill=\"url(#\(id))\"\(opacity)/>"
+		}
 		let cls = "chart__mark chart__area \(colorClass(ChartMark(spec: MarkSpec(kind: .area, series: series))))"
 		let opacity = pts.first.map { opacityAttr($0.mark) } ?? ""
 		return "<path class=\"\(cls)\" d=\"\(d)\"\(opacity)/>"
@@ -638,7 +685,9 @@ struct ChartRenderer {
 		case .circle:
 			if let mid = markIdPrefix { attrs += " id=\"\(htmlEscape("\(mid)-pt"))\"" }
 			let title = markTitle(mark)
-			return "<g\(attrs)\(opacityAttr(mark))>\(title)<circle cx=\"\(fmt(x))\" cy=\"\(fmt(y))\" r=\"\(r)\"/></g>"
+			var g = "<g\(attrs)\(opacityAttr(mark))>\(title)<circle cx=\"\(fmt(x))\" cy=\"\(fmt(y))\" r=\"\(r)\"/>"
+			if let tip = tipSVG(x: x, y: y, mark: mark, fallback: mark.spec.y?.value.numericValue) { g += tip }
+			return g + "</g>"
 		default:
 			let path = ChartGeometry.symbolPath(shape: mark.spec.symbol, x: x, y: y, size: 4)
 			return "<g\(attrs)\(opacityAttr(mark))>\(path)</g>"
@@ -810,5 +859,150 @@ struct ChartRenderer {
 	/// stripped. Never corrupts internal zeros (1.05 stays 1.05).
 	private func fmt(_ v: Double) -> String {
 		ChartGeometry.fmt(v)
+	}
+
+	// MARK: p5 — radar
+
+	private func renderRadar() -> String {
+		let m = metrics()
+		let radar = marks.filter { $0.spec.kind == .radar }
+		let axes = radar.first?.spec.radarValues?.map { $0.label } ?? []
+		var html = figureOpen(" chart--radar", label: ariaDescription(), metrics: m)
+		if let title = config.title { html += "<figcaption class=\"chart__title\">\(htmlEscape(title))</figcaption>" }
+		guard axes.count >= 3 else {
+			html += plotOpen(m) + plotClose + "</figure>"
+			return html
+		}
+		let cx = Double(m.width) / 2
+		let cy = Double(m.height) / 2
+		let rOuter = Double(min(m.width, m.height)) / 2 - 38
+		let allValues = radar.flatMap { $0.spec.radarValues?.map { $0.value } ?? [] }
+		let maxValue = config.yDomain?.upperBound ?? max(1, allValues.max() ?? 1)
+
+		html += plotOpen(m)
+		for level in 1...4 {
+			let r = rOuter * Double(level) / 4
+			let points = (0..<axes.count).map { i -> String in
+				let p = polarPoint(cx: cx, cy: cy, r: r, step: i, of: axes.count)
+				return "\(fmt(p.x)),\(fmt(p.y))"
+			}
+			html += "<polygon class=\"chart__grid-ring\" points=\"\(points.joined(separator: " "))\"/>"
+		}
+		for (i, name) in axes.enumerated() {
+			let edge = polarPoint(cx: cx, cy: cy, r: rOuter, step: i, of: axes.count)
+			let spot = polarPoint(cx: cx, cy: cy, r: rOuter + 18, step: i, of: axes.count)
+			html += "<line class=\"chart__grid-line\" x1=\"\(fmt(cx))\" y1=\"\(fmt(cy))\" x2=\"\(fmt(edge.x))\" y2=\"\(fmt(edge.y))\"/>"
+			let anchor = abs(spot.x - cx) < 1 ? "middle" : (spot.x > cx ? "start" : "end")
+			html += "<text class=\"chart__axis-label\" x=\"\(fmt(spot.x))\" y=\"\(fmt(spot.y + 3))\" text-anchor=\"\(anchor)\">\(htmlEscape(name))</text>"
+		}
+		for s in seriesOrder {
+			guard let mark = radar.first(where: { ($0.spec.series ?? seriesOrder[0]) == s }),
+			      let seriesValues = mark.spec.radarValues, seriesValues.count == axes.count else { continue }
+			let color = colorClass(ChartMark(spec: MarkSpec(kind: .area, series: s)))
+			var points: [String] = []
+			for (i, v) in seriesValues.enumerated() {
+				let r = rOuter * min(1, max(0, v.value / maxValue))
+				let p = polarPoint(cx: cx, cy: cy, r: r, step: i, of: axes.count)
+				points.append("\(fmt(p.x)),\(fmt(p.y))")
+			}
+			html += "<polygon class=\"chart__mark chart__radar \(color)\" points=\"\(points.joined(separator: " "))\"/>"
+			for (i, v) in seriesValues.enumerated() {
+				let r = rOuter * min(1, max(0, v.value / maxValue))
+				let p = polarPoint(cx: cx, cy: cy, r: r, step: i, of: axes.count)
+				html += "<g class=\"chart__mark chart__radar-vertex \(color)\"><circle cx=\"\(fmt(p.x))\" cy=\"\(fmt(p.y))\" r=\"3\"/>"
+				let axisName = axes.indices.contains(i) ? axes[i] : "axis"
+				if let tip = tipSVG(x: p.x, y: p.y, text: "\(axisName): \(ChartValueFormat.format(v.value, .automatic))") { html += tip }
+				html += "</g>"
+			}
+		}
+		html += plotClose
+		if config.legend.position != .hidden && seriesOrder.count > 1 {
+			html += legendForCartesian(position: config.legend.position)
+		}
+		html += "</figure>"
+		return html
+	}
+
+	// MARK: p5 — radial (gauge arcs: stroked rings, not filled wedges)
+
+	private func renderRadial() -> String {
+		let m = metrics()
+		let radial = marks.filter { $0.spec.kind == .radial }
+		var html = figureOpen(" chart--radial", label: ariaDescription(), metrics: m)
+		if let title = config.title { html += "<figcaption class=\"chart__title\">\(htmlEscape(title))</figcaption>" }
+		let cx = Double(m.width) / 2
+		let cy = Double(m.height) / 2
+		let rOuter = Double(min(m.width, m.height)) / 2 - 18
+		html += plotOpen(m)
+		for (i, mark) in radial.enumerated() {
+			let value = mark.spec.y?.value.numericValue ?? 0
+			let total = mark.spec.radialTotal ?? 100
+			let fraction = total > 0 ? min(1, max(0, value / total)) : 0
+			let ringR = max(20, rOuter - Double(i) * 26)
+			let circumference = 2 * Double.pi * ringR
+			let color = colorClass(mark)
+			html += "<circle class=\"chart__radial-track\" cx=\"\(fmt(cx))\" cy=\"\(fmt(cy))\" r=\"\(fmt(ringR))\" fill=\"none\" stroke-width=\"14\"/>"
+			html += "<circle class=\"chart__mark chart__radial \(color)\" cx=\"\(fmt(cx))\" cy=\"\(fmt(cy))\" r=\"\(fmt(ringR))\" fill=\"none\" stroke-width=\"14\" stroke-linecap=\"round\""
+			html += " stroke-dasharray=\"\(fmt(circumference * fraction)) \(fmt(circumference))\""
+			html += " transform=\"rotate(-90 \(fmt(cx)) \(fmt(cy)))\""
+			html += explicitColorStyle(mark) + "/>"
+		}
+		if let first = radial.first {
+			let value = first.spec.y?.value.numericValue ?? 0
+			let total = first.spec.radialTotal ?? 100
+			let pct = total > 0 ? Int((min(1, max(0, value / total)) * 100).rounded()) : 0
+			html += "<text class=\"chart__radial-value\" x=\"\(fmt(cx))\" y=\"\(fmt(cy))\">\(htmlEscape("\(pct)%"))</text>"
+		}
+		html += plotClose + "</figure>"
+		return html
+	}
+
+	// MARK: p5 — polar helper, css-only tips, gradient defs
+
+	private func polarPoint(cx: Double, cy: Double, r: Double, step: Int, of count: Int) -> (x: Double, y: Double) {
+		let degrees = -90 + 360 * Double(step) / Double(max(1, count))
+		let rad = degrees * Double.pi / 180
+		return (cx + r * ChartGeometry.StdlibMath.cos(rad), cy + r * ChartGeometry.StdlibMath.sin(rad))
+	}
+
+	private func tipSVG(x: Double, y: Double, mark: ChartMark, fallback: Double? = nil, text: String? = nil) -> String? {
+		if let text { return tipSVG(x: x, y: y, text: text) }
+		if let custom = mark.spec.tooltip { return tipSVG(x: x, y: y, text: custom) }
+		if let displayed = mark.spec.displayValue { return tipSVG(x: x, y: y, text: displayed) }
+		if let value = fallback ?? mark.spec.y?.value.numericValue {
+			return tipSVG(x: x, y: y, text: ChartValueFormat.format(value, .automatic))
+		}
+		return nil
+	}
+
+	private func tipSVG(x: Double, y: Double, text: String) -> String? {
+		guard !text.isEmpty else { return nil }
+		let w = max(30, Double(text.count) * 6.65 + 16)
+		let bx = x - w / 2
+		let by = y - 30
+		return "<g class=\"chart__tip\" aria-hidden=\"true\">"
+			+ "<rect x=\"\(fmt(bx))\" y=\"\(fmt(by))\" width=\"\(fmt(w))\" height=\"20\" rx=\"4\"/>"
+			+ "<text x=\"\(fmt(x))\" y=\"\(fmt(by + 14))\" text-anchor=\"middle\">\(htmlEscape(text))</text>"
+			+ "</g>"
+	}
+
+	private func gradientDefs() -> String {
+		var defs = ""
+		var seen = Set<String>()
+		for mark in marks {
+			guard let gradient = mark.spec.gradient else { continue }
+			let series = mark.spec.series ?? seriesOrder.first ?? "(default)"
+			let id = gradient.scopedId(series: series)
+			if seen.contains(id) { continue }
+			seen.insert(id)
+			defs += "<linearGradient id=\"\(id)\" x1=\"0\" y1=\"0\" x2=\"0\" y2=\"1\">"
+			let count = max(1, gradient.colors.count)
+			for (i, color) in gradient.colors.enumerated() {
+				let offset = count == 1 ? 0 : Double(i) / Double(count - 1)
+				defs += "<stop offset=\"\(fmt(offset * 100))%\" style=\"stop-color:\(gradient.cssColor(color))\"/>"
+			}
+			defs += "</linearGradient>"
+		}
+		return defs
 	}
 }

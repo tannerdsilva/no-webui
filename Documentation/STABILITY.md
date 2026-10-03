@@ -19,8 +19,8 @@ the package follows **semantic versioning** for its public API:
 the stability epoch begins at **1.0.0**. before that (`0.x`) the project is
 in active design and the API is allowed to churn (it already has: the
 `EventData.data` payload was widened from `[String: String]` to
-`[String: JSONValue]` during the wasm migration — see
-`WASM_TRAJECTORY.md` for why).
+`[String: JSONValue]` during the wasm migration; the doc that argued that change
+has since been deleted, and `CHANGELOG.md` records it).
 
 the canonical list of what may not change in a minor/patch is known as the
 **frozen surface**.
@@ -61,7 +61,11 @@ the frozen surface is:
   `WebUIListItem`, `WebUIComposer`, `WebUIPanel`, `WebUISelect`).
 - document/assembly: `WebUIDocument` (title/body/`includeRuntime`/
   `runtimeConfig`/`contentSecurityPolicy`/`theme`/`rawStyles`/`clientMode`),
-  `RuntimeConfig`, `WebUITheme`, `@Theme`, `DesignToken`.
+  `RuntimeConfig`, `ClientBoot` (the engine boot + `csp(nonce:)`),
+  `DesignSystemAssets` (the content-addressed sheet url, hash and prewarm).
+- the theming surface: `WebUITheme`, `ThemeMode`, `ThemePalette`, `ThemeScope`,
+  `TokenAlias`, `WebUIThemeProvider`, `ThemeCatalog` / `ThemeEntry`, the `@Theme`
+  macro, and the generated `DesignToken` vocabulary.
 - the `WebUIAuth` surface: `SessionToken`, `CSRFProtection`,
   `PasswordVerifier` / `Argon2Parameters` / `PasswordRecord`, `LoginThrottle`,
   `SingleUseTokenStore`, `AsyncSemaphore`, `CookieParser` / `HTTPCookie`,
@@ -77,6 +81,43 @@ the frozen surface is:
   and the fragment patch semantics (`FragmentUpdate`, replace-by-id,
   optimistic rollback, input/scroll/focus restoration) — pinned by the
   client-runtime suites and the byte-identity asset tests.
+
+### measured consumption (2026-09-28)
+
+the frozen list above is a **promise**, not a usage report. a survey of every
+top-level `public` declaration in `Sources/` — non-comment mentions outside the
+declaring file, partitioned by consumer class (library product target / demo
+app / `Tests/`) — found the two lists below. re-measure before trusting the
+counts.
+
+**frozen but unexercised (9).** no library target and no demo page renders these;
+the `APISurfaceTests` pin is their only exerciser. the promise stands — change
+them only through the deprecation cycle — but their shape is unproven, so treat
+any new use as a design review, not a drop-in.
+
+| name | why it reads as unused |
+|---|---|
+| `WebUISelect` | one mention repo-wide (its own pin); `Select` (primitives) and `WebUIComboBox` cover the demos |
+| `WebUISpinner` | no non-test renderer; `WebUIProgress` and `WebUICircularProgress` carry the loading demos |
+| `WebUITooltip` | no non-test renderer |
+| `WebUIChip` | no non-test renderer; `WebUITag` restates it with a parallel variant enum |
+| `WebUIReasoningBlock` · `WebUIToolStep` · `WebUITurnSummary` | the agent-turn trio ships with no page that renders it |
+
+two of the nine read as unused because they are consumed *structurally* rather
+than by name, and no action is implied: `EmptyView` (a `ViewBuilder` sentinel)
+and `Argon2Parameters` (the config type in the frozen `PasswordVerifier`'s
+signature).
+
+**showcase-rendered but not frozen (16).** outside the promise, therefore free
+to change in a minor — which is the opposite of what their demo coverage
+suggests. `WebUIMenu` (15 demo sites) · `WebUIActivityFeed` (8) ·
+`WebUIAspectRatio` (7) · `WebUICircularProgress` · `WebUIBanner` ·
+`WebUIToggleGroup` · `WebUISeparator` · `WebUIKbd` (6 each) · `WebUIInputGroup`
+(5) · `WebUIMarker` · `WebUIAttachment` · `WebUINavbar` · `WebUIItem` (4 each);
+`WebUISidebarItem`, `WebUIField` and `WebUIMenubar` additionally appear in a
+**frozen** type's own signature, so their absence from the frozen list reads as
+an oversight rather than a decision. the `WebUIExtras*` families are the other
+case: unproven by design, deliberately outside.
 
 outside the frozen surface (free to change in any release): example
 apps (`WebUIExample`, `WebUIAuthExample`, `WebUIShowcaseServer`), plugin
@@ -99,6 +140,20 @@ before a frozen-surface member may be removed, it must ship a deprecation
 across **one full minor release**: a public `@available(*, deprecated, …)`
 marking (or a docs note for markup contracts) plus a changelog entry naming
 the replacement. removal lands in the next **major**.
+
+### removals that were never functional (unreleased)
+
+three chart symbols were removed outright rather than deprecated —
+`ChartScrollAxes`, `.chartScrollableAxes(_:)`, `.chartXVisibleDomain(_:)` and
+their `ChartConfig` storage. they shipped with **no reader anywhere**: no
+renderer, no client runtime, no css rule, no docs entry. grep `Sources/` and
+`designer/assets/` for `scrollAxes` / `visibleDomain` and nothing matches — the
+only mentions left are this note and the changelog entry. every call was
+therefore already a no-op, so the
+consumer impact is a compile error on a call that did nothing; the replacement
+for the intent is the plot's pan behaviour (`.chart__plot`) or a declared design
+width (`.chartHeight` / `.chartAspectRatio`). this is a corrective, not a
+deprecation cycle — say so here rather than silently breaking a promise.
 
 ## what is not stable (yet) — honest limits
 
@@ -127,7 +182,10 @@ frozen surface is a mistake:
    `designer/browser-smoke.mjs` (Escape probe). the wasm client path keeps
    none of this (see #2).
 4. **`WebUIChart` pins live in `ChartTests`** and follow the same epoch, but
-   charts are the youngest surface — treat them as the least battle-tested.
+   charts are the youngest surface — treat them as the least battle-tested. the
+   width/label contract has a second pin outside the unit suite:
+   `designer/chart-mobile-audit.mjs` (six viewports × two themes; painted text
+   ≥ 11px *and* the visible fraction of every plot).
 5. **phase 6 of the wasm trajectory** (size diet + per-SKU distribution) is
    post-1.0 scope; it changes distribution and payload size, never the
    frozen surface.
@@ -136,9 +194,11 @@ frozen surface is a mistake:
    enforced by review against this document and the changelog. the in-repo
    enforcement (tests, byte-identity pins) guarantees the *current* epoch's
    surface, not the *transition* between epochs.
-7. **the applet harness is pre-2.0.** `WASM_APPLET_HARNESS.md` is the target
-   contract (applet regions, renderer registry, expanded import surface,
-   v2 message shapes). the v1 wire/ABI pinned by this 1.0.0 epoch remains
+7. **the applet harness is pre-2.0.** the harness's design doc
+   (`WASM_APPLET_HARNESS.md`) was deleted with the wasm-era docs; the target
+   contract — applet regions, renderer registry, expanded import surface, v2
+   message shapes — is described in `NEXT_ARCHITECTURE.md` §2c–§2d. the v1
+   wire/ABI pinned by this 1.0.0 epoch remains
    authoritative until the 2.0 epoch cut — the harness lands behind
    `clientMode` so the JS-runtime path and its pins stay untouched.
 
@@ -154,3 +214,8 @@ frozen surface is a mistake:
   `swift build` → `swift test` → `swift package --disable-sandbox plugin
   smoke` → `plugin fullstack-smoke` → `node designer/browser-smoke.mjs`,
   each self-contained and runnable by one human.
+
+> **note (post-deletion):** the wasm monolith client (`WebUIClientRuntime`,
+> `WebUIClient`, the chamber + content-addressed artifact) has been deleted. the
+> engine is the client runtime; wasm survives only as capability islands. any
+> reference to the client boot below is historical.

@@ -121,18 +121,14 @@ extension Chart {
 	public func chartAngularInset(_ degrees: Double?) -> Chart {
 		var c = config; c.angularInset = degrees; return Chart(marks, config: c, id: id, ariaLabel: ariaLabel)
 	}
-	/// Enable scrolling on the given axes (mirrors `chartScrollableAxes`).
-	public func chartScrollableAxes(_ axes: ChartScrollAxes) -> Chart {
-		var c = config; c.scrollAxes = axes; return Chart(marks, config: c, id: id, ariaLabel: ariaLabel)
-	}
-	/// How many x-units are visible in a horizontal scroll (mirrors
-	/// `chartXVisibleDomain`).
-	public func chartXVisibleDomain(_ count: Int) -> Chart {
-		var c = config; c.visibleDomain = count; return Chart(marks, config: c, id: id, ariaLabel: ariaLabel)
-	}
 	/// Plot height in viewBox units.
 	public func chartHeight(_ height: Int) -> Chart {
 		var c = config; c.height = height; return Chart(marks, config: c, id: id, ariaLabel: ariaLabel)
+	}
+	/// The viewBox aspect ratio (width = height * ratio). Defaults to 2; use 1
+	/// for square charts such as a radial gauge.
+	public func chartAspectRatio(_ ratio: Double) -> Chart {
+		var c = config; c.aspectRatio = ratio; return Chart(marks, config: c, id: id, ariaLabel: ariaLabel)
 	}
 	/// A title rendered above the plot.
 	public func chartTitle(_ title: String) -> Chart {

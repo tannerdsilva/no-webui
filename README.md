@@ -1,7 +1,7 @@
 # no-webui
 
 A SwiftUI-for-web framework: server-rendered HTML with a SwiftUI-like declarative
-API, a design system with 225 CSS tokens and 22 components, and a JS runtime
+API, a design system with 174 CSS custom properties and 133 component types, and a JS runtime
 for live UI updates.
 
 ## Modules
@@ -9,7 +9,10 @@ for live UI updates.
 | Module | Description | Dependencies |
 |---|---|---|
 | `WebUI` | View protocol, primitives, layouts, modifiers, CSS system, HTML document assembly, WebSocket protocol, JS runtime | swift-log, rawdog |
-| `WebUIDesignSystem` | design system: 225 CSS custom properties, 22 styled components | WebUI |
+| `WebUIDesignSystem` | design system: 174 CSS custom properties, 133 component types | WebUI |
+| `WebUIChart` | server-rendered inline-SVG charts: 9 mark types (bar/line/area/point/rect/rule/sector/radar/radial), scales, axes, selection, palette tokens; a plot declares a design width, compresses to 92% and pans rather than shrinking its labels | WebUICore |
+| `WebUIServer` | the NIO server that hosts a page plus its assets and the `/ws` socket | WebUI, WebUIDesignSystem, swift-nio |
+| `WebUIBlocks` | standalone page scaffolds — dashboard, login, signup, four sidebar variants, patterns — served one per process by `WebUIBlocksServer` | WebUI, WebUIDesignSystem, WebUIChart |
 | `WebUIAuth` | authentication + sessions: identity model, session tokens, cookies, `AuthSessionStore` protocol + in-memory store, Argon2id password verification, `AuthContext` | WebUI, swift-log, rawdog |
 | `WebUIAssetTool` | build-time executable that embeds CSS + JS as Swift string constants | — |
 | `WebUIExample` | HTTP/WebSocket example server (SwiftNIO) | WebUI, WebUIDesignSystem, swift-nio |
@@ -42,7 +45,7 @@ See `Sources/WebUIExample/main.swift` and `Documentation/GETTING_STARTED.md`.
 
 ```bash
 swift build          # WebUIAssetPlugin auto-generates Assets+Generated.swift
-swift test           # 398 tests, 35 suites
+swift test           # 903 tests
 swift run WebUIExample  # example server on :9090
 ```
 
@@ -116,11 +119,12 @@ See `designer/README.md` for the full designer guide.
 - `Documentation/ASSEMBLY.md` — project tooling and the build/verification stage map
 - `Documentation/API.md` — full API reference
 - `Documentation/DESIGN_SYSTEM.md` — design system component reference
+- `Documentation/CHARTS.md` — charting guide (marks, scales, axes, the responsive width contract)
+- `Documentation/ICONS.md` — icon catalog, tooling and SVG sanitization
 - `Documentation/GETTING_STARTED.md` — getting started guide
 - `Documentation/JS_RUNTIME.md` — JavaScript runtime API
 - `Documentation/LAYOUTS.md` — layout primitives reference
 - `Documentation/AUTH_SESSIONS.md` — authentication + sessions design and decisions
-- `Documentation/IMPLEMENTATION_PLAN.md` — auth/session implementation plan and status
 
 ## Requirements
 

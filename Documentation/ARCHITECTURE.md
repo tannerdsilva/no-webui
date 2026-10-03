@@ -222,15 +222,25 @@ At render time the combined css (`styles` + `rawStyles`) is passed through
 `minifyCSS()` — `/* */` comments, blank lines, and line padding are stripped
 before the `<style>` tag is emitted, so shipped pages carry no css comments.
 
+the design sheet is **layered**: `@layer webui, webui.utilities;` wraps the
+framework's rules — components in `webui`, the layout primitives in
+`webui.utilities` — so *unlayered* css (an app's own sheet, `rawStyles`, the theme
+sheet) outranks the framework by cascade origin rather than by selector weight.
+`CascadeLayerTests` scans the served bytes and fails if any rule escapes the
+layers; the browser gate proves the consequence (a single-class consumer rule
+beats a two-class framework rule).
+
 A `RuntimeConfig?` parameter changes the runtime bootstrap: with a non-empty
 config the page emits `WebUIRuntime.init({...})` with only the set keys;
 otherwise the default `WebUIRuntime.init();` is emitted byte-for-byte.
 
 ### WebUIDocument
 
-Extends `HTMLDocument` with the full WebUI design system CSS embedded as a
-raw style string (minified on the wire as above). Use this for apps that want
-the complete design system.
+Extends `HTMLDocument` with the design system: the layered sheet
+(`@layer webui, webui.utilities`, 174 `:root` tokens) plus the layout rules,
+hoisted to `DesignSystemAssets.minifiedCss` and served content-addressed
+(`/__assets/css.<sha256>`, linked by default). Use this for apps that want the
+complete design system.
 
 ### WebUIRuntime
 
@@ -298,8 +308,10 @@ owns linear memory; the chamber writes event envelopes at `webui_input_ptr`,
 calls `webui_handle_event`, reads fragments from the frame, and patches by id.
 async handlers run through `swift_task_donateThreadToGlobalExecutorUntil` (the
 6.4 cooperative executor's blessed pump) — one call drains spawned tasks and
-their awaits to quiescence. full detail: `Documentation/WASM_BOOTSTRAP.md` +
-`Documentation/WASM_IMPLEMENTATION_PLAN.md`.
+their awaits to quiescence. full detail (**historical**):
+`Documentation/WASM_BOOTSTRAP.md` + `Documentation/WASM_IMPLEMENTATION_PLAN.md`,
+both deleted with the chamber — the island machinery that remains is described in
+`NEXT_ARCHITECTURE.md` §2c–§2d.
 
 ## Security Architecture
 
@@ -325,3 +337,7 @@ their awaits to quiescence. full detail: `Documentation/WASM_BOOTSTRAP.md` +
 | Per-request render cost | `WebUIDocument` hoists the minified design sheet (layout rules + embedded css) to a startup constant and embeds it verbatim (`HTMLDocument.preMinifiedStyles`) instead of re-minifying ~300 kb of css per request — probe-measured 11 ms → <0.01 ms in release. `/__assets/css` likewise serves the minified sheet (comment-free; the first law now holds on every endpoint) |
 | Event-loop CPU isolation | Argon2id runs on a dedicated `NIOThreadPool` (`--argon2-workers`, default 2), never on a connection's event loop; event handlers are `@Sendable async` and can hop off-loop for heavy work |
 | Memory ceiling on small hosts | `ConnectionGate` caps concurrent connections (`--max-connections`, default 256) with admission enforced in the child channel initializer — bare connect-only sockets count toward the cap, so a connect-flood cannot sidestep it — and a 120 s read-idle reaper guards plain http and websockets alike (`--event-loops` sizes the nio group) |
+> **note (post-deletion):** the wasm monolith client (`WebUIClientRuntime`,
+> `WebUIClient`, the chamber + content-addressed artifact) has been deleted. the
+> engine is the client runtime; wasm survives only as capability islands. any
+> reference to the client boot below is historical.

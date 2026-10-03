@@ -17,26 +17,48 @@ struct WebUIWasmToolTests {
 		0x00, 0x61, 0x73, 0x6D, 0x02, 0x00, 0x00, 0x00,  // version 2
 	]
 
+	/// the tool is a build product, so `swift test` without `swift build`
+	/// legitimately leaves it absent. every test carries this as an
+	/// `.enabled(if:)` trait — one mechanism, so a new test cannot forget a
+	/// guard and abort the runner (which is how this target used to die on linux).
+	static var toolAvailable: Bool { toolURL() != nil }
+	static let unavailable: Comment = "WebUIWasmTool not built — run `swift build` first"
+
 	static func toolURL() -> URL? {
-		// `swift build` puts the tool at .build/out/Products/Debug/WebUIWasmTool
-		let candidates = [
-			".build/out/Products/Debug/WebUIWasmTool",
-			".build/out/Products/Release/WebUIWasmTool",
-		]
-		for c in candidates where FileManager.default.fileExists(atPath: c) {
-			return URL(fileURLWithPath: c)
+		// scanned, not hard-coded: the product directory carries a platform
+		// suffix on linux (`Debug-linux-x86_64`) and on cross targets, so a fixed
+		// `.build/out/Products/Debug/...` path resolves to nil there — and a nil
+		// `Process.executableURL` is a fatalError *inside Foundation*, which
+		// aborts the whole test runner instead of failing one test.
+		let root = ".build/out/Products"
+		if let entries = try? FileManager.default.contentsOfDirectory(atPath: root) {
+			for dir in entries.sorted() {
+				let candidate = root + "/" + dir + "/WebUIWasmTool"
+				if FileManager.default.isExecutableFile(atPath: candidate) {
+					return URL(fileURLWithPath: candidate)
+				}
+			}
+		}
+		// legacy layout, for older SwiftPM
+		for legacy in [".build/debug/WebUIWasmTool", ".build/release/WebUIWasmTool"] {
+			if FileManager.default.isExecutableFile(atPath: legacy) {
+				return URL(fileURLWithPath: legacy)
+			}
 		}
 		return nil
 	}
 
-	func runTool(_ args: [String]) -> (status: Int32, out: String) {
+	func runTool(_ args: [String]) throws -> (status: Int32, out: String) {
+		// `#require` rather than assignment: a missing tool must be a clean test
+		// failure, never a Foundation trap.
+		let url = try #require(Self.toolURL(), "\(Self.unavailable)")
 		let process = Process()
-		process.executableURL = Self.toolURL()
+		process.executableURL = url
 		process.arguments = args
 		let pipe = Pipe()
 		process.standardOutput = pipe
 		process.standardError = pipe
-		try! process.run()
+		try process.run()
 		process.waitUntilExit()
 		let data = pipe.fileHandleForReading.readDataToEndOfFile()
 		return (process.terminationStatus, String(data: data, encoding: .utf8) ?? "")
@@ -44,25 +66,21 @@ struct WebUIWasmToolTests {
 
 	// MARK: -
 
-	@Test("--missing emits an absent carrier with empty sha and zero count")
-	func missingCarrier() {
+	@Test("--missing emits an absent carrier with empty sha and zero count", .enabled(if: toolAvailable, unavailable))
+	func missingCarrier() throws {
 		let tmp = NSTemporaryDirectory() + "wasm-tool-missing-\(UUID().uuidString).swift"
 		defer { try? FileManager.default.removeItem(atPath: tmp) }
-		let (status, out) = runTool(["--missing", "--output", tmp])
+		let (status, out) = try runTool(["--missing", "--output", tmp])
 		#expect(status == 0)
 		#expect(out.contains("absent carrier"))
-		let text = try! String(contentsOfFile: tmp, encoding: .utf8)
+		let text = try String(contentsOfFile: tmp, encoding: .utf8)
 		#expect(text.contains("public static let present = false"))
 		#expect(text.contains("public static let sha256 = \"\""))
 		#expect(text.contains("public static let byteCount = 0"))
 	}
 
-	@Test("a valid artifact produces a present carrier with matching sha and count")
+	@Test("a valid artifact produces a present carrier with matching sha and count", .enabled(if: toolAvailable, unavailable))
 	func validArtifactCarrier() throws {
-		guard Self.toolURL() != nil else {
-			Issue.record("WebUIWasmTool not built (run `swift build` first)", severity: .warning)
-			return
-		}
 		let tmp = NSTemporaryDirectory() + "wasm-tool-valid-\(UUID().uuidString)"
 		let wasmPath = tmp + ".wasm"
 		let swiftPath = tmp + ".swift"
@@ -71,10 +89,10 @@ struct WebUIWasmToolTests {
 			try? FileManager.default.removeItem(atPath: swiftPath)
 		}
 		try Data(Self.validWasm).write(to: URL(fileURLWithPath: wasmPath))
-		let (status, out) = runTool(["--wasm-input", wasmPath, "--output", swiftPath, "--product", "ProbeClient"])
+		let (status, out) = try runTool(["--wasm-input", wasmPath, "--output", swiftPath, "--product", "ProbeClient"])
 		#expect(status == 0)
 		#expect(out.contains("validated + hashed"))
-		let text = try! String(contentsOfFile: swiftPath, encoding: .utf8)
+		let text = try String(contentsOfFile: swiftPath, encoding: .utf8)
 		#expect(text.contains("public static let present = true"))
 		#expect(text.contains("public static let byteCount = \(Self.validWasm.count)"))
 		#expect(text.contains("public static let product = \"ProbeClient\""))
@@ -83,12 +101,8 @@ struct WebUIWasmToolTests {
 		#expect(sha != nil)
 	}
 
-	@Test("a corrupt artifact fails the tool (build-time integrity gate)")
+	@Test("a corrupt artifact fails the tool (build-time integrity gate)", .enabled(if: toolAvailable, unavailable))
 	func corruptArtifactFails() throws {
-		guard Self.toolURL() != nil else {
-			Issue.record("WebUIWasmTool not built (run `swift build` first)", severity: .warning)
-			return
-		}
 		let tmp = NSTemporaryDirectory() + "wasm-tool-bad-\(UUID().uuidString)"
 		let wasmPath = tmp + ".wasm"
 		let swiftPath = tmp + ".swift"
@@ -97,18 +111,14 @@ struct WebUIWasmToolTests {
 			try? FileManager.default.removeItem(atPath: swiftPath)
 		}
 		try Data(Self.badMagicWasm).write(to: URL(fileURLWithPath: wasmPath))
-		let (status, out) = runTool(["--wasm-input", wasmPath, "--output", swiftPath])
+		let (status, out) = try runTool(["--wasm-input", wasmPath, "--output", swiftPath])
 		#expect(status != 0)
 		#expect(out.contains("version"))
 	}
 
-	@Test("a missing file fails the tool (never emits a stale carrier)")
+	@Test("a missing file fails the tool (never emits a stale carrier)", .enabled(if: toolAvailable, unavailable))
 	func missingFileFails() throws {
-		guard Self.toolURL() != nil else {
-			Issue.record("WebUIWasmTool not built (run `swift build` first)", severity: .warning)
-			return
-		}
-		let (status, out) = runTool(["--wasm-input", "/nonexistent/x.wasm", "--output", "/tmp/x.swift"])
+		let (status, out) = try runTool(["--wasm-input", "/nonexistent/x.wasm", "--output", "/tmp/x.swift"])
 		#expect(status != 0)
 		#expect(out.contains("cannot read"))
 	}
@@ -129,12 +139,8 @@ struct WebUIWasmToolTests {
 		return out
 	}()
 
-	@Test("strip removes custom sections but preserves header + non-custom sections")
+	@Test("strip removes custom sections but preserves header + non-custom sections", .enabled(if: toolAvailable, unavailable))
 	func stripRemovesCustomKeepsRest() throws {
-		guard Self.toolURL() != nil else {
-			Issue.record("WebUIWasmTool not built (run `swift build` first)", severity: .warning)
-			return
-		}
 		let tmp = NSTemporaryDirectory() + "wasm-tool-strip-\(UUID().uuidString)"
 		let inPath = tmp + ".wasm"
 		let outPath = tmp + "-out.wasm"
@@ -143,7 +149,7 @@ struct WebUIWasmToolTests {
 			try? FileManager.default.removeItem(atPath: outPath)
 		}
 		try Data(Self.wasmWithCustom).write(to: URL(fileURLWithPath: inPath))
-		let (status, out) = runTool(["--strip-input", inPath, "--strip-output", outPath])
+		let (status, out) = try runTool(["--strip-input", inPath, "--strip-output", outPath])
 		#expect(status == 0)
 		#expect(out.contains("stripped 8 bytes"))
 		let stripped = try Data(contentsOf: URL(fileURLWithPath: outPath))
@@ -156,12 +162,8 @@ struct WebUIWasmToolTests {
 		#expect(String(decoding: stripped, as: UTF8.self).contains("hello") == false)
 	}
 
-	@Test("strip is a no-op on an artifact with no custom sections")
+	@Test("strip is a no-op on an artifact with no custom sections", .enabled(if: toolAvailable, unavailable))
 	func stripNoCustomIsNoop() throws {
-		guard Self.toolURL() != nil else {
-			Issue.record("WebUIWasmTool not built (run `swift build` first)", severity: .warning)
-			return
-		}
 		let tmp = NSTemporaryDirectory() + "wasm-tool-stripn-\(UUID().uuidString)"
 		let inPath = tmp + ".wasm"
 		let outPath = tmp + "-out.wasm"
@@ -170,7 +172,7 @@ struct WebUIWasmToolTests {
 			try? FileManager.default.removeItem(atPath: outPath)
 		}
 		try Data(Self.validWasm).write(to: URL(fileURLWithPath: inPath))
-		let (status, _) = runTool(["--strip-input", inPath, "--strip-output", outPath])
+		let (status, _) = try runTool(["--strip-input", inPath, "--strip-output", outPath])
 		#expect(status == 0)
 		let stripped = try Data(contentsOf: URL(fileURLWithPath: outPath))
 		#expect(Array(stripped) == Self.validWasm)

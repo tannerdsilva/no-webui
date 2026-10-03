@@ -163,21 +163,16 @@ max-age 1800s) are invalidated on rotation — documented, accepted behavior.
 token on process restart; a persisted secret needs a storage location anyway and
 LMDB is the house choice. Session tokens never use a `SystemRandomNumberGenerator`
 fallback — and since 2026-09 no path in the framework does: `CSRFProtection`
-secret/token minting throws (`CSRFError.entropyUnavailable`/`.signingFailed`)
-instead. all token material comes from `SecureRandom.bytes` exclusively.
+secret minting throws (`CSRFError.entropyUnavailable` on entropy failure, and
+`token(for:…)` throws `.signingFailed` on an hmac failure) instead. all token
+material comes from `SecureRandom.bytes` exclusively.
 
 ## Core protocols
 
 ```swift
-public protocol UserStore: Sendable {              // backend supplies
-    func identity(forUsername: String) async throws -> Identity?
-}
 public struct Credential: Sendable {               // opaque to the framework
     public let username: String
     public let secret: [UInt8]                        // raw password bytes, single use
-}
-public protocol Authenticator: Sendable {          // verify credentials
-    func authenticate(_ credential: Credential) async throws -> Identity?
 }
 public protocol AuthSessionStore: Sendable {
     func create(_ session: AuthenticatedSession) async throws
@@ -212,6 +207,11 @@ public struct AuthenticatedSession: Sendable, Codable {
 - `constantTimeEquals(_:_:)` — new tiny pure-Swift utility. All token and MAC
   comparisons use it, including the existing `CSRFProtection.validate` which
   currently uses `String ==` (`Utilities.swift:309`).
+- **no identity-resolution seam is shipped.** an earlier draft of this section
+  sketched `UserStore` / `Authenticator` protocols; they were never implemented
+  and no shipped API accepted them, so they are not public surface. `Credential`
+  and `Identity` remain the data vocabulary, and a host wires its own verifier
+  directly (as `WebUIAuthExample` does).
 
 ## Session store & LMDB layout
 
@@ -258,7 +258,7 @@ Single `webui_sessions` env, one persistent environment, one writer:
 2. `POST /login` (urlencoded, server-owned single-route parser) → CSRF
    validation → **single-use check** (the stateless token is recorded as
    consumed before any KDF work) → per-IP + per-account throttle
-   (§hardening; `429` + `Retry-After` when exceeded) → `PasswordAuthenticator`
+   (§hardening; `429` + `Retry-After` when exceeded) → `PasswordVerifier`
    with Argon2id under a **global concurrency cap** (default 4); **dummy-hash
    discipline**: unknown usernames hash a fixed dummy so timing does not
    reveal existence.
@@ -411,7 +411,9 @@ Single `webui_sessions` env, one persistent environment, one writer:
   calls, CBOR/COSE key parsing, `clientDataHash`/`authData` verification, origin
   checks, counter checks — in a comment-free embedded runtime with no CBOR
   dependency today.
-- `WebAuthnAuthenticator` conforms to the same `Authenticator` protocol. The
+- a future `WebAuthnAuthenticator` would implement the same
+  credential-verification shape (username/secret in, `Identity?` out — no
+  protocol seam is shipped yet, see §core protocols). The
   login UX forks (password form vs. passkey button/conditional mediation) — an
   accepted fork, not an extension of `LoginView`.
 

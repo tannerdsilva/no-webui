@@ -1,8 +1,11 @@
 import Testing
 import Foundation
 import WebUI
+import WebUICore
 import WebUIDesignSystem
 import WebUIAuth
+import WebUIBuild
+import WebUIServer
 
 // MARK: - Public API surface pins
 //
@@ -17,6 +20,56 @@ import WebUIAuth
 
 private func rendered(_ view: some View) -> String {
 	view.render()
+}
+
+// MARK: - the asset toolkit
+
+// the public surface `Documentation/ASSETS.md` documents, referenced here at compile time
+// and asserted where it can drift: the protocol's stamp convention, the pairing value's url
+// and registration, and the emitter's receipt.
+
+@Test("the asset toolkit's public surface pins its contract")
+func assetToolkitSurfacePins() throws {
+	// WebUIShippedAsset (WebUICore): the shape generated code conforms to.
+	struct Pinned: WebUIShippedAsset {
+		static let contentType = "text/css; charset=utf-8"
+		static let stamp = "dc8a9766bbab"
+		static let body: [UInt8] = Array(":root { --probe: 1 }\n".utf8)
+		static let gzip: [UInt8]? = nil
+	}
+
+	// WebUIAsset (WebUIServer): url and registration from one value.
+	let shipped = WebUIAsset(Pinned.self, path: "/ui/pinned.css")
+	#expect(shipped.url == "/ui/pinned.css?v=dc8a9766bbab")
+	#expect(shipped.registration.path == "/ui/pinned.css")
+	#expect(shipped.registration.immutable)
+	#expect(shipped.registration.cacheSeconds == 31536000)
+	let fromText = WebUIAsset(path: "/ui/pinned.css", text: ":root { --probe: 1 }\n", contentType: "text/css; charset=utf-8")
+	#expect(fromText.url == shipped.url, "the same bytes and path are the same address")
+
+	// WebUIBuild: the build-side surface a consumer's tool calls.
+	let dir = FileManager.default.temporaryDirectory
+		.appendingPathComponent("webui-surface-\(UUID().uuidString)")
+	try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+	defer { try? FileManager.default.removeItem(at: dir) }
+	let receipt = try WebUIAssetBuilder.emit(
+		shipped: ":root { --probe: 1 }\n",
+		typeName: "PinnedAsset",
+		options: .init(minify: false, prose: .off, contentType: "text/css; charset=utf-8"),
+		to: dir.appendingPathComponent("PinnedAsset.swift")
+	)
+	#expect(receipt.typeName == "PinnedAsset")
+	#expect(receipt.bytes == 21)
+	#expect(receipt.stamp == Pinned.stamp, "the emitter's address agrees with the protocol's convention")
+	#expect(receipt.stamp == String(SHA256.hex(Pinned.body).prefix(12)))
+	#expect((receipt.gzipBytes ?? 0) > 0)
+
+	_ = gzip(Data("probe".utf8)) as Data?
+	_ = gzip("probe") as Data?
+	#expect(ProsePolicy.off != ProsePolicy.check)
+	#expect(WebUIBuildError.invalidTypeName("Not A Name").description.contains("Not A Name"))
+	_ = Emitted.self
+	_ = WebUIAssetManifest.self
 }
 
 // MARK: - Core primitives
@@ -228,6 +281,311 @@ func componentSurfacePins() {
 
 	let chip = rendered(WebUIChip("tag", variant: .neutral, removable: true))
 	#expect(chip.contains("chip"))
+// p1 reachable-API sweep: components whose css shipped before their api did.
+	let separator = rendered(WebUISeparator("or"))
+	#expect(separator.contains("divider-divider"))
+	#expect(separator.contains("divider-divider__label"))
+	let verticalSeparator = rendered(WebUISeparator(orientation: .vertical))
+	#expect(verticalSeparator.contains("divider divider--vertical"))
+	#expect(verticalSeparator.contains("aria-orientation=\"vertical\""))
+	let glyphSeparator = rendered(WebUISeparator(icon: .chevronDown))
+	#expect(glyphSeparator.contains("divider divider--icon"))
+	#expect(glyphSeparator.contains("divider__label"))
+	let strongSeparator = rendered(WebUISeparator(strong: true))
+	#expect(strongSeparator.contains("divider divider--strong"))
+	let escapedSeparator = rendered(WebUISeparator("<b>or</b>"))
+	#expect(escapedSeparator.contains("&lt;b&gt;or&lt;/b&gt;"))
+
+	let kbd = rendered(WebUIKbd("K"))
+	#expect(kbd.contains("<kbd class=\"kbd\">K</kbd>"))
+	let combo = rendered(WebUIKbd(["Ctrl", "K"]))
+	#expect(combo.contains("kbd-combo"))
+	#expect(combo.contains("<kbd class=\"kbd\">Ctrl</kbd><kbd class=\"kbd\">K</kbd>"))
+	let sizedKbd = rendered(WebUIKbd(["Ctrl", "K"], size: .small, separator: "+"))
+	#expect(sizedKbd.contains("kbd kbd--sm"))
+	#expect(sizedKbd.contains("kbd-sep"))
+	let largeKbd = rendered(WebUIKbd("Esc", size: .large))
+	#expect(largeKbd.contains("kbd--lg"))
+
+	let aspect = rendered(WebUIAspectRatio(.square, label: "1 / 1"))
+	#expect(aspect.contains("aspect aspect--1-1"))
+	#expect(aspect.contains("aspect__label"))
+	#expect(rendered(WebUIAspectRatio(.wide)).contains("aspect--21-9"))
+	#expect(rendered(WebUIAspectRatio(.standard)).contains("aspect--16-9"))
+	#expect(rendered(WebUIAspectRatio(.photo)).contains("aspect--4-3"))
+	#expect(rendered(WebUIAspectRatio(.portrait)).contains("aspect--3x4"))
+	#expect(rendered(WebUIAspectRatio(.tall)).contains("aspect--9x16"))
+
+	let ring = rendered(WebUICircularProgress(value: 0.25, label: "25", sublabel: "%", ariaLabel: "Used"))
+	#expect(ring.contains("role=\"progressbar\""))
+	#expect(ring.contains("aria-valuenow=\"25\""))
+	#expect(ring.contains("stroke-dashoffset=\"75.0\""))
+	#expect(ring.contains("ring__track"))
+	#expect(ring.contains("ring__fill"))
+	#expect(ring.contains("ring__label"))
+	#expect(ring.contains("ring__label-sub"))
+	let smallRing = rendered(WebUICircularProgress(value: 0.5, tone: .success, size: .small))
+	#expect(smallRing.contains("ring ring--sm ring--success"))
+	#expect(rendered(WebUICircularProgress(value: 0.5, tone: .warning, size: .large)).contains("ring--lg"))
+	#expect(rendered(WebUICircularProgress(value: 0.5, tone: .danger)).contains("ring--danger"))
+	let busyRing = rendered(WebUICircularProgress(value: 0, indeterminate: true))
+	#expect(busyRing.contains("ring--indeterminate"))
+	#expect(!busyRing.contains("aria-valuenow"))
+	let clampedRing = rendered(WebUICircularProgress(value: 5))
+	#expect(clampedRing.contains("aria-valuenow=\"100\""))
+
+	let group = rendered(WebUIInputGroup(placeholder: "0.00", prefix: "$", icon: .dollarSign, suffix: "USD", type: .number, name: "amt"))
+	#expect(group.contains("input input--with-affix"))
+	#expect(group.contains("input__affix input__affix--left"))
+	#expect(group.contains("input__prefix"))
+	#expect(group.contains("input__suffix"))
+	#expect(group.contains("input__el"))
+	#expect(group.contains("name=\"amt\""))
+	let errorGroup = rendered(WebUIInputGroup(placeholder: "x", suffix: "bad", state: .error))
+	#expect(errorGroup.contains("input--error"))
+	#expect(errorGroup.contains("input__suffix input__suffix--error"))
+	#expect(errorGroup.contains("aria-invalid=\"true\""))
+
+	let banner = rendered(WebUIBanner(variant: .warning, title: "Heads up", message: "Watch out", dismissible: true, id: "bn"))
+	#expect(banner.contains("banner banner--warning"))
+	#expect(banner.contains("role=\"status\""))
+	#expect(banner.contains("banner__icon"))
+	#expect(banner.contains("banner__title"))
+	#expect(banner.contains("banner__text"))
+	#expect(banner.contains("banner__close"))
+	#expect(banner.contains("data-dismiss"))
+	#expect(rendered(WebUIBanner(variant: .success, message: "x")).contains("banner--success"))
+	#expect(rendered(WebUIBanner(variant: .danger, message: "x")).contains("banner--error"))
+	#expect(rendered(WebUIBanner(variant: .info, message: "x")).contains("banner--info"))
+
+	let feed = rendered(WebUIActivityFeed([
+		WebUIActivityFeed.Group("Today", items: [
+			WebUIActivityFeed.Item(icon: .checkCircle, text: "Shipped", time: "2h"),
+		]),
+	]))
+	#expect(feed.contains("activity"))
+	#expect(feed.contains("activity__group"))
+	#expect(feed.contains("activity__item"))
+	#expect(feed.contains("activity__icon"))
+	#expect(feed.contains("activity__text"))
+	#expect(feed.contains("activity__time"))
+	let unsafeFeed = rendered(WebUIActivityFeed([
+		WebUIActivityFeed.Group("<b>today</b>", items: [
+			WebUIActivityFeed.Item(icon: .bell, text: "<script>x</script>", time: "<1m"),
+		]),
+	]))
+	#expect(unsafeFeed.contains("&lt;script&gt;x&lt;/script&gt;"))
+	#expect(unsafeFeed.contains("&lt;1m"))
+// p2 chat set: the sheet's chat family plus the scroller/marker/attachment.
+	let scroller = rendered(WebUIMessageScroller(height: "18rem", id: "sc", ariaLabel: "Thread") {
+		Text("first")
+		Text("second")
+	})
+	#expect(scroller.contains("scroll-area scroll-area--reverse scroll-area--fade-y"))
+	#expect(scroller.contains("role=\"log\""))
+	#expect(scroller.contains("aria-live=\"polite\""))
+	#expect(scroller.contains("tabindex=\"0\""))
+	#expect(scroller.contains("height: 18rem; max-height: 18rem"))
+	// bottom-anchored layout: children emit in reverse dom order
+	let firstAt = scroller.range(of: "first")!
+	let secondAt = scroller.range(of: "second")!
+	#expect(secondAt.lowerBound < firstAt.lowerBound)
+	#expect(!rendered(WebUIMessageScroller(fade: false) { Text("x") }).contains("scroll-area--fade-y"))
+
+	let marker = rendered(WebUIMarker("Today"))
+	#expect(marker.contains("class=\"marker\""))
+	#expect(marker.contains("role=\"separator\""))
+	#expect(marker.contains("marker__rule"))
+	#expect(marker.contains("marker__label"))
+	#expect(rendered(WebUIMarker("Pinned", icon: .clock, sticky: true)).contains("marker--sticky"))
+	#expect(rendered(WebUIMarker("Pinned", icon: .clock)).contains("marker__glyph"))
+	#expect(!rendered(WebUIMarker("Bare", spread: false)).contains("marker__rule"))
+	#expect(rendered(WebUIMarker("<b>x</b>")).contains("&lt;b&gt;x&lt;/b&gt;"))
+
+	let attachment = rendered(WebUIAttachment(name: "notes.md", meta: "12 KB", removable: true, id: "att"))
+	#expect(attachment.contains("class=\"attachment\""))
+	#expect(attachment.contains("attachment__icon"))
+	#expect(attachment.contains("attachment__name"))
+	#expect(attachment.contains("attachment__meta"))
+	#expect(attachment.contains("attachment__remove"))
+	#expect(attachment.contains("data-dismiss"))
+	#expect(attachment.contains("id=\"att\""))
+	#expect(rendered(WebUIAttachment(name: "x", meta: "y", state: .uploading)).contains("attachment--uploading"))
+	#expect(rendered(WebUIAttachment(name: "x", state: .error)).contains("attachment--error"))
+	#expect(rendered(WebUIAttachment(name: "<script>x</script>")).contains("&lt;script&gt;"))
+
+	let bubble = rendered(WebUIChatBubble("hi there", side: .sent, time: "09:41", receipt: .read))
+	#expect(bubble.contains("chat__bubble chat__bubble--sent"))
+	#expect(bubble.contains("chat__time"))
+	#expect(bubble.contains("chat__receipt chat__receipt--read"))
+	#expect(bubble.contains("aria-label=\"Read\""))
+	#expect(rendered(WebUIChatBubble("x", side: .received)).contains("chat__bubble--received"))
+	let reacted = rendered(WebUIChatBubble("x", reactions: [WebUIChatBubble.Reaction(label: "up", count: 2, active: true)]))
+	#expect(reacted.contains("chat__reactions"))
+	#expect(reacted.contains("chat__reaction chat__reaction--active"))
+	#expect(rendered(WebUIChatBubble("line1\nline2")).contains("line1<br>line2"))
+	#expect(rendered(WebUIChatBubble("<b>x</b>")).contains("&lt;b&gt;x&lt;/b&gt;"))
+	// a received bubble never shows an outgoing receipt
+	#expect(!rendered(WebUIChatBubble("x", side: .received, receipt: .read)).contains("chat__receipt"))
+
+	let thread = rendered(WebUIMessage(name: "Dana", text: "green", time: "09:12"))
+	#expect(thread.contains("class=\"chat__thread\""))
+	#expect(thread.contains("chat__meta"))
+	#expect(thread.contains("class=\"chat__bubble\""))
+	let ownThread = rendered(WebUIMessage(name: "You", text: "ok", own: true))
+	#expect(ownThread.contains("chat__thread chat__thread--own"))
+	#expect(ownThread.contains("chat__bubble chat__bubble--own"))
+// p3 composition primitives: card anatomy, field, item, toggle group, scroll top.
+	let tap: EventHandler = { _ in [] }
+	let anatomy = rendered(WebUICard(
+		variant: .outlined,
+		eyebrow: "eyebrow",
+		title: "title",
+		description: "desc",
+		headerIcon: .activity,
+		media: .image,
+		mediaBadge: "badge",
+		text: "text",
+		footerMeta: "meta",
+		actions: { WebUIButton("Go", variant: .primary) }
+	) {
+		Text("body")
+	})
+	#expect(anatomy.contains("card card--outlined"))
+	#expect(anatomy.contains("card__media"))
+	#expect(anatomy.contains("card__media-badge"))
+	#expect(anatomy.contains("card__header"))
+	#expect(anatomy.contains("card__eyebrow"))
+	#expect(anatomy.contains("card__title"))
+	#expect(anatomy.contains("card__icon"))
+	#expect(anatomy.contains("card__desc"))
+	#expect(anatomy.contains("card__text"))
+	#expect(anatomy.contains("card__footer"))
+	#expect(anatomy.contains("card__meta"))
+	#expect(anatomy.contains("card__actions"))
+	// a bare card keeps the old markup: no anatomy slots, just card + body
+	let bare = rendered(WebUICard { Text("x") })
+	#expect(bare.contains("card card--elevated"))
+	#expect(bare.contains("card__body"))
+	#expect(!bare.contains("card__header"))
+	#expect(!bare.contains("card__actions"))
+	#expect(rendered(WebUICard(variant: .horizontal) { Text("x") }).contains("card card--horizontal"))
+	#expect(rendered(WebUICard(variant: .hover) { Text("x") }).contains("card--hover"))
+	#expect(rendered(WebUICard(variant: .compact) { Text("x") }).contains("card--compact"))
+	#expect(rendered(WebUICard(variant: .disabled) { Text("x") }).contains("card--disabled"))
+
+	let field = rendered(WebUIField(
+		label: "Name",
+		controlID: "nm",
+		required: true,
+		note: "taken",
+		noteKind: .error,
+		count: "3 / 20",
+		helper: "Shown on your profile"
+	) {
+		WebUIInput(placeholder: "Name", id: "nm")
+	})
+	#expect(field.contains("class=\"field\""))
+	#expect(field.contains("field__row"))
+	#expect(field.contains("field__label field__label--required"))
+	#expect(field.contains("for=\"nm\""))
+	#expect(field.contains("field__hint field__hint--error"))
+	#expect(field.contains("field__count"))
+	#expect(field.contains("field__helper"))
+	#expect(rendered(WebUIField(label: "x", helper: "bad", helperIsError: true) { Text("y") }).contains("field__helper field__helper--error"))
+	#expect(rendered(WebUIField(label: "x", note: "ok", noteKind: .success) { Text("y") }).contains("field__hint--success"))
+	#expect(rendered(WebUIField(label: "<b>x</b>") { Text("y") }).contains("&lt;b&gt;x&lt;/b&gt;"))
+
+	let row = rendered(WebUIItem(
+		title: "web-01",
+		subtitle: "us-east-1",
+		meta: "42 ms",
+		icon: .server,
+		selected: true,
+		id: "row-1"
+	) {
+		WebUIButton("Open", variant: .ghost, size: .sm)
+	})
+	#expect(row.contains("list__item list__item--selected"))
+	#expect(row.contains("list__icon"))
+	#expect(row.contains("list__title"))
+	#expect(row.contains("list__sub"))
+	#expect(row.contains("list__meta"))
+	#expect(row.contains("list__actions"))
+	#expect(row.contains("list__action"))
+	#expect(row.contains("id=\"row-1\""))
+	#expect(!rendered(WebUIItem(title: "bare")).contains("list__actions"))
+
+	let chips = rendered(WebUIToggleGroup(
+		options: [
+			WebUIToggleGroup.Option("all", "All", selected: true),
+			WebUIToggleGroup.Option("web", "Web"),
+		],
+		id: "filters",
+		onToggle: tap
+	))
+	#expect(chips.contains("chip chip--filter chip--filter-active"))
+	#expect(chips.contains("chip chip--filter\""))
+	#expect(chips.contains("aria-pressed=\"true\""))
+	#expect(chips.contains("id=\"filters-opt-0\""))
+	#expect(chips.contains("data-component-id=\"filters\""))
+	#expect(chips.contains("role=\"group\""))
+	#expect(chips.contains("flex-wrap: wrap"))
+
+	let top = rendered(WebUIScrollTop(progress: 0.4, id: "to-top", onTap: tap))
+	#expect(top.contains("scroll-top scroll-top--ring"))
+	#expect(top.contains("scroll-top__ring"))
+	#expect(top.contains("ring__track"))
+	#expect(top.contains("ring__fill"))
+	#expect(top.contains("stroke-dashoffset=\"60.0\""))
+	#expect(top.contains("scroll-top__icon"))
+	#expect(top.contains("aria-label=\"Back to top\""))
+	#expect(top.contains("data-component-id=\"to-top\""))
+	let plainTop = rendered(WebUIScrollTop())
+	#expect(!plainTop.contains("scroll-top--ring"))
+	#expect(plainTop.contains("scroll-top__icon"))
+// p3b nav chrome: navbar search + hamburger, menu sections and item states.
+	let nav = rendered(WebUINavbar(
+		brand: "Acme",
+		links: [WebUINavbar.Link("A", href: "#")],
+		search: WebUINavbar.Search(placeholder: "Find", shortcut: "Ctrl K", id: "ns"),
+		mobileMenu: true
+	) {
+		WebUIButton("Go")
+	})
+	#expect(nav.contains("navbar__search"))
+	#expect(nav.contains("<kbd>Ctrl K</kbd>"))
+	#expect(nav.contains("id=\"ns\""))
+	#expect(nav.contains("navbar__hamburger"))
+	#expect(nav.contains("aria-label=\"Menu\""))
+	#expect(!rendered(WebUINavbar { Text("x") }).contains("navbar__hamburger"))
+	#expect(!rendered(WebUINavbar { Text("x") }).contains("navbar__search"))
+	#expect(rendered(WebUINavbar(search: WebUINavbar.Search(id: "s")) { Text("x") }).contains("role=\"search\""))
+
+	let menu = rendered(WebUIMenu(items: [
+		WebUIMenu.Item("One", active: true),
+		WebUIMenu.Item("Two", hint: "Ctrl 2", submenu: true, dividerBefore: true),
+		WebUIMenu.Item("Three", avatar: "DA", section: "Group"),
+		WebUIMenu.Item("Four", danger: true),
+	], header: "Heading", search: "Find", panel: true))
+	#expect(menu.contains("menu menu__panel"))
+	#expect(menu.contains("menu__header"))
+	#expect(menu.contains("menu__search"))
+	#expect(menu.contains("menu__section"))
+	#expect(menu.contains("menu__divider"))
+	#expect(menu.contains("menu__item--active"))
+	#expect(menu.contains("menu__item--has-sub"))
+	#expect(menu.contains("menu__item--danger"))
+	#expect(menu.contains("menu__avatar"))
+    #expect(menu.contains("avatar avatar--initials avatar--sm"))
+	#expect(menu.contains("menu__hint"))
+	let plainMenu = rendered(WebUIMenu(items: [WebUIMenu.Item("Only")]))
+	#expect(!plainMenu.contains("menu__panel"))
+	#expect(!plainMenu.contains("menu__header"))
+	#expect(plainMenu.contains("menu__item"))
+    // a menu with an id must carry it as a dom id, or the root cannot be a
+    // fragment-patch target (the runtime looks the id up in the document)
+    #expect(rendered(WebUIMenu(items: [WebUIMenu.Item("x")], id: "cm")).contains("id=\"cm\""))
 }
 
 @Test("composite components pin their surface")
@@ -350,7 +708,7 @@ func documentSurfacePins() {
 	#expect(doc.contains("<meta name=\"webui-config\""))
 	#expect(doc.contains("renderToken"))
 
-	let themed = WebUIDocument(body: Text("x").render(), theme: WebUITheme(scheme: .dark)).render()
+	let themed = WebUIDocument(body: Text("x").render(), theme: WebUITheme(defaultMode: .dark)).render()
 	#expect(themed.contains("color-scheme: dark"))
 }
 
@@ -372,4 +730,38 @@ func runtimeConfigSurfacePins() {
 		renderToken: "tok"
 	)
 	_ = config
+}
+
+// MARK: - render path additions (the render-buffer arc)
+
+@Test("the render path's additions are additive and byte-identical")
+func renderBufferAdditionsPin() {
+	// `HTMLBuffer` is a public *type* while every member stays `package`; the
+	// test target is inside the package, so both routes are exercised here.
+	// the pin is compile-time for the signatures and byte-level for the
+	// contract — and it is why these additions ride a minor.
+	let view: any View = Div { Text("x") }
+	var buffer = HTMLBuffer()
+	view.render(into: &buffer)
+	#expect(buffer.finish() == "<div>x</div>")
+
+	var styled = HTMLBuffer()
+	Text("y").padding(2).render(into: &styled)
+	#expect(styled.finish() == "<span style=\"padding: 2px;\">y</span>")
+
+	// a conformer implementing only the string requirements still works through
+	// the buffer: that is the defaulted requirement's additive promise
+	struct StringOnly: View {
+		func render() -> String { "s" }
+	}
+	var fallback = HTMLBuffer()
+	StringOnly().render(into: &fallback)
+	#expect(fallback.finish() == "s")
+
+	struct ModifierOnly: ViewModifier {
+		func apply(to html: String) -> String { "<b>\(html)</b>" }
+	}
+	var wrapped = HTMLBuffer()
+	ModifiedView(content: Text("z"), modifier: ModifierOnly()).render(into: &wrapped)
+	#expect(wrapped.finish() == "<b>z</b>")
 }

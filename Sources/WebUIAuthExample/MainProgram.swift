@@ -51,9 +51,10 @@ final class RouterRegistry: Sendable {
 				if let router = values.routers[hash]?[current] {
 					// touch: an actively-used token is re-promoted in the lru
 					// so frequent renderers do not evict a live page mid-flight.
-					if let idx = values.order[hash]?.firstIndex(of: current) {
-						values.order[hash]!.remove(at: idx)
-						values.order[hash]!.append(current)
+					if var list = values.order[hash], let idx = list.firstIndex(of: current) {
+						list.remove(at: idx)
+						list.append(current)
+						values.order[hash] = list
 					}
 					return (router, current, current != renderToken)
 				}
@@ -66,29 +67,33 @@ final class RouterRegistry: Sendable {
 	}
 	func set(_ router: EventRouter, forTokenHash hash: [UInt8], renderToken: String) {
 		values.withLock { values in
-			if values.routers[hash] == nil {
-				values.routers[hash] = [:]
-				values.order[hash] = []
-				values.forward[hash] = [:]
-				values.forwardOrder[hash] = []
+			// bind the session's four parallel maps once: every read is total,
+			// and the write-back happens in one place.
+			var routers = values.routers[hash] ?? [:]
+			var order = values.order[hash] ?? []
+			var forward = values.forward[hash] ?? [:]
+			var forwardOrder = values.forwardOrder[hash] ?? []
+			if let seen = order.firstIndex(of: renderToken) {
+				order.remove(at: seen)
 			}
-			if let seen = values.order[hash]!.firstIndex(of: renderToken) {
-				values.order[hash]!.remove(at: seen)
-			}
-			values.routers[hash]![renderToken] = router
-			values.order[hash]!.append(renderToken)
-			while values.order[hash]!.count > maxRendersPerSession {
-				let evicted = values.order[hash]!.removeFirst()
-				values.routers[hash]!.removeValue(forKey: evicted)
+			routers[renderToken] = router
+			order.append(renderToken)
+			while order.count > maxRendersPerSession {
+				let evicted = order.removeFirst()
+				routers.removeValue(forKey: evicted)
 				// record the forward before the entry is gone, bounded by the
 				// same capacity as the router map.
-				values.forward[hash]![evicted] = renderToken
-				values.forwardOrder[hash]!.append(evicted)
-				while values.forwardOrder[hash]!.count > maxRendersPerSession {
-					let old = values.forwardOrder[hash]!.removeFirst()
-					values.forward[hash]!.removeValue(forKey: old)
+				forward[evicted] = renderToken
+				forwardOrder.append(evicted)
+				while forwardOrder.count > maxRendersPerSession {
+					let old = forwardOrder.removeFirst()
+					forward.removeValue(forKey: old)
 				}
 			}
+			values.routers[hash] = routers
+			values.order[hash] = order
+			values.forward[hash] = forward
+			values.forwardOrder[hash] = forwardOrder
 		}
 	}
 	func remove(forTokenHash hash: [UInt8]) {
@@ -977,41 +982,6 @@ struct WebUIAuthExample {
 		case (.GET, let cssURL) where cssURL.hasPrefix("/__assets/css."):
 			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/css; charset=utf-8"), ("Cache-Control", "public, max-age=31536000, immutable")], body: DesignSystemAssets.minifiedCss)
 			return
-		case (.GET, "/ui/webui-client.js"):
-			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/javascript; charset=utf-8")], body: WebUIAssets.client)
-			return
-		case (.GET, "/ui/webui-app-boot.js"):
-			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/javascript; charset=utf-8")], body: WebUIAssets.clientBoot)
-			return
-		case (.GET, "/ui/webui-engine.js"):
-			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/javascript; charset=utf-8"), ("Cache-Control", "public, max-age=3600")], body: WebUIAssets.engine)
-			return
-		case (.GET, "/ui/webui-shell.js"):
-			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/javascript; charset=utf-8"), ("Cache-Control", "public, max-age=3600")], body: WebUIAssets.shell)
-			return
-		default:
-			break
-		}
-
-		// the wasm client artifact — content-addressed & immutable (wasm is the
-		// only client runtime; there is no js runtime to serve anymore).
-		if head.method == .GET, head.uri.hasPrefix("/__assets/webui-client."), head.uri.hasSuffix(".wasm"),
-			let url = WebUIBoot.wasmProductURL(productName: "WebUIClient"),
-			let data = try? Data(contentsOf: url) {
-			var wasmHead = HTTPResponseHead(version: .http1_1, status: .ok)
-			wasmHead.headers.replaceOrAdd(name: "Content-Type", value: "application/wasm")
-			wasmHead.headers.replaceOrAdd(name: "Content-Length", value: "\(data.count)")
-			wasmHead.headers.replaceOrAdd(name: "Connection", value: "close")
-			wasmHead.headers.replaceOrAdd(name: "Cache-Control", value: "public, max-age=31536000, immutable")
-			wasmHead.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
-			wasmHead.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
-			var buf = ByteBuffer()
-			buf.writeBytes(data)
-			try await writeResponse(channel: channel, head: wasmHead, body: buf)
-			return
-		}
-
-		switch (head.method, head.uri) {
 		case (.GET, "/login"):
 			// the mint page is throttled (separate, more generous budget) and
 			// every issued token is reserved under the caller's outstanding

@@ -69,8 +69,6 @@ struct WebUISmokePlugin: CommandPlugin {
 
         let cssSource = context.package.directoryURL
             .appendingPathComponent("designer/assets/design-system.css")
-        let jsSource = context.package.directoryURL
-            .appendingPathComponent("designer/assets/webui-client.js")
 
         if let servedCss = await GET(session, "\(base)/__assets/css"),
            let sourceCss = try? Data(contentsOf: cssSource),
@@ -81,13 +79,6 @@ struct WebUISmokePlugin: CommandPlugin {
             bad("css served is not the minified design sheet")
         }
 
-        if let servedJs = await GET(session, "\(base)/ui/webui-client.js"),
-           let sourceJs = try? Data(contentsOf: jsSource),
-           servedJs == sourceJs {
-            ok("wasm chamber served bytes == source (\(sourceJs.count) bytes)")
-        } else {
-            bad("wasm chamber served bytes DIFFER from source")
-        }
 
         let engineSource = context.package.directoryURL
             .appendingPathComponent("designer/assets/webui-engine.js")
@@ -99,6 +90,28 @@ struct WebUISmokePlugin: CommandPlugin {
             ok("engine served bytes == source, comment-free (\(sourceEngine.count) bytes)")
         } else {
             bad("engine served bytes DIFFER from source or carry comments")
+        }
+
+        // the embed plugin's dogfood, end to end: /ui/probe.css is served from the generated
+        // `ProbeAsset` a build produced out of `Assets/webui-assets.json`, and the bytes a
+        // client receives must equal that generated payload — payload in, generated type
+        // out, wire bytes verified.
+        let probeSource = context.package.directoryURL
+            .appendingPathComponent("Sources/WebUISmokeTest/Assets/probe.css")
+        if let (servedProbe, probeHeaders) = await GETWithHeaders(session, "\(base)/ui/probe.css"),
+           let sourceProbe = try? Data(contentsOf: probeSource),
+           let generatedPayload = generatedBodyPayload(packageDir: context.package.directoryURL) {
+            let probeText = String(data: servedProbe, encoding: .utf8) ?? ""
+            if servedProbe == generatedPayload,
+               !probeText.contains("/*"), !probeText.contains("dogfood"),
+               servedProbe.count < sourceProbe.count,
+               headerValue(probeHeaders, "Cache-Control")?.contains("immutable") == true {
+                ok("embedded asset served == generated payload (comment-free, \(servedProbe.count) bytes < source \(sourceProbe.count), immutable)")
+            } else {
+                bad("embedded asset served DIFFERS from the generated payload")
+            }
+        } else {
+            bad("the embed plugin's asset did not serve at /ui/probe.css (or its generated file is missing — run swift build)")
         }
 
         guard let pageData = await GET(session, "\(base)/"),
@@ -156,89 +169,16 @@ struct WebUISmokePlugin: CommandPlugin {
         let interactiveCount = html.components(separatedBy: "data-component-id=\"").count - 1
         // 3 counter + 2 progress + 1 echo + 12 table controls (3 sort + select-all
         // + 4 select + 4 expand) + 6 chart bars = 24 routed components.
-        if interactiveCount == 24 {
-            ok("served page exposes 24 interactive components, incl. per-control table routing (handler wiring intact)")
+        if interactiveCount == 25 {
+            ok("served page exposes 25 interactive components, incl. per-control table routing (handler wiring intact)")
         } else {
-            bad("expected 24 data-component-id attributes, found \(interactiveCount)")
+            bad("expected 25 data-component-id attributes, found \(interactiveCount)")
         }
 
         if html.contains("http-equiv=\"Content-Security-Policy\"") {
             ok("CSP meta present")
         } else {
             bad("CSP meta missing")
-        }
-
-        // client-mode probe (p1): the wasm artifact, the chamber, and the
-        // client-demo page must all be served with the client-mode markers.
-        // the artifact is built by a separate wasm-sdk invocation before this
-        // gate; absence surfaces as FAIL here (gates build it first).
-        if let wasm = await GET(session, base + "/__assets/app.wasm"),
-           wasm.count > 8,
-           Array(wasm.prefix(4)) == [0x00, 0x61, 0x73, 0x6D],
-           wasm[4] == 0x01 {
-            ok("client wasm served with valid magic/version (\(wasm.count) bytes)")
-        } else {
-            bad("client wasm missing or malformed (run the wasm release build first)")
-        }
-
-        if let clientJs = await GET(session, base + "/__assets/webui-client.js"),
-           let clientText = String(data: clientJs, encoding: .utf8),
-           clientText.contains("WebUIClient"), !clientText.contains("/*") {
-            ok("chamber served, comment-free")
-        } else {
-            bad("chamber not served or carries comments")
-        }
-
-        if let demo = await GET(session, base + "/__assets/client-demo"),
-           let demoText = String(data: demo, encoding: .utf8),
-           demoText.contains("'wasm-unsafe-eval'"),
-           demoText.contains("id=\"app\""),
-           demoText.contains("webui-client.js"),
-           !demoText.contains("WebUIRuntime.init") {
-            ok("client-demo page carries client csp + external scripts")
-        } else {
-            bad("client-demo page missing client-mode markers")
-        }
-
-        // local-search vertical probe: the search-demo page serves the client
-        // csp + the search boot script.
-        if let searchDemo = await GET(session, base + "/__assets/search-demo"),
-           let searchText = String(data: searchDemo, encoding: .utf8),
-           searchText.contains("'wasm-unsafe-eval'"),
-           searchText.contains("search-app"),
-           searchText.contains("search-demo-boot.js"),
-           !searchText.contains("WebUIRuntime.init") {
-            ok("search-demo page carries client csp + search boot script")
-        } else {
-            bad("search-demo page missing client-mode markers")
-        }
-        if let searchBoot = await GET(session, base + "/__assets/search-demo-boot.js"),
-           let bootText = String(data: searchBoot, encoding: .utf8),
-           bootText.contains("WebUIClient"), bootText.contains("mode: 'search'") {
-            ok("search demo boot script targets the wasm search boot")
-        } else {
-            bad("search demo boot script missing or malformed")
-        }
-
-        // content-addressed wasm distribution: the page meta points at the
-        // immutable route; it must serve the same bytes as the alias, with a
-        // year-long immutable cache (the alias stays no-store for gates).
-        if let demo = await GET(session, base + "/__assets/client-demo"),
-           let demoText = String(data: demo, encoding: .utf8),
-           let metaOpen = demoText.range(of: "<meta name=\"webui-wasm\" content=\"") {
-            let hashPath = String(demoText[metaOpen.upperBound...].prefix(while: { $0 != "\"" }))
-            if !hashPath.isEmpty,
-               let (hashed, hashedHeaders) = await GETWithHeaders(session, base + hashPath),
-               let (alias, aliasHeaders) = await GETWithHeaders(session, base + "/__assets/app.wasm"),
-               hashed == alias,
-               (hashedHeaders["Cache-Control"] ?? "").contains("immutable"),
-               (aliasHeaders["Cache-Control"] ?? "").contains("no-store") {
-                ok("content-addressed wasm route serves identical bytes with immutable cache")
-            } else {
-                bad("content-addressed wasm route missing or misconfigured")
-            }
-        } else {
-            bad("webui-wasm meta missing from client-demo page")
         }
 
         print("")
@@ -248,6 +188,27 @@ struct WebUISmokePlugin: CommandPlugin {
         } else {
             Diagnostics.error("smoke gate failed")
         }
+    }
+
+    /// the `bodyBase64` payload of the generated embed file, decoded — the bytes the server
+    /// is expected to serve, read back from the build product itself. found by walking the
+    /// known plugin-output shape rather than guessing the package hash swiftpm owns.
+    private func generatedBodyPayload(packageDir: URL) -> Data? {
+        let outputs = packageDir.appendingPathComponent(".build/plugins/outputs")
+        guard let packages = try? FileManager.default.contentsOfDirectory(
+            at: outputs, includingPropertiesForKeys: nil
+        ) else { return nil }
+        for package in packages {
+            let file = package
+                .appendingPathComponent("WebUISmokeTest/destination/WebUIEmbedPlugin/EmbeddedAssets.swift")
+            guard
+                let source = try? String(contentsOf: file, encoding: .utf8),
+                let start = source.range(of: "bodyBase64 = \""),
+                let end = source.range(of: "\"", range: start.upperBound..<source.endIndex)
+            else { continue }
+            return Data(base64Encoded: String(source[start.upperBound..<end.lowerBound]))
+        }
+        return nil
     }
 
     private func GET(_ session: URLSession, _ urlString: String) async -> Data? {

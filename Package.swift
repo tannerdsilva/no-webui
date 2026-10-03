@@ -17,10 +17,6 @@ let package = Package(
             targets: ["WebUICore"]
         ),
         .library(
-            name: "WebUIClientRuntime",
-            targets: ["WebUIClientRuntime"]
-        ),
-        .library(
             name: "WebUIDesignSystem",
             targets: ["WebUIDesignSystem"]
         ),
@@ -40,21 +36,26 @@ let package = Package(
             name: "WebUIServer",
             targets: ["WebUIServer"]
         ),
-        .executable(
-            name: "WebUIClient",
-            targets: ["WebUIClient"]
+        // the host-side build library: gzip, generated-source emission and the asset
+        // manifest, shared by the framework's own tool and a consumer's tool (a plugin
+        // cannot import a library, so the plugin ships this and invokes a tool).
+        .library(
+            name: "WebUIBuild",
+            targets: ["WebUIBuild"]
         ),
-        .plugin(
-            name: "WebUIWasmPlugin",
-            targets: ["WebUIWasmPlugin"]
-        ),
-        .plugin(
-            name: "WebUIWasmClientPlugin",
-            targets: ["WebUIWasmClientPlugin"]
+        .library(
+            name: "WebUIBlocks",
+            targets: ["WebUIBlocks"]
         ),
         .plugin(
             name: "WebUIIslandPlugin",
             targets: ["WebUIIslandPlugin"]
+        ),
+        // a consumer attaches this plugin and ships an `Assets/webui-assets.json`; the
+        // plugin runs the framework's tool over it on every build.
+        .plugin(
+            name: "WebUIEmbedPlugin",
+            targets: ["WebUIEmbedPlugin"]
         ),
         .library(
             name: "WebUIIslandCore",
@@ -90,12 +91,23 @@ let package = Package(
         // swift-syntax for the @Theme macro implementation (603.x matches the
         // 6.3 toolchain line).
         .package(url: "https://github.com/apple/swift-syntax.git", "603.0.0"..<"604.0.0"),
+        // swift-service-lifecycle: hosts `WebUIServer` inside a `ServiceGroup`
+        // (`WebUIServerService`), so a long-lived server has ordered startup
+        // and graceful shutdown instead of an ad-hoc process lifecycle.
+        .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", "2.6.0"..<"3.0.0"),
     ],
     targets: [
 
         // ── Web UI Framework ─────────────────────────────────────
+        // the zero-dep leaf. it still needs libm on linux: `Double.rounded()`
+        // lowers to a plain `round` call, and an island product pulls in no
+        // other target that would bring libm along. apple platforms get their
+        // math from libSystem, so the setting is linux-only.
         .target(
-            name: "WebUISharedCore"
+            name: "WebUISharedCore",
+            linkerSettings: [
+                .linkedLibrary("m", .when(platforms: [.linux])),
+            ]
         ),
         .target(
             name: "WebUICore",
@@ -118,29 +130,6 @@ let package = Package(
             ],
             plugins: [
                 "WebUIAssetPlugin",
-                "WebUIWasmPlugin",
-            ]
-        ),
-        .target(
-            name: "WebUIClientRuntime",
-            dependencies: [
-                "WebUICore",
-                "WebUISharedCore",
-                "WebUIDesignSystemCore",
-                "WebUIChart",
-            ],
-            swiftSettings: [
-                // the official sdk's wasm import primitive (@_extern(wasm, module:name:))
-                .unsafeFlags(["-enable-experimental-feature", "Extern"]),
-            ]
-        ),
-        .executableTarget(
-            name: "WebUIClient",
-            dependencies: [
-                "WebUIClientRuntime",
-                "WebUISmokeShared",
-                "WebUIDesignSystemCore",
-                "WebUIChart",
             ]
         ),
         // the capability-island core: same-swift logic that compiles to a
@@ -207,20 +196,13 @@ let package = Package(
             dependencies: [
                 "WebUI",
                 "WebUIDesignSystem",
-                "WebUICompression",
                 .product(name: "Logging", package: "swift-log"),
+                .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOHTTP1", package: "swift-nio"),
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOWebSocket", package: "swift-nio"),
             ]
-        ),
-        // host-side gzip shim: the C `compression_stream` API is awkward to
-        // drive from Swift (non-optional memberwise init), so the framework's
-        // server target gets a tiny C wrapper. not shipped to clients.
-        .target(
-            name: "WebUICompression",
-            publicHeadersPath: "include"
         ),
         .target(
             name: "WebUIAuth",
@@ -233,9 +215,39 @@ let package = Package(
             ]
         ),
 
+        // ── Asset Build Library (host-side) ──────────────────────
+        // the logic the framework's asset tool and a consumer's tool share, promoted out
+        // of `WebUIAssetTool` so there is one implementation of gzip, emission and the
+        // manifest. host-only by construction: it may import Foundation and links WebUI
+        // (for `SHA256`) — the client never sees any of it.
+        .target(
+            name: "WebUIBuild",
+            dependencies: [
+                // sha-256 comes from rawdog directly, NOT through WebUI: WebUI's own asset
+                // plugin invokes `WebUIAssetTool`, which depends on this library, so a WebUI
+                // dependency here is a manifest cycle SwiftPM refuses. WebUICore — the other
+                // candidate — must stay rawdog-free, because the client build reaches
+                // `DesignToken` through it precisely to avoid rawdog. see `Hash.swift`.
+                .product(name: "RAW", package: "rawdog"),
+                .product(name: "RAW_sha256", package: "rawdog"),
+                // the minifier and the prose guard live here (`ProseGuard` is package-level,
+                // which is exactly why this library — not a plugin — is where a consumer's
+                // tool meets them).
+                .target(name: "WebUICore"),
+            ]
+        ),
+
         // ── Asset Tool ───────────────────────────────────────────
         .executableTarget(
-            name: "WebUIAssetTool"
+            name: "WebUIAssetTool",
+            dependencies: [
+                // the minifier and the layout rules live in WebUICore, so the
+                // minified sheet is produced at BUILD time (and therefore
+                // compressible at build time — the runtime has no compressor).
+                .target(name: "WebUICore"),
+                // the gzip/emit internals live in WebUIBuild; the tool is a CLI over them.
+                .target(name: "WebUIBuild"),
+            ]
         ),
 
         // ── Icon Tool (svg iconography generator + linter) ───────
@@ -307,11 +319,19 @@ let package = Package(
                 "WebUIDesignSystem",
                 "WebUIChart",
                 "WebUISmokeShared",
+                "WebUIBlocks",
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOHTTP1", package: "swift-nio"),
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOWebSocket", package: "swift-nio"),
+            ],
+            // `Assets/` is consumed by `WebUIEmbedPlugin`, not compiled: excluding it keeps
+            // swiftpm from warning about files it does not know how to handle (the plugin
+            // reads them through its own context, which exclusion does not affect).
+            exclude: ["Assets"],
+            plugins: [
+                "WebUIEmbedPlugin",
             ]
         ),
 
@@ -323,6 +343,25 @@ let package = Package(
                 "WebUIDesignSystem",
                 "WebUIChart",
                 "WebUIShowcaseContent",
+                "WebUIServer",
+                .product(name: "Logging", package: "swift-log"),
+            ]
+        ),
+
+        // ── Blocks: standalone page scaffolds, composed from the existing set ──
+        .target(
+            name: "WebUIBlocks",
+            dependencies: [
+                "WebUI",
+                "WebUIDesignSystem",
+                "WebUIChart",
+            ]
+        ),
+        .executableTarget(
+            name: "WebUIBlocksServer",
+            dependencies: [
+                "WebUI",
+                "WebUIBlocks",
                 "WebUIServer",
                 .product(name: "Logging", package: "swift-log"),
             ]
@@ -343,24 +382,23 @@ let package = Package(
                 .target(name: "WebUIIconTool"),
             ]
         ),
+        // the file half of the asset toolkit: a target shipping `Assets/webui-assets.json`
+        // attaches this; the plugin runs the framework's own tool over the manifest.
         .plugin(
-            name: "WebUIWasmPlugin",
+            name: "WebUIEmbedPlugin",
             capability: .buildTool(),
             dependencies: [
-                .target(name: "WebUIWasmTool"),
+                .target(name: "WebUIAssetTool"),
             ]
         ),
         .plugin(
-            name: "WebUIWasmClientPlugin",
+            name: "WebUIBudgetPlugin",
             capability: .command(
                 intent: .custom(
-                    verb: "wasm-client",
-                    description: "Cross-build the wasm client product with the wasm SDK (requires --disable-sandbox; builds into .build/wasm-client-scratch then copies the stripped artifact to .build/out/…)."
+                    verb: "budget",
+                    description: "Fail when any shipped surface (engine, design-system sheet, shell, island artifact) exceeds its pinned size ceiling. Read-only; no sandbox flag needed."
                 )
-            ),
-            dependencies: [
-                .target(name: "WebUIWasmTool"),
-            ]
+            )
         ),
         .plugin(
             name: "WebUIIslandPlugin",
@@ -457,12 +495,20 @@ let package = Package(
             name: "WebUITests",
             dependencies: [
                 "WebUI",
+                "WebUISharedCore",
                 "WebUIDesignSystem",
                 "WebUIChart",
                 "WebUIAuth",
                 "WebUIShowcaseContent",
                 "WebUIServer",
-            ]
+                "WebUIBlocks",
+                // the surface pins reference the toolkit's public types (STABILITY.md
+                // change discipline).
+                "WebUIBuild",
+                .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
+                .product(name: "Logging", package: "swift-log"),
+            ],
+            resources: [.copy("orphan-class-baseline.txt")]
         ),
         .testTarget(
             name: "WebUIWasmToolTests",
@@ -470,22 +516,25 @@ let package = Package(
                 .product(name: "RAW_sha256", package: "rawdog"),
             ]
         ),
+        // the asset tool carries the token surface (T9 pruning), so its pruner is
+        // unit-tested in-process and its CLI is exercised as a subprocess.
+        .testTarget(
+            name: "WebUIAssetToolTests",
+            dependencies: [
+                "WebUIAssetTool",
+            ]
+        ),
+        .testTarget(
+            name: "WebUIBuildTests",
+            dependencies: [
+                "WebUIBuild",
+            ]
+        ),
         .testTarget(
             name: "WebUIIslandCoreTests",
             dependencies: [
                 "WebUIIslandCore",
                 "WebUISharedCore",
-                "WebUIClientRuntime",
-            ]
-        ),
-        .testTarget(
-            name: "WebUIClientTests",
-            dependencies: [
-                "WebUIClientRuntime",
-                "WebUICore",
-                "WebUISharedCore",
-                "WebUIDesignSystemCore",
-                "WebUISmokeShared",
             ]
         ),
         .testTarget(

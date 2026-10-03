@@ -34,6 +34,16 @@ public struct Text: View {
     public func render() -> String {
         htmlEscape(content)
     }
+
+    /// the buffer route writes the escaped bytes straight in. text frames no
+    /// element, so there is nothing for a buffer round trip to buy and
+    /// `render()` stays the direct call — a text node under a not-yet-migrated
+    /// parent (the design system, until S4) would otherwise pay an allocation
+    /// pair around the same escape work. a modifier wrapping text still
+    /// settles against it through the string-path fallback.
+    public func render(into buffer: inout HTMLBuffer) {
+        buffer.appendEscaped(content)
+    }
 }
 
 // MARK: - Raw
@@ -45,6 +55,14 @@ public struct Raw: View {
 
     public func render() -> String {
         content
+    }
+
+    /// the buffer route appends the caller's bytes verbatim — `Raw`'s contract —
+    /// and `render()` stays direct for the same reason as `Text`: no element is
+    /// framed, so a round trip would buy nothing. a modifier wrapping `Raw`
+    /// settles against this fragment (its own scan, never the page).
+    public func render(into buffer: inout HTMLBuffer) {
+        buffer.append(content)
     }
 }
 
@@ -64,15 +82,19 @@ public struct Div: View {
     }
 
     public func render() -> String {
-        var html = "<div"
-        if let id { html += " id=\"\(htmlEscape(id))\"" }
-        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
-        html += ">"
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
+        var attributes = ""
+        if let id { attributes += " id=\"\(htmlEscape(id))\"" }
+        if let `class` { attributes += " class=\"\(htmlEscape(`class`))\"" }
+        buffer.beginElement("div", attributes)
+        buffer.endOpenTag()
         for child in children {
-            html += child.render()
+            child.render(into: &buffer)
         }
-        html += "</div>"
-        return html
+        buffer.endElement()
     }
 }
 
@@ -92,15 +114,19 @@ public struct Span: View {
     }
 
     public func render() -> String {
-        var html = "<span"
-        if let id { html += " id=\"\(htmlEscape(id))\"" }
-        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
-        html += ">"
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
+        var attributes = ""
+        if let id { attributes += " id=\"\(htmlEscape(id))\"" }
+        if let `class` { attributes += " class=\"\(htmlEscape(`class`))\"" }
+        buffer.beginElement("span", attributes)
+        buffer.endOpenTag()
         for child in children {
-            html += child.render()
+            child.render(into: &buffer)
         }
-        html += "</span>"
-        return html
+        buffer.endElement()
     }
 }
 
@@ -134,14 +160,20 @@ public struct Button: View {
     }
 
     public func render() -> String {
-        var html = "<button"
-        if let id { html += " id=\"\(htmlEscape(id))\"" }
-        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
-        if let name { html += " name=\"\(htmlEscape(name))\"" }
-        html += " type=\"\(type.rawValue)\""
-        if disabled { html += " disabled" }
-        html += ">\(htmlEscape(label))</button>"
-        return html
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
+        var attributeText = ""
+        if let id { attributeText += " id=\"\(htmlEscape(id))\"" }
+        if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
+        if let name { attributeText += " name=\"\(htmlEscape(name))\"" }
+        attributeText += " type=\"\(type.rawValue)\""
+        if disabled { attributeText += " disabled" }
+        buffer.beginElement("button", attributeText)
+        buffer.endOpenTag()
+        buffer.appendEscaped(label)
+        buffer.endElement()
     }
 }
 
@@ -202,21 +234,24 @@ public struct Input: View {
     }
 
     public func render() -> String {
-        var html = "<input"
-        if let id { html += " id=\"\(htmlEscape(id))\"" }
-        if let name { html += " name=\"\(htmlEscape(name))\"" }
-        html += " type=\"\(type.rawValue)\""
-        if !placeholder.isEmpty { html += " placeholder=\"\(htmlEscape(placeholder))\"" }
-        if !value.isEmpty { html += " value=\"\(htmlEscape(value))\"" }
-        if disabled { html += " disabled" }
-        if required { html += " required" }
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
+        var attributeText = ""
+        if let id { attributeText += " id=\"\(htmlEscape(id))\"" }
+        if let name { attributeText += " name=\"\(htmlEscape(name))\"" }
+        attributeText += " type=\"\(type.rawValue)\""
+        if !placeholder.isEmpty { attributeText += " placeholder=\"\(htmlEscape(placeholder))\"" }
+        if !value.isEmpty { attributeText += " value=\"\(htmlEscape(value))\"" }
+        if disabled { attributeText += " disabled" }
+        if required { attributeText += " required" }
         for (key, value) in attributes {
             let safeKey = htmlEscape(key)
             guard !safeKey.isEmpty else { continue }
-            html += " \(safeKey)=\"\(htmlEscape(value))\""
+            attributeText += " \(safeKey)=\"\(htmlEscape(value))\""
         }
-        html += ">"
-        return html
+        buffer.voidElement("input", attributeText)
     }
 }
 
@@ -251,15 +286,19 @@ public struct Image: View {
     }
 
     public func render() -> String {
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
         guard let safeSrc = sanitizeURL(src) else {
-            return "<img alt=\"\(htmlEscape(alt))\">"
+            buffer.voidElement("img", " alt=\"\(htmlEscape(alt))\"")
+            return
         }
-        var html = "<img src=\"\(htmlEscape(safeSrc))\" alt=\"\(htmlEscape(alt))\""
-        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
-        if let loading { html += " loading=\"\(loading.rawValue)\"" }
-        if let decoding { html += " decoding=\"\(decoding.rawValue)\"" }
-        html += ">"
-        return html
+        var attributeText = " src=\"\(htmlEscape(safeSrc))\" alt=\"\(htmlEscape(alt))\""
+        if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
+        if let loading { attributeText += " loading=\"\(loading.rawValue)\"" }
+        if let decoding { attributeText += " decoding=\"\(decoding.rawValue)\"" }
+        buffer.voidElement("img", attributeText)
     }
 }
 
@@ -325,15 +364,22 @@ public struct Link: View {
     }
 
     public func render() -> String {
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
         guard let safeHref = sanitizeURL(href) else {
-            return htmlEscape(text)
+            buffer.appendEscaped(text)
+            return
         }
-        var html = "<a href=\"\(htmlEscape(safeHref))\""
-        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
-        if let target { html += " target=\"\(target.rawValue)\"" }
-        if let rel { html += " rel=\"\(rel.htmlValue)\"" }
-        html += ">\(htmlEscape(text))</a>"
-        return html
+        var attributeText = " href=\"\(htmlEscape(safeHref))\""
+        if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
+        if let target { attributeText += " target=\"\(target.rawValue)\"" }
+        if let rel { attributeText += " rel=\"\(rel.htmlValue)\"" }
+        buffer.beginElement("a", attributeText)
+        buffer.endOpenTag()
+        buffer.appendEscaped(text)
+        buffer.endElement()
     }
 }
 
@@ -355,11 +401,17 @@ public struct Heading: View {
     }
 
     public func render() -> String {
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
         let lvl = level.rawValue
-        var html = "<h\(lvl)"
-        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
-        html += ">\(htmlEscape(text))</h\(lvl)>"
-        return html
+        var attributeText = ""
+        if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
+        buffer.beginElement("h\(lvl)", attributeText)
+        buffer.endOpenTag()
+        buffer.appendEscaped(text)
+        buffer.endElement()
     }
 }
 public struct Paragraph: View {
@@ -372,10 +424,16 @@ public struct Paragraph: View {
     }
 
     public func render() -> String {
-        var html = "<p"
-        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
-        html += ">\(htmlEscape(text))</p>"
-        return html
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
+        var attributeText = ""
+        if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
+        buffer.beginElement("p", attributeText)
+        buffer.endOpenTag()
+        buffer.appendEscaped(text)
+        buffer.endElement()
     }
 }
 
@@ -390,14 +448,21 @@ public struct UnorderedList: View {
     }
 
     public func render() -> String {
-        var html = "<ul"
-        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
-        html += ">"
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
+        var attributes = ""
+        if let `class` { attributes += " class=\"\(htmlEscape(`class`))\"" }
+        buffer.beginElement("ul", attributes)
+        buffer.endOpenTag()
         for item in items {
-            html += "<li>\(item.render())</li>"
+            buffer.beginElement("li")
+            buffer.endOpenTag()
+            item.render(into: &buffer)
+            buffer.endElement()
         }
-        html += "</ul>"
-        return html
+        buffer.endElement()
     }
 }
 public struct OrderedList: View {
@@ -410,14 +475,21 @@ public struct OrderedList: View {
     }
 
     public func render() -> String {
-        var html = "<ol"
-        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
-        html += ">"
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
+        var attributes = ""
+        if let `class` { attributes += " class=\"\(htmlEscape(`class`))\"" }
+        buffer.beginElement("ol", attributes)
+        buffer.endOpenTag()
         for item in items {
-            html += "<li>\(item.render())</li>"
+            buffer.beginElement("li")
+            buffer.endOpenTag()
+            item.render(into: &buffer)
+            buffer.endElement()
         }
-        html += "</ol>"
-        return html
+        buffer.endElement()
     }
 }
 
@@ -433,28 +505,45 @@ public struct Table: View {
     }
 
     public func render() -> String {
-        var html = "<table"
-        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
-        html += ">"
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
+        var attributeText = ""
+        if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
+        buffer.beginElement("table", attributeText)
+        buffer.endOpenTag()
 
         if !headers.isEmpty {
-            html += "<thead><tr>"
+            buffer.beginElement("thead")
+            buffer.endOpenTag()
+            buffer.beginElement("tr")
+            buffer.endOpenTag()
             for h in headers {
-                html += "<th>\(htmlEscape(h))</th>"
+                buffer.beginElement("th")
+                buffer.endOpenTag()
+                buffer.appendEscaped(h)
+                buffer.endElement()
             }
-            html += "</tr></thead>"
+            buffer.endElement()
+            buffer.endElement()
         }
 
-        html += "<tbody>"
+        buffer.beginElement("tbody")
+        buffer.endOpenTag()
         for row in rows {
-            html += "<tr>"
+            buffer.beginElement("tr")
+            buffer.endOpenTag()
             for cell in row {
-                html += "<td>\(cell.render())</td>"
+                buffer.beginElement("td")
+                buffer.endOpenTag()
+                cell.render(into: &buffer)
+                buffer.endElement()
             }
-            html += "</tr>"
+            buffer.endElement()
         }
-        html += "</tbody></table>"
-        return html
+        buffer.endElement()
+        buffer.endElement()
     }
 }
 
@@ -481,11 +570,17 @@ public struct Label: View {
     }
 
     public func render() -> String {
-        var html = "<label"
-        if let forVal = `for` { html += " for=\"\(htmlEscape(forVal))\"" }
-        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
-        html += ">\(htmlEscape(text))</label>"
-        return html
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
+        var attributeText = ""
+        if let forVal = `for` { attributeText += " for=\"\(htmlEscape(forVal))\"" }
+        if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
+        buffer.beginElement("label", attributeText)
+        buffer.endOpenTag()
+        buffer.appendEscaped(text)
+        buffer.endElement()
     }
 }
 public struct TextArea: View {
@@ -513,14 +608,20 @@ public struct TextArea: View {
     }
 
     public func render() -> String {
-        var html = "<textarea"
-        if let id { html += " id=\"\(htmlEscape(id))\"" }
-        if let name { html += " name=\"\(htmlEscape(name))\"" }
-        html += " rows=\"\(rows)\""
-        if !placeholder.isEmpty { html += " placeholder=\"\(htmlEscape(placeholder))\"" }
-        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
-        html += ">\(htmlEscape(value))</textarea>"
-        return html
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
+        var attributeText = ""
+        if let id { attributeText += " id=\"\(htmlEscape(id))\"" }
+        if let name { attributeText += " name=\"\(htmlEscape(name))\"" }
+        attributeText += " rows=\"\(rows)\""
+        if !placeholder.isEmpty { attributeText += " placeholder=\"\(htmlEscape(placeholder))\"" }
+        if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
+        buffer.beginElement("textarea", attributeText)
+        buffer.endOpenTag()
+        buffer.appendEscaped(value)
+        buffer.endElement()
     }
 }
 public struct Select: View {
@@ -545,17 +646,24 @@ public struct Select: View {
     }
 
     public func render() -> String {
-        var html = "<select"
-        if let id { html += " id=\"\(htmlEscape(id))\"" }
-        if let name { html += " name=\"\(htmlEscape(name))\"" }
-        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
-        html += ">"
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
+        var attributeText = ""
+        if let id { attributeText += " id=\"\(htmlEscape(id))\"" }
+        if let name { attributeText += " name=\"\(htmlEscape(name))\"" }
+        if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
+        buffer.beginElement("select", attributeText)
+        buffer.endOpenTag()
         for option in options {
             let sel = option.value == selected ? " selected" : ""
-            html += "<option value=\"\(htmlEscape(option.value))\"\(sel)>\(htmlEscape(option.label))</option>"
+            buffer.beginElement("option", " value=\"\(htmlEscape(option.value))\"\(sel)")
+            buffer.endOpenTag()
+            buffer.appendEscaped(option.label)
+            buffer.endElement()
         }
-        html += "</select>"
-        return html
+        buffer.endElement()
     }
 }
 
@@ -569,7 +677,15 @@ public struct ForEach<Data: RandomAccessCollection & Sendable>: View {
     }
 
     public func render() -> String {
-        data.map { content($0).map { $0.render() }.joined() }.joined()
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
+        for element in data {
+            for child in content(element) {
+                child.render(into: &buffer)
+            }
+        }
     }
 }
 extension ForEach where Data == Range<Int> {
@@ -587,7 +703,13 @@ public struct Group: View {
     }
 
     public func render() -> String {
-        children.map { $0.render() }.joined()
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
+        for child in children {
+            child.render(into: &buffer)
+        }
     }
 }
 
@@ -616,20 +738,24 @@ public struct Form: View {
     }
 
     public func render() -> String {
-        var html = "<form"
-        if let id { html += " id=\"\(htmlEscape(id))\"" }
-        if let `class` { html += " class=\"\(htmlEscape(`class`))\"" }
+        renderThroughBuffer()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
+        var attributeText = ""
+        if let id { attributeText += " id=\"\(htmlEscape(id))\"" }
+        if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
         let safeAction = sanitizeURL(action) ?? ""
-        html += " action=\"\(htmlEscape(safeAction))\""
-        html += " method=\"\(htmlEscape(method))\""
-        html += ">"
+        attributeText += " action=\"\(htmlEscape(safeAction))\""
+        attributeText += " method=\"\(htmlEscape(method))\""
+        buffer.beginElement("form", attributeText)
+        buffer.endOpenTag()
         if let token = csrfToken {
-            html += "<input type=\"hidden\" name=\"_csrf\" value=\"\(htmlEscape(token))\">"
+            buffer.voidElement("input", " type=\"hidden\" name=\"_csrf\" value=\"\(htmlEscape(token))\"")
         }
         for child in children {
-            html += child.render()
+            child.render(into: &buffer)
         }
-        html += "</form>"
-        return html
+        buffer.endElement()
     }
 }

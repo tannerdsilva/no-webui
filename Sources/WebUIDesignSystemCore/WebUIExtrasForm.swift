@@ -139,12 +139,13 @@ public struct WebUIOTP: View {
     }
 
     public func render() -> String {
+        let digits = value ?? []
         var html = "<div class=\"otp\(size.rawValue)\(error ? " otp--error" : "")\" aria-label=\"One-time code\">"
         for i in 0..<length {
-            let filled = (value != nil && i < value!.count)
+            let filled = i < digits.count
             let cellID = id.map { " id=\"\(htmlEscape("\($0)-cell-\(i)"))\"" } ?? ""
             let cellAttrs = id.map { controlAttributes(id: "\($0)-cell-\(i)", event: .input, handler: onChange) } ?? ""
-            html += "<input class=\"otp__cell\(filled ? " otp__cell--filled" : "")\(i == (value?.count ?? 0) ? " otp__cell--active" : "")\"\(cellID) type=\"text\" inputmode=\"numeric\" maxlength=\"1\" value=\"\(filled ? "\(value![i])" : "")\" aria-label=\"Digit \(i + 1)\"\(cellAttrs)>"
+            html += "<input class=\"otp__cell\(filled ? " otp__cell--filled" : "")\(i == digits.count ? " otp__cell--active" : "")\"\(cellID) type=\"text\" inputmode=\"numeric\" maxlength=\"1\" value=\"\(filled ? "\(digits[i])" : "")\" aria-label=\"Digit \(i + 1)\"\(cellAttrs)>"
         }
         html += "</div>"
         return html
@@ -483,6 +484,204 @@ public struct WebUICardInput: View {
         html += "</div></div>"
         html += "<div class=\"card-input__row\"><div class=\"card-input__field\"><label>Card number</label><input class=\"input\" value=\"\(htmlEscape(number))\"></div></div>"
         html += "<div class=\"card-input__row\"><div class=\"card-input__field\"><label>Card holder</label><input class=\"input\" value=\"\(htmlEscape(holder))\"></div></div>"
+        html += "</div>"
+        return html
+    }
+}
+
+// MARK: WebUI Input Group
+/// an input with affixes inside one field box: a leading glyph, a leading text
+/// (currency, protocol) and a trailing text (unit, domain, or the error note).
+/// the sheet styles the container as `input--with-affix` around a bare
+/// `input__el`, so the box, focus ring and state colours come from the shared
+/// `.input` rules rather than a parallel set.
+public struct WebUIInputGroup: View {
+    public let placeholder: String
+    /// text before the field. rendered in the muted prefix tone.
+    public let prefix: String?
+    /// glyph before the field, rendered outside the input itself.
+    public let icon: IconName?
+    /// text after the field. turns danger-coloured in the error state.
+    public let suffix: String?
+    public let type: InputType
+    public let state: WebUIInput.State
+    public let name: String?
+    public let id: String?
+    public let value: String?
+    public let disabled: Bool
+
+    public init(
+        placeholder: String = "",
+        prefix: String? = nil,
+        icon: IconName? = nil,
+        suffix: String? = nil,
+        type: InputType = .text,
+        state: WebUIInput.State = .normal,
+        name: String? = nil,
+        id: String? = nil,
+        value: String? = nil,
+        disabled: Bool = false
+    ) {
+        self.placeholder = placeholder
+        self.prefix = prefix
+        self.icon = icon
+        self.suffix = suffix
+        self.type = type
+        self.state = state
+        self.name = name
+        self.id = id
+        self.value = value
+        self.disabled = disabled
+    }
+
+    public func render() -> String {
+        var html = "<div class=\"input input--with-affix"
+        if !state.rawValue.isEmpty { html += " \(state.rawValue)" }
+        html += "\">"
+        if let icon {
+            html += "<span class=\"input__affix input__affix--left\">" + WebUIIcon(icon, size: .small).render() + "</span>"
+        }
+        if let prefix {
+            html += "<span class=\"input__prefix\">\(htmlEscape(prefix))</span>"
+        }
+        html += "<input class=\"input__el\" type=\"\(type.rawValue)\""
+        if let id { html += " id=\"\(htmlEscape(id))\"" }
+        if let name { html += " name=\"\(htmlEscape(name))\"" }
+        html += " placeholder=\"\(htmlEscape(placeholder))\""
+        if let value { html += " value=\"\(htmlEscape(value))\"" }
+        if state == .error { html += " aria-invalid=\"true\"" }
+        if disabled { html += " disabled" }
+        html += ">"
+        if let suffix {
+            let suffixClass = state == .error ? "input__suffix input__suffix--error" : "input__suffix"
+            html += "<span class=\"\(suffixClass)\">\(htmlEscape(suffix))</span>"
+        }
+        html += "</div>"
+        return html
+    }
+}
+
+
+// MARK: WebUI Field
+/// a labelled form row: a label (with an optional required marker, a
+/// validation note and a counter on its row) above the control, and helper
+/// text below it. the control is whatever the caller passes as content.
+public struct WebUIField: View {
+    public enum Note: String, Sendable {
+        case neutral = ""
+        case error = "field__hint--error"
+        case success = "field__hint--success"
+    }
+
+    public let label: String?
+    /// associates the label with the control (`for=`).
+    public let controlID: String?
+    public let required: Bool
+    /// inline note on the label row.
+    public let note: String?
+    public let noteKind: Note
+    /// right-aligned counter on the label row, e.g. "12 / 80".
+    public let count: String?
+    /// helper text under the control; tinted when `helperIsError`.
+    public let helper: String?
+    public let helperIsError: Bool
+    public let children: [any View]
+
+    public init(
+        label: String? = nil,
+        controlID: String? = nil,
+        required: Bool = false,
+        note: String? = nil,
+        noteKind: Note = .neutral,
+        count: String? = nil,
+        helper: String? = nil,
+        helperIsError: Bool = false,
+        @ViewBuilder content: () -> [any View]
+    ) {
+        self.label = label
+        self.controlID = controlID
+        self.required = required
+        self.note = note
+        self.noteKind = noteKind
+        self.count = count
+        self.helper = helper
+        self.helperIsError = helperIsError
+        self.children = content()
+    }
+
+    public func render() -> String {
+        var html = "<div class=\"field\">"
+        if label != nil || note != nil || count != nil {
+            html += "<div class=\"field__row\">"
+            if let label {
+                html += "<label class=\"field__label\(required ? " field__label--required" : "")\""
+                if let controlID { html += " for=\"\(htmlEscape(controlID))\"" }
+                html += ">\(htmlEscape(label))</label>"
+            }
+            if let note {
+                html += "<span class=\"field__hint\(noteKind.rawValue.isEmpty ? "" : " " + noteKind.rawValue)\">\(htmlEscape(note))</span>"
+            }
+            if let count {
+                html += "<span class=\"field__count\">\(htmlEscape(count))</span>"
+            }
+            html += "</div>"
+        }
+        for child in children { html += child.render() }
+        if let helper {
+            html += "<span class=\"field__helper\(helperIsError ? " field__helper--error" : "")\">\(htmlEscape(helper))</span>"
+        }
+        html += "</div>"
+        return html
+    }
+}
+
+// MARK: WebUI Toggle Group
+/// a row of independently toggleable filter chips (several may be active). single-select
+/// segmentation is `WebUISegmentedControl`'s shape; this is the filter bar: the
+/// sheet's `chip--filter` / `chip--filter-active` pair.
+public struct WebUIToggleGroup: View {
+    public struct Option: Sendable {
+        public let id: String
+        public let label: String
+        public let selected: Bool
+        public init(_ id: String, _ label: String, selected: Bool = false) {
+            self.id = id
+            self.label = label
+            self.selected = selected
+        }
+    }
+
+    public let options: [Option]
+    /// stable container id; when set with `onToggle` the group self-wires and
+    /// each chip carries `id + "-opt-<index>"`, so the handler can tell which
+    /// chip was clicked from `targetId`.
+    public let id: String?
+    public let onToggle: EventHandler?
+
+    public init(options: [Option], id: String? = nil, onToggle: EventHandler? = nil) {
+        self.options = options
+        self.id = id
+        self.onToggle = onToggle
+    }
+
+    public func render() -> String {
+        let attrs: String
+        if let id, let onToggle {
+            attrs = controlAttributes(id: id, event: .click, handler: onToggle)
+        } else {
+            attrs = ""
+        }
+        var html = "<div style=\"display: flex; flex-wrap: wrap; gap: var(--space-2)\""
+        if let id { html += " id=\"\(htmlEscape(id))\"" }
+        html += " role=\"group\"\(attrs)>"
+        for (index, option) in options.enumerated() {
+            var cls = "chip chip--filter"
+            if option.selected { cls += " chip--filter-active" }
+            let chipID = id.map { " id=\"\(htmlEscape("\($0)-opt-\(index)"))\"" } ?? ""
+            html += "<button type=\"button\" class=\"\(cls)\"\(chipID)"
+            if option.selected { html += " aria-pressed=\"true\"" }
+            html += ">\(htmlEscape(option.label))</button>"
+        }
         html += "</div>"
         return html
     }

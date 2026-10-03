@@ -1,6 +1,7 @@
 # next architecture — clean-slate client/server restart proposal
 
-_status: proposal (not executed) · 2026-09-22 · supersedes the wasm-only client runtime
+_status: executed (p0–p5 landed: engine-first default boot, capability islands,
+progressive capabilities, monolith sunset) · 2026-09-22 · supersedes the wasm-only client runtime
 direction of `WASM_BOOTSTRAP.md` / `WASM_TRAJECTORY.md` phase 5 for the default path;
 the wasm machinery they describe is not lost — it is repackaged as capability islands
 (see d3).
@@ -206,3 +207,61 @@ free core already exists; embedded tier is kB-scale per `WASM_TRAJECTORY.md` §
 | d6 | shell + engine + css cacheable/immutable/brotli; no mandatory binary on any page | design | proposed |
 | d7 | no ci gates; in-repo ladder only | user | stays locked |
 | d8 | p3 diff protocol only if measured payoff on patch bytes | design | open |
+
+> **note (post-deletion):** the wasm monolith client (`WebUIClientRuntime`,
+> `WebUIClient`, the chamber + content-addressed artifact) has been deleted. the
+> engine is the client runtime; wasm survives only as capability islands. any
+> reference to the client boot below is historical.
+
+---
+
+## 8. the css delivery (landed 2026-09-30) and the reachability step
+
+### 8.1 what landed
+
+- **cascade layers.** the sheet ships inside `@layer webui, webui.utilities;`,
+  declared in its own source, and the asset tool wraps the prepended layout
+  primitives in `webui.utilities`. unlayered css — an app's own sheet,
+  `WebUIDocument.rawStyles`, the theme sheet — outranks both layers by cascade
+  origin, so an override never needs matching specificity or `!important`.
+  verified in a real browser (`designer/browser-smoke.mjs` proves a single-class
+  consumer rule beats a two-class framework rule) and structurally
+  (`CascadeLayerTests` fails if any rule escapes the layers).
+- **the theme sheet stays unlayered** — that is what keeps a scheme above the base
+  sheet's tokens.
+- **prose guard.** `WebUICore.ProseGuard` scans the runtime, engine, shell and
+  minified sheet on every build and fails naming file, line and text. the css
+  working file keeps its designer notes (they are minified away before embedding).
+- **T9 token pruning.** `WebUIAssetTool --used-tokens`/`--guard-css` emits only the
+  tokens an app's catalog resolves; the counts land in the build manifest.
+
+### 8.2 the measured case for the next step
+
+on the showcase page (2,854 nodes, 461 distinct classes, census over the served bytes):
+
+| measurement | number |
+|---|---|
+| rules the page can apply / cannot | 737 applicable, **1,688 dead** of 2,511 |
+| bytes applicable / dead | 67,926 / **174,262 — 54% of the sheet** |
+| `:root` tokens declared / referenced by the page | 174 / 120 |
+| inherited custom properties | 174 per element × 2,854 nodes = 498,076 instances |
+| theme flip (`data-theme` on `documentElement`) | 6.3 ms median; the same declarations on a subtree 5.0 ms |
+
+the `:root` *attachment* is not the cost: a page-wide palette change pays the
+recalc wherever the tokens are declared, and one attribute flip is the minimum
+invalidation surface. the cost is that the whole sheet ships to a page that can
+use half of it.
+
+### 8.3 the step: rule-level reachability, with the fragment closure
+
+`WebUIAssetTool` already resolves *tokens* from an oracle's listing (T9). the next
+step is the same resolution for *rules*: the swift render knows which classes a
+page emits, so a build-time pass can select the sheet's rules against that set and
+emit a page-scoped, content-addressed sheet.
+
+the constraint that must be designed **before** any pruning happens: a websocket
+fragment can introduce a class after first paint, so a page's css closure is
+`page classes ∪ every class the page's registered handlers can emit` — which needs
+a declared per-component class inventory (macro-generated, the shape `IconName`'s
+manifest already uses). a tree-shake without that closure ships unstyled
+fragments. app-invented classes keep riding the `--guard-css` path T9 established.

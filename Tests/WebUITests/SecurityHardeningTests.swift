@@ -253,8 +253,14 @@ struct CSSMinificationTests {
 	func hoistedStyleBlockMatchesManualMinify() {
 		// byte-identity pin: the route-served sheet and the hoisted constant
 		// must render exactly as a fresh minify would — a divergence here means
-		// the hoist path and the canonical minify path have drifted.
-		let expected = minifyCSS(CSSStylesheet(LayoutStyles.complete).render() + "\n\n" + WebUIAssets.css)
+		// the hoist path and the canonical minify path have drifted. the
+		// composition is the tool's: the order statement, then the layout
+		// primitives wrapped in `webui.utilities`, then the layered sheet.
+		let expected = minifyCSS(
+			"@layer webui, webui.utilities;\n\n@layer webui.utilities {\n"
+				+ CSSStylesheet(LayoutStyles.complete).render()
+				+ "\n}\n\n" + WebUIAssets.css
+		)
 		#expect(DesignSystemAssets.minifiedCss == expected)
 		#expect(WebUIDocument.minifiedDesignStyles == expected)
 	}

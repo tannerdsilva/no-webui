@@ -164,7 +164,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 		}
 		let out = chart.render()
 		#expect(out.contains("chart__bar"))
-		#expect(occ(out, "<rect") == 2)
+		#expect(occ(out, "chart__bar\"") == 2, "one bar rect per datum (tips add rects of their own)")
 		// two bars, both inside the plot (viewBox 0 0 640 320, plot x 44…624)
 		for g in out.components(separatedBy: "<g") where g.contains("chart__bar") {
 			let x = Double(capture("x=\"([0-9.]+)\"", in: g)!)!
@@ -233,7 +233,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 			}
 		}
 		let out = chart.render()
-		#expect(occ(out, "<rect") == 3)
+		#expect(occ(out, "chart__bar\"") == 3, "one bar rect per datum")
 	}
 
 	@Test func barsPinYDomainFromZero() {
@@ -707,5 +707,145 @@ func capture(_ regex: String, in haystack: String) -> String? {
 			}
 		}
 		#expect(c.render() == c.render())
+	}
+}
+
+// MARK: - Accessible name precedence
+
+@Suite struct ChartAccessibleNameTests {
+	/// the figure's accessible name is the chart's title by default — before
+	/// this, every titled chart announced as "Chart with N marks" and the
+	/// title reached assistive tech only as stray inner text.
+	@Test func titleBecomesAccessibleNameByDefault() {
+		let out = Chart {
+			ForEach([("A", 1.0)]) { d in
+				BarMark(x: .value("M", d.0), y: .value("V", d.1))
+			}
+		}
+		.chartTitle("Revenue by quarter")
+		.render()
+		#expect(out.contains("aria-label=\"Revenue by quarter\""))
+	}
+
+	@Test func explicitLabelOutranksTitle() {
+		let out = Chart {
+			ForEach([("A", 1.0)]) { d in
+				BarMark(x: .value("M", d.0), y: .value("V", d.1))
+			}
+		}
+		.chartTitle("Revenue by quarter")
+		.chartAccessibilityLabel("Custom accessible name")
+		.render()
+		#expect(out.contains("aria-label=\"Custom accessible name\""))
+		#expect(!out.contains("aria-label=\"Revenue by quarter\""))
+	}
+
+	@Test func untitledChartDescribesItsMarkCount() {
+		let one = Chart {
+			ForEach([("A", 1.0)]) { d in
+				BarMark(x: .value("M", d.0), y: .value("V", d.1))
+			}
+		}
+		.render()
+		#expect(one.contains("aria-label=\"Chart with 1 mark\""))
+
+		let two = Chart {
+			ForEach([("A", 1.0), ("B", 2.0)]) { d in
+				BarMark(x: .value("M", d.0), y: .value("V", d.1))
+			}
+		}
+		.render()
+		#expect(two.contains("aria-label=\"Chart with 2 marks\""))
+	}
+
+	@Test func whitespaceTitleFallsBackToMarkCount() {
+		let out = Chart {
+			ForEach([("A", 1.0)]) { d in
+				BarMark(x: .value("M", d.0), y: .value("V", d.1))
+			}
+		}
+		.chartTitle("   ")
+		.render()
+		#expect(out.contains("aria-label=\"Chart with 1 mark\""))
+	}
+
+	@Test func emptyChartUsesTitleAsAccessibleName() {
+		let out = Chart([]).chartTitle("No data yet").render()
+		#expect(out.contains("chart--empty"))
+		#expect(out.contains("aria-label=\"No data yet\""))
+	}
+
+	@Test func polarFigureUsesTitleAsAccessibleName() {
+		let out = Chart([SectorMark(angle: .value("share", 30), category: "web").makeMark()], id: "pie")
+			.chartTitle("Platform share")
+			.render()
+		#expect(out.contains("aria-label=\"Platform share\""))
+	}
+
+	@Test func titleUsedAsAccessibleNameIsEscaped() {
+		let payload = "x\" onload=\"alert(1)"
+		let out = Chart {
+			ForEach([("A", 1.0)]) { d in
+				BarMark(x: .value("M", d.0), y: .value("V", d.1))
+			}
+		}
+		.chartTitle(payload)
+		.render()
+		#expect(!out.contains("onload=\"alert(1)\""))
+		#expect(out.contains("aria-label=\"x&quot; onload=&quot;alert(1)\""))
+	}
+}
+
+// MARK: - Layout contract (responsive width)
+
+@Suite struct ChartLayoutContractTests {
+	/// the figure publishes the width the plot was laid out for; the stylesheet
+	/// shows the plot at that width, compresses it to 92% at most, and pans
+	/// below that instead of shrinking its labels under 11px.
+	@Test func figureCarriesItsDesignWidth() {
+		let out = Chart {
+			ForEach([("A", 1.0)]) { d in
+				BarMark(x: .value("M", d.0), y: .value("V", d.1))
+			}
+		}
+		.render()
+		#expect(out.contains("style=\"--chart-w:640px\""))
+	}
+
+	@Test func designWidthFollowsHeightAndAspect() {
+		let out = Chart {
+			ForEach([("A", 1.0)]) { d in
+				BarMark(x: .value("M", d.0), y: .value("V", d.1))
+			}
+		}
+		.chartHeight(180)
+		.render()
+		#expect(out.contains("style=\"--chart-w:360px\""))
+	}
+
+	/// every render path wraps its svg in the scroll container — a kind that
+	/// forgot the wrapper would silently lose the pan behaviour.
+	@Test func everyKindWrapsItsPlot() {
+		let bar = Chart {
+			ForEach([("A", 1.0)]) { d in
+				BarMark(x: .value("M", d.0), y: .value("V", d.1))
+			}
+		}
+		.render()
+		let pie = Chart([SectorMark(angle: .value("share", 30), category: "web").makeMark()], id: "pie").render()
+		let radar = Chart([RadarMark([("speed", 3.0), ("cost", 5.0), ("reach", 4.0)], series: "s").makeMark()],
+			id: "radar").render()
+		let radial = Chart([RadialMark(value: 72, of: 100, series: "cpu").makeMark()],
+			id: "gauge").render()
+		#expect(occ(bar, "class=\"chart__plot\"") == 1, "bar plot is wrapped")
+		#expect(occ(pie, "class=\"chart__plot\"") == 1, "pie plot is wrapped")
+		#expect(occ(radar, "class=\"chart__plot\"") == 1, "radar plot is wrapped")
+		#expect(occ(radial, "class=\"chart__plot\"") == 1, "radial plot is wrapped")
+	}
+
+	@Test func emptyStateRendersNoPlot() {
+		let out = Chart([]).render()
+		#expect(out.contains("chart--empty"))
+		#expect(!out.contains("chart__plot"))
 	}
 }

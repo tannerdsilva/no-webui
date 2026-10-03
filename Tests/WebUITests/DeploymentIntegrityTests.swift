@@ -118,6 +118,35 @@ func cssTokenValue(_ name: String, in css: String) -> String? {
 	return String(tail[..<stop]).trimmingCharacters(in: .whitespaces)
 }
 
+// Composite an `rgba(...)` soft token over a substrate — what the browser
+// actually paints for a tinted surface. Returns `#rrggbb`, or nil if either
+// value cannot be parsed.
+func softTint(_ name: String, in css: String, over substrate: String) -> String? {
+	guard let raw = cssTokenValue(name, in: css) else { return nil }
+	// the light soft tokens are opaque hex; the dark ones are rgba and have to
+	// be composited over whatever surface they sit on.
+	if raw.hasPrefix("#") { return raw }
+	let nums = raw.components(separatedBy: CharacterSet(charactersIn: "0123456789.").inverted)
+		.filter { !$0.isEmpty }
+		.compactMap(Double.init)
+	guard nums.count >= 4 else { return nil }
+	var hex = substrate
+	if hex.hasPrefix("#") { hex.removeFirst() }
+	if hex.count == 3 { hex = hex.map { "\($0)\($0)" }.joined() }
+	guard hex.count == 6 else { return nil }
+	var channels: [Int] = []
+	var idx = hex.startIndex
+	while idx < hex.endIndex, let next = hex.index(idx, offsetBy: 2, limitedBy: hex.endIndex) {
+		guard let v = Int(hex[idx..<next], radix: 16) else { return nil }
+		channels.append(v)
+		idx = next
+	}
+	guard channels.count == 3 else { return nil }
+	let a = nums[3]
+	func mix(_ c: Double, _ s: Int) -> Int { Int((c * a + Double(s) * (1 - a)).rounded()) }
+	return String(format: "#%02x%02x%02x", mix(nums[0], channels[0]), mix(nums[1], channels[1]), mix(nums[2], channels[2]))
+}
+
 @Test("solid action buttons meet WCAG AA in light mode")
 func lightSolidButtonContrast() {
 	let css = WebUIAssets.css
@@ -155,6 +184,62 @@ func darkSolidButtonContrast() {
 	}
 	// Guard: the override must actually be present, not accidentally dropped.
 	#expect(dark.contains(".button.button--success"), "dark solid-button ink override missing (white-on-bright would return)")
+}
+
+@Test("tint-ink pairs stay legible in dark: selected list title, active segmented count")
+func darkTintInkContrast() {
+	let css = WebUIAssets.css
+	let darkStart = css.range(of: ":root[data-theme=\"dark\"]")
+	let dark = darkStart.map { String(css[$0.lowerBound...]) } ?? css
+	let ink = cssTokenValue("color-primary-400", in: dark) ?? "000000"
+	for surface in ["color-primary-50", "color-primary-100"] {
+		let tint = cssTokenValue(surface, in: dark) ?? "000000"
+		#expect(wcagRatio(ink, tint) >= 4.5, "dark \(surface) tint ink below AA — the tint-ink pair goes dim")
+	}
+	// Guard: the overrides must be present, not silently dropped. the deep
+	// primary inks (700–900) are not remapped for dark, so the pair needs its
+	// own rule rather than inheriting the light ink.
+	#expect(dark.contains(".list__item--selected .list__title"), "dark selected-title ink override missing")
+	#expect(dark.contains(".segmented__item--active .segmented__count"), "dark active-count ink override missing")
+}
+
+@Test("the alert and banner close glyphs meet AA on every tint, in both themes")
+func alertCloseContrast() {
+	let css = WebUIAssets.css
+	let darkStart = css.range(of: ":root[data-theme=\"dark\"]")
+	let dark = darkStart.map { String(css[$0.lowerBound...]) } ?? css
+	let softs = ["color-info-soft", "color-success-soft", "color-warning-soft", "color-danger-soft"]
+
+	let lightInk = cssTokenValue("color-text", in: css) ?? "000000"
+	let lightSurface = cssTokenValue("color-bg-raised", in: css) ?? "ffffff"
+	for soft in softs {
+		guard let tint = softTint(soft, in: css, over: lightSurface) else {
+			Issue.record("could not composite light \(soft)")
+			continue
+		}
+		#expect(wcagRatio(lightInk, tint) >= 4.5, "alert close ink below AA on light \(soft)")
+	}
+
+	let darkInk = cssTokenValue("color-text", in: dark) ?? "000000"
+	let darkSurface = cssTokenValue("color-bg-raised", in: dark) ?? "000000"
+	for soft in softs {
+		guard let tint = softTint(soft, in: dark, over: darkSurface) else {
+			Issue.record("could not composite dark \(soft)")
+			continue
+		}
+		#expect(wcagRatio(darkInk, tint) >= 4.5, "alert close ink below AA on dark \(soft)")
+	}
+
+	// Guard: each close must inherit its surface's own ink — re-adding an
+	// override is the regression that had both at 4.45:1 on the info tint.
+	for rule in [".alert__close {", ".banner__close {"] {
+		guard let found = css.range(of: rule) else {
+			Issue.record("\(rule) missing from the sheet")
+			continue
+		}
+		let body = css[found.upperBound...].prefix { $0 != "}" }
+		#expect(!body.contains("color:"), "\(rule) re-added an ink override; it must inherit its surface ink")
+	}
 }
 
 // MARK: - JS runtime event-pipeline resilience
@@ -297,5 +382,81 @@ func spaceTokensResolveInCss() {
 		missing.append(token.cssVariable)
 	}
 	#expect(missing.isEmpty, "space tokens missing from shipped css: \(missing)")
+}
+
+@Test("the dark-mode link hover differs from its resting tint (feedback, not a no-op)")
+func darkLinkHoverIsNotANoOp() throws {
+	let css = WebUIAssets.css
+	// the dark block tints anchors for legibility; the hover override exists to
+	// replace the light hover ink (primary-800, illegible on dark). it once
+	// repeated the resting token instead, which silently removed hover feedback:
+	// `.navbar__brand` read #818cf8 both hovered and unhovered in dark while the
+	// light theme steps the same element to primary-800. both rules must move.
+	func colorToken(after selector: String) throws -> String {
+		let rule = try #require(css.range(of: selector), "missing rule: \(selector)")
+		let rest = css[rule.upperBound...]
+		let open = try #require(rest.firstIndex(of: "{"), "no body for \(selector)")
+		let close = try #require(rest[open...].firstIndex(of: "}"), "unterminated rule: \(selector)")
+		let body = rest[rest.index(after: open)..<close]
+		let color = try #require(body.range(of: "color:"), "no color declaration in \(selector)")
+		return body[color.upperBound...].prefix { $0 != ";" }
+			.trimmingCharacters(in: .whitespacesAndNewlines)
+	}
+	let resting = try colorToken(after: "[data-theme=\"dark\"] a, [data-theme=\"dark\"] .button--link")
+	let hovered = try colorToken(after: "[data-theme=\"dark\"] a:hover, [data-theme=\"dark\"] .button--link:hover")
+	#expect(
+		resting != hovered,
+		"the dark hover repeats \(hovered) — the legibility override silently removes hover feedback"
+	)
+}
+
+@Test("dark active-variant overrides do not swallow their family's hover")
+func darkActiveVariantsKeepTheirHover() {
+	let css = WebUIAssets.css
+	// every dark `--active`/`--selected` override ties its family's `:hover` rule
+	// on specificity and sits later in source order, so without an explicit dark
+	// hover the state never moves at all — measured in dark as
+	// property-for-property identical while `:hover` matched:
+	// `.navbar__link--active`, `.tabs__tab--active`, `.sidebar__item--active`,
+	// `.tree__row--selected`. both halves are pinned: the resting treatment must
+	// stay, and a hover rule must exist so the state can move.
+	let pairs: [(rest: String, hover: String)] = [
+		("[data-theme=\"dark\"] .navbar__link--active {", "[data-theme=\"dark\"] .navbar__link--active:hover"),
+		("[data-theme=\"dark\"] .tabs__tab--active {", "[data-theme=\"dark\"] .tabs__tab--active:hover"),
+		("[data-theme=\"dark\"] .tabs--bordered .tabs__tab--active {", "[data-theme=\"dark\"] .tabs--bordered .tabs__tab--active:hover"),
+		("[data-theme=\"dark\"] .sidebar__item--active {", "[data-theme=\"dark\"] .sidebar__item--active:hover"),
+		("[data-theme=\"dark\"] .tree__row--selected {", "[data-theme=\"dark\"] .tree__row--selected:hover"),
+		("[data-theme=\"dark\"] .toc__link--active {", "[data-theme=\"dark\"] .toc__link--active:hover"),
+		("[data-theme=\"dark\"] .bottom-nav__item--active {", "[data-theme=\"dark\"] .bottom-nav__item--active:hover"),
+	]
+	for (rest, hover) in pairs {
+		#expect(css.contains(rest), "dark rest treatment vanished: \(rest)")
+		#expect(css.contains(hover), "dark override has no hover rule — the state cannot move: \(hover)")
+	}
+}
+
+@Test("a declared stack alignment beats the block-fill shim, keyed on the emitted class")
+func declaredStackAlignmentPlacesCappedChildren() {
+	let css = WebUIAssets.css
+	// the fill exists because a flex column (any host's, too) sizes block
+	// children to their content unless something restores the block behavior.
+	#expect(css.contains("align-self: stretch"), "the block-fill shim left the sheet")
+	// …but the alignment a stack *declares* wins over it: a width-capped child
+	// (the auth card's `max-width: 26rem`) must be placed by the stack, not
+	// parked at the cross-start edge — measured before the fix at x=24 in a
+	// 1280 px viewport, where the column's center is 640.
+	#expect(css.contains(".vstack.align-center > :is(.card,"), "centered columns lost the placement rule")
+	#expect(css.contains(".vstack.align-flex-end > :is(.card,"), "end-aligned columns lost the placement rule")
+	#expect(css.contains("align-self: auto;"), "the placement rule no longer yields to the stack")
+	// and the pairing is the contract: the classes the emitted markup carries are
+	// exactly the ones the rule keys on, so a rename on either side fails here
+	// rather than silently re-parking the card.
+	let emit: [(HorizontalAlignment, String)] = [
+		(.leading, "align-flex-start"), (.center, "align-center"), (.trailing, "align-flex-end"),
+	]
+	for (alignment, klass) in emit {
+		let html = VStack(alignment: alignment, spacing: 8) { Text("x") }.render()
+		#expect(html.contains("vstack spacing-8 \(klass)"), "\(alignment) should emit \(klass): \(html.prefix(90))")
+	}
 }
 
