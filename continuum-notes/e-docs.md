@@ -1,0 +1,103 @@
+# lane E — wave 1 doc fragments (t1.1, t1.2, t1.4)
+
+orchestrator folds these into `Documentation/CONTINUUM.md` + `CHANGELOG.md` at
+integration; never edits the shared docs directly (deviation D-1).
+
+## t1.1 — fragment ops complete (remove / attr / move)
+
+the `FragmentOp` vocabulary is now six ops, additive over the landed
+append/text/replace (absent `op` stays `replace`, pinned):
+
+| op | wire (json inside `fragments[]`) | meaning | optimistic |
+|---|---|---|---|
+| `replace` | `{"id":"x","html":"…"}` | swap subtree | allowed (armed) |
+| `append` | `{"id":"x","op":"append","html":"…","before":"child"?}` | insert child | allowed |
+| `text` | `{"id":"x","op":"text","text":"…"}` | write textContent | forbidden v1 (skip + warn once) |
+| `remove` | `{"id":"x","op":"remove"}` | delete `#x` | forbidden v1 |
+| `attr` | `{"id":"x","op":"attr","name":"…","value":"…"}` | set ONE attribute | forbidden v1 |
+| `move` | `{"id":"x","op":"move","before":"y"?}` | reorder within parent | forbidden v1 |
+
+- swift constructors (beside the append/text precedent in
+  `Sources/WebUICore/WebSocketProtocol.swift`): `.remove(id:)`,
+  `.attr(id:name:value:)`, `.move(id:before:)`; `name`/`value` ride on the
+  `FragmentUpdate` Codable + the data-free `jsonText` wire.
+- engine apply lives in `applyFragments` (`webui-engine.js`). `remove` uses a
+  real `element.remove()` (the empty-fragment-removes-element branch stays
+  replace-only, pinned). `move` uses `parent.insertBefore`/`appendChild` on the
+  existing node — a reorder, never a re-insert. `attr` validates the name
+  against an allowlist then `setAttribute` (the DOM API handles escaping).
+- unknown op / unknown attr name / optimistic + forbidden op: skip + warn once
+  (keyed `warnOnce`, the engine's established warn-once pattern).
+
+### attr allowlist — WAVE-1 STATIC SEED (handoff to lane B)
+
+engine constant, clearly marked:
+
+```js
+var ATTR_ALLOW_EXACT = { 'class': true };
+var ATTR_ALLOW_PREFIX = ['aria-', 'data-'];
+```
+
+this is the wave-1 static seed only — lane B's generated allowlist (t1.3,
+`Continuum+Generated.swift` class inventory) replaces it at integration. the
+allowlist deliberately keeps url-bearing attrs (`href`, `src`, `style`) and
+`on*` handlers out of the hot plane (skip + warn once when a name isn't
+listed).
+
+## t1.2 — scheduling policy (documented + guaranteed)
+
+the existing policy (landed f794267) is now explicit in the coalescer
+(`enqueue` in `webui-engine.js`):
+
+1. queued application: fragments enqueue and flush as one batch.
+2. last-write-wins per target: a later non-append, non-remove op for an id
+   collapses onto the newest queued entry with that id (scan from the tail,
+   never across a queued `remove`).
+3. never-animate hot ops: `wantsTransition` returns false for
+   append/text/remove/attr/move — view transitions only ever animate plain
+   replaces.
+
+extended for the new ops:
+
+- `remove` never coalesces — it always enqueues fresh and no later op for the
+  same id may swallow a queued `remove` (a deletion must always execute).
+- `attr`/`move` collapse to newest per target, exactly like replace/text.
+- array order stays semantic: `append` is never reordered relative to ops on
+  other targets.
+
+probe `e-ops.mjs` sends 50 mixed ops and asserts exact applied counts (24 =
+4 newest-per-target + 10 removes + 10 appends) plus newest-per-target DOM
+wins.
+
+## t1.4 — engine-local echo (the first lease)
+
+contract attribute: `data-webui-echo="<id>"` on an element. on `input`, the
+engine writes the element's value into `#<id>`'s text in the same turn —
+locally, with zero websocket traffic. the authoritative patch always wins: a
+`text` op or a `replace` for the echo target overwrites the local overlay and
+clears the `echoOverlay` marker.
+
+implementation:
+
+- fragment patcher exposes `echo(id, value)` + `echoOverlay` (and
+  `clearEcho`); a delegated document-level `input` listener (`echoInput` in
+  the event delegator) calls `fragmentPatcher.echo` for any element carrying
+  the contract attribute — before component lookup, so unwired echo sources
+  work too.
+- `applyFragments` clears the overlay on authoritative `text` and `replace`.
+- the debounced wire path is untouched: a component-wired echo source still
+  sends its event at the debounce edge (one frame), never per keystroke.
+
+probe `e-echo.mjs`: types 20 chars and asserts (a) the target updates per
+keystroke, (b) 0 ws frames during the typing window — counted from OUTSIDE via
+playwright's `page.on('websocket')`, the runtime is never patched under
+measurement — and (c) an authoritative text/replace wins and clears the
+overlay. a wired variant asserts frames still arrive at the debounce edge.
+
+## conservative choices / notes
+
+- `text` under optimistic patches is now forbidden (skip + warn once),
+  matching the §1.3.2 table; no landed behavior depended on optimistic text
+  (predictions are html-based replaces).
+- engine bytes stay comment-free (ProseGuard scans them); the policy tables
+  above are the documentation home.
