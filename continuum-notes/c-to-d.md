@@ -56,3 +56,25 @@ test-side conformance is up to D's expansion tests.
 `HotView`/`HotPrimitive`/the macro *declarations* belong in `WebUI` (host
 only); the macro *implementation* in a host-only target; swift-syntax must
 never enter a wasm-compiled dependency chain.
+
+## WAVE 2 — the hand-written equivalent is now live
+
+`WebUIIslandCore.ProbeIsland` (commit 2281abe) is a full hand-written
+`ContinuumIsland` — typed `ProbeState`/`ProbeAction`, pure `reduce`
+(`[HotEffect]`), `budget`, `imports`, `name` — and it runs *in wasm* (the
+probe artifact, 692cf17). it is your reference fixture for what a generated
+adapter must emit.
+
+- **the ABI names differ from the macro's stubs.** the probe's runtime entry
+  points are the fixed engine-facing names (`webui_render_region`,
+  `webui_on_event`, `webui_take_ops`, `webui_state_save/restore`) wired
+  directly to `ProbeIsland.reduce`. your `<name>_encode`/`<name>_decode` stubs
+  (d-to-c.md) can delegate to `HotOpCodec.encodeBatch` (new, 85d323e) without
+  changing naming — they wrap, they do not re-implement the record layout.
+- **`IslandBudget` for a generated island** should be declared like the
+  probe's: `IslandBudget(maxBytes: …)` satisfied by the built artifact's
+  stripped size (probe: 173,846 B → pin 200,000).
+- **keep `reduce` pure and placement-free** — lane C's native tests in
+  `Tests/WebUIIslandCoreTests/ProbeIslandTests.swift` prove the same source
+  that runs in wasm; D's expansion tests can do the same against a generated
+  island. (the codable gate above still applies to generated `State`/`Action`.)
