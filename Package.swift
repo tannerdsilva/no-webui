@@ -278,9 +278,15 @@ let package = Package(
             name: "WebUIIconTool"
         ),
 
-        // ── Continuum Tool (class inventory + build lint, d1 t1.3) ──
+        // ── Continuum Tool (class inventory + build lint + served manifest, d1/d2) ──
         .executableTarget(
-            name: "WebUIContinuumTool"
+            name: "WebUIContinuumTool",
+            dependencies: [
+                // the served, content-addressed engine slice rides the same
+                // WebUIAssetBuilder emitter as the css/js assets — one
+                // implementation of stamping, gzip and the prose gate.
+                .target(name: "WebUIBuild"),
+            ]
         ),
 
         // ── Wasm Tool (validates + hashes the prebuilt client artifact) ──

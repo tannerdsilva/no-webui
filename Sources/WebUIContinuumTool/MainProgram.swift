@@ -1,4 +1,5 @@
 import Foundation
+import WebUIBuild
 
 #if os(Linux)
 import Glibc
@@ -241,6 +242,17 @@ func appendHot(classes: [String], to result: inout ScanResult, component: String
 struct HotViewMarker: Equatable {
 	let name: String
 	let imports: [String]
+	/// the declared `budget: IslandBudget(...)` pin, if any (t4.2).
+	let pin: IslandPin?
+}
+
+/// a per-island budget pin declared by a `@HotView(..., budget: IslandBudget(...))`
+/// marker (parent §1.3.5 `IslandBudget`, §t4.2). the plugin enforces these
+/// against the built `.wasm`; islands without a pin ride the global ceiling.
+struct IslandPin: Equatable {
+	let name: String
+	let maxBytes: Int
+	let maxGzipBytes: Int?
 }
 
 /// the canonical capability table (parent §1.3.4): type name -> wire name.
@@ -330,24 +342,59 @@ func parseHotViewBody(_ body: String) -> HotViewMarker? {
 	let name = String(nameMatch.1)
 
 	var imports: [String] = []
+	var pin: IslandPin? = nil
 	for arg in args.dropFirst() {
 		let trimmed = arg.trimmingCharacters(in: .whitespaces)
 		guard let label = trimmed.firstMatch(of: /^([A-Za-z_][A-Za-z0-9_]*)\s*:/) else { continue }
 		let labelName = String(label.1)
-		guard labelName == "imports" else { continue }
 		var value = String(trimmed[label.range.upperBound...]).trimmingCharacters(in: .whitespaces)
-		if value.hasPrefix("[") {
-			value.removeFirst()
-			if value.hasSuffix("]") { value.removeLast() }
-		}
-		for token in topLevelCommaSplit(value) {
-			let wire = normalizeCapabilityToken(token)
-			guard !wire.isEmpty else { continue }
-			if !imports.contains(wire) { imports.append(wire) }
+		if labelName == "imports" {
+			if value.hasPrefix("[") {
+				value.removeFirst()
+				if value.hasSuffix("]") { value.removeLast() }
+			}
+			for token in topLevelCommaSplit(value) {
+				let wire = normalizeCapabilityToken(token)
+				guard !wire.isEmpty else { continue }
+				if !imports.contains(wire) { imports.append(wire) }
+			}
+		} else if labelName == "budget" {
+			pin = islandBudget(from: value, islandName: name)
 		}
 	}
 	imports.sort()
-	return HotViewMarker(name: name, imports: imports)
+	return HotViewMarker(name: name, imports: imports, pin: pin)
+}
+
+/// parse an `IslandBudget(...)` expression into a pin (t4.2): required
+/// `maxBytes:` and optional `maxGzipBytes:` (default nil).
+func islandBudget(from value: String, islandName: String) -> IslandPin? {
+	guard let maxMatch = value.firstMatch(of: /maxBytes\s*:\s*(\d+)/) else { return nil }
+	let maxBytes = Int(maxMatch.1) ?? 0
+	let gz: Int?
+	if let gzMatch = value.firstMatch(of: /maxGzipBytes\s*:\s*(\d+)/) {
+		gz = Int(gzMatch.1)
+	} else {
+		gz = nil
+	}
+	return IslandPin(name: islandName, maxBytes: maxBytes, maxGzipBytes: gz)
+}
+
+/// every distinct island pin across the marker-bearing source dirs.
+func islandPins(in sourceDirs: [String]) -> [IslandPin] {
+	var pins: [IslandPin] = []
+	for dir in sourceDirs {
+		guard let files = try? FileManager.default.contentsOfDirectory(atPath: dir) else { continue }
+		for file in files where file.hasSuffix(".swift") {
+			let path = (dir as NSString).appendingPathComponent(file)
+			guard let source = try? String(contentsOfFile: path, encoding: .utf8) else { continue }
+			for marker in hotViewMarkers(in: source) {
+				guard let pin = marker.pin else { continue }
+				if !pins.contains(where: { $0.name == pin.name }) { pins.append(pin) }
+			}
+		}
+	}
+	return pins.sorted { $0.name < $1.name }
 }
 
 /// split `text` on commas at paren/bracket/quote depth 0.
@@ -517,6 +564,9 @@ enum WebUIContinuumTool {
 		verbs:
 		  generate       scan design-system core -> Continuum+Generated.swift
 		                 --sources <dir> --output <path>
+		                 [--engine-manifest <path>]  served content-addressed slice
+		                 [--manifest <json>]         raw manifest (budget plugin)
+		                 [--hotview-sources <dir>]   marker dirs for pins
 		  lint           re-scan sources; warn on class literals the generated
 		                 inventory does not claim (warn-only in d1) AND fail on
 		                 capability-import mismatches against the host grants
@@ -542,6 +592,83 @@ enum WebUIContinuumTool {
 			let k = scan.unclaimed.count
 			// the build line the plugin reports.
 			print("[WebUIContinuumPlugin] inventory: \(n) components, \(m) classes, \(k) unclaimed (warn)")
+
+			// per-island budget pins ride the same scan (t4.2): `@HotView(..., budget:
+			// IslandBudget(...))` markers anywhere in the marker-bearing sources.
+			var sourceDirs = [sources]
+			if let extra = Args.option(argv, "--hotview-sources") {
+				sourceDirs += extra.split(separator: ",").map(String.init)
+			}
+			let pins = islandPins(in: sourceDirs)
+
+			// the raw manifest: the same payload the served slice embeds, written
+			// as plain json so the budget plugin reads the pins without decoding
+			// the generated conformance.
+			if let manifestPath = Args.option(argv, "--manifest") {
+				let payload = manifestJSON(scan, pins: pins)
+				try payload.write(toFile: manifestPath, atomically: true, encoding: .utf8)
+			}
+
+			// d2 §1.5: the engine-facing slice. the engine cannot read swift —
+			// it receives its attr allowlist (and the class inventory) as a
+			// served, content-addressed manifest, emitted through the same
+			// WebUIAssetBuilder machinery as the css/js: one stamp (sha256
+			// prefix), one gzip variant, one WebUIShippedAsset conformance the
+			// host registers at a content-addressed url. this closes lane E's
+			// wave-1 static-allowlist seed handoff (reconcile wires the fetch
+			// at i2; the engine stays conservative until then).
+			if let manifestPath = Args.option(argv, "--engine-manifest") {
+				let payload = engineSliceJSON(scan, pins: pins)
+				let receipt = try WebUIAssetBuilder.emit(
+					shipped: payload,
+					typeName: "ContinuumEngineManifest",
+					options: WebUIAssetBuilder.Options(
+						prose: .off,
+						contentType: "application/json; charset=utf-8"
+					),
+					to: URL(fileURLWithPath: manifestPath)
+				)
+				print("[WebUIContinuumPlugin] engine slice: \(receipt.bytes) bytes, sha \(receipt.stamp), served at /ui/continuum-manifest.json?v=\(receipt.stamp)")
+			}
+		}
+
+		/// the engine-facing manifest payload (parent §1.5): the attr allowlist
+		/// the engine enforces on `attr` ops, the class inventory, and the
+		/// per-island budget pins (t4.2). flat and self-describing so the
+		/// reconciler wires the fetch without negotiation.
+		static func engineSliceJSON(_ scan: ScanResult, pins: [IslandPin]) -> String {
+			let components = scan.components
+				.sorted { $0.name < $1.name }
+				.map { c in
+					"\"\(c.name)\":"
+						+ "[\n"
+						+ c.allClasses.map { "\t\t\t\"\($0)\"" }.joined(separator: ",\n")
+						+ "\n\t\t]"
+				}
+				.joined(separator: ",\n")
+			let union = scan.union.map { "\"\($0)\"" }.joined(separator: ",")
+			let allowlist = ["\"class\"", "\"aria-*\"", "\"data-*\""].joined(separator: ",")
+			let islands = pins.map { p in
+				"{\"name\":\"\(p.name)\",\"maxBytes\":\(p.maxBytes)\(p.maxGzipBytes.map { ",\"maxGzipBytes\":\($0)" } ?? "")}"
+			}.joined(separator: ",")
+			return """
+			{
+			  "kind": "continuum-engine-slice",
+			  "version": 1,
+			  "attributeAllowlist": [\(allowlist)],
+			  "components": {
+			\(components)
+			  },
+			  "union": [\(union)],
+			  "islands": [\(islands)]
+			}
+			"""
+		}
+
+		/// the same payload as the served slice, as plain json (the budget
+		/// plugin reads this file — no conformance decoding needed).
+		static func manifestJSON(_ scan: ScanResult, pins: [IslandPin]) -> String {
+			engineSliceJSON(scan, pins: pins)
 		}
 
 		static func lint(_ argv: [String]) throws {

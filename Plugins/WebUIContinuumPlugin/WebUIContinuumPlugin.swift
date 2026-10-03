@@ -28,6 +28,17 @@ struct WebUIContinuumPlugin: BuildToolPlugin {
 
         let outputURL = context.pluginWorkDirectoryURL
             .appendingPathComponent("Continuum+Generated.swift")
+        // d2 §1.5: the engine-facing served slice — a content-addressed
+        // WebUIShippedAsset conformance (the same emission machinery as the
+        // css/js), compiled into the WebUI target so a host registers it like
+        // any other shipped asset and the engine fetches it at its
+        // content-addressed url.
+        let engineSliceURL = context.pluginWorkDirectoryURL
+            .appendingPathComponent("ContinuumEngineManifest+Generated.swift")
+        // the raw manifest the budget plugin reads for per-island pins: the
+        // same payload the served slice embeds, as plain json.
+        let rawManifestURL = context.pluginWorkDirectoryURL
+            .appendingPathComponent("ContinuumManifest.json")
 
         let tool = try context.tool(named: "WebUIContinuumTool")
         let inputFiles = try FileManager.default.contentsOfDirectory(
@@ -61,9 +72,12 @@ struct WebUIContinuumPlugin: BuildToolPlugin {
                     "generate",
                     "--sources", coreDir.path,
                     "--output", outputURL.path,
+                    "--engine-manifest", engineSliceURL.path,
+                    "--manifest", rawManifestURL.path,
+                    "--hotview-sources", webUIDir.path,
                 ],
                 inputFiles: inputFiles,
-                outputFiles: [outputURL]
+                outputFiles: [outputURL, engineSliceURL, rawManifestURL]
             ),
             // d2 t2.6: the capability-grants gate. runs on every build over the
             // marker-bearing sources; a mismatch (`@HotView` imports something

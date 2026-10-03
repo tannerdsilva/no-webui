@@ -42,6 +42,53 @@ the generated value (`public enum ContinuumClassInventory`):
 design system builds class strings via interpolation, out of the literal scan
 by design; the inventory grows when `@HotClass` vocabularies land (d3).
 
+## d2 wave-2 additions (capability lint + the engine-facing served slice)
+
+_commit `f75873f` (t2.6 lint) + the served-slice unit (wave 2)._
+
+### the capability-grants lint (t2.6, commit `f75873f`)
+
+`WebUIContinuumTool lint` now reads `@HotView` descriptors for their
+`imports:` list and compares it against the **host grant list**: a
+`ContinuumGrants` constant declared in the scanned sources wins, then
+`--grants a,b,c`, then the framework default (every engine capability,
+§1.3.4). a capability the host does not grant is a **build error** with the
+parent plan's exact message:
+
+```
+island "feed" imports "surface_acquire" — not granted by the host manifest (add it to ContinuumGrants or drop the import)
+```
+
+the `WebUIContinuumPlugin` runs the lint as a second build step over the
+design-system core + `Sources/WebUI` (where the consumer surface lives); a
+clean scan writes a `Capabilities.ok` cache stamp, a violation exits non-zero
+and the stamp never lands, so the gate is cached-green and fail-red.
+accepted `imports:` spellings — array, dot-case (`.clock`), `.self` types
+(`ClockCapability.self`), single string — so lane D's wave-2 marker shape
+reconciles without negotiation. probe: `designer/probes/b-lint.mjs` (6/6).
+
+### the engine's served slice (§1.5, closes E's static-seed handoff)
+
+the engine cannot read swift, so the attribute allowlist (+ the class
+inventory) is **also** emitted as a served, content-addressed asset: the
+plugin emits `ContinuumEngineManifest+Generated.swift` into the WebUI target
+— a `WebUIShippedAsset` conformance produced by the same
+`WebUIAssetBuilder.emit` machinery as the css/js (one sha256 stamp, one gzip
+variant, prose-gated). the payload is the `continuum-engine-slice` json
+(`attributeAllowlist`, `components`, `union`).
+
+**served path (for lane E at i2):** a host registers it like any shipped
+asset — `WebUIAsset(ContinuumEngineManifest.self, path: "/ui/continuum-manifest.json")`
+— and the engine fetches `/ui/continuum-manifest.json?v=<stamp>` (the stamp
+is the content address; a rebuilt allowlist is a different url, so a
+year-long immutable cache is safe). the payload's `attributeAllowlist`
+(`["class","aria-*","data-*"]` today; component-declared names join when
+`@HotClass` lands) is the superset of the wave-1 static seed — the engine
+replaces `ATTR_ALLOW_EXACT`/`ATTR_ALLOW_PREFIX` with it. until the fetch is
+wired, the engine stays conservative (its seed is harmless); the byte counts
+the generated asset ships are reported on every build:
+`[WebUIContinuumPlugin] engine slice: N bytes, sha <stamp>`.
+
 ### bench tooling contract (lanes consuming d0 numbers)
 
 - `WebUIBench` — raw NIO host on `--port`/`WEBUI_BENCH_PORT` (default 9130;
