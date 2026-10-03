@@ -308,6 +308,17 @@ window.WebUIEngine = (function () {
       log.debug('Event delegation unmounted');
     }
 
+    function echoInput(event) {
+      var target = event.target;
+      if (!target || !target.getAttribute) return;
+      var echoId = target.getAttribute('data-webui-echo');
+      if (!echoId) return;
+      var value = target.value === undefined || target.value === null ? '' : String(target.value);
+      if (typeof fragmentPatcher.echo === 'function') {
+        fragmentPatcher.echo(echoId, value);
+      }
+    }
+
     function applyPrediction(componentEl, componentId) {
       var raw = componentEl.getAttribute('data-optimistic');
       if (!raw) return;
@@ -333,6 +344,9 @@ window.WebUIEngine = (function () {
     }
 
     function handleEvent(event) {
+      if (event.type === 'input') {
+        echoInput(event);
+      }
       if (event.type === 'keydown') {
         var treeRow = event.target && event.target.closest && event.target.closest('.tree--interactive [role=treeitem]');
         if (treeRow && (event.key === 'Enter' || event.key === ' ')) {
@@ -765,6 +779,7 @@ window.WebUIEngine = (function () {
         }
         if (op === 'text') {
           setTextContent(f.id, f.text === undefined || f.text === null ? '' : String(f.text));
+          clearEcho(f.id);
           var textNode = document.getElementById(f.id);
           if (textNode) { changed.push(textNode); }
           continue;
@@ -790,10 +805,23 @@ window.WebUIEngine = (function () {
           continue;
         }
         replaceElement(f.id, f.html);
+        clearEcho(f.id);
         var node = document.getElementById(f.id);
         if (node) { changed.push(node); }
       }
       if (changed.length) { runHooks(afterPatchHooks, changed); }
+    }
+
+    var echoOverlay = {};
+    function echo(id, value) {
+      var el = document.getElementById(id);
+      if (!el) return false;
+      echoOverlay[id] = true;
+      setTextContent(id, value);
+      return true;
+    }
+    function clearEcho(id) {
+      delete echoOverlay[id];
     }
 
     function setTextContent(id, value) {
@@ -1183,7 +1211,7 @@ window.WebUIEngine = (function () {
       settleMs = ms;
     }
 
-    return { patch: patch, reset: reset, setSettle: setSettle, sanitize: sanitizeFragment };
+    return { patch: patch, reset: reset, setSettle: setSettle, sanitize: sanitizeFragment, echo: echo, echoOverlay: echoOverlay };
   }
 
   var UNSAFE_PROTOCOLS = /^(javascript|data|vbscript):/i;

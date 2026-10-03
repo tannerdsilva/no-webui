@@ -27,17 +27,23 @@ function encodeWsFrame(text) {
 
 // minimal RFC6455 server: accepts the upgrade, echoes frames unbuffered, replies
 // pong to ping so the engine's ping loop never sees a timeout.
-export async function startProbeServer(port, bodyHtml, { enginePath = "designer/assets/webui-engine.js", wsPath = "/ws" } = {}) {
+export async function startProbeServer(port, bodyHtml, { enginePath = "designer/assets/webui-engine.js", wsPath = "/ws", config = {} } = {}) {
   const engine = readFileSync(enginePath, "utf8");
 
   const sockets = new Set();
   const wsCounters = new Map();
 
+  const runtimeConfig = JSON.stringify({
+    wsUrl: `ws://127.0.0.1:${port}${wsPath}`,
+    logLevel: "warn",
+    ...config,
+  })
+
   const server = createServer((req, res) => {
     if (req.url === "/") {
       const html = `<!DOCTYPE html>
 <html><head>
-<meta name="webui-config" content='{"wsUrl":"ws://127.0.0.1:${port}${wsPath}","logLevel":"warn"}'>
+<meta name="webui-config" content='${runtimeConfig.replace(/'/g, "&#39;")}'>
 <style>
   body { font: 13px ui-monospace, monospace; padding: 16px; }
   #list, #attrs, #moveset { margin: 8px 0; }
