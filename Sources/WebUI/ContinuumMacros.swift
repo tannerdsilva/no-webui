@@ -1,26 +1,19 @@
 import Foundation
-
-/// a view that can serve its state server-side: the server renders `render(state:)`
-/// html and routes actions through the router. `@HotView` generates conformance;
-/// hand-writing it stays possible and tested (the hand-written-equivalent rule).
-/// wave-1 ships the marker only — the render/routing requirements land in wave 2
-/// alongside the view-side protocols, and the macro's generated `extension Feed:
-/// ContinuumServerPath` compiles against them unchanged.
-public protocol ContinuumServerPath {}
+import WebUICore
 
 // MARK: - continuum macros (@HotView / @HotClass)
 //
 // declaration placement is load-bearing (DESKTOP_GRADE §5 t3.1): macro
 // *declarations* are inert syntax — the implementation is a separate, host-only
 // compiler-plugin target (`WebUIContinuumMacros`) that must never enter a
-// wasm-compiled dependency chain (swift-syntax does not cross-build). the view-side
-// runtime protocols this surface generates conformance for (`HotView`/`HotPrimitive`/
-// `HotTree`) land in wave 2; the generated members reference them by name only and
-// are exercised by string-based expansion tests until then.
+// wasm-compiled dependency chain (swift-syntax does not cross-build). the
+// view-side runtime vocabulary this surface generates against lives in
+// `ContinuumHot.swift`; the descriptor + server path in `ContinuumSurface.swift`.
 
 /// the hot-view attribute: one declaration, two placements.
 ///
-///     @HotView("feed")
+///     @HotView("feed", imports: [ClockCapability.self],
+///              budget: IslandBudget(maxBytes: 16_384, maxGzipBytes: 4_096))
 ///     struct Feed: HotView {
 ///         typealias State = FeedState
 ///         typealias Action = FeedAction
@@ -32,21 +25,27 @@ public protocol ContinuumServerPath {}
 ///
 /// - `static let continuumDescriptor` — name/grants/budget/class, greppable;
 /// - `struct FeedIsland: ContinuumIsland` — the island adapter; `reduce` forwards to
-///   the author's `reduce`; `State`/`Action` alias the view's;
-/// - `@_expose(wasm, …)` codec shims — the t2.3 export names;
+///   the author's `reduce`; `State`/`Action` alias the view's; `imports`/`budget`
+///   carry the declared values;
+/// - `@_expose(wasm, …)` shims — the t2.3 export names (`<name>_encode`/`<name>_decode`);
 /// - `extension Feed: ContinuumServerPath` — the server adapter.
 ///
-/// wave-1 signature is name-only (`@HotView("feed")`); the `imports:`/`budget:`
-/// parameters arrive in wave 2 alongside the view-side protocols. a sibling
-/// `@HotClass(…)` on the same declaration feeds the descriptor's class vocabulary.
+/// the import/budget parameters type-check at the use site: `imports:` takes
+/// `HostCapability` types (`[ClockCapability.self]` — never wire strings) and
+/// `budget:` an `IslandBudget`. both stay optional (additive): name-only
+/// `@HotView("feed")` keeps working — a declaration that names host imports
+/// must pin a budget (a size-pinned island), everything else keeps the
+/// "unset" sentinel budget.
 ///
-/// generated members reference the seam vocabulary (`ContinuumIsland`,
-/// `HostCapability`, `IslandBudget`, `HotEffect`, `ContinuumDescriptor`,
-/// `ContinuumServerPath`) by name; the macro adds no runtime work the declaration
-/// does not state.
+/// diagnostics refuse (never `fatalError`): a non-struct target; a missing or
+/// malformed name; a declaration without `State`/`Action`; a body not declared
+/// `@HotBuilder`; wire-string imports; and imports without a budget.
 @attached(extension, conformances: ContinuumServerPath, names: arbitrary)
-public macro HotView(_ name: String) =
-	#externalMacro(module: "WebUIContinuumMacros", type: "HotViewMacro")
+public macro HotView(
+	_ name: String,
+	imports: [any HostCapability.Type] = [],
+	budget: IslandBudget? = nil
+) = #externalMacro(module: "WebUIContinuumMacros", type: "HotViewMacro")
 
 /// the class-vocabulary attribute: declares a component's class names once.
 ///
