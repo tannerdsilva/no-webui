@@ -36,6 +36,23 @@ struct WebUIContinuumPlugin: BuildToolPlugin {
         .filter { $0.hasSuffix(".swift") }
         .map { coreDir.appendingPathComponent($0) }
 
+        // the WebUI target is where the consumer surface (@HotView / @HotClass
+        // markers) lands; the capability lint scans it alongside the core.
+        let webUIDir = context.package.directoryURL
+            .appendingPathComponent("Sources")
+            .appendingPathComponent("WebUI")
+        let webUIInputs: [URL] = (try? FileManager.default.contentsOfDirectory(
+            atPath: webUIDir.path
+        )
+        .filter { $0.hasSuffix(".swift") }
+        .map { webUIDir.appendingPathComponent($0) }) ?? []
+
+        // the capability gate's cache stamp: the lint itself writes this after
+        // a clean scan, so a deliberate violation stops the build with the
+        // t2.6 message instead of being cached away.
+        let lintOutput = context.pluginWorkDirectoryURL
+            .appendingPathComponent("Capabilities.ok")
+
         return [
             .buildCommand(
                 displayName: "Generating the continuum class inventory from Sources/WebUIDesignSystemCore/",
@@ -47,7 +64,23 @@ struct WebUIContinuumPlugin: BuildToolPlugin {
                 ],
                 inputFiles: inputFiles,
                 outputFiles: [outputURL]
-            )
+            ),
+            // d2 t2.6: the capability-grants gate. runs on every build over the
+            // marker-bearing sources; a mismatch (`@HotView` imports something
+            // the host manifest does not grant) fails the build with the parent
+            // plan's exact message.
+            .buildCommand(
+                displayName: "Checking continuum capability grants against the host manifest (@HotView imports:)",
+                executable: tool.url,
+                arguments: [
+                    "lint",
+                    "--sources", coreDir.path,
+                    "--hotview-sources", webUIDir.path,
+                    "--touch", lintOutput.path,
+                ],
+                inputFiles: inputFiles + webUIInputs,
+                outputFiles: [lintOutput]
+            ),
         ]
     }
 }
