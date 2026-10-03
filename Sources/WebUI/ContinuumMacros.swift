@@ -26,8 +26,10 @@ import WebUICore
 /// - `static let continuumDescriptor` — name/grants/budget/class, greppable;
 /// - `struct FeedIsland: ContinuumIsland` — the island adapter; `reduce` forwards to
 ///   the author's `reduce`; `State`/`Action` alias the view's; `imports`/`budget`
-///   carry the declared values;
-/// - `@_expose(wasm, …)` shims — the t2.3 export names (`<name>_encode`/`<name>_decode`);
+///   carry the declared values; `_continuumEncode`/`_continuumDecode` carry the
+///   island-side codec entry points;
+/// - `@_expose(wasm, …)` shims — the t2.3 export names (`<name>_encode`/`<name>_decode`)
+///   on *global* functions (`@_expose` forbids non-global placement — verified);
 /// - `extension Feed: ContinuumServerPath` — the server adapter.
 ///
 /// the import/budget parameters type-check at the use site: `imports:` takes
@@ -41,6 +43,7 @@ import WebUICore
 /// malformed name; a declaration without `State`/`Action`; a body not declared
 /// `@HotBuilder`; wire-string imports; and imports without a budget.
 @attached(extension, conformances: ContinuumServerPath, names: arbitrary)
+@attached(peer, names: prefixed(_continuumEncode), prefixed(_continuumDecode))
 public macro HotView(
 	_ name: String,
 	imports: [any HostCapability.Type] = [],

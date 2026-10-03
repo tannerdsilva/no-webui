@@ -33,6 +33,16 @@ struct Feed {
 	static func reduce(state: inout State, action: Action) -> [HotEffect] { [] }
 }
 
+@_expose(wasm, "feed_encode")
+func _continuumEncodeFeed() -> [UInt8] {
+	Feed.FeedIsland._continuumEncode()
+}
+
+@_expose(wasm, "feed_decode")
+func _continuumDecodeFeed() -> [HotEffect] {
+	Feed.FeedIsland._continuumDecode()
+}
+
 extension Feed: ContinuumServerPath {
 	static let continuumDescriptor = ContinuumDescriptor(
 		name: "feed",
@@ -58,14 +68,13 @@ extension Feed: ContinuumServerPath {
 			Feed.reduce(state: &state, action: action)
 		}
 
-		// island exports. the @_expose names are the t2.3 ABI contract;
-		// bodies land with the island runtime slice (the frame-buffer op loop).
-		@_expose(wasm, "feed_encode")
-		static func _continuumEncode() -> [UInt8] {
+				// the island-side codec entry points. bodies land with the island
+		// runtime slice (the frame-buffer op loop); the t2.3 ABI shims are
+		// the peer-emitted globals below (@_expose forbids non-global placement).
+				static func _continuumEncode() -> [UInt8] {
 		    []
 		}
 
-		@_expose(wasm, "feed_decode")
 		static func _continuumDecode() -> [HotEffect] {
 		    []
 		}
@@ -95,6 +104,16 @@ struct Feed {
 	static func reduce(state: inout State, action: Action) -> [HotEffect] { [] }
 }
 
+@_expose(wasm, "feed_encode")
+func _continuumEncodeFeed() -> [UInt8] {
+	Feed.FeedIsland._continuumEncode()
+}
+
+@_expose(wasm, "feed_decode")
+func _continuumDecodeFeed() -> [HotEffect] {
+	Feed.FeedIsland._continuumDecode()
+}
+
 extension Feed: ContinuumServerPath {
 	static let continuumDescriptor = ContinuumDescriptor(
 		name: "feed",
@@ -120,14 +139,13 @@ extension Feed: ContinuumServerPath {
 			Feed.reduce(state: &state, action: action)
 		}
 
-		// island exports. the @_expose names are the t2.3 ABI contract;
-		// bodies land with the island runtime slice (the frame-buffer op loop).
-		@_expose(wasm, "feed_encode")
-		static func _continuumEncode() -> [UInt8] {
+				// the island-side codec entry points. bodies land with the island
+		// runtime slice (the frame-buffer op loop); the t2.3 ABI shims are
+		// the peer-emitted globals below (@_expose forbids non-global placement).
+				static func _continuumEncode() -> [UInt8] {
 		    []
 		}
 
-		@_expose(wasm, "feed_decode")
 		static func _continuumDecode() -> [HotEffect] {
 		    []
 		}
@@ -160,6 +178,16 @@ public struct Feed {
     public static let continuumClasses: [String] = ["feed-item", "feed-item__meta"]
 }
 
+@_expose(wasm, "feed_encode")
+func _continuumEncodeFeed() -> [UInt8] {
+	Feed.FeedIsland._continuumEncode()
+}
+
+@_expose(wasm, "feed_decode")
+func _continuumDecodeFeed() -> [HotEffect] {
+	Feed.FeedIsland._continuumDecode()
+}
+
 extension Feed: ContinuumServerPath {
 	public static let continuumDescriptor = ContinuumDescriptor(
 		name: "feed",
@@ -185,14 +213,13 @@ extension Feed: ContinuumServerPath {
 			Feed.reduce(state: &state, action: action)
 		}
 
-		// island exports. the @_expose names are the t2.3 ABI contract;
-		// bodies land with the island runtime slice (the frame-buffer op loop).
-		@_expose(wasm, "feed_encode")
-		public static func _continuumEncode() -> [UInt8] {
+				// the island-side codec entry points. bodies land with the island
+		// runtime slice (the frame-buffer op loop); the t2.3 ABI shims are
+		// the peer-emitted globals below (@_expose forbids non-global placement).
+				public static func _continuumEncode() -> [UInt8] {
 		    []
 		}
 
-		@_expose(wasm, "feed_decode")
 		public static func _continuumDecode() -> [HotEffect] {
 		    []
 		}

@@ -163,6 +163,10 @@ public enum HotTree: HotPrimitive, Equatable, Sendable {
         for child in current {
             if let id = child.elementID { currentIDs.insert(id) }
         }
+        // the sibling set both trees share: the only anchors that exist in the
+        // DOM when the batch applies (removals run first, insertions last), and
+        // the only siblings a `move` may be judged against.
+        let survivorIDs = Set(previousByID.keys).intersection(currentIDs)
 
         // 1. removals — an address gone from the current tree, or one whose
         //    node kind changed (removed here, reinserted below).
@@ -181,10 +185,10 @@ public enum HotTree: HotPrimitive, Equatable, Sendable {
             guard let id = child.elementID,
                   let old = previousByID[id], old.kind == child.kind else { continue }
             let previousNext = HotTree.nextSiblingID(
-                in: previous, after: previousIndex[id] ?? 0, survivingInto: currentIDs
+                in: previous, after: previousIndex[id] ?? 0, survivingInto: survivorIDs
             )
             let currentNext = HotTree.nextSiblingID(
-                in: current, after: index, survivingInto: currentIDs
+                in: current, after: index, survivingInto: survivorIDs
             )
             if previousNext != currentNext {
                 ops.append(.move(id, before: currentNext))
@@ -198,7 +202,7 @@ public enum HotTree: HotPrimitive, Equatable, Sendable {
             let kindChanged = previousByID[id].map { $0.kind != child.kind } ?? false
             guard previousByID[id] == nil || kindChanged else { continue }
             let anchor = HotTree.nextSiblingID(
-                in: current, after: index, survivingInto: Set(previousByID.keys)
+                in: current, after: index, survivingInto: survivorIDs
             )
             ops.append(.insert(parent: parent, before: anchor, html: child.render()))
         }

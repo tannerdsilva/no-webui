@@ -211,6 +211,58 @@ private func missingBudgetMessage(arguments: HotViewArguments) -> String? {
 	return "@HotView: missing budget: — a declaration that names host imports is a sized island; add budget: IslandBudget(maxBytes: 16_384, maxGzipBytes: 4_096) (the budget plugin pins it before ship)"
 }
 
+// MARK: - the plan (shared by both macro roles)
+
+/// everything both roles emit from: parsed + validated once, so the peer role
+/// (export shims) and the extension role (descriptor + adapter) cannot drift.
+private struct HotViewPlan {
+	let name: String
+	let typeName: String
+	let islandName: String
+	let islandQualifiedName: String
+	let className: String
+	let access: String
+	let grantsSource: String
+	let budgetSource: String
+}
+
+private func hotViewPlan(of node: AttributeSyntax, on structDecl: StructDeclSyntax) throws -> HotViewPlan {
+	let arguments = try hotViewArguments(of: node)
+	guard !arguments.name.isEmpty else {
+		throw MacroExpansionErrorMessage("@HotView requires a non-empty island name — as @HotView(\"feed\")")
+	}
+	if let message = missingBudgetMessage(arguments: arguments) {
+		throw MacroExpansionErrorMessage(message)
+	}
+	if let message = missingStateActionMessage(in: structDecl) {
+		throw MacroExpansionErrorMessage(message)
+	}
+	if let message = renderBuilderMessage(in: structDecl) {
+		throw MacroExpansionErrorMessage(message)
+	}
+	let typeName = structDecl.name.text
+	return HotViewPlan(
+		name: arguments.name,
+		typeName: typeName,
+		islandName: typeName + "Island",
+		islandQualifiedName: "\(typeName).\(typeName)Island",
+		className: siblingHotClasses(on: structDecl).joined(separator: " "),
+		access: structDecl.modifiers.contains { $0.name.text == "public" } ? "public " : "",
+		// the copied expressions; the sentinel budget is the wave-1 "unset" value
+		// the name-only signature has always emitted (additive).
+		grantsSource: arguments.imports?.trimmedDescription ?? "[]",
+		budgetSource: arguments.budget?.trimmedDescription ?? "IslandBudget(maxBytes: 0, maxGzipBytes: nil)"
+	)
+}
+
+/// the fragment appended to the shim prefixes: the compiler requires peer names
+/// at global scope to derive from the attached declaration's name (`prefixed(p)`
+/// covers `p` + the annotated name — verified against the compiler), so the
+/// export shims for `struct Feed` are `_continuumEncodeFeed`/`_continuumDecodeFeed`.
+private func shimName(_ prefix: String, _ typeName: String) -> String {
+	prefix + typeName
+}
+
 // MARK: - HotClassMacro
 
 /// `@HotClass("a", "b")` — declares a component's class vocabulary. the single
@@ -222,6 +274,7 @@ public struct HotClassMacro: MemberMacro {
 	public static func expansion(
 		of node: AttributeSyntax,
 		providingMembersOf declaration: some DeclGroupSyntax,
+		conformingTo protocols: [TypeSyntax],
 		in context: some MacroExpansionContext
 	) throws -> [DeclSyntax] {
 		guard let structDecl = declaration.as(StructDeclSyntax.self) else {
@@ -245,22 +298,28 @@ public struct HotClassMacro: MemberMacro {
 // MARK: - HotViewMacro
 
 /// `@HotView("feed", imports: […], budget: …)` — one declaration, both paths
-/// (server + island). the generated extension carries:
+/// (server + island). two roles, one plan:
 ///
-/// - `static let continuumDescriptor` — name/grants/budget/class, greppable;
-/// - `struct <Type>Island: ContinuumIsland` — the adapter. `reduce` forwards to the
-///   author's `reduce`; `State`/`Action` alias the view's; `imports`/`budget`
-///   carry the declared values;
-/// - `@_expose(wasm, …)` codec shims — the t2.3 export names (`<name>_encode` /
-///   `<name>_decode`; bodies land with the island runtime slice);
-/// - the `ContinuumServerPath` conformance — the server adapter.
+/// - the *extension* role emits `static let continuumDescriptor` (name/grants/
+///   budget/class, greppable), `struct <Type>Island: ContinuumIsland` (adapter:
+///   `reduce` forwards, `State`/`Action` alias, `imports`/`budget` carry the
+///   declared values, `_continuumEncode`/`_continuumDecode` are the island-side
+///   codec entry points — bodies land with the island runtime slice), and the
+///   `ContinuumServerPath` conformance;
+/// - the *peer* role emits the `@_expose(wasm, "<name>_encode"/"<name>_decode")`
+///   export shims as GLOBAL functions — `@_expose` rejects non-global placement
+///   (verified against the compiler), so the statics alone cannot carry it.
 ///
 /// generated members reference the seam vocabulary by name; the expansion is pure
 /// declaration text and adds no runtime work the declaration does not state. it
 /// synthesizes no `Codable` and never routes state through `JSONEncoder`/`Decoder`
 /// — the island path carries values with `JSONValue` + `HotOpCodec` (the
 /// embed-Codable gate, `c-to-d.md`).
-public struct HotViewMacro: ExtensionMacro {
+///
+/// the extension role owns the refusal diagnostics; the peer role validates
+/// through the same plan and emits nothing when the declaration is invalid (one
+/// clear error, no dangling shims).
+public struct HotViewMacro: ExtensionMacro, PeerMacro {
 
 	public static func expansion(
 		of node: AttributeSyntax,
@@ -274,61 +333,35 @@ public struct HotViewMacro: ExtensionMacro {
 				"@HotView can only be applied to a struct (the hot view); move the attribute onto the view type"
 			)
 		}
-		let arguments = try hotViewArguments(of: node)
-		guard !arguments.name.isEmpty else {
-			throw MacroExpansionErrorMessage(
-				"@HotView requires a non-empty island name — as @HotView(\"feed\")"
-			)
-		}
-		if let message = missingBudgetMessage(arguments: arguments) {
-			throw MacroExpansionErrorMessage(message)
-		}
-		if let message = missingStateActionMessage(in: declaration) {
-			throw MacroExpansionErrorMessage(message)
-		}
-		if let message = renderBuilderMessage(in: declaration) {
-			throw MacroExpansionErrorMessage(message)
-		}
-
-		let typeName = type.trimmedDescription
-		let islandName = typeName + "Island"
-		let className = siblingHotClasses(on: declaration).joined(separator: " ")
-		let access = structDecl.modifiers.contains { $0.name.text == "public" } ? "public " : ""
-
-		// the copied expressions; the sentinel budget is the wave-1 "unset" value
-		// the name-only signature has always emitted (additive).
-		let grantsSource = arguments.imports?.trimmedDescription ?? "[]"
-		let budgetSource = arguments.budget?.trimmedDescription
-			?? "IslandBudget(maxBytes: 0, maxGzipBytes: nil)"
+		let plan = try hotViewPlan(of: node, on: structDecl)
 
 		let extensionDecl: DeclSyntax =
 			"""
-			extension \(raw: typeName): ContinuumServerPath {
-			\t\(raw: access)static let continuumDescriptor = ContinuumDescriptor(
-			\t\tname: "\(raw: arguments.name)",
-			\t\tgrants: \(raw: grantsSource),
-			\t\tbudget: \(raw: budgetSource),
-			\t\tclassName: "\(raw: className)"
+			extension \(raw: plan.typeName): ContinuumServerPath {
+			\t\(raw: plan.access)static let continuumDescriptor = ContinuumDescriptor(
+			\t\tname: "\(raw: plan.name)",
+			\t\tgrants: \(raw: plan.grantsSource),
+			\t\tbudget: \(raw: plan.budgetSource),
+			\t\tclassName: "\(raw: plan.className)"
 			\t)
 
-			\t\(raw: access)struct \(raw: islandName): ContinuumIsland {
-			\t\t\(raw: access)typealias State = \(raw: typeName).State
-			\t\t\(raw: access)typealias Action = \(raw: typeName).Action
-			\t\t\(raw: access)static var name: String { "\(raw: arguments.name)" }
-			\t\t\(raw: access)static var imports: [any HostCapability.Type] { \(raw: grantsSource) }
-			\t\t\(raw: access)static var budget: IslandBudget { \(raw: budgetSource) }
+			\t\(raw: plan.access)struct \(raw: plan.islandName): ContinuumIsland {
+			\t\t\(raw: plan.access)typealias State = \(raw: plan.typeName).State
+			\t\t\(raw: plan.access)typealias Action = \(raw: plan.typeName).Action
+			\t\t\(raw: plan.access)static var name: String { "\(raw: plan.name)" }
+			\t\t\(raw: plan.access)static var imports: [any HostCapability.Type] { \(raw: plan.grantsSource) }
+			\t\t\(raw: plan.access)static var budget: IslandBudget { \(raw: plan.budgetSource) }
 
-			\t\t\(raw: access)static func reduce(state: inout State, action: Action) -> [HotEffect] {
-			\t\t\t\(raw: typeName).reduce(state: &state, action: action)
+			\t\t\(raw: plan.access)static func reduce(state: inout State, action: Action) -> [HotEffect] {
+			\t\t\t\(raw: plan.typeName).reduce(state: &state, action: action)
 			\t\t}
 
-			\t\t// island exports. the @_expose names are the t2.3 ABI contract;
-			\t\t// bodies land with the island runtime slice (the frame-buffer op loop).
-			\t\t@_expose(wasm, "\(raw: arguments.name)_encode")
-			\t\t\(raw: access)static func _continuumEncode() -> [UInt8] { [] }
+			\t\t// the island-side codec entry points. bodies land with the island
+			// runtime slice (the frame-buffer op loop); the t2.3 ABI shims are
+			// the peer-emitted globals below (@_expose forbids non-global placement).
+			\t\t\(raw: plan.access)static func _continuumEncode() -> [UInt8] { [] }
 
-			\t\t@_expose(wasm, "\(raw: arguments.name)_decode")
-			\t\t\(raw: access)static func _continuumDecode() -> [HotEffect] { [] }
+			\t\t\(raw: plan.access)static func _continuumDecode() -> [HotEffect] { [] }
 			\t}
 			}
 			"""
@@ -337,5 +370,36 @@ public struct HotViewMacro: ExtensionMacro {
 			throw MacroExpansionErrorMessage("@HotView could not synthesize the island + server adapter extension")
 		}
 		return [parsed]
+	}
+
+	public static func expansion(
+		of node: AttributeSyntax,
+		providingPeersOf declaration: some DeclSyntaxProtocol,
+		in context: some MacroExpansionContext
+	) throws -> [DeclSyntax] {
+		// the extension role owns the refusal diagnostics; an invalid declaration
+		// produces no peers (the build still fails once, with the fix hint).
+		guard let structDecl = declaration.as(StructDeclSyntax.self),
+			let plan = try? hotViewPlan(of: node, on: structDecl)
+		else {
+			return []
+		}
+		let encodeName = shimName("_continuumEncode", plan.typeName)
+		let decodeName = shimName("_continuumDecode", plan.typeName)
+		let encode: DeclSyntax =
+			"""
+			@_expose(wasm, "\(raw: plan.name)_encode")
+			func \(raw: encodeName)() -> [UInt8] {
+				\(raw: plan.islandQualifiedName)._continuumEncode()
+			}
+			"""
+		let decode: DeclSyntax =
+			"""
+			@_expose(wasm, "\(raw: plan.name)_decode")
+			func \(raw: decodeName)() -> [HotEffect] {
+				\(raw: plan.islandQualifiedName)._continuumDecode()
+			}
+			"""
+		return [encode, decode]
 	}
 }
