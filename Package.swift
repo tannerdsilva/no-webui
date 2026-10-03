@@ -137,6 +137,7 @@ let package = Package(
             name: "WebUI",
             dependencies: [
                 "WebUICore",
+                "WebUIContinuumMacros",
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "RAW", package: "rawdog"),
                 .product(name: "RAW_sha256", package: "rawdog"),
@@ -293,6 +294,19 @@ let package = Package(
         // ── @Theme Macro ────────────────────────────────────────
         .macro(
             name: "WebUIDesignSystemMacros",
+            dependencies: [
+                .product(name: "SwiftSyntax", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
+                .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
+            ]
+        ),
+
+        // ── @HotView / @HotClass Macros (the continuum surface) ─
+        // host-compiled compiler plugin (swift-syntax, already vendored above).
+        // its declarations live inert in `WebUI`; the implementation must never
+        // enter a wasm-compiled chain — a compiler plugin cannot cross-build.
+        .macro(
+            name: "WebUIContinuumMacros",
             dependencies: [
                 .product(name: "SwiftSyntax", package: "swift-syntax"),
                 .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
@@ -609,6 +623,22 @@ let package = Package(
             dependencies: [
                 "WebUIDesignSystem",
                 "WebUIDesignSystemMacros",
+                .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxMacroExpansion", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxMacrosGenericTestSupport", package: "swift-syntax"),
+                .product(name: "SwiftParser", package: "swift-syntax"),
+                .product(name: "SwiftDiagnostics", package: "swift-syntax"),
+            ]
+        ),
+        // the continuum surface expansion suite: string-based expansion tests only
+        // in wave 1 — generated members are asserted by name/shape but never
+        // compiled (lane C's vocabulary is unmerged). the compiled end-to-end
+        // fixture and the hand-written-equivalent rule join in wave 2.
+        .testTarget(
+            name: "WebUIContinuumMacroTests",
+            dependencies: [
+                "WebUI",
+                "WebUIContinuumMacros",
                 .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
                 .product(name: "SwiftSyntaxMacroExpansion", package: "swift-syntax"),
                 .product(name: "SwiftSyntaxMacrosGenericTestSupport", package: "swift-syntax"),
