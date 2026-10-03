@@ -53,7 +53,14 @@ struct WebUIBudgetPlugin: CommandPlugin {
     /// the theming work (T8/T9) will add tokens and therefore grow the sheet, which should
     /// trip this gate and force a deliberate re-pin rather than a silent drift.
     private static let ceilings: [Ceiling] = [
-        Ceiling(surface: "engine", label: "webui-engine.js", raw: 46_000, gz: 11_600),
+        // re-pinned d0 (t0.4, 2026-10-03): the engine grew to 52,433 raw /
+        // 12,744 gz after the oct-2 wire work (lanes' seam growth), tripping
+        // the former 46,000 / 11,600 pin — the mechanism working as designed.
+        // measured at the d0 bench (pre-d1), so the appreciable d1 engine
+        // bytes (op apply, coalescer, echo) get a deliberate headroom and a
+        // second deliberate trip for the next growth spur rather than an
+        // immediate re-trip on landing.
+        Ceiling(surface: "engine", label: "webui-engine.js", raw: 55_000, gz: 13_600),
         Ceiling(surface: "sheet", label: "design-system.css", raw: 335_000, gz: 49_500),
         Ceiling(surface: "shell", label: "webui-shell.js", raw: 1_700, gz: 650),
     ]

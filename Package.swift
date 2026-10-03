@@ -81,6 +81,14 @@ let package = Package(
             name: "WebUIShowcaseServer",
             targets: ["WebUIShowcaseServer"]
         ),
+        .executable(
+            name: "WebUIBench",
+            targets: ["WebUIBench"]
+        ),
+        .executable(
+            name: "WebUIContinuumTool",
+            targets: ["WebUIContinuumTool"]
+        ),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-log.git", "1.0.0"..<"2.0.0"),
@@ -130,6 +138,7 @@ let package = Package(
             ],
             plugins: [
                 "WebUIAssetPlugin",
+                "WebUIContinuumPlugin",
             ]
         ),
         // the capability-island core: same-swift logic that compiles to a
@@ -255,6 +264,11 @@ let package = Package(
             name: "WebUIIconTool"
         ),
 
+        // ── Continuum Tool (class inventory + build lint, d1 t1.3) ──
+        .executableTarget(
+            name: "WebUIContinuumTool"
+        ),
+
         // ── Wasm Tool (validates + hashes the prebuilt client artifact) ──
         .executableTarget(
             name: "WebUIWasmTool",
@@ -292,6 +306,21 @@ let package = Package(
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOHTTP1", package: "swift-nio"),
                 .product(name: "NIOCore", package: "swift-nio"),
+                .product(name: "NIOWebSocket", package: "swift-nio"),
+            ]
+        ),
+        // ── Bench host (desktop-grade measurement fixtures, d0) ──
+        .executableTarget(
+            name: "WebUIBench",
+            dependencies: [
+                "WebUI",
+                "WebUIChart",
+                "WebUICore",
+                "WebUIDesignSystem",
+                .product(name: "Logging", package: "swift-log"),
+                .product(name: "NIOCore", package: "swift-nio"),
+                .product(name: "NIOHTTP1", package: "swift-nio"),
+                .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOWebSocket", package: "swift-nio"),
             ]
         ),
@@ -380,6 +409,16 @@ let package = Package(
             capability: .buildTool(),
             dependencies: [
                 .target(name: "WebUIIconTool"),
+            ]
+        ),
+        // the static half of the continuum class machinery: scans the
+        // design-system core sources every build and emits
+        // `Continuum+Generated.swift` into the WebUI target.
+        .plugin(
+            name: "WebUIContinuumPlugin",
+            capability: .buildTool(),
+            dependencies: [
+                .target(name: "WebUIContinuumTool"),
             ]
         ),
         // the file half of the asset toolkit: a target shipping `Assets/webui-assets.json`
