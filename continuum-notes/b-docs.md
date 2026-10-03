@@ -89,8 +89,39 @@ wired, the engine stays conservative (its seed is harmless); the byte counts
 the generated asset ships are reported on every build:
 `[WebUIContinuumPlugin] engine slice: N bytes, sha <stamp>`.
 
-### bench tooling contract (lanes consuming d0 numbers)
+## wave-2 bench re-run (merged tree; base `8eac8ae`)
 
+re-ran the d0 harness once on the merged tree (`node designer/continuum-bench.mjs`
+per bench, lane port 9206; loopback + throttled per the recipe-6 gate). all
+five benches green (`feed` 7/7, `grid` 5/5, `dashboard` 5/5, `editor` 7/7,
+`windowed` 5/5 — 29/29 precondition assertions).
+
+| metric | d0 (recorded) | wave-2 (one run) | delta |
+|---|---|---|---|
+| tti · feed@10k | 102 ms / 709 ms | 138.2 / 707.5 | loopback +36 ms (noise-tier) |
+| tti · grid 500×10 | 43 / 784 | 42.9 / 784.4 | — |
+| tti · dashboard 8×100 | 97 / 762 | 99.3 / 783.1 | — |
+| tti · editor | 23 / 756 | 24.1 / 767.4 | — |
+| scroll fps · feed 10k | p95 62.4 / 61.5 | 62.4 / 62.4 | — |
+| echo settled · editor | 311 ms / 368 ms | **448.1 / 434.9** | **material: +137 loopback, +67 throttled** |
+| append-100 replace | 1,501,978 B / 46 ms | 1,501,978 B / 71.5 ms | bytes —; rt within noise |
+| append-100 op | 19,531 B / 33 ms | 19,531 B / 32.5 ms | — |
+| grid sort | 81,920 B / 32 / 86 ms | 81,920 B / 32.2 / 78.6 | — |
+| dashboard tick | 278,399 B / 67 / 293 | 278,399 B / 65.4 / 325 | — |
+| window step naive/ops | 8,694 B / 2,191 B | 8,694 B / 2,191 B | bytes — (rt 0.8 / 0.8 → 10.5 / 4.8 throttled) |
+
+the one number that moved materially is **editor echo settled**, and it moved
+the *wrong way* (slower) despite lane E's t1.4 local echo landing in the merged
+tree. likely causes, in order: (a) the editor bench's echo-settled recipe
+measures the authoritative-settle edge, which the merged engine now delays
+behind local-echo + reconcile rather than a single server round trip — the
+metric's meaning may have shifted with the feature, or (b) one noisy run
+(repeat=1). flagged to lane E at i2: re-read the echo recipe against t1.4's
+contract before treating +137 ms as a regression. everything conclusion-bearing
+(the 77× replace/op byte gap, the 4× window-step byte gap, scroll p95 62 ms,
+throttled dominance) is unchanged at these scales.
+
+### bench tooling contract (lanes consuming d0 numbers)
 - `WebUIBench` — raw NIO host on `--port`/`WEBUI_BENCH_PORT` (default 9130;
   measure on lane-B 9200–9219). routes: `/bench/feed[?items=&windowed=&ops=]`,
   `/bench/grid?rows=&cols=`, `/bench/dashboard?series=&points=`,
