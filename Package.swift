@@ -85,6 +85,10 @@ let package = Package(
             name: "WebUIBench",
             targets: ["WebUIBench"]
         ),
+        .executable(
+            name: "WebUIContinuumTool",
+            targets: ["WebUIContinuumTool"]
+        ),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-log.git", "1.0.0"..<"2.0.0"),
@@ -134,6 +138,7 @@ let package = Package(
             ],
             plugins: [
                 "WebUIAssetPlugin",
+                "WebUIContinuumPlugin",
             ]
         ),
         // the capability-island core: same-swift logic that compiles to a
@@ -257,6 +262,11 @@ let package = Package(
         // ── Icon Tool (svg iconography generator + linter) ───────
         .executableTarget(
             name: "WebUIIconTool"
+        ),
+
+        // ── Continuum Tool (class inventory + build lint, d1 t1.3) ──
+        .executableTarget(
+            name: "WebUIContinuumTool"
         ),
 
         // ── Wasm Tool (validates + hashes the prebuilt client artifact) ──
@@ -399,6 +409,16 @@ let package = Package(
             capability: .buildTool(),
             dependencies: [
                 .target(name: "WebUIIconTool"),
+            ]
+        ),
+        // the static half of the continuum class machinery: scans the
+        // design-system core sources every build and emits
+        // `Continuum+Generated.swift` into the WebUI target.
+        .plugin(
+            name: "WebUIContinuumPlugin",
+            capability: .buildTool(),
+            dependencies: [
+                .target(name: "WebUIContinuumTool"),
             ]
         ),
         // the file half of the asset toolkit: a target shipping `Assets/webui-assets.json`
