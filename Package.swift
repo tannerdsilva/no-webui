@@ -570,5 +570,21 @@ let package = Package(
                 .product(name: "SwiftDiagnostics", package: "swift-syntax"),
             ]
         ),
+        // the continuum surface expansion suite: string-based expansion tests only
+        // in wave 1 — generated members are asserted by name/shape but never
+        // compiled (lane C's vocabulary is unmerged). the compiled end-to-end
+        // fixture and the hand-written-equivalent rule join in wave 2.
+        .testTarget(
+            name: "WebUIContinuumMacroTests",
+            dependencies: [
+                "WebUI",
+                "WebUIContinuumMacros",
+                .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxMacroExpansion", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxMacrosGenericTestSupport", package: "swift-syntax"),
+                .product(name: "SwiftParser", package: "swift-syntax"),
+                .product(name: "SwiftDiagnostics", package: "swift-syntax"),
+            ]
+        ),
     ]
 )
