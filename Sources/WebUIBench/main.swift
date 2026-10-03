@@ -121,8 +121,9 @@ func renderFeedPage(state: BenchState, router: EventRouter, items: Int, windowed
 							v.feedCount += 100
 							return v.feedCount
 						}
-						// today's model: one whole-region replace of the list.
-						return [FragmentUpdate(id: "feed-list", html: rowsHTML(count: n))]
+						// today's model: one whole-region replace of the list,
+						// re-emitting the container so the id anchor survives.
+						return [FragmentUpdate(id: "feed-list", html: rowsRegionHTML(count: n))]
 					})
 					WebUIButton("Append 100 (op)", variant: .secondary, size: .md, id: "feed-append-op", onTap: { _ in
 						// the op-shaped interaction: emit 100 single-row
@@ -210,7 +211,16 @@ func routedNextWindowControl(state: BenchState, opsVariant: Bool) -> String {
 	return "<button id=\"feed-window-next\" style=\"display:none\"\(attrs)></button>"
 }
 
-/// the full detached-list html (naive append-100: one region replace).
+/// the full detached-list html (naive append-100: one region replace). the
+/// payload re-emits the container div — `replaceElement` swaps the element
+/// WHOLESALE (parentNode.replaceChild), so a bare-rows payload would delete
+/// the region's own id anchor and kill every subsequent patch on it.
+func rowsRegionHTML(count: Int) -> String {
+	"<div id=\"feed-list\" class=\"feed-list\">\(rowsHTML(count: count))</div>"
+}
+
+/// the bare rows (used under the ops path, where the container is stable and
+/// rows are appended into it).
 func rowsHTML(count: Int) -> String {
 	var html = ""
 	for i in 0..<count { html += feedRowHTML(i) }
@@ -292,12 +302,13 @@ func renderDashboardPage(state: BenchState, router: EventRouter, series: Int, po
 			Heading("Dashboard bench", level: .h1)
 			Div(class: "bench__toolbar") {
 				WebUIButton("Tick", variant: .primary, size: .md, id: "dash-tick", onTap: { _ in
-					// today's model: one whole-region replace of the chart wall.
+					// today's model: one whole-region replace of the chart wall
+					// (re-emitting the container so the id anchor survives).
 					let t = state.withLock { v in
 						v.tick += 1
 						return v.tick
 					}
-					return [FragmentUpdate(id: "dash-wall", html: chartWallHTML(series: series, points: points, tick: t))]
+					return [FragmentUpdate(id: "dash-wall", html: chartWallRegionHTML(series: series, points: points, tick: t))]
 				})
 			}
 			Div(id: "dash-wall", class: "dash-wall") {
@@ -319,6 +330,13 @@ func chartWallHTML(series: Int, points: Int, tick: Int) -> String {
 		html += Chart(marks, config: ChartConfig(), ariaLabel: "series \(s)").render()
 	}
 	return html
+}
+
+/// the chart wall wrapped in its container (the replace path re-emits the
+/// region's own div — replaceElement swaps the element wholesale, so a bare
+/// payload would delete the `dash-wall` id anchor).
+func chartWallRegionHTML(series: Int, points: Int, tick: Int) -> String {
+	"<div id=\"dash-wall\" class=\"dash-wall\">\(chartWallHTML(series: series, points: points, tick: tick))</div>"
 }
 
 // ── editor ────────────────────────────────────────────────────────────────
