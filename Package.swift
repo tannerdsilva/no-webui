@@ -81,13 +81,19 @@ let package = Package(
             name: "WebUIShowcaseServer",
             targets: ["WebUIShowcaseServer"]
         ),
-        .executable(
+.executable(
             name: "WebUIBench",
             targets: ["WebUIBench"]
         ),
         .executable(
             name: "WebUIContinuumTool",
             targets: ["WebUIContinuumTool"]
+        ),
+        // the stateful probe capability island (DESKTOP_GRADE t2.5) — built
+        // for wasm via the wasm-island plugin; the host product is inert.
+        .executable(
+            name: "WebUIProbeIsland",
+            targets: ["WebUIProbeIsland"]
         ),
     ],
     dependencies: [
@@ -154,6 +160,13 @@ let package = Package(
         ),
         .executableTarget(
             name: "WebUIValidateIsland",
+            dependencies: [
+                "WebUIIslandCore",
+                "WebUISharedCore",
+            ]
+        ),
+        .executableTarget(
+            name: "WebUIProbeIsland",
             dependencies: [
                 "WebUIIslandCore",
                 "WebUISharedCore",
@@ -573,6 +586,14 @@ let package = Package(
             name: "WebUIIslandCoreTests",
             dependencies: [
                 "WebUIIslandCore",
+                "WebUISharedCore",
+            ]
+        ),
+        // the seam vocabulary + the hand-rolled scalar-clean op-stream codec
+        // (record format v1, DESKTOP_GRADE §t2.3) — round-trips + edge cases.
+        .testTarget(
+            name: "WebUISharedCoreTests",
+            dependencies: [
                 "WebUISharedCore",
             ]
         ),
