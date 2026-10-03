@@ -81,6 +81,10 @@ let package = Package(
             name: "WebUIShowcaseServer",
             targets: ["WebUIShowcaseServer"]
         ),
+        .executable(
+            name: "WebUIBench",
+            targets: ["WebUIBench"]
+        ),
     ],
     dependencies: [
         .package(url: "https://github.com/apple/swift-log.git", "1.0.0"..<"2.0.0"),
@@ -292,6 +296,21 @@ let package = Package(
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOHTTP1", package: "swift-nio"),
                 .product(name: "NIOCore", package: "swift-nio"),
+                .product(name: "NIOWebSocket", package: "swift-nio"),
+            ]
+        ),
+        // ── Bench host (desktop-grade measurement fixtures, d0) ──
+        .executableTarget(
+            name: "WebUIBench",
+            dependencies: [
+                "WebUI",
+                "WebUIChart",
+                "WebUICore",
+                "WebUIDesignSystem",
+                .product(name: "Logging", package: "swift-log"),
+                .product(name: "NIOCore", package: "swift-nio"),
+                .product(name: "NIOHTTP1", package: "swift-nio"),
+                .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOWebSocket", package: "swift-nio"),
             ]
         ),
