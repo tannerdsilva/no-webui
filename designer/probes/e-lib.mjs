@@ -27,8 +27,9 @@ function encodeWsFrame(text) {
 
 // minimal RFC6455 server: accepts the upgrade, echoes frames unbuffered, replies
 // pong to ping so the engine's ping loop never sees a timeout.
-export async function startProbeServer(port, bodyHtml, { enginePath = "designer/assets/webui-engine.js", wsPath = "/ws", config = {} } = {}) {
+export async function startProbeServer(port, bodyHtml, { enginePath = "designer/assets/webui-engine.js", wsPath = "/ws", config = {}, routes = {} } = {}) {
   const engine = readFileSync(enginePath, "utf8");
+  const extraRoutes = routes || {};
 
   const sockets = new Set();
   const wsCounters = new Map();
@@ -58,6 +59,7 @@ export async function startProbeServer(port, bodyHtml, { enginePath = "designer/
   <div id="moveset"></div>
   <div id="echo"></div>
   <div id="log"></div>
+  ${bodyHtml || ""}
 </div>
 <script>${engine}</script>
 <script>
@@ -71,6 +73,12 @@ if (document.readyState !== "loading") { window.__ready(); }
 </body></html>`;
       res.writeHead(200, { "Content-Type": "text/html" });
       res.end(html);
+      return;
+    }
+    const extra = extraRoutes[req.url];
+    if (extra) {
+      res.writeHead(200, { "Content-Type": extra.type || "application/octet-stream" });
+      res.end(extra.body);
       return;
     }
     res.writeHead(404);

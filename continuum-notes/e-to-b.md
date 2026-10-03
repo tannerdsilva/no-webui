@@ -40,3 +40,13 @@ your handoff so the reconciler wires it.
 ## 4. lane ports used (do not collide)
 
 e-ops on :9260, e-echo on :9261 (within the 9260-9279 lane block).
+
+## 5. wave-2 handoff — the shipped-surface budget needs its deliberate re-pin
+
+the engine grew to **68,188 raw / 16,185 gz** on the task/e-engine wave-2 head
+(from 56,818 / 13,602 at i1). the growth is the seam's engine half (typed host
+import table, events-in routing, the take-ops decoder + drain, the state channel,
+runtime defense-in-depth) — the plugin comment's anticipated "second trip". the i1
+pin (60,000 / 14,500) will trip at i2; leave the re-pin to the orchestrator/B at
+integration (do not edit the plugin in this branch). ~5-6% headroom over the
+measured numbers is a reasonable next pin.

@@ -101,3 +101,59 @@ overlay. a wired variant asserts frames still arrive at the debounce edge.
   (predictions are html-based replaces).
 - engine bytes stay comment-free (ProseGuard scans them); the policy tables
   above are the documentation home.
+
+---
+
+## wave 2 — the island seam, engine half (t2.1, t2.2, t2.3, t2.4, t2.6)
+
+### the open wire contracts
+
+- `webui_store_get` / `webui_store_set` / the `webui_frame_tick` call-back entry are
+  the wire-table gaps lane E resolved conservatively; the full contract is in
+  `continuum-notes/e-to-c.md` (wave 2).
+- region descriptor for event routing: `data-webui-island-events='["keydown","click"]'`.
+
+### engine behavior (webui-engine.js)
+
+- **typed host imports (t2.1).** `buildImports` keys on the import name; known set is
+  `webui_log/now_ms/raf/store_get/store_set/surface`. unknown `webui_*` → throw
+  (t2.6); other namespaces keep the `() => 0` stub.
+- **events in (t2.2).** delegated events bubbling inside a region whose descriptor
+  lists the kind are delivered to `webui_on_event(ptr, len)` as
+  `{type, key, data}` (the server's extract shape); the island owns those events
+  (no server round-trip, no legacy region re-render for subscribed regions).
+- **op stream (t2.3).** `webui_take_ops() -> u32` per the i1 freeze: next batch byte
+  length in the frame buffer, 0 = empty, records back-to-back record-v1
+  (c-to-e.md), drain until 0, batch copied out before the next call, length cap
+  262144, malformed record stops the drain with one warning. ops apply through the
+  fragment patcher's `applyHotOp` (attr allowlist enforced; insert sanitized once).
+- **state channel (t2.4).** save map keyed `name|regionId`; saves on `replace` of a
+  region root (pre-replace hook) and on ws reconnect (`webui:connected`); restores
+  on every remount via `webui_state_restore` (engine writes into the input buffer).
+- **defense in depth (t2.6).** unknown host import throws; every island export call
+  is try/catch'd; `_start` failures degrade; missing artifact (404) → unmapped;
+  page stays server-rendered and the engine instance stays alive in every failure
+  path (probe-verified).
+
+### probes
+
+- `designer/probes/e-island-decoder.mjs` — decoder + drain as pure functions;
+  crafted byte sequences incl. invalid utf-8 → U+FFFD, reserved version/opcode,
+  truncation (19/19).
+- `designer/probes/e-island-wasm.mjs` — a loop-free synthetic wasm island
+  (hand-assembled; bulk memory.copy) declaring the full host import set and the
+  merged probe surface + `webui_take_ops` + `webui_frame_tick`; `buildBogusWasm`
+  for the unknown-import module.
+- `designer/probes/e-island-e2e.mjs` — the engine's real loader/instantiate path
+  against the synthetic island in a real browser (ports 9262): mount, unknown
+  import + 404 degrade, keydown/click events → `{type,key,data}`, op drain applied,
+  clock + rAF + store_set/get, resource replace → save → restore → count continues,
+  ws reconnect keeps regions mounted (17/17).
+
+### budget
+
+the engine grew to **68,188 raw / 16,185 gz** (measured on this branch head) from
+56,818 / 13,602 at i1. this is the expected wave-2 second trip of the shipped-surface
+gate — the mechanism working as designed. the i1 pin (60,000 / 14,500) needs a
+deliberate re-pin at i2 (orchestrator/B decision, ~5-6% headroom over these numbers).
+
