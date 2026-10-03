@@ -660,10 +660,16 @@ window.WebUIEngine = (function () {
     function enqueue(fragments) {
       for (var i = 0; i < fragments.length; i++) {
         var f = fragments[i];
+        var op = (f.op === undefined || f.op === null) ? 'replace' : String(f.op);
         var coalesced = false;
-        if (f.op !== 'append') {
-          for (var j = 0; j < queued.length; j++) {
-            if (queued[j].id === f.id) { queued[j] = f; coalesced = true; break; }
+        if (op !== 'append' && op !== 'remove') {
+          for (var j = queued.length - 1; j >= 0; j--) {
+            var queuedOp = (queued[j].op === undefined || queued[j].op === null) ? 'replace' : String(queued[j].op);
+            if (queued[j].id === f.id && queuedOp !== 'remove') {
+              queued[j] = f;
+              coalesced = true;
+              break;
+            }
           }
         }
         if (!coalesced) { queued.push(f); }
@@ -689,7 +695,7 @@ window.WebUIEngine = (function () {
       if (mm && mm('(prefers-reduced-motion: reduce)').matches) return false;
       for (var i = 0; i < fragments.length; i++) {
         var f = fragments[i];
-        if (f && (f.op === 'append' || f.op === 'text')) return false;
+        if (f && (f.op === 'append' || f.op === 'text' || f.op === 'remove' || f.op === 'attr' || f.op === 'move')) return false;
         if (f && f.transition === false) return false;
         var el = f && f.id ? document.getElementById(f.id) : null;
         if (el && el.closest && el.closest('[data-webui-transition="off"]')) return false;

@@ -182,8 +182,73 @@ if (optState.was && optState.still && optWarns.length === 1) {
   bad(`optimistic: was=${optState.was} still=${optState.still} warns=${optWarns.length}`);
 }
 
+
+// ---- t1.2: 50 mixed ops → expected apply counts per the coalescer policy ----
+// build dedicated targets (all present) so every applied op counts.
+const coalesceFixture = await page.evaluate(() => {
+  const chip = (id, label) => {
+    const el = document.createElement("span");
+    el.id = id;
+    el.className = "chip";
+    el.textContent = label;
+    return el;
+  };
+  document.getElementById("coalesce-root")?.remove();
+  const root = document.createElement("div");
+  root.id = "coalesce-root";
+  document.body.appendChild(root);
+  root.appendChild(chip("t-a", "TA"));
+  root.appendChild(chip("t-b2", "TB"));
+  root.appendChild(chip("t-d", "TD"));
+  for (let i = 1; i <= 10; i++) root.appendChild(chip("x" + i, "X" + i));
+  const moves = document.getElementById("moveset");
+  moves.innerHTML = "";
+  for (let i = 1; i <= 4; i++) moves.appendChild(chip("m" + i, "M" + i));
+  window.__coalesceApplied = 0;
+  return true;
+});
+const OPS = [];
+const push = (f) => OPS.push(f);
+// 10 text ops on one target -> collapse to 1
+for (let i = 1; i <= 10; i++) push({ id: "t-a", op: "text", text: "ta" + i });
+// 8 attr ops on one target -> collapse to 1
+for (let i = 1; i <= 8; i++) push({ id: "t-b2", op: "attr", name: "data-i", value: "b" + i });
+// 6 move ops on one target -> collapse to 1
+for (let i = 1; i <= 6; i++) push({ id: "m2", op: "move", before: i % 2 ? "m1" : "m3" });
+// 6 replace ops on one target -> collapse to 1
+for (let i = 1; i <= 6; i++) push({ id: "t-d", op: "replace", html: '<span id="t-d" class="chip">D' + i + "</span>" });
+// 10 removes on distinct existing ids -> never coalesce (10)
+for (let i = 1; i <= 10; i++) push({ id: "x" + i, op: "remove" });
+// 10 appends into the list with distinct child ids -> never coalesce (10)
+for (let i = 1; i <= 10; i++) push({ id: "list", op: "append", html: '<span id="a' + i + '" class="chip">A' + i + "</span>" });
+// total ops: 10+8+6+6+10+10 = 50
+const EXPECTED = 1 + 1 + 1 + 1 + 10 + 10; // 24 survives
+
+const coalesceResult = await page.evaluate(({ ops, expected }) => {
+  const inst = window.WebUIEngine._getInstance();
+  window.__coalesceApplied = 0;
+  window.WebUIEngine.on.afterPatch((nodes) => { window.__coalesceApplied += nodes.length; });
+  inst.patch(ops, 500);
+  return { appliedDelta: window.__coalesceApplied, expected };
+}, { ops: OPS, expected: EXPECTED });
+
+const coalesceDom = await page.evaluate(() => ({
+  ta: document.getElementById("t-a")?.textContent ?? null,
+  tb: document.getElementById("t-b2")?.getAttribute("data-i") ?? null,
+  removals: ["x1", "x2", "x3", "x4", "x5", "x6", "x7", "x8", "x9", "x10"].filter((id) => !document.getElementById(id)).length,
+  appends: ["a1", "a2", "a3", "a4", "a5", "a6", "a7", "a8", "a9", "a10"].filter((id) => !!document.getElementById(id)).length,
+}));
+
+if (coalesceResult.appliedDelta === EXPECTED) {
+  ok(`coalescer: 50 mixed ops → exactly ${EXPECTED} applies (${coalesceResult.appliedDelta} observed)`);
+} else {
+  bad(`coalescer: expected ${EXPECTED} applies, observed ${coalesceResult.appliedDelta}`);
+}
+if (coalesceDom.ta === "ta10" && coalesceDom.tb === "b8" && coalesceDom.removals === 10 && coalesceDom.appends === 10) {
+  ok("coalescer: newest-per-target won (ta10/b8), 10 removals applied, 10 appends applied");
+} else {
+  bad(`coalescer DOM: ta=${coalesceDom.ta} tb=${coalesceDom.tb} removals=${coalesceDom.removals} appends=${coalesceDom.appends}`);
+}
+
 await browser.close();
 close();
-
-console.log(`\ne-ops: ${pass} passed, ${fail} failed`);
-process.exit(fail === 0 ? 0 : 1);
