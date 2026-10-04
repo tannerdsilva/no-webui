@@ -337,4 +337,126 @@ data:{data,isComposing}}`; a click in a key-only region is NOT delivered
   i2 pin 72,000/17,000 — the arc budget authorizes it; the i3 re-pin
   (~74,500/18,000 advice above) absorbs both.
 
+---
+
+## CONTINUUM_DX wave 2 (lane E) — the A1 overscan ruling, DX-6e, the template + acceptance, DX-4e wiring
+
+commits `7d3d4e8` (A1 overscan), `d517cc7` (DX-6e), `b308484` (templates/app +
+designer/dx-acceptance.mjs) on `task/e-engine`, base `95ba7b7`.
+
+### A1 — the overscan-unit adjudication (binding ruling, applied engine-side)
+
+i1 recorded: `data-viewport-overscan` reads as a **FACTOR** (window = visible ×
+factor, `ViewportSizing` in `Viewport.swift:29,46-48`), `data-webui-overscan`
+stays **ABSOLUTE rows**. the engine now tracks the two spellings separately
+(`w.ovA`/`w.ovF` in `createWindowManager`) and `wnd()` converts per-side:
+
+```
+vis = max(1, ceil(v / w.h))
+per-side = ovA>0 ? ovA : (ovF>0 ? ceil(vis*(ovF-1)/2) : vis)   // factor 1 -> 0
+```
+
+`e-windowed.mjs` now DISCRIMINATES at mid-scroll (row ~1000 of 2000):
+`data-viewport-overscan=2` windows to **12-13** (vis=6 at 200px/37px, per-side
+ceil(6×1/2)=3; the window band's ceil((t+v)/h) makes it 13 on this fixture),
+`data-webui-overscan=2` (new `dx-a` container) windows to **10-11**, and the
+undeclared default band stays **16-20** (one visible band per side ≈ 18). the
+ranges were tightened to reject unit conflation in both directions (an engine
+that lumped the spellings fails one of `dx-c`/`dx-a`). the stale `[8,13] ~=
+visible+2+2` assertion and comment are gone. 31/31.
+
+### DX-6e — the engine consumes islands[] (content-addressed URLs)
+
+`loadIsland` chains on the shared manifest promise (`manifestReady`) and
+resolves the URL from `islandUrlMap[name]` (populated from `/ui/
+continuum-manifest.json`'s `islands[]` `{name,url}` entries) with the
+name-convention `/__assets/webui-<name>.wasm` fallback (v1 payload / 404).
+`e-manifest.mjs` extended to v1+v2+404: the allowlist replace semantics per
+version are unchanged, and the feed region now mounts through the
+content-addressed URL in v2 (the convention URL is NOT hit) vs the convention
+fallback in v1/404. **20/20** (was 10/10). regressions green: e-island-e2e
+17/17, e-island-e2e-real 21/21, e-input-desc 7/7.
+
+### DX-4e wiring — folded into the acceptance path
+
+the registry → routes → view primitive chain is now closed end-to-end by the
+template: the app serves a **v2 manifest with `islands[]`** (content-addressed
+URL) + the artifact at both URLs, and the acceptance asserts the region loaded
+_via the content-addressed URL_ — proving DX-6e + both-discovery-spellings
+(DX-7e, W1) on a real consumer page. the server-side built-in route stays B's
+DX-6b (WebUIServer is B-owned); the bench string-replace lease adapter is B's
+to retire.
+
+### templates/app/ + designer/dx-acceptance.mjs (appendix A; landed at W2 start — the "committed by i1" slip is the orchestrator's §7 record)
+
+template = minimal consumer: the once-per-app inert block (framework dep +
+`WebUIAutobuildPlugin` on the page target + one island executable target
+`feed`, mirroring the demo app's shape), one page target (`App`, `swift run`
+first product), one PRE-EMITTED `WebUIIsland("feed")` region, **no capability
+allowlist**. the island (`Sources/feed/main.swift`) is a self-contained
+`IslandRuntimeSurface` (counter + pick ops + state channel).
+
+harness `designer/dx-acceptance.mjs` runs in a **home-directory project**
+(`~/dx-accept`, never /tmp) with the appendix-A preflight/prep/step1-4/
+asserts/teardown, plus the DX-11 dogfood assertion.
+
+### assumptions / conservative choices (report)
+
+1. **the Package.swift framework path is materialized at PREP** — the template
+   ships `__FRAMEWORK_PATH__`; the harness substitutes the checkout path into
+   the copied manifest once, before step 1. assert (b) then proves the manifest
+   is byte-stable from prep through teardown (zero edits during the test).
+2. **the pre-emitted region rides the click subscription** — a bare
+   `WebUIIsland("feed")` mounts but receives NO delegated events (the frozen
+   t2.2 contract: delivery is descriptor-gated). the template splices
+   `data-webui-island-events='["click"]'` beside the D-owned view's markup.
+3. **the DOGFOOD table handler emits ops app-side** — DX-11b (op-emitting
+   built-in handlers) is W3 lane-D; the acceptance asserts the same contract
+   with the app's typed handler returning `FragmentUpdate.attr/.text` (the
+   FragmentOp plane, engine-applied). green today, stays green when DX-11b
+   lands.
+4. **the step-1 @HotView struct compiles but is not yet the island's source**
+   at this base (codec stubs + the autobuild plugin identifies islands by
+   `Sources/<name>/main.swift importing WebUIIslandCore`). the feed island is
+   self-contained until B's DX-5-real + D's codec-bodies close the gap.
+
+### budget
+
+engine measured on this branch head: **75,438 raw / 18,195 gz** (base
+95ba7b7 measured identically: 74,735 / 18,014) → **cumulative E2 deltas +703
+raw / +181 gz** (gzipSync, method-consistent; vs the W1-recorded 17,924 gz
+baseline the gz delta reads +271 — both within the +512 gz arc ceiling).
+`plugin budget` (served measure) reports engine 75,438 / 18,087 ok/ok under
+the 77,000 / 18,500 pin. **do NOT re-pin** — the orchestrator re-pins at i3.
+
+### handoffs
+
+- **to lane D:** (1) DX-11b (W3) — pull op emission INTO the built-in table/
+  chart/pagination handlers; the acceptance's dogfood assert already passes via
+  app-side emission, unblocked either way; (2) consider an `events:` parameter
+  on `WebUIIsland` so the region view can emit the click/keydown descriptor
+  itself (the template currently splices it); (3) the A1 ruling now pins
+  `data-viewport-overscan`'s factor semantics engine-side — the Viewport
+  emission is correct as-is, keep it.
+- **to lane B:** (1) the acceptance's `assert (c)`: a consumer package CANNOT
+  invoke a dependency's command plugin — `swift package plugin budget` from
+  ~/dx-accept fails with "Unknown subcommand or plugin name 'budget'"
+  (measured). the harness proves the island-budget ROW machinery from the
+  framework checkout and flags the feed row's dependency on DX-3's merged
+  manifest emission (consumer-side budget invocation needs B's DX-8 `verify`
+  consolidation); (2) retire the bench string-replace lease adapter; (3) DX-6b's
+  WebUIServer built-in routes will cover the template's hand-served routes —
+  at i2 the template should be able to drop its own (framework-route-win +
+  registry); (4) the `islands[]` merge into the served manifest (DX-3/DX-6b)
+  is what removes the template's own manifest construction.
+- **to orchestrator:** appendix A promised the template + harness "committed by
+  i1" — they land at W2 start (this branch); record the slip in §7. the
+  reference-surface pin re-check (assert d) is yours at i2/i3, not the
+  template's (the template server cannot see the reference hosts).
+
+### next-slice
+
+- canonical bench re-run + final reconciliations (W3).
+
+
 

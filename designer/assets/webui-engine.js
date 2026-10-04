@@ -1332,7 +1332,8 @@ window.WebUIEngine = (function () {
       var win = w.m === 'win';
       var v = win ? w.el.clientHeight : (window.innerHeight || 400);
       var t = win ? (w.el.scrollTop || 0) : -w.el.getBoundingClientRect().top;
-      var ov = w.ov > 0 ? w.ov : Math.max(1, Math.ceil(v / w.h));
+      var vis = Math.max(1, Math.ceil(v / w.h));
+      var ov = w.ovA > 0 ? w.ovA : (w.ovF > 0 ? Math.ceil(vis * (w.ovF - 1) / 2) : vis);
       var ns = Math.max(0, Math.floor(t / w.h) - ov);
       var ne = Math.min(w.r.length - 1, Math.ceil((t + v) / w.h) + ov);
       if (!f && ns === w.a && ne === w.b) { return; }
@@ -1352,15 +1353,16 @@ window.WebUIEngine = (function () {
         var c = el.children[i];
         if (!c.getAttribute || c.getAttribute('data-webui-window-spacer') === null) { rows.push(c); }
       }
-      w = reg[id] || (reg[id] = { el: el, r: rows, h: 24, ov: 0, m: 'doc', a: 0, b: -1, sp: null });
+      w = reg[id] || (reg[id] = { el: el, r: rows, h: 24, ovA: 0, ovF: 0, m: 'doc', a: 0, b: -1, sp: null });
       w.el = el; w.r = rows;
       var f = rows[0];
       var rh = parseInt(el.getAttribute('data-webui-row-height'), 10);
       if (!(rh > 0)) { rh = parseInt(el.getAttribute('data-viewport-rowsize'), 10); }
       w.h = (rh > 0) ? rh : ((f && f.offsetHeight > 0) ? f.offsetHeight : 24);
-      var ov = parseInt(el.getAttribute('data-webui-overscan'), 10);
-      if (!(ov > 0)) { ov = parseInt(el.getAttribute('data-viewport-overscan'), 10); }
-      w.ov = ov > 0 ? ov : 0;
+      var oa = parseInt(el.getAttribute('data-webui-overscan'), 10);
+      var of = parseInt(el.getAttribute('data-viewport-overscan'), 10);
+      w.ovA = oa > 0 ? oa : 0;
+      w.ovF = of > 0 ? of : 0;
       while (el.firstChild) { el.removeChild(el.firstChild); }
       var s = document.createElement('div');
       s.setAttribute('data-webui-window-spacer', '1');
@@ -1595,6 +1597,8 @@ window.WebUIEngine = (function () {
   var _islandApply = null;
   var islandModules = {};
   var islandLoading = {};
+  var islandUrlMap = {};
+  var manifestReady = Promise.resolve(null);
   var islandRegionState = {};
   var islandRafHosts = [];
   var islandRafGoing = false;
@@ -1706,32 +1710,34 @@ window.WebUIEngine = (function () {
   function loadIsland(name) {
     if (islandModules[name]) { return Promise.resolve(islandModules[name]); }
     if (islandLoading[name]) { return islandLoading[name]; }
-    var url = '/__assets/webui-' + name + '.wasm';
-    islandLoading[name] = fetch(url)
-      .then(function (r) { if (!r.ok) { throw new Error('island fetch ' + r.status); } return r; })
-      .then(function (res) {
-        if (typeof WebAssembly.compileStreaming === 'function' && res && res.body) {
-          return WebAssembly.compileStreaming(Promise.resolve(res));
-        }
-        return res.arrayBuffer().then(function (bytes) { return new WebAssembly.Module(bytes); });
-      })
-      .then(function (mod) { return instantiateIsland(mod, name); })
-      .then(function (exports) {
-        if (!exports) { return null; }
-        if (typeof exports._start === 'function') {
-          try { exports._start(); } catch (e) { }
-        }
-        ensureIslandMemory(exports);
-        islandModules[name] = { exports: exports, memory: exports.memory };
-        return islandModules[name];
-      })
-      .catch(function (err) {
-        islandLoading[name] = null;
-        if (err && err.message) {
-          _islandLog('island ' + name + ' unavailable (' + err.message + '); page stays server-rendered', 'warn');
-        }
-        return null;
-      });
+    islandLoading[name] = manifestReady.then(function () {
+      var url = islandUrlMap[name] || '/__assets/webui-' + name + '.wasm';
+      return fetch(url)
+        .then(function (r) { if (!r.ok) { throw new Error('island fetch ' + r.status); } return r; })
+        .then(function (res) {
+          if (typeof WebAssembly.compileStreaming === 'function' && res && res.body) {
+            return WebAssembly.compileStreaming(Promise.resolve(res));
+          }
+          return res.arrayBuffer().then(function (bytes) { return new WebAssembly.Module(bytes); });
+        })
+        .then(function (mod) { return instantiateIsland(mod, name); })
+        .then(function (exports) {
+          if (!exports) { return null; }
+          if (typeof exports._start === 'function') {
+            try { exports._start(); } catch (e) { }
+          }
+          ensureIslandMemory(exports);
+          islandModules[name] = { exports: exports, memory: exports.memory };
+          return islandModules[name];
+        })
+        .catch(function (err) {
+          islandLoading[name] = null;
+          if (err && err.message) {
+            _islandLog('island ' + name + ' unavailable (' + err.message + '); page stays server-rendered', 'warn');
+          }
+          return null;
+        });
+    });
     return islandLoading[name];
   }
   function drainIslandOps(name, ex) {
@@ -1972,16 +1978,26 @@ window.WebUIEngine = (function () {
     eventDelegator.mount();
 
     var attrManifestLoaded = function () {
-      fetch('/ui/continuum-manifest.json').then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
-        if (!j || !Array.isArray(j.attributeAllowlist) || j.attributeAllowlist.length === 0) { return; }
-        var exact = {}, prefixes = [];
-        for (var i = 0; i < j.attributeAllowlist.length; i++) {
-          var e = String(j.attributeAllowlist[i]).trim();
-          if (!e) { continue; }
-          if (e.slice(-1) === '*' || e.slice(-1) === '-') { prefixes.push(e.slice(0, -1)); } else { exact[e] = true; }
+      manifestReady = fetch('/ui/continuum-manifest.json').then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+        if (!j) { return null; }
+        if (Array.isArray(j.attributeAllowlist) && j.attributeAllowlist.length === 0) { return j; }
+        if (Array.isArray(j.attributeAllowlist)) {
+          var exact = {}, prefixes = [];
+          for (var i = 0; i < j.attributeAllowlist.length; i++) {
+            var e = String(j.attributeAllowlist[i]).trim();
+            if (!e) { continue; }
+            if (e.slice(-1) === '*' || e.slice(-1) === '-') { prefixes.push(e.slice(0, -1)); } else { exact[e] = true; }
+          }
+          fragmentPatcher.setAttrAllowlist(exact, prefixes);
         }
-        fragmentPatcher.setAttrAllowlist(exact, prefixes);
-      }).catch(function () { });
+        if (Array.isArray(j.islands)) {
+          for (var k = 0; k < j.islands.length; k++) {
+            var en = j.islands[k];
+            if (en && en.name && typeof en.url === 'string' && en.url) { islandUrlMap[en.name] = en.url; }
+          }
+        }
+        return j;
+      }).catch(function () { return null; });
     };
     attrManifestLoaded();
 
