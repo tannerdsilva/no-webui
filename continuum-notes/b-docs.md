@@ -674,4 +674,63 @@ bash designer/gates/scaffold-demo.sh --clean                  -> SCAFFOLDDEMO PA
 ### measured numbers (this wave)
 
 - dx5-demo seam step F: 3 islands cross-built into the work dir, served byte-for-byte at `/__assets/webui-feed.wasm`; merged manifest version 2 with 3 measured rows.
+
+## CONTINUUM_DX W3 — lane B (base `3381e89`): DX-8 `verify` consolidation + the no-manual-steps audit
+
+_commit `af74d99` (DX-8 verify) · `94db05c` (audit fixes) (W3; base `3381e89`). DX-8: one consumer-facing `verify` verb runs the FULL island verification path (build → cross-build → measure/pin → budget row), so no getting-started path names `plugin wasm-island`; `wasm-island` stays internal (unchanged semantics — the ladder + acceptance keep calling it). `scaffold`, `budget`, `smoke`, `fullstack-smoke` keep working. + the no-manual-steps audit below._
+
+### DX-8 verify (commit `af74d99`) — the verb
+
+- `WebUIContinuumTool verify` (new tool verb) + `Plugins/WebUIVerifyPlugin` (new command plugin, verb `verify`, thin wrapper exactly like WebUIScaffoldPlugin — injects `--package-dir`, resolves `--framework` from the no-webui dependency when declared). both surfaces hit the SAME tool code, so semantics cannot diverge:
+  - `swift package --disable-sandbox plugin verify` (framework home)
+  - `webui-continuum verify --package-dir <app> --framework <no-webui path>` (consumer app — the same tool surface as `scaffold`)
+- the four stages, printed with a stage marker + verdict per stage:
+  1. **build** — host `swift build --package-path <pkg> --build-path <work>/host-build` (island mains + app compile natively).
+  2. **cross-build** — every island product (discovery = the SAME imports-scan WebUIAutobuildPlugin uses, so verify's set == what a plain `swift build` cross-builds; `--product <Island>` filters) cross-compiled via the SAME `wasm-cross` verb into `<work>/`, never the autobuild work dir.
+  3. **measure/pin** — `measure` over `<work>/`: the DX-3 rows (name/maxBytes/maxGzipBytes EXACTLY the budget schema + additive raw/gz/sha/url, version 2) → `<work>/ContinuumManifest.json`.
+  4. **budget row** — `WebUIBudgetPlugin` RE-INVOKED over `<work>` (`--island-dir` + `--autobuild-manifest`; `--island-manifest` passed when a declared-pins manifest exists under the package). one budget path (I5): verify adds NO second enforcement locus — the budget row is the plugin's own output; any breach = verify fails.
+- belt-and-suspenders by design: the plain getting-started path (`swift build`, zero manual verbs) already runs stages 2+3 automatically via WebUIAutobuildPlugin. verify performs every stage explicitly so a package WITHOUT wiring still gets a complete, deterministic verdict, and it is the ONLY verb a getting-started path may name for island verification.
+- flags: `--skip-swift-build` (the demo gate uses it — host build proven separately), `--no-strip`, `--swiftc`, `--work-dir` (default `<pkg>/.build/continuum-verify`), `--product` (repeatable).
+
+### the re-entrancy find (why the first `plugin verify` hang matters)
+
+- **finding**: `swift package plugin verify` (outer SwiftPM) holds a per-package build lock **under $TMPDIR** — the opened FD is `…/T/_private_tmp_…_lane-b_.build.lock`, keyed on the package's canonical `.build` path, NOT the build root — for the WHOLE plugin invocation. any nested `swift build` / `swift package plugin budget` on the SAME package therefore blocks forever (`--build-path` alone does NOT relocate this lock). measured: first framework-home run deadlocked 600 s on the nested budget after stages 1–3 completed.
+- **fix**: verify spawns its nested SwiftPM children with `TMPDIR`/`TMP`/`TEMP` pointed at `<work>/tmp` (a directory verify owns) + `--build-path` into `<work>/`. each nested SwiftPM then uses a lock key only it touches. verified: the nested budget completes in ~7 s with the outer plugin still running; the consumer tool form (no outer SwiftPM) was never affected (scaffold-demo step 7 green).
+- npm-flavored note: this is the same class of hazard the DX-5 spike recorded for nested builds — documented here so no future verb nests SwiftPM without the TMPDIR isolation.
+
+### the no-manual-steps audit (W3 §4.7)
+
+grep (hosts, verb-shaped lines: `plugin (wasm-island|budget|smoke|fullstack-smoke|serve|scaffold|verify|probe|showcase)` / `wasm-cross` / `wasm-island` / `swift package` / `swift run`):
+
+| getting-started host | required manual island-verbs | drift? | disposition |
+|---|---|---|---|
+| `README.md` (framework quick start) | zero | none before; now names `verify` as the ONE optional verb | fixed (islands § + plugin tree + `plugin verify` line) |
+| `Documentation/GETTING_STARTED.md` | zero | none before | fixed (§8 Islands: zero-verb path + single optional `verify`) |
+| `templates/app/` (consumer template) | zero (Package.swift breadcrumb) | no README existed; the template IS the acceptance's getting-started copy | added `templates/app/README.md` (zero verbs + the optional `verify` tool surface) |
+| scaffold output text | zero required | output was operational lines only | added the optional-verify hint after a successful `--add-island` (names `verify`, never `wasm-island`) |
+| `Documentation/CONTINUUM.md` (orchestrator-owned) | internal | `plugin wasm-island` appears only in §2.6 (internal artifact path) + §7 (in-repo ladder) — internal by design per W3 scope | NO change (ladder + acceptance keep calling it) |
+| `AGENTS.md` (orchestrator-owned) | **drift** | line 69: `plugin wasm-island` presented as "the native way to produce an island artifact" | **handoff to orchestrator** — fold: plain `swift build` auto-cross-builds (WebUIAutobuildPlugin); `verify` is the one explicit verb; `wasm-island` is internal |
+| `Documentation/ASSEMBLY.md` (orchestrator-owned) | zero | tooling stage map only (serve/smoke/fullstack/probe/showcase) | no change |
+| `Documentation/STABILITY.md` (orchestrator-owned) | zero | ladder mentions smoke/fullstack/browser only | no change |
+| `Documentation/ICONS.md` | zero | icon-tooling workflow (`swift run WebUIIconTool …` — the icon plugin's own surface, auto-generated on build) | no change |
+| `Documentation/SHEETS_CLASS.md`, `NEXT_ARCHITECTURE.md`, `NEXT_IMPLEMENTATION_PLAN.md` | zero (planning/feature docs; `wasm-island` as planned internal verb) | historical/planning | no change |
+| `skills/webui-design-system/` (SKILL.md + engine-delivery.md) | zero (mentions `wasm-island` as internal verb) | repo-shipped skill, not getting-started | recorded only |
+
+net: the editable getting-started path lists ZERO required manual verbs before AND after the wave; `verify` is the single OPTIONAL explicit verb it names; the one genuine drift (AGENTS.md) is orchestrator-owned → handoff, fold suggestion above.
+
+### gates (exact, W3)
+
+```
+swift build                                                   -> Build complete
+swift test (full)                                             -> green (incl. 8 verify tests + 7 scaffold tests)
+swift package --disable-sandbox plugin budget                -> budget: PASS
+swift package --disable-sandbox plugin smoke                 -> smoke PASS (folds b-lint + b-interaction)
+bash designer/gates/scaffold-demo.sh --clean                  -> SCAFFOLDDEMO PASS incl. step 7 (verify e2e: build→cross-build→measure/pin→budget row, one verb)
+bash designer/gates/dx5-demo.sh --clean --framework=<clone>   -> DX5DEMO PASS (unchanged)
+```
+
+### measured (this wave)
+
+- scaffold-demo step 7 verify log: 3 islands cross-built into `.build/continuum-verify/` (Feed 132171 B, WebUIValidateIsland 175525 B, WebUIProbeIsland 235982 B — stripped embedded), 3 DX-3 rows pinned, budget row PASS (`raw≤138780 / raw≤184302 / raw≤247782` ceil×1.05); framework-home `plugin verify` full path (WITH host build) green deadlock-free.
+- `README.md` plugin block + Plugins/ tree now list `WebUIVerifyPlugin` / `plugin verify`.
 - scaffold-demo: Feed 132171 B stripped embedded, valid wasm; host build compiles natively; wasm-cross cold ~40 s.
