@@ -210,7 +210,36 @@ struct WebUIBudgetPlugin: CommandPlugin {
             .appendingPathComponent("out")
             .appendingPathComponent("Products")
             .appendingPathComponent("Release-webassembly-wasm32")
-        let islandPins = Self.islandPins(from: Self.islandManifestURL(packageDir: packageDir, arguments: arguments))
+        // DX-3 (CONTINUUM_DX §2.3): the measured pins. the budget plugin now
+        // reads TWO manifest sources — the declared `@HotView(budget:)` pins
+        // (the WebUIContinuumPlugin manifest, t4.2) AND the autobuild
+        // measured rows (the WebUIAutobuildPlugin work-dir manifest) — and
+        // enforces the TIGHTER of the two per island (tightening-only: a
+        // declared pin can only lower the auto-pin, never loosen it; the
+        // macro-side diagnostic for a wasted looser declaration is lane D's).
+        let declaredPins = Self.islandPins(from: Self.islandManifestURL(packageDir: packageDir, arguments: arguments))
+        let autoPins = Self.autoPins(from: packageDir, arguments: arguments)
+        // an artifact's effective pin = the TIGHTEST value of EACH field across
+        // both sources, chosen independently: a declaration can only tighten a
+        // field below its measured auto-pin, never loosen it (tightening-only;
+        // the macro-side diagnostic for a wasted looser declaration is lane D's).
+        // rows match by the SAME case-insensitive containment the t4.2 matching
+        // below uses, so a declared "validate" row and a measured
+        // "WebUIValidateIsland" row collide onto one artifact.
+        let effectivePin: (String) -> (maxBytes: Int, maxGzipBytes: Int?, name: String)? = { name in
+            let hits = { (rows: [(name: String, maxBytes: Int, maxGzipBytes: Int?)]) -> [(String, Int, Int?)] in
+                rows.filter {
+                    name.lowercased().contains($0.name.lowercased())
+                        || $0.name.lowercased().contains(name.lowercased())
+                }.map { ($0.name, $0.maxBytes, $0.maxGzipBytes) }
+            }
+            let all = hits(declaredPins) + hits(autoPins)
+            guard !all.isEmpty else { return nil }
+            let maxB = all.map(\.1).min()!
+            let maxG = all.compactMap(\.2).min()
+            let reported = all.min(by: { $0.1 < $1.1 })?.0 ?? all[0].0
+            return (maxB, maxG, reported)
+        }
         var islandRows: [(String, Int, String, String)] = []
         if let entries = try? FileManager.default.contentsOfDirectory(
             at: islandDir, includingPropertiesForKeys: [.fileSizeKey]
@@ -220,10 +249,7 @@ struct WebUIBudgetPlugin: CommandPlugin {
                 let name = entry.lastPathComponent
                 // match the wasm artifact to a manifest island by name
                 // (case-insensitive containment: WebUIProbeIsland.wasm <-> "probe").
-                let pin = islandPins.first { pin in
-                    name.lowercased().contains(pin.name.lowercased())
-                        || pin.name.lowercased().contains(name.lowercased())
-                }
+                let pin = effectivePin(name)
                 let pinLabel: String
                 if let pin {
                     pinLabel = "raw≤\(pin.maxBytes)" + (pin.maxGzipBytes.map { " gz≤\($0)" } ?? "")
@@ -278,8 +304,8 @@ struct WebUIBudgetPlugin: CommandPlugin {
                 print("  " + pad(name, 10) + padLeft(String(size), 10) + padLeft("—", 10)
                       + "  " + pad(verdict, 12) + pad("", 18) + pinLabel)
             }
-            if !islandPins.isEmpty {
-                print("  per-island pins from ContinuumManifest.json (t4.2); unmatched islands ride the global ceiling")
+            if !declaredPins.isEmpty || !autoPins.isEmpty {
+                print("  per-island pins (t4.2 declared + DX-3 measured); unmatched islands ride the global ceiling")
             }
         }
         print("─────────────────────────────────────────────────────────────────")
@@ -300,7 +326,50 @@ struct WebUIBudgetPlugin: CommandPlugin {
         print("budget: PASS — every shipped surface is within its pinned ceiling.")
     }
 
-    // MARK: - per-island budget pins (t4.2)
+    // MARK: - per-island budget pins (t4.2) + autobuild auto-pins (DX-3)
+
+    /// the measured auto-pins: the WebUIAutobuildPlugin work-dir
+    /// ContinuumManifest.json, found by the same plugin-outputs walk as the
+    /// declared-pins manifest. the autobuild plugin writes this AFTER every
+    /// island cross-build (its own llbuild command: artifact inputs ->
+    /// manifest output), with rows carrying name/maxBytes/maxGzipBytes
+    /// (EXACTLY the schema this plugin reads) + additive raw/gz/sha/url.
+    /// a consumer app that runs a plain `swift build` therefore gets its
+    /// island budgets auto-pinned here with ~5% headroom — no hand-written
+    /// `IslandBudget` needed on the declared path (DX-3).
+    private static func autoPins(from packageDir: URL, arguments: [String]) -> [(name: String, maxBytes: Int, maxGzipBytes: Int?)] {
+        // `--island-manifest` overrides the DECLARED manifest (probe/testing);
+        // the auto-pin source is always the autobuild work dir.
+        if let i = arguments.firstIndex(of: "--autobuild-manifest"), i + 1 < arguments.count {
+            let value = arguments[i + 1]
+            let url = value.hasPrefix("/")
+                ? URL(fileURLWithPath: value)
+                : packageDir.appendingPathComponent(value)
+            return Self.islandPins(from: url)
+        }
+        let outputs = packageDir
+            .appendingPathComponent(".build")
+            .appendingPathComponent("plugins")
+            .appendingPathComponent("outputs")
+        guard let packages = try? FileManager.default.contentsOfDirectory(
+            at: outputs, includingPropertiesForKeys: nil
+        ) else { return [] }
+        for package in packages {
+            guard let targets = try? FileManager.default.contentsOfDirectory(
+                at: package, includingPropertiesForKeys: nil
+            ) else { continue }
+            for target in targets {
+                let manifest = target
+                    .appendingPathComponent("destination")
+                    .appendingPathComponent("WebUIAutobuildPlugin")
+                    .appendingPathComponent("ContinuumManifest.json")
+                if FileManager.default.fileExists(atPath: manifest.path) {
+                    return Self.islandPins(from: manifest)
+                }
+            }
+        }
+        return []
+    }
 
     /// locate the raw ContinuumManifest.json the continuum plugin emitted:
     /// `--island-manifest <path>` overrides (probe/testing), else walked from

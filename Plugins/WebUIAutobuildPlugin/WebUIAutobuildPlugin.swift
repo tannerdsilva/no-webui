@@ -103,6 +103,32 @@ struct WebUIAutobuildPlugin: BuildToolPlugin {
 				outputFiles: [artifact]
 			))
 		}
+
+		// DX-3 auto-pin: ONE measure command after all the cross-builds. its
+		// inputFiles are every island artifact and its outputFiles are the
+		// work-dir ContinuumManifest.json, so llbuild orders it after the
+		// commands above and skips it warm (no artifact changed); the tool
+		// scans the work dir itself, so no per-command sidecar or shared-file
+		// race. the pins it writes (name/maxBytes/maxGzipBytes EXACTLY the
+		// schema WebUIBudgetPlugin reads, + additive raw/gz/sha/url, version 2)
+		// are spliced into the served /ui/continuum-manifest.json at
+		// serve-emission by WebUIServer (DX-6b).
+		let islandArtifacts = islands.map {
+			context.pluginWorkDirectoryURL.appendingPathComponent($0 + ".wasm")
+		}
+		let pinManifest = context.pluginWorkDirectoryURL
+			.appendingPathComponent("ContinuumManifest.json")
+		commands.append(.buildCommand(
+			displayName: "WebUIAutobuild: measuring island pins into ContinuumManifest.json (DX-3)",
+			executable: tool.url,
+			arguments: [
+				"measure",
+				"--work-dir", context.pluginWorkDirectoryURL.path,
+				"--manifest", pinManifest.path,
+			],
+			inputFiles: islandArtifacts,
+			outputFiles: [pinManifest]
+		))
 		return commands
 	}
 
