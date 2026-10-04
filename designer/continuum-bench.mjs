@@ -73,7 +73,7 @@ const POINTS = parseInt(arg(argv, "--points", "100"), 10);
 const ROWS = parseInt(arg(argv, "--rows", "200"), 10);
 const COLS = parseInt(arg(argv, "--cols", "10"), 10);
 const THROTTLE = parseInt(arg(argv, "--throttle", "80"), 10);
-const REPEAT = parseInt(arg(argv, "--repeat", "1"), 10);
+const REPEAT = parseInt(arg(argv, "--repeat", "3"), 10);
 const PORT = parseInt(arg(argv, "--port", String(LANE_PORT)), 10);
 let THROTTLING = false; // set during the throttled run (inflates wait bounds)
 

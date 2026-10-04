@@ -279,19 +279,29 @@ noisy at repeat=1; treated as qualitative only.
 
 ### 5. canonical-gate fold-in list (wave-3 → polish wave, lane B owns)
 
-which lane-B probes belong in which canonical gate, for the orchestrator's
-fold-in (never edited by the lane; listed here for tracking):
+**EXECUTED in the polish wave (commit `a9bd58a`).** the final mapping (what
+each canonical gate now invokes, via the fold-in runner
+`designer/gates/b-probe-fold.mjs`):
 
-| canonical gate | lane-B probes/clients to fold | note |
+| canonical gate | lane-B probes/clients folded (final) | how |
 |---|---|---|
-| build ladder (`swift build` + plugin) | `WebUIContinuumTool` lint/generate gate (already wired via `WebUIContinuumPlugin` — t2.6 capability check + budget plugin) | the class-inventory + capability grant gate is already in the build; nothing new to add |
-| `plugin smoke` | `designer/probes/b-lint.mjs` (8/8) as a standalone probe; `designer/probes/b-interaction-smoke.mjs` (ws interaction smoke) | fold as a probe list entry, not more build commands |
-| `fullstack-smoke` | `designer/probes/b-windowed-smoke.mjs` (naive + ops window advance) | already fullstack-shaped; ensure it's invoked with a lane port on the fold-in |
-| `browser-smoke` | engine-path probes stay in the existing browser-smoke; lane-B adds `designer/d3-gate.mjs` as the agg gate | run d3-gate on a lane port **after** the smoke ladder, before the bench refresh |
-| bench ladder (i3/eval) | `designer/continuum-bench.mjs` (the five benches) + `designer/d3-gate.mjs` | the d3-gate is the single-command i3 measurement; the five benches are the periodic refresh |
+| build ladder (`swift build` + plugin) | `WebUIContinuumTool` lint/generate gate (already wired via `WebUIContinuumPlugin` — t2.6 capability check + budget plugin; the class-inventory + capability grant gate lives in the build) | nothing new to add — already in the build |
+| `plugin smoke` | `designer/probes/b-lint.mjs` (8/8) + `designer/probes/b-interaction-smoke.mjs` (6/6) | `b-probe-fold.mjs --lint --interaction`, appended to `WebUISmokePlugin` after the smoke checks; traffic on lane port 9212 |
+| `fullstack-smoke` | `designer/probes/b-windowed-smoke.mjs` (5/5) | `b-probe-fold.mjs --windowed`, appended to `WebUIFullstackSmokePlugin` after the ws round-trips; lane port 9213 |
+| `browser-smoke` | `designer/d3-gate.mjs` as the aggregate gate | `b-probe-fold.mjs --d3` (d3-gate on lane ports 9210/9211), invoked at the end of `designer/browser-smoke.mjs` **after** the smoke ladder |
+| bench ladder (i3/eval) | `designer/continuum-bench.mjs` (the five benches, `--repeat 3` default) + `designer/d3-gate.mjs` | the d3 gate is the single-command i3 measurement on lane ports; the five benches are the periodic refresh |
 
-the two windowed-scroll FAILs in §2 are the fold-in's tracking signal: the
-polish wave's job is `t3.3` engine/island-local windowing, not a bench change.
+fold-in runner: `node designer/gates/b-probe-fold.mjs [--lint] [--interaction]
+[--windowed] [--d3] [--all]` — exits non-zero on any probe failure; every
+self-spawned server uses a lane port (9200–9219) and is killed on exit; the
+canonical ports 9123/9130 are never touched.
+
+constraints honored: the smoke gate's pins (25-component count, byte
+integrity, CSP) are untouched (`SMOKE PASS 19/19` before the fold);
+fullstack's round-trip checks are untouched (`22/22`); browser-smoke's
+layout/Escape/layers checks are untouched (`46/46` including the folded d3
+gate). the pre-polish table listed which probes belong where; this table
+records the executed wiring.
 
 ---
 
@@ -357,3 +367,60 @@ the budget. the polish fixture is `/bench/feed?windowed=engine`:
 two consecutive runs. the t3.3 engine scroll-work (2.4–2.6 ms p95) is the
 number that carries the "20 ms frame-budget" claim on this host — 8× under
 budget, unchanged by throttle (engine-local: the wire isn't in the path).
+
+---
+
+## POLISH wave — §2: bench `--repeat` default 3 + final numbers refresh (base `d5cb0c4`)
+
+_commit pending (this section). the `--repeat` default in
+`designer/continuum-bench.mjs` is bumped **1 → 3** (each metric now samples
+three times by default; the isolation lesson of the echo-settled ruling §3 —
+single-run numbers on this loaded host are noise-tier)._
+
+### final refresh (merged tree, repeat=3 default; all five benches green)
+
+preconditions 29/29 (feed 7/7, grid 5/5, dashboard 5/5, editor 7/7, windowed
+5/5) on lane port 9206. medians-of-3 below:
+
+| metric | d0 (recorded) | wave-3 (r1–r5) | polish repeat=3 | delta vs d0 |
+|---|---|---|---|---|
+| tti feed@10k | 102 / 709 ms | 98.0 / 429.4 | **91.3 / 407.0** | loop −11 (noise-tier), thr within spread |
+| tti grid 500×10 | 43 / 784 | 42.9 / 784.4 | **30.2 / 525.6** | both down (throttled tti noisy) |
+| tti dashboard 8×100 | 97 / 762 | 95.0 / 485.5 | **91.1 / 429.0** | loop −6, thr within spread |
+| tti editor | 23 / 756 | 11.9 / 467.9 | **12.4 / 497.4** | — |
+| scroll p95 feed 10k | 62.4 / 61.5 | 61.1–62.3 / 60.8–62.3 | **62.4 / 62.2** (r3) | the wall, unchanged |
+| echo settled editor | 311 / 368 | 361.1 med / 415.0 med | **448.9 med / 443.3 med** (r3) | within the §3 spread (variance, not drift) |
+| append-100 replace | 1,501,978 B / 46 ms | 43.0–49.6 | **1,501,978–1,532,378 B / 48.1 med; thr 1,427 ms** | bytes —, rt within noise |
+| append-100 op | 19,531 B / 33 ms | 30.4–31.1 | **19,531 B / 54.2 med (32.7–65.6)** | — |
+| grid sort | 81,920 B / 32 / 86 | 32.2 | **81,920 B / 32.8 med / 85.7 med** | — |
+| dashboard tick | 278,399 B / 67 / 293 | 70.6–74.1 | **278,399 B / 73.1 med / 326 med** | — |
+| window step naive/ops | 8,694 / 2,191 B | 0.7–0.9 / 4.6–8.8 thr | **8,694 / 2,191 B; 0.78 / 0.72 loop, 9.8 / 4.1 thr** | — |
+
+conclusion-bearing numbers are unchanged at repeat=3: the 77× replace/op
+byte gap (1,501,978 vs 19,531 B), the 4× window-step byte gap (8,694 vs
+2,191 B), the 62 ms full-render scroll wall, throttled dominance. editor
+echo-settled medians (448.9/443.3) sit inside the §3-ruled single-run spread
+(316.3–453.4 loopback) — no new signal.
+
+### d3-gate rows (polish, for the §1 table)
+
+`node designer/d3-gate.mjs` (lane ports 9210/9211, two consecutive runs):
+**14/14 PASS both**. the engine-local scroll rows (loopback / throttled):
+scroll-work p95 **2.40 / 2.60 ms** ≤ 20; attached rows 34–56 / 55–56 ≤ 90;
+childList-only census (902 / 923, 0 char/attr); scroll moved 0→24000→48000.
+grid echo @ 80 ms rtt p95 0.2–0.4 ms, 0 ws frames; authoritative-wins PASS;
+degrade PASS. host refresh floor measured in-gate: p50 33.4 ms / p95 66.8 ms
+(30 Hz host) — recorded, never hardcoded.
+
+### gates (exact, this run)
+
+```
+swift build                                                 -> Build complete
+swift test (full)                                           -> (terminal gate, see below)
+swift package --disable-sandbox plugin smoke                -> SMOKE PASS 19/19 + b-lint 8/8 + b-interaction 6/6
+swift package --disable-sandbox plugin fullstack-smoke      -> FULL-STACK 22/22 + b-windowed 5/5
+node designer/browser-smoke.mjs                             -> BROWSER SMOKE PASS 46/46 (incl. d3 gate 14/14)
+node designer/continuum-bench.mjs --bench {feed,grid,dashboard,editor,windowed} (repeat=3 default) -> PASS ×5 (29/29)
+node designer/d3-gate.mjs                                   -> D3 GATE PASS 14/14 (2× stable)
+swift package --disable-sandbox plugin budget               -> budget: PASS (see budget gate)
+```
