@@ -120,8 +120,8 @@ check("t2.2+t2.3 three keydowns -> #lbl text '3' (events drained + applied)", tr
 
 const islandLogs = logs().map((l) => l.text.replace(/^\[island:e2e\] /, "")).filter((t) => t.startsWith("{"));
 const parsed = islandLogs.map((t) => { try { return JSON.parse(t); } catch (e) { return null; } }).filter(Boolean);
-const keyA = parsed.find((p) => p.type === "keydown" && p.key === "a");
-check("t2.2 payload shape {type,key,data} arrives island-side", !!keyA && typeof keyA.data === "object" && keyA.data && keyA.data.key === "a", JSON.stringify(parsed[0]));
+const keyA = parsed.find((p) => p.type === "key" && p.key === "a");
+check("t2.2 payload shape {type,key,data} arrives island-side (keyboard normalized to 'key')", !!keyA && typeof keyA.data === "object" && keyA.data && keyA.data.key === "a", JSON.stringify(parsed[0]));
 
 // ---- t2.1: clock value flows into applied ops ----
 const clockAttr = await page.evaluate(() => document.querySelector("#e2e #lbl").getAttribute("data-now"));
