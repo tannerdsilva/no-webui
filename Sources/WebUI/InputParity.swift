@@ -186,3 +186,23 @@ extension View {
 		ModifiedView(content: self, modifier: KeyEventDeliveryModifier(handler))
 	}
 }
+
+// MARK: - the island transport mapping (KeyEvent → {type, key, data} v1)
+
+extension KeyEvent {
+	/// this key event as E's island event payload, v1 (frozen in c-to-e.md).
+	/// the `key` channel carries the key identity ONLY: `type` is always
+	/// `"key"`, `key` is `Key.identifier` (the canonical wire string — the
+	/// same string the engine's real `deliverIslandEvent` forwards from the
+	/// DOM `KeyboardEvent.key`, parseable back by `Key(identifier:)`).
+	///
+	/// the v1 boundary (recorded, do not extend without c-to-e): `modifiers`
+	/// and `isRepeat` have NO wire field on the v1 key channel — this payload
+	/// omits `data` entirely, which is the exact frozen shape. (the engine's
+	/// current artifact additionally carries the four modifier booleans as
+	/// informational strings inside `data`; the island's `decodeEvent` keys on
+	/// `key` alone and ignores them.)
+	public var islandPayloadV1: [String: String] {
+		["type": "key", "key": key.identifier]
+	}
+}
