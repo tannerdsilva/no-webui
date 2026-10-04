@@ -4,6 +4,34 @@ all notable changes to this project are documented here.
 
 ## [unreleased]
 
+### continuum — the engine ⇄ dom ⇄ wasm seam (desktop-grade d0–d4)
+
+- **the fragment seam.** `FragmentOp` grows `remove`/`attr`/`move` (additive;
+  absent op stays `replace`, pinned); engine apply with the optimistic-forbid
+  table; the coalescer speaks every op; engine-local echo
+  (`data-webui-echo="<id>"`) — 0 ws frames while typing. see `CONTINUUM.md` §1.
+- **the island seam.** typed host imports, events in
+  (`data-webui-island-events` + `{type,key,data}` v1), the op stream
+  (`webui_take_ops` whole-record drain, record v1 little-endian), the state
+  channel (`webui_state_save`/`restore`, keyed name|regionId), defense in
+  depth. the probe island (231,984 B stripped) is the hand-written fixture.
+  see `CONTINUUM.md` §2.
+- **the author surface.** `@HotView`/`@HotClass` macros (+`imports:`/`budget:`
+  with refusal diagnostics), the hot vocabulary
+  (`HotView`/`HotPrimitive`/`HotTree`/`@HotBuilder` + `Hot.*` primitives),
+  `.lease` hints, `data-webui-echo` delivery, `InputParity`. see `CONTINUUM.md`
+  §2.7–§2.8.
+- **windowing.** `Viewport` + the engine's `createWindowManager` (engine-local
+  re-windowing; measured: scroll-work p95 ≈ 2.3 ms at 10k rows; the 62 ms
+  full-render wall is the control). see `CONTINUUM.md` §3.
+- **kernels + parity.** `WebUISharedCore/Kernels/` + the frozen corpus hashed
+  natively and in wasm (equal hashes = the gate, 25/25). see `CONTINUUM.md` §4.
+- **tooling.** the class inventory (`Continuum+Generated.swift`), the
+  capability-grants lint, the served engine slice
+  (`/ui/continuum-manifest.json`, registered by the reference hosts),
+  per-island budget pins. see `CONTINUUM.md` §5.
+- new: `Documentation/CONTINUUM.md` — the living reference for the seam.
+
 ### runtime — streaming patch ops and calm patches
 
 - **`FragmentUpdate` gains ops.** `append` inserts one subtree as a child of the

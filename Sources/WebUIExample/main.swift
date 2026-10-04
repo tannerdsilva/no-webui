@@ -106,7 +106,14 @@ struct WebUIExample {
 		let server = WebUIServer(
 			render: { renderExamplePage(state: state, router: router) },
 			router: router,
-			config: WebUIServerConfig(port: intFlag(named: "--port", default: 9090))
+			config: WebUIServerConfig(
+				port: intFlag(named: "--port", default: 9090),
+				// the generated engine slice (continuum §1.5): the engine fetches
+				// it at boot and swaps its conservative attr seed for it.
+				assets: [
+					WebUIAsset(ContinuumEngineManifest.self, path: "/ui/continuum-manifest.json").registration
+				]
+			)
 		)
 		try await server.start()
 	}

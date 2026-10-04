@@ -56,7 +56,15 @@ struct WebUIBlocksServer {
 				return WebUIBlocks.indexPage(dir: dir.isEmpty ? nil : dir)
 			},
 			router: router,
-			config: WebUIServerConfig(host: "0.0.0.0", port: port)
+			config: WebUIServerConfig(
+			host: "0.0.0.0",
+			port: port,
+			// the generated engine slice (continuum §1.5): the engine fetches
+			// it at boot and swaps its conservative attr seed for it.
+			assets: [
+				WebUIAsset(ContinuumEngineManifest.self, path: "/ui/continuum-manifest.json").registration
+			]
+		)
 		)
 		logger.info("serving block '\(name)' on http://0.0.0.0:\(port)")
 		try await server.start()
