@@ -59,8 +59,27 @@ check("forms: all three clock imports flagged", clockViols === 3, `clockViols=${
 check("forms: granted surface_acquire not flagged", !f.err.includes('imports "surface_acquire"'), f.err);
 check("forms: non-zero exit", f.code === 1, `exit=${f.code}`);
 
+// 4. the REAL in-tree markers (D's compiled fixture + the macro expansion
+//    suite) parse under the same accepted spelling set — this is the
+//    wave-3 re-verify: the fixture emits `imports: [ClockCapability.self]`
+//    (array-of-.self-types) and the suite also exercises the single-string
+//    and empty-array forms, so a spelling the scanner misses would surface
+//    as a wrong flag count here.
+const liveDir = join(ROOT, "Tests", "WebUIContinuumMacroTests");
+if (!existsSync(liveDir)) {
+  console.error(`b-lint: live marker dir missing: ${liveDir}`);
+  process.exit(1);
+}
+const liveRestricted = run(["lint", "--sources", liveDir, "--grants", "surface_acquire"]);
+// the compiled fixture's `counter` island imports clock (`.self` spelling) —
+// with only surface_acquire granted it must be flagged; the expansion suite's
+// `"clock"` single-string and `ClockCapability.self` markers add the rest.
+const liveClock = (liveRestricted.err.match(/imports "clock"/g) ?? []).length;
+check("live tree: clock imports flagged when ungranted", liveClock >= 1, `clockflags=${liveClock}`);
+check("live tree: granted marker exits 0", run(["lint", "--sources", liveDir, "--grants", "surface_acquire,clock,log,frame_schedule,input_subscribe,state_persist"]).code === 0, "exit != 0");
+
 if (failures > 0) {
   console.error(`b-lint: ${failures} failure(s)`);
   process.exit(1);
 }
-console.log("b-lint: 6/6 PASS");
+console.log("b-lint: 8/8 PASS (6 fixture + 2 live-tree)");
