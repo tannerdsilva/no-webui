@@ -296,9 +296,10 @@ wave's commit), `Sources/WebUIProbeIsland/main.swift` (the slim form),
   contract (`loadIsland` → `_start()` → exports) works as-is; no E change
   required for W1.
 - **to lane B/orchestrator:** the declared `IslandBudget` pin (240,000/105,000)
-  holds; measured artifact after the conversion is recorded in this wave's
-  report (the wasm-island build output). the budget-enforcement gap noted in
-  the W3 fragment (probe pin not in the manifest) is unchanged.
+  holds; measured artifact after the conversion: **233,952 B raw / 100,469 B
+  gzip** (was 231,984 / 99,360 — the runtime slice + existential bridge added
+  ~2.0 KB raw, ~1.1 KB gz; within the ~3.4% headroom). the budget-enforcement
+  gap noted in the W3 fragment (probe pin not in the manifest) is unchanged.
 - **to lane D (W2):** `IslandRuntimeSurface` is the shape `@HotView`
   adapters must satisfy (the macro's `_continuumEncode`/`_continuumDecode`
   stubs can delegate to `IslandRuntimeCore` on emission); the slim main pattern
