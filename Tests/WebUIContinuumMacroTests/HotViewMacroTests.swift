@@ -401,19 +401,54 @@ struct HotViewMacroNegativeTests {
 		)
 	}
 
-	@Test("imports: without a budget is refused — a sized island pins one")
-	func missingBudgetThrows() {
+	@Test("imports: without a budget auto-defaults (the DX-3 measured pin) — the imports:→budget rule retires")
+	func importsWithoutBudgetExpands() {
+		let text = expandedText(of: """
+		@HotView("feed", imports: [ClockCapability.self])
+		struct Feed {
+			typealias State = FeedState
+			typealias Action = FeedAction
+			@HotBuilder func render(state: State) -> HotTree { Hot.Text(id: "feed-status", "ready") }
+			static func reduce(state: inout State, action: Action) -> [HotEffect] { [] }
+		}
+		""")
+		#expect(text.contains("static let continuumDescriptor"))
+		#expect(text.contains("grants: [ClockCapability.self]"))
+		// the auto/unset marker: budget: is tightening-only, the measured
+		// auto-pin applies (DX-3, lane B's islands[] row).
+		#expect(text.contains("IslandBudget(maxBytes: 0, maxGzipBytes: nil)"))
+	}
+
+	@Test("a declared pin of 0 bytes is the auto spelling taken as a pin — refused with the fix")
+	func budgetZeroThrows() {
 		assertExpansionThrows(
 			"""
-			@HotView("feed", imports: [ClockCapability.self])
-			struct Unpinned {
+			@HotView("feed", imports: [ClockCapability.self], budget: IslandBudget(maxBytes: 0))
+			struct ZeroPin {
 				typealias State = FeedState
 				typealias Action = FeedAction
 				@HotBuilder func render(state: State) -> HotTree { Hot.Text(id: "feed-status", "ready") }
 				static func reduce(state: inout State, action: Action) -> [HotEffect] { [] }
 			}
 			""",
-			message: "@HotView: missing budget: — a declaration that names host imports is a sized island; add budget: IslandBudget(maxBytes: 16_384, maxGzipBytes: 4_096) (the budget plugin pins it before ship)"
+			message: "@HotView: a declared maxBytes: of 0 is the auto/unset spelling, not a pin — omit budget: (the measured auto-pin applies); if you meant a ceiling, declare a positive maxBytes:"
+		)
+	}
+
+	@Test("a non-literal budget is refused — budget: pins are literals, tightening-only")
+	func budgetNonLiteralThrows() {
+		assertExpansionThrows(
+			"""
+			@HotView("feed", budget: IslandBudget(maxBytes: pin))
+			struct Computed {
+				typealias State = FeedState
+				typealias Action = FeedAction
+				@HotBuilder func render(state: State) -> HotTree { Hot.Text(id: "feed-status", "ready") }
+				static func reduce(state: inout State, action: Action) -> [HotEffect] { [] }
+				static let pin = 1024
+			}
+			""",
+			message: "@HotView: budget: must be an IslandBudget pin with a positive integer maxBytes: — e.g. budget: IslandBudget(maxBytes: 16_384, maxGzipBytes: 4_096) (budget: is tightening-only; omit it to auto-pin from the measured row)"
 		)
 	}
 

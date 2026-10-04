@@ -204,11 +204,45 @@ private func renderBuilderMessage(in declaration: some DeclGroupSyntax) -> Strin
 	return nil
 }
 
-/// a declaration that names host imports is a sized island: the budget pin is
-/// mandatory (`WebUIBudgetPlugin` enforces the generated pin before ship).
-private func missingBudgetMessage(arguments: HotViewArguments) -> String? {
-	guard arguments.imports != nil, !arguments.importsIsEmpty, arguments.budget == nil else { return nil }
-	return "@HotView: missing budget: — a declaration that names host imports is a sized island; add budget: IslandBudget(maxBytes: 16_384, maxGzipBytes: 4_096) (the budget plugin pins it before ship)"
+// MARK: - the budget: tightening rule (CONTINUUM_DX W2, lane D)
+//
+// DX-3 measurement-fed budgets (§2.3): `budget:` is TIGHTENING-ONLY — the
+// measured auto-pin (the DX-3 `maxBytes`/`raw`/`gz`/`sha` row lane B writes
+// alongside every cross-built island) is the default; a DECLARED pin is
+// honored as a ceiling and may only be TIGHTER than it. the remembered
+// `imports:→budget:` rule retires: non-empty `imports:` auto-defaults the
+// budget and no longer requires a declared pin (the sentinel
+// `IslandBudget(maxBytes: 0, maxGzipBytes: nil)` is the "auto/unset" marker —
+// the budget plugin reads the manifest, not this declaration).
+// the tighter-than-measured COMPARISON needs lane B's measured rows, which
+// are enforced build-side (BudgetDriftTests "declarations are tightening-only"
+// + the plugin); the macro-side contribution here is the tightening-
+// READINESS guard: a declared pin that can never be a legal tightening
+// (a 0-byte pin = the auto spelling taken as a real pin, or a
+// non-literal/non-positive value) is refused with the fix hint.
+
+/// `budget:` when declared must be a legal tightening pin — a positive
+/// `maxBytes:` integer literal (and `maxGzipBytes:` positive or absent). a
+/// declared `maxBytes: 0` is the auto/unset spelling mistakenly written as a
+/// pin — omit `budget:` instead. nil = valid.
+private func declaredBudgetMessage(arguments: HotViewArguments) -> String? {
+	guard let budget = arguments.budget else { return nil }
+	// a budget expression must spell `IslandBudget(maxBytes: <pos>, ...)`.
+	let text = budget.trimmedDescription
+	guard let maxBytes = text.firstMatch(of: /maxBytes\s*:\s*(\d+)/) else {
+		return "@HotView: budget: must be an IslandBudget pin with a positive integer maxBytes: — e.g. budget: IslandBudget(maxBytes: 16_384, maxGzipBytes: 4_096) (budget: is tightening-only; omit it to auto-pin from the measured row)"
+	}
+	let raw = String(maxBytes.1)
+	guard let value = Int(raw), value > 0 else {
+		return "@HotView: a declared maxBytes: of 0 is the auto/unset spelling, not a pin — omit budget: (the measured auto-pin applies); if you meant a ceiling, declare a positive maxBytes:"
+	}
+	if let gz = text.firstMatch(of: /maxGzipBytes\s*:\s*(\d+)/) {
+		let gzValue = Int(String(gz.1)) ?? 0
+		guard gzValue > 0 else {
+			return "@HotView: a declared maxGzipBytes: of 0 is the auto/unset spelling, not a pin — omit maxGzipBytes: (nil auto-defaults) or declare a positive value"
+		}
+	}
+	return nil
 }
 
 // MARK: - registry markers final (CONTINUUM_DX W2, lane D)
@@ -313,7 +347,7 @@ private func hotViewPlan(of node: AttributeSyntax, on structDecl: StructDeclSynt
 	if let message = memberCollisionMessage(in: structDecl, adapterName: typeName + "Island") {
 		throw MacroExpansionErrorMessage(message)
 	}
-	if let message = missingBudgetMessage(arguments: arguments) {
+	if let message = declaredBudgetMessage(arguments: arguments) {
 		throw MacroExpansionErrorMessage(message)
 	}
 	if let message = missingStateActionMessage(in: structDecl) {

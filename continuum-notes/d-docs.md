@@ -611,6 +611,29 @@ page (showcase/blocks) carries a wired table. the change is purely additive
 to the row tag; the interactive count pin (25 `data-component-id`) is
 unchanged (rows carry no routing attrs).
 
+## the `imports:→budget` tightening diagnostic — implementation record (lane D, wave 2)
+
+_committed `task/d-surface2`. plan §2.3 + b-docs:571-573._
+
+- **the imports-require-budget refusal is DELETED** (`missingBudgetMessage`):
+  non-empty `imports:` auto-defaults the budget — the generated adapter emits
+  the auto/unset sentinel `IslandBudget(maxBytes: 0, maxGzipBytes: nil)`, and
+  the B-scanner's `parseHotViewBody` (no `budget:` label → pin nil → no
+  manifest row) leaves the pin to the DX-3 measured row / the plugin's
+  per-island row / the global ceiling. `importsWithoutBudgetExpands` pins it.
+- **tightening-READINESS diagnostic (additive, macro-side)**: `budget:` when
+  declared must be a POSITIVE literal pin — a declared `maxBytes: 0` is the
+  auto spelling mistakenly written as a pin (refused: omit `budget:`), and a
+  non-literal `maxBytes:` is refused (pins are literals). `budgetZeroThrows` +
+  `budgetNonLiteralThrows`.
+- **the tighter-than-measured COMPARISON needs lane B's measured-row exposure
+  (`islands[]` rows with `raw/gz/sha`, b-docs:571-573), NOT visible in this
+  tree** — the check is enforced build-side (BudgetDriftTests "declarations
+  are tightening-only" + the plugin's per-island row, already landed). when B's
+  measured rows land and the macro can see a compile-time auto-pin, the
+  declared<measured error fires here; until then the build-side enforce holds.
+  dependency recorded in d-to-b.md.
+
 ## doc fragments (W1, for the orchestrator)
 
 - `CONTINUUM.md`: §2.4 gains `WebUIIsland`'s pinned contract table (attribute
