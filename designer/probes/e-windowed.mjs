@@ -354,10 +354,11 @@ async function measureScroll(pg, label) {
   const dxBody = `
 <style>
   body { font: 13px ui-monospace, monospace; padding: 0; margin: 0; }
-  #dx-c, #dx-e, #dx-n { position: relative; height: 200px; overflow-y: auto; }
+  #dx-c, #dx-e, #dx-n, #dx-a { position: relative; height: 200px; overflow-y: auto; }
 </style>
 <div class="bench">
   <div id="dx-c" data-webui-viewport data-viewport-rowsize="${DECL_ROW_CPX}" data-viewport-overscan="2" style="position:relative;height:200px;overflow-y:auto">${dxRows}</div>
+  <div id="dx-a" data-webui-lease="viewport" data-webui-row-height="${DECL_ROW_CPX}" data-webui-overscan="2" style="position:relative;height:200px;overflow-y:auto">${dxRows}</div>
   <div id="dx-e" data-webui-lease="viewport" data-webui-row-height="${DECL_ROW_EPX}" style="position:relative;height:200px;overflow-y:auto">${dxRows}</div>
   <div id="dx-n" data-webui-lease="viewport" style="position:relative;height:200px;overflow-y:auto">${dxRows}</div>
 </div>`;
@@ -378,9 +379,11 @@ async function measureScroll(pg, label) {
   // container-local and fully formed (a top-of-list window clamps the above-band).
   await dpg.evaluate(() => {
     document.getElementById("dx-c").scrollTop = 1000 * 37;
+    document.getElementById("dx-a").scrollTop = 1000 * 37;
     document.getElementById("dx-e").scrollTop = 1000 * 38;
     document.getElementById("dx-n").scrollTop = 1000 * 40;
     document.getElementById("dx-c").dispatchEvent(new Event("scroll"));
+    document.getElementById("dx-a").dispatchEvent(new Event("scroll"));
     document.getElementById("dx-e").dispatchEvent(new Event("scroll"));
     document.getElementById("dx-n").dispatchEvent(new Event("scroll"));
   });
@@ -394,21 +397,27 @@ async function measureScroll(pg, label) {
         spacerH: sp ? parseFloat(sp.style.height) : 0,
       };
     };
-    return { c: snap("dx-c"), e: snap("dx-e"), n: snap("dx-n") };
+    return { c: snap("dx-c"), a: snap("dx-a"), e: snap("dx-e"), n: snap("dx-n") };
   });
   // dx-c: discovered via data-webui-viewport alone; declared rowsize 37 must
-  // win over the rendered 40 px measurement; declared overscan 2 must hold the
-  // window to ~visible+2+2 (~11 rows at 200px/37px), NOT the fallback default
-  // band (~one viewport's worth each side, ~19 rows) the red-team caught.
-  check(`DX-7e: data-webui-viewport discovery windows the container (attached ${dx.c.attached} << 2000)`, dx.c.attached > 0 && dx.c.attached < 500, JSON.stringify(dx.c));
+  // win over the rendered 40 px measurement. the A1 adjudication (i1): the
+  // component spelling data-viewport-overscan is a FACTOR (window = visible x
+  // factor), so overscan=2 at 200px/37px (vis=6) windows the region to
+  // 6 + ceil(6*1/2)*2 = 12 rows — NOT the pre-ruling absolute reading of
+  // visible+2+2 = 10 rows this fixture once asserted.
+  check("DX-7e: data-webui-viewport discovery windows the container (attached " + dx.c.attached + " << 2000)", dx.c.attached > 0 && dx.c.attached < 500, JSON.stringify(dx.c));
   check(`DX-7e: data-viewport-rowsize=${DECL_ROW_CPX} honored, not the 40 px offsetHeight (spacerH=${dx.c.spacerH} ~= ${DX_ROWS * DECL_ROW_CPX})`, Math.abs(dx.c.spacerH - DX_ROWS * DECL_ROW_CPX) < DECL_ROW_CPX, `spacerH=${dx.c.spacerH} expected~=${DX_ROWS * DECL_ROW_CPX}`);
-  check(`DX-7e: data-viewport-overscan=2 honored (window ${dx.c.attached} in [8,13] ~= visible+2+2, not the default band)`, dx.c.attached >= 8 && dx.c.attached <= 13, String(dx.c.attached));
+  check(`DX-7e: data-viewport-overscan=2 reads as a FACTOR (window ${dx.c.attached} in [12,13] = vis(6)+3+3 ≈ 12, rejects the absolute-2 row reading 11/10)`, dx.c.attached >= 12 && dx.c.attached <= 13, String(dx.c.attached));
+  // dx-a: engine-spelling data-webui-overscan=2 stays an ABSOLUTE 2 rows per
+  // side — the same declared value that reads 12-13 as a factor must window to
+  // 10-11 here, discriminating the two units at the same scroll row.
+  check(`DX-7e: data-webui-overscan=2 stays ABSOLUTE rows, distinct from the factor spelling (window ${dx.a.attached} in [10,11] = vis(6)+2+2 ≈ 10)`, dx.a.attached >= 10 && dx.a.attached <= 11, String(dx.a.attached));
   // dx-e: lease discovery preserved; engine-spelling data-webui-row-height=38
-  // honored; overscan undeclared -> the fallback default band stays (~19 rows),
-  // distinct from a declared-2 window.
+  // honored; overscan undeclared -> the default band stays (one visible band
+  // per side, 6+6+6 = 18), distinct from both declared spellings.
   check(`DX-7e: data-webui-lease discovery still windows (attached ${dx.e.attached} << 2000)`, dx.e.attached > 0 && dx.e.attached < 500, JSON.stringify(dx.e));
   check(`DX-7e: data-webui-row-height=${DECL_ROW_EPX} honored (spacerH=${dx.e.spacerH})`, Math.abs(dx.e.spacerH - DX_ROWS * DECL_ROW_EPX) < DECL_ROW_EPX, `spacerH=${dx.e.spacerH} expected~=${DX_ROWS * DECL_ROW_EPX}`);
-  check(`DX-7e: overscan fallback band when undeclared (attached ${dx.e.attached} in [14,24])`, dx.e.attached >= 14 && dx.e.attached <= 24, String(dx.e.attached));
+  check(`DX-7e: overscan default band when undeclared (attached ${dx.e.attached} in [16,20] = vis(6)+6+6 ≈ 18)`, dx.e.attached >= 16 && dx.e.attached <= 20, String(dx.e.attached));
   // dx-n: no params at all -> the first-row offsetHeight fallback must still
   // run (40 px) — kept only when NEITHER name set is present.
   check(`DX-7e: offsetHeight fallback kept when neither attr present (spacerH≈${DX_ROWS * RENDER_H})`, Math.abs(dx.n.spacerH - DX_ROWS * RENDER_H) < RENDER_H, `spacerH=${dx.n.spacerH} expected≈${DX_ROWS * RENDER_H}`);
