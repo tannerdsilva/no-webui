@@ -576,6 +576,41 @@ exposes `WebUIIslandCore` to `@HotView` targets, the emission swaps these two
 bodies verbatim to the documented spell — one self-contained patch, string
 suite + fixture pin it.
 
+## DX-11a — implementation record (lane D, wave 2) + the byte-identity exception
+
+_committed `task/d-surface2`. the typed per-control id vocabulary ships; gate =
+`Tests/WebUITests/APISurfaceTests.swift` `dx11a*` (byte-diff)._
+
+### the contract (pinned byte-exact)
+
+- **`WebUITable`, INTERACTIVE tables** (wired = at least one typed handler,
+  `.onSort`/`.onSelectAll`/`.onSelect`/`.onToggleExpand`): every data row
+  carries `<tr id="{id}-r{rowIndex}" data-key="{rowId}">` (attribute order
+  id → data-key → class). `data-key` is the SAME `rowId` the select/expand
+  control ids derive from (`{id}-select-{rowId}` / `{id}-expand-{rowId}`) —
+  one id vocabulary, no string math. sortable headers keep the routed control
+  `{id}-sort-{i}` (the span INSIDE the `<th>` — pinned there by the smoke gate
+  `<th class="sort-cell"><span class="sort" id="...-sort-{i}">`; the plan's
+  "ids on sortable `<th>`s" reads as these header-control ids; moving the id
+  onto the `<th>` element itself is a W3 routing re-target, deferred).
+- **`WebUIPagination`**: `{id}-prev/next/page-{n}/rows` (already existed —
+  pinned as the contract).
+- **chart marks** (`WebUIChart`): `{id}-mark-{i}` (sectors/categorical),
+  `{id}-mark-pt` (points) — already existed, pinned.
+- **static tables stay byte-identical**: a table without typed handlers (or
+  without an id) emits NO row ids / `data-key` — so showcase/blocks display
+  tables and the BEM pins (`<tr class="tr--selected">` etc.) are untouched.
+
+### the byte-identity exception (I1 migration register, §3.1/§2.11)
+
+rows of the smoke page's `interactive-table` (wired) gain the two row
+attributes → **the smoke page's served bytes change**. recorded exception,
+named in d-to-b.md for the dx-content-pin harness: page `smoke`, table
+`interactive-table`, rows `{id}-r{i}` + `data-key` added. no other reference
+page (showcase/blocks) carries a wired table. the change is purely additive
+to the row tag; the interactive count pin (25 `data-component-id`) is
+unchanged (rows carry no routing attrs).
+
 ## doc fragments (W1, for the orchestrator)
 
 - `CONTINUUM.md`: §2.4 gains `WebUIIsland`'s pinned contract table (attribute
