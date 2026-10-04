@@ -1,5 +1,5 @@
-=== canonical (nonce-normalized) + raw hashes, base ec1bcbc ===
-smoke canonical: 4b97be42f1e72f3ed5fdcfbeb08b0551b6ed44d78a77f1d86259375d87d13744
+=== canonical (render-noise-normalized) + raw hashes, base ec1bcbc ===
+smoke canonical: 0ec8a4ceb2f32513ddf507c19b76850514edc71f6b3e3278ef037a48a9d958d8
 smoke raw:       f6213fdc17e7476a7ef81b0c3d57aa28e159900c37576e87c7f34d9ddad729dd
 smoke bytes:        26907
 
@@ -15,6 +15,6 @@ blocks-standalone canonical: a660fe19d0642964ba5754c99636ce8800d74944f98333181c5
 blocks-standalone raw:       d16f0f8d37c13995ac75d25091b1eaf1213d061105408e3d5fd4447a45554c87
 blocks-standalone bytes:        4090
 
-showcase canonical: 01ec4c510bb0d933927785037bce3fc0a36d0fadf51d13a4bd541a517912efb5
+showcase canonical: 5a450af1bd93edcfcc04cdb2312bf98964d822358ccb96eca247fbca119c4422
 showcase raw:       e24e1dfbf6fe5aaba3f46beccfbe5cce366314d189262cae02d9308eaabc2a30
 showcase bytes:        167764

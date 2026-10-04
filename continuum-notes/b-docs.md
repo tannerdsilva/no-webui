@@ -579,3 +579,42 @@ second measurement pass:
   artifacts from the plugin work dir (lane-E's `WebUIServer` island routes +
   the built-in manifest route should read `designer`-produced assets at i1+,
   decided with the plan's DX-6 row).
+
+---
+
+## CONTINUUM_DX W1 — lane B addendum (measured numbers + the pin's channel finding)
+
+_committed `2c86d84` → this addendum (final green, base `ec1bcbc`)._
+
+### the demo, measured (candidate (b), `designer/gates/dx5-demo.sh --clean`, ~/dx-demo)
+
+| step | wall | evidence |
+|---|---|---|
+| cold `swift build` (home-dir app, plain, no flags; includes one-time network resolution of the framework's 5 remote deps + host tool build + the app) | **41.7 s** (SwiftPM phase 28.3 s) | 3 islands cross-built (Probe 232878 / Validate 163708 / Feed (consumer) 151895 B, all stripped embedded, valid \0asm) |
+| warm `swift build` (no edits) | **2.2 s** (SwiftPM 0.66 s) | **0 cross-build re-runs** — llbuild-declared inputs/outputs skipped the commands |
+| edit ONE consumer island source, rebuild | 11.2 s | FeedIsland re-cross-built only; WebUIProbeIsland/WebUIValidateIsland untouched (targeted invalidation) |
+| `WEBUI_WASM_SWIFTC=/nonexistent swift build` | fails exit 1 | named `[WebUIAutobuild] cannot cross-build … swiftly toolchain is a one-time machine prerequisite` |
+| `WEBUI_ISLAND_NESTED=1 wasm-cross …` | skip | recursion-guard backstop short-circuits, no artifact written |
+
+equivalence anchor: direct swiftc Probe = 232878 B vs the nested `swift build
+--swift-sdk …-embedded -c release` 231984 B (i3 record) → **0.4%**; Validate
+163708 vs 164921 → **0.7%**. the artifact lands in the plugin work dir (the
+sandbox-writable zone; `.build/out/Products/…` is unwritable from a build
+command on home dirs — the acceptance app must keep its home-dir shape).
+
+### the pin's channel finding (beyond the red-team's nonce fold)
+
+the red-team's fold (a) mapped the CSP nonce; live-serve at base measured the
+showcase page carries **three more per-process channels** the harness must
+normalize or that surface can never pin: the hidden `_csrf` input (fresh HMAC
+token per process), the RenderContext auto-generated `data-component-id="c<n>"`
+counter (shifted per process), and any JSON-Dictionary-serialized attribute
+(`data-optimistic`) whose Swift Dictionary key order randomizes per process
+(`{html,id}` vs `{id,html}` — the skill's JSON-in-markup hazard, confirmed
+live). `node designer/dx-content-pin.mjs --serve` is GREEN at base with all
+four channels canonicalized; pages.txt's canonical column reflects the extended
+transform (the raw column is untouched — fixtures authentic). the served sheet
+is NOT the naive comment-stripped working file (the asset tool's minify is more
+aggressive); serve mode asserts served-sheet determinism across processes +
+the pinned working-file hash (fixture mode), and W2 may fold the exact
+transform if a stricter assertion is wanted.

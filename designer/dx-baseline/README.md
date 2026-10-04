@@ -26,19 +26,27 @@ their canonical hashes are equal. that pair is the canonicalization's own test.
 
 ## the canonicalization (the harness owns the definition)
 
-every document mints a random CSP nonce per process (`HTMLDocument` echoes it
-into the policy as `'nonce-…'` and into the inline prelude as `nonce="…"`), so a
-raw hash is unique per process and cross-process diffs always false-fire
-(red-team fold a). the harness canonicalizes BEFORE hashing:
+every document carries PER-PROCESS render noise that has no deterministic page
+structure — a cross-process page diff must ignore all of it. the harness
+canonicalizes four channels BEFORE hashing (all four measured live at base):
 
 ```
-nonce="<base64url…>" → nonce="N"
-'nonce-<base64url…>' → 'nonce-N'
+nonce="<base64url…>"            → nonce="N"          (the CSP prelude attr)
+'nonce-<base64url…>'            → 'nonce-N'          (the CSP policy source)
+name="_csrf" value="<…>"        → name="_csrf" value="CSRF"   (per-process HMAC token)
+data-component-id="c<digits>"   → data-component-id="cN"       (per-process RenderContext counter)
+data-optimistic="<json>"        → data-optimistic="OPS"        (Dictionary key order is per-process)
 ```
 
-deterministic, length-free, quoted-form-preserving. the same transformation
-applies to committed fixtures and live bytes, so "clean" means the live page
-equals the captured page modulo exactly that one randomized attribute.
+`data-optimistic` (and any JSON-Dictionary-serialized inline payload) cannot be
+byte-pinned: Swift Dictionary key order is randomized per process, so even
+identical data serializes differently across processes — the pin asserts the
+marker, never the serialization. stable literal ids (`data-component-id="btn-x"`)
+are untouched by the narrow `c\d+` shape.
+
+deterministic, length-free, form-preserving. the same transformation applies to
+committed fixtures and live bytes, so "clean" means the live page equals the
+captured page modulo exactly these randomized channels.
 
 ## note: the pages.txt canonical column was regenerated at W1
 
