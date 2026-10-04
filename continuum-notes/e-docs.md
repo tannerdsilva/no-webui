@@ -157,3 +157,83 @@ the engine grew to **68,188 raw / 16,185 gz** (measured on this branch head) fro
 gate — the mechanism working as designed. the i1 pin (60,000 / 14,500) needs a
 deliberate re-pin at i2 (orchestrator/B decision, ~5-6% headroom over these numbers).
 
+---
+
+## wave 3 — the live handshake, t3.3 windowing, the served allowlist slice
+
+### the real-island handshake (i2 gate completion; reconcile-what-differs)
+
+`designer/probes/e-island-e2e-real.mjs` drives C's actual
+`WebUIProbeIsland.wasm` (173,846 B) through the engine's real loader on :9263.
+the live vocabulary works end-to-end (21/21): mount html, ArrowUp/Down keydowns,
+clicks on probe-inc/dec/clear, input on probe-field → insert, take_ops drain,
+state channel across a region replace (counter + keyed list survive).
+
+two engine reconciliations surfaced by the real artifact (both are the c-to-e.md
+frozen vocabulary — the synthetic wave-2 island had simply not exercised them):
+
+1. **event type normalization.** the island decodes keyboard events as
+   `type: "key"` (c-to-e.md table), the engine was sending `keydown/keyup/
+   keypress`. `deliverIslandEvent` now normalizes keyboard kinds to `key`
+   (island-delivery path only — the shared `effectiveTypes` used by component
+   routing is untouched).
+2. **click key = element id.** clicks carry `key: <nearest id within the region>`
+   (probe-inc/dec/clear), matching the frozen table; previously `key` was absent
+   for clicks (event.key is undefined), which real-island clicks reduced to
+   `.noop`.
+
+verified-moot (not assumed): the artifact imports NO `webui_*` host fns and
+exports NO `webui_frame_tick` — so `webui_frame_tick` (rAF call-back) and
+`webui_store_get|set` remain unused conventions; the state channel is
+`webui_state_save/restore` only. the synthetic e-island-e2e (17/17) assertion
+was updated to the normalized `key` type.
+
+### t3.3 engine-local windowing (the d3 gate's load-bearing piece)
+
+engine support: `createWindowManager` in webui-engine.js. a container carrying
+`data-webui-lease="viewport"` is windowed at boot (and re-windowed after every
+whole-container replace): pool = direct children (detached), attached = the
+viewport ± overscan rows positioned absolutely at `i × rowHeight`, total height
+held by an engine-injected `<data-webui-window-spacer>`. scroll re-windowing is
+engine-local (the d0 page-side observer is replaced); only entering/leaving
+window rows are inserted/removed per scroll. two scroll models (document-flow,
+and self-scrolling container) are auto-detected. the full DOM contract and
+D-side `Viewport` requirements are in `continuum-notes/e-to-d.md` (wave 3).
+
+**bench (e-windowed, 22/22 on :9266; recipe math mirrors continuum-bench):**
+10k-row feed, 30 Hz host display (CoreGraphics `refreshRate == 30` — the rAF
+metric's floor is one refresh, ~33 ms, for ANY page on this host):
+
+| metric | loopback | throttled (80 ms rtt) |
+|---|---|---|
+| rAF p95 (10k full-render control, d0) | 62.4 ms | 61.5 ms |
+| rAF p95 (engine-windowed) | **35.8 ms** (= floor, no jank) | **35.8 ms** |
+| engine scroll-work p95 (scroll→rewind→mutations) | **2.30 ms** | **2.20 ms** |
+| mutation census (windowed) | childList only (1.1k), 0 char/attr | same |
+| attached rows (windowed, 10k pool) | 45–71 (≤ 90) | 45–70 |
+
+the t3.3 "≤ 20 ms" claim is carried by the display-independent **engine
+scroll-work p95 (2.2–2.3 ms)**; the rAF metric sits at the 30 Hz host floor and
+2× below the d0 full-render wall. memory flat over 60 s (heap delta 0%, attached
+bounded). scroll anchoring: a whole-region replace of the windowed container
+keeps scroll position and reforms the same visible row.
+
+### served allowlist slice (consuming B's `/ui/continuum-manifest.json`)
+
+the engine fetches `/ui/continuum-manifest.json` at boot; when the response
+carries `attributeAllowlist`, it **replaces** `ATTR_ALLOW_EXACT` /
+`ATTR_ALLOW_PREFIX` (entries ending `*` or `-` become prefixes, others exact);
+a missing/malformed manifest falls back to the seed silently (no warning).
+probe `e-manifest.mjs` (10/10 on :9267, mocked route): manifest exact + prefix
+entries apply, a seed-only name drops out (replace, not union), and the 404 page
+keeps the seed with zero manifest warnings.
+
+### budget — the fourth trip (flagged, deliberate re-pin at/after i3)
+
+the engine measured **73,094 raw / 17,595 gz** on this branch head (t3.3
+windowing + manifest slice + handshake reconciliations), against the i2 pin
+**72,000 / 17,000** — +1.5% raw / +3.5% gz. the additions are the mandated
+wave-3 scope; the mechanism is the designed trip-and-rein. recommend the i3/i4
+re-pin at ~**74,500 raw / 18,000 gz** (~2-3% headroom) — orchestrator/B decision,
+recorded here. `swift package plugin budget` will report this breach until then.
+
