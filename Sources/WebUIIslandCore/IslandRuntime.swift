@@ -50,6 +50,24 @@ public protocol IslandRuntimeSurface: ContinuumIsland where State: IslandEmptySt
 
 	/// rebuilds the retained state; nil = malformed (caller keeps live state).
 	static func stateFromJSON(_ json: String) -> (state: State, renderCount: Int, eventCount: Int)?
+
+	// DX-2 (validated additive): the mount-envelope hook. the runtime decodes
+	// the `{name, args}` envelope `webui_render_region` carries and hands it
+	// here BEFORE rendering, so an args-derived island (validate) can fold the
+	// mount args into its retained state. the probe's default ignores the
+	// envelope (its region is retained-state-only) — the hook is strictly
+	// additive and the default keeps every existing conformance unchanged.
+	static func consumeMountEnvelope(_ envelopeJSON: String, state: inout State)
+}
+
+/// the mount-envelope default: not consumed (the probe renders retained state
+/// only). `writeExport`-style defaults live beside the runtime so a slim island
+/// conformance stays one declared `static func` short of complete.
+public extension IslandRuntimeSurface {
+	static func consumeMountEnvelope(_ envelopeJSON: String, state: inout State) {
+		_ = envelopeJSON
+		_ = state
+	}
 }
 
 // MARK: - the reactor core (buffer-free, native-testable)
@@ -88,9 +106,12 @@ public struct IslandRuntimeCore<I: IslandRuntimeSurface> {
 	public mutating func renderRegion(input: [UInt8]) -> [UInt8]? {
 		guard !input.isEmpty else { return nil }
 		renderCount += 1
-		// the mount envelope `{name, args}` is not consumed by the probe; the
-		// restored typed state (via webui_state_restore) is already retained.
-		_ = utf8Decode(input)
+		// the mount envelope `{name, args}` is folded into the retained state
+		// via the island's mount hook (DX-2 additive: validate retains the args
+		// it must render; the probe's default ignores the envelope, so the
+		// mount path for retained-state islands is unchanged).
+		let envelopeJSON = utf8Decode(input)
+		I.consumeMountEnvelope(envelopeJSON, state: &probe)
 		return Array(I.regionHTML(state: probe, renderCount: renderCount, eventCount: eventCount).utf8)
 	}
 
@@ -360,6 +381,28 @@ public enum IslandRuntime<I: IslandRuntimeSurface> {
 		return Int(bitPattern: IslandRuntimeBuffers.frame)
 		#else
 		_ = payload
+		return 0
+		#endif
+	}
+
+	/// the lockstep EXTRA-export entry for INPUT-DRIVEN extras (DX-2:
+	/// `webui_validate`). the island's shim hands the raw input buffer
+	/// (`webui_input_ptr`-style pointer + length, exactly like the standard
+	/// exports receive), the runtime decodes it scalar-clean and calls
+	/// `compute`, then writes the returned payload to the frame. empty input
+	/// returns 0 without touching the frame — matching the hand-written
+	/// validate export's `guard let ptr, len > 0 else { return 0 }`.
+	@discardableResult
+	public static func writeExport(
+		input ptr: UnsafeRawPointer?, _ len: Int,
+		compute: (String) -> String
+	) -> Int {
+		#if os(WASI)
+		guard let ptr, len > 0 else { return 0 }
+		let bytes = UnsafeRawBufferPointer(start: ptr, count: len).map { $0 }
+		return writeExport(compute(utf8Decode(bytes)))
+		#else
+		_ = (ptr, len, compute)
 		return 0
 		#endif
 	}

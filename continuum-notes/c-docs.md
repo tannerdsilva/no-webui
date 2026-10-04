@@ -307,8 +307,81 @@ wave's commit), `Sources/WebUIProbeIsland/main.swift` (the slim form),
 
 ## next-slice queue (lane c)
 
-- convert `ValidateIsland` to the runtime (`IslandRuntimeSurface` conformance +
-  slim main) — needs a `State`/`Action`-shaped surface for the validator (its
-  current static funcs are rule-eval, not a reducer); runtime-side dev check
-  (DX-9) behind the build flag; auto-declared budgets for both islands (W2
-  lane-C scope, CONTINUUM_DX §4.5).
+- ~~convert `ValidateIsland` to the runtime (`IslandRuntimeSurface` conformance +
+  slim main)~~ **DONE — see the DX-2 fragment below (task/c-validate)** — needs a
+  `State`/`Action`-shaped surface for the validator (its current static funcs are
+  rule-eval, not a reducer); runtime-side dev check (DX-9) behind the build flag;
+  auto-declared budgets for both islands (W2 lane-C scope, CONTINUUM_DX §4.5).
+
+---
+
+# lane-c docs fragment — CONTINUUM_DX WAVE 2 (DX-2: the validate island conversion)
+
+the pull-forward unit that closes the integration merge's link gap. base was the
+four-lane merged tree (`8eeee6e`, the orchestrator's dev-continuum head); the
+defect reproduced at base:
+
+```
+swift package --disable-sandbox plugin wasm-island
+wasm-ld: error: .../WebUIIslandCore.objlib/islandruntime.o: undefined symbol: webui_island_bind
+```
+
+## what landed (dx-2)
+
+- **`ValidateIsland` becomes a concrete `IslandRuntimeSurface`.** the d3
+  rule-evaluator funcs stay the natively-tested logic home in
+  `Sources/WebUIIslandCore/ValidateIsland.swift`; a `ValidateState` (the mount
+  args envelope payload, `IslandEmptyState`) + `ValidateAction` (`.noop` only)
+  were added, and the enum now conforms to `ContinuumIsland` +
+  `IslandRuntimeSurface` with the probe's exact hook signatures
+  (`decodeEvent`/`regionHTML(state:)`/`stateToJSON`/`stateFromJSON`).
+- **the slim main.** `Sources/WebUIValidateIsland/main.swift` goes 121 lines →
+  ~50: the `webui_island_bind` shim (`IslandRuntime<ValidateIsland>.run()`) plus
+  the `webui_validate` EXTRA export as a one-line global `@_expose` shim through
+  the runtime's lockstep input-driven extras entry. the hand-written export set
+  that collided with the runtime's (input/frame/frame_len/render_region) is
+  gone — the runtime owns the 8-export surface.
+- **two additive runtime hooks (documented, probe-neutral).**
+  1. `IslandRuntimeSurface.consumeMountEnvelope(_:state:)` — the mount envelope
+     `{name, args}` is handed to the island before rendering so an
+     args-derived island (validate) retains the args it renders. DEFAULT:
+     ignored (the probe renders retained state only — its conformance file is
+     untouched, artifact byte-identical at 233,952 B).
+  2. `IslandRuntime.writeExport(input:_:compute:)` — the lockstep EXTRA-export
+     entry for input-driven extras (validate needs the raw input buffer, the
+     corpus export does not). both are strictly additive; no existing probe
+     path changed.
+- **behavior-equivalence proven natively.** `ValidateIslandRuntimeTests.swift`
+  drives the SAME `IslandRuntimeCore<ValidateIsland>` the wasm executes and
+  asserts the mount/verdict/state contracts byte-exact against the d3 logic
+  home (mirrors the DX-1 probe suite).
+
+## the webui_validate contract (preserved exactly)
+
+input = raw `{value, rules}` json in the input buffer; response written to the
+frame buffer, byte-identical to the hand-written template:
+`{"ok":<bool>,"message":"<escaped>"}` (`JSONValue.escapeString`). empty input
+returns 0 without touching the frame. the mount path renders
+`ValidateIsland.regionHTML(argsJSON:)` for the retained envelope args — the same
+`.island--ok`/`.island--error` region html as the hand-written main.
+
+## size + budget (measured)
+
+- `WebUIValidateIsland.wasm` **176,669 B stripped** (was 164,670 hand-written —
+  the runtime slice + slim main add ~12.0 KB; declared `IslandBudget`
+  200,000/90,000 holds, global ceiling 240,000 verified via `plugin budget`).
+- `WebUIProbeIsland.wasm` unchanged at **233,952 B** — the two additive hooks
+  cost zero probe bytes (byte-identity is itself an assertion here).
+
+## handoffs / adjudication
+
+- **to E:** the validate artifact's export surface is unchanged in kind (8
+  standard + `webui_validate`); the engine mount/drain contract needs no change
+  (`restoreIslandRegionState` + `webui_render_region` already envelope-based).
+- **to D:** `consumeMountEnvelope` is the generalized mount contract for
+  args-derived `@HotView` adapters; `writeExport(input:_:)` is the generated
+  shape for input-driven extras.
+- **orchestrator:** the two additive hooks are the ONLY runtime deviations
+  from the DX-1 slice; both ship with the probe byte-identity as the
+  regression backstop.
+
