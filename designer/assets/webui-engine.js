@@ -380,6 +380,13 @@ window.WebUIEngine = (function () {
         }
       }
 
+      var islRegion = event.target && event.target.closest ? event.target.closest('[data-webui-island]') : null;
+      if (islRegion && islRegion.getAttribute && islandRegionSubscribed(islRegion, event.type)) {
+        if (event.type === 'submit' && typeof event.preventDefault === 'function') { event.preventDefault(); }
+        deliverIslandEvent(islRegion, event);
+        return;
+      }
+
       var componentEl = findComponent(event);
       if (!componentEl) {
         warnUnwiredControl(event);
@@ -628,6 +635,31 @@ window.WebUIEngine = (function () {
       }
     }
 
+    function deliverIslandEvent(region, event) {
+      var name = region.getAttribute('data-webui-island');
+      if (!name) return;
+      var mod = islandModules[name];
+      if (!mod || !mod.exports || typeof mod.exports.webui_on_event !== 'function') return;
+      var payload = {
+        type: effectiveTypes(event)[0] || event.type,
+        key: (event.key !== undefined && event.key !== null) ? String(event.key) : undefined,
+        data: extractEventData(event, region),
+      };
+      var bytes = new TextEncoder().encode(JSON.stringify(payload));
+      if (bytes.length > 65536) {
+        _islandLog('island ' + name + ' event payload too large — dropped', 'warn');
+        return;
+      }
+      var inputPtr = mod.exports.webui_input_ptr();
+      new Uint8Array(mod.memory.buffer, inputPtr, bytes.length).set(bytes);
+      try {
+        mod.exports.webui_on_event(inputPtr, bytes.length);
+      } catch (e) {
+        _islandLog('island ' + name + ' webui_on_event threw: ' + e.message, 'warn');
+      }
+      drainIslandOps(name, mod.exports);
+    }
+
     function reset(config_) {
       config = config_;
     }
@@ -643,6 +675,7 @@ window.WebUIEngine = (function () {
     var callbackPending = false;
     var queued = [];
     var warnedOnce = {};
+    var onReplace = null;
 
     function warnOnce(key, message) {
       if (warnedOnce[key]) return;
@@ -908,6 +941,39 @@ window.WebUIEngine = (function () {
       return el;
     }
 
+    function applyHotOp(op) {
+      if (!op) return false;
+      if (op.c === 'text') {
+        clearPending(op.id);
+        setTextContent(op.id, op.value);
+        clearEcho(op.id);
+        return true;
+      }
+      if (op.c === 'attr') {
+        if (!attrNameAllowed(op.name)) {
+          warnOnce('hot-attr:' + op.name, 'island op attr "' + op.name + '" — not on the allowlist, skipped');
+          return false;
+        }
+        clearPending(op.id);
+        applyAttrFragment({ id: op.id, name: op.name, value: op.value });
+        return true;
+      }
+      if (op.c === 'insert') {
+        clearPending(op.parent);
+        return !!appendChildFragment(op.parent, op.html, op.before || undefined);
+      }
+      if (op.c === 'remove') {
+        clearPending(op.id);
+        return !!removeFragmentElement(op.id);
+      }
+      if (op.c === 'move') {
+        clearPending(op.id);
+        var moved = moveFragmentElement({ id: op.id, before: op.before || undefined });
+        return !!moved;
+      }
+      return false;
+    }
+
     function armPending(id) {
       var el = document.getElementById(id);
       if (!el) return;
@@ -991,6 +1057,9 @@ window.WebUIEngine = (function () {
         }
       }
 
+      if (onReplace) {
+        try { onReplace(el, id); } catch (e) { }
+      }
       var savedState = saveInputState(el);
 
       el.parentNode.replaceChild(fragment, el);
@@ -1211,7 +1280,11 @@ window.WebUIEngine = (function () {
       settleMs = ms;
     }
 
-    return { patch: patch, reset: reset, setSettle: setSettle, sanitize: sanitizeFragment, echo: echo, echoOverlay: echoOverlay };
+    return { patch: patch, reset: reset, setSettle: setSettle, sanitize: sanitizeFragment, echo: echo, echoOverlay: echoOverlay, applyHotOp: applyHotOp, setOnReplace: setOnReplace };
+
+    function setOnReplace(fn) {
+      onReplace = fn;
+    }
   }
 
   var UNSAFE_PROTOCOLS = /^(javascript|data|vbscript):/i;
@@ -1410,21 +1483,77 @@ window.WebUIEngine = (function () {
 
   var _islandSanitize = null;
   var _islandConfig = null;
+  var _islandApply = null;
   var islandModules = {};
   var islandLoading = {};
-  function buildImports(module) {
+  var islandRegionState = {};
+  var islandRafHosts = [];
+  var islandRafGoing = false;
+  var ISLAND_HOST = {
+    webui_log: function (h) { return function (p, l) { var t = islandStr(h, p, l); if (t !== null) { try { console.log('[island:' + h.name + '] ' + t); } catch (e) { } } return 0; }; },
+    webui_now_ms: function () { return function () { return (typeof performance === 'undefined' || !performance.now) ? Date.now() : performance.now(); }; },
+    webui_raf: function (h) { return function (i) { islandRafRegister(h, i); return 0; }; },
+    webui_store_get: function (h) { return function (p, l) { var k = islandStr(h, p, l); if (!k) return 0; var v = null; try { v = window.localStorage.getItem(k); } catch (e) { } return (v === null) ? 0 : islandFrameWrite(h, v); }; },
+    webui_store_set: function (h) { return function (kp, kl, vp, vl) { var k = islandStr(h, kp, kl); if (k === null) return 0; var v = (vp === undefined) ? '' : (islandStr(h, vp, vl) || ''); try { window.localStorage.setItem(k, v); } catch (e) { } return 0; }; },
+    webui_surface: function () { return function () { return 0; }; },
+  };
+  function islandStr(h, p, l) { var m = h.exports && h.exports.memory; return (m && l) ? new TextDecoder().decode(new Uint8Array(m.buffer, p, l)) : null; }
+  function buildImports(module, host) {
     var imports = {};
     var declared = WebAssembly.Module.imports(module);
     for (var i = 0; i < declared.length; i++) {
       var imp = declared[i];
       var bucket = imports[imp.module] || (imports[imp.module] = {});
-      bucket[imp.name] = function () { return 0; };
+      if (imp.name.indexOf('webui_') === 0 && !ISLAND_HOST[imp.name]) { throw new Error('island imports unknown host fn ' + imp.name); }
+      bucket[imp.name] = ISLAND_HOST[imp.name] ? ISLAND_HOST[imp.name](host) : function () { return 0; };
     }
     return imports;
   }
-  function instantiateIsland(module) {
-    return WebAssembly.instantiate(module, buildImports(module)).then(function (result) {
+  function islandFrameWrite(h, text) {
+    var e = h.exports;
+    if (!e || typeof e.webui_frame_ptr !== 'function') return 0;
+    var m = e.memory;
+    var ptr = e.webui_frame_ptr();
+    var b = new TextEncoder().encode(text);
+    var cap = m.buffer.byteLength - ptr - 4;
+    if (cap < 0) return 0;
+    if (b.length > cap) { b = b.slice(0, cap); }
+    var w = new Uint8Array(m.buffer, ptr, b.length + 4);
+    w[0] = b.length & 255; w[1] = (b.length >>> 8) & 255; w[2] = (b.length >>> 16) & 255; w[3] = b.length >>> 24;
+    w.set(b, 4);
+    return ptr;
+  }
+  function islandRafRegister(h, i) {
+    if (typeof requestAnimationFrame !== 'function') { return; }
+    (h.raf = h.raf || {})[i] = true;
+    if (islandRafHosts.indexOf(h) === -1) { islandRafHosts.push(h); }
+    if (!islandRafGoing) { islandRafGoing = true; requestAnimationFrame(islandRafTick); }
+  }
+  function islandRafTick() {
+    islandRafGoing = false;
+    var live = [];
+    for (var i = 0; i < islandRafHosts.length; i++) {
+      var h = islandRafHosts[i];
+      var idx = [];
+      for (var k in h.raf) { if (h.raf[k]) { idx.push(Number(k)); h.raf[k] = false; } }
+      if (!idx.length) { continue; }
+      live.push(h);
+      var ex = h.exports;
+      if (ex && typeof ex.webui_frame_tick === 'function') {
+        for (var j = 0; j < idx.length; j++) {
+          try { ex.webui_frame_tick(idx[j]); } catch (e) { }
+          if (_islandApply) { drainIslandOps(h.name, ex); }
+        }
+      }
+    }
+    islandRafHosts = live;
+    if (islandRafHosts.length) { islandRafGoing = true; requestAnimationFrame(islandRafTick); }
+  }
+  function instantiateIsland(module, name) {
+    var host = { exports: null, name: name };
+    return WebAssembly.instantiate(module, buildImports(module, host)).then(function (result) {
       var inst = result && result.instance ? result.instance : result;
+      host.exports = inst.exports;
       return inst.exports;
     });
   }
@@ -1445,6 +1574,7 @@ window.WebUIEngine = (function () {
       islandState(el, 'unmapped');
       return false;
     }
+    restoreIslandRegionState(el, name);
     var args = {};
     try { args = JSON.parse(el.getAttribute('data-webui-args') || '{}'); } catch (e) { }
     var payload = new TextEncoder().encode(JSON.stringify({ name: name, args: args }));
@@ -1476,7 +1606,7 @@ window.WebUIEngine = (function () {
         }
         return res.arrayBuffer().then(function (bytes) { return new WebAssembly.Module(bytes); });
       })
-      .then(instantiateIsland)
+      .then(function (mod) { return instantiateIsland(mod, name); })
       .then(function (exports) {
         if (!exports) { return null; }
         if (typeof exports._start === 'function') {
@@ -1495,22 +1625,72 @@ window.WebUIEngine = (function () {
       });
     return islandLoading[name];
   }
+  function drainIslandOps(name, ex) {
+    if (typeof ex.webui_take_ops !== 'function') { return 0; }
+    var applied = 0;
+    var batches = 0;
+    while (++batches <= 64) {
+      var len = 0;
+      try { len = ex.webui_take_ops(); } catch (e) { _islandLog('island ' + name + ' webui_take_ops threw: ' + e.message, 'warn'); break; }
+      if (!len || len > 262144) { break; }
+      var bytes = (function () {
+        try { return new Uint8Array(ex.memory.buffer, ex.webui_frame_ptr(), len).slice(); }
+        catch (e) { return null; }
+      })();
+      if (!bytes) { _islandLog('island ' + name + ' webui_take_ops frame out of bounds — drain stopped', 'warn'); break; }
+      var at = 0;
+      var good = true;
+      while (at < bytes.length) {
+        var rec = null;
+        try { rec = decodeHotOpRecord(bytes, at); } catch (e) { good = false; break; }
+        if (!rec || !_islandApply) { good = false; break; }
+        _islandApply(rec.op);
+        applied++;
+        at = rec.next;
+      }
+      if (!good) { _islandLog('island ' + name + ' emitted a malformed op record — drain stopped', 'warn'); break; }
+    }
+    return applied;
+  }
+  function decodeHotOpRecord(bytes, start) {
+    var p = start;
+    var td = new TextDecoder();
+    function take(n) { if (p + n > bytes.length) { throw new RangeError('trunc'); } var s = p; p += n; return s; }
+    function u8() { return bytes[take(1)]; }
+    function u16() { var s = take(2); return bytes[s] | (bytes[s + 1] << 8); }
+    function u32() { var s = take(4); return bytes[s] | (bytes[s + 1] << 8) | (bytes[s + 2] << 16) | (bytes[s + 3] * 16777216); }
+    function id16() { var n = u16(); return td.decode(bytes.subarray(take(n), p)); }
+    function id32() { var n = u32(); return td.decode(bytes.subarray(take(n), p)); }
+    function optId() { var n = u16(); if (n === 0xffff) { return null; } return td.decode(bytes.subarray(take(n), p)); }
+    if (u8() !== 1) { throw new RangeError('ver'); }
+    var op = u8();
+    var eid = id16();
+    var r = null;
+    if (op === 1) { r = { c: 'text', id: eid, value: id32() }; }
+    else if (op === 2) { r = { c: 'attr', id: eid, name: id16(), value: id32() }; }
+    else if (op === 3) { r = { c: 'insert', parent: eid, before: optId(), html: id32() }; }
+    else if (op === 4) { r = { c: 'remove', id: eid }; }
+    else if (op === 5) { r = { c: 'move', id: eid, before: optId() }; }
+    else { throw new RangeError('op' + op); }
+    return { op: r, next: p };
+  }
+  function mountIslandRegion(el) {
+    if (el.getAttribute('data-webui-island-state') === 'mounted') { return; }
+    var name = el.getAttribute('data-webui-island');
+    if (!name) { return; }
+    if (_islandConfig && _islandConfig.capabilities && _islandConfig.capabilities.indexOf(name) === -1) {
+      islandState(el, 'unmapped');
+      return;
+    }
+    var ref = el;
+    loadIsland(name).then(function (mod) {
+      if (mod) { islandRender(ref, name); }
+      else { islandState(ref, 'unmapped'); }
+    });
+  }
   function mountAllIslands() {
     var regions = document.querySelectorAll('[data-webui-island]');
-    for (var i = 0; i < regions.length; i++) {
-      (function (el) {
-        var name = el.getAttribute('data-webui-island');
-        if (!name) { return; }
-        if (_islandConfig && _islandConfig.capabilities && _islandConfig.capabilities.indexOf(name) === -1) {
-          islandState(el, 'unmapped');
-          return;
-        }
-        loadIsland(name).then(function (mod) {
-          if (mod) { islandRender(el, name); }
-          else { islandState(el, 'unmapped'); }
-        });
-      })(regions[i]);
-    }
+    for (var i = 0; i < regions.length; i++) { mountIslandRegion(regions[i]); }
   }
   function wireIslandInputs() {
     document.addEventListener('input', function (e) {
@@ -1520,6 +1700,7 @@ window.WebUIEngine = (function () {
       if (!regionId) { return; }
       var region = document.getElementById(regionId);
       if (!region || !region.getAttribute) { return; }
+      if (islandRegionSubscribed(region, 'input')) { return; }
       var name = region.getAttribute('data-webui-island');
       if (!name || !islandModules[name]) { return; }
       var args = {};
@@ -1529,13 +1710,61 @@ window.WebUIEngine = (function () {
       islandRender(region, name);
     });
   }
+  function islandRegionSubscribed(region, type) {
+    var raw = region.getAttribute('data-webui-island-events');
+    if (!raw) { return false; }
+    var list = null;
+    try { list = JSON.parse(raw); } catch (e) { return false; }
+    if (!Array.isArray(list)) { return false; }
+    if (list.indexOf(type) !== -1) { return true; }
+    if (type === 'focusin' && list.indexOf('focus') !== -1) { return true; }
+    if (type === 'focusout' && list.indexOf('blur') !== -1) { return true; }
+    return false;
+  }
+  function saveIslandRegionState(el) {
+    if (!el || !el.getAttribute) { return; }
+    var name = el.getAttribute('data-webui-island');
+    if (!name) { return; }
+    var mod = islandModules[name];
+    if (!mod || !mod.exports || typeof mod.exports.webui_state_save !== 'function') { return; }
+    try {
+      var ptr = mod.exports.webui_state_save();
+      var len = (typeof mod.exports.webui_frame_len === 'function') ? mod.exports.webui_frame_len() : 0;
+      if (!ptr || !len) { return; }
+      islandRegionState[name + '|' + (el.id || '')] = new Uint8Array(mod.memory.buffer, ptr, len).slice();
+    } catch (e) { _islandLog('island ' + name + ' webui_state_save threw: ' + e.message, 'warn'); }
+  }
+  function restoreIslandRegionState(el, name) {
+    var mod = islandModules[name];
+    if (!mod || !mod.exports || typeof mod.exports.webui_state_restore !== 'function') { return false; }
+    var bytes = islandRegionState[name + '|' + (el.id || '')];
+    if (!bytes || !bytes.length || bytes.length > 65536) { return false; }
+    var inputPtr = mod.exports.webui_input_ptr();
+    new Uint8Array(mod.memory.buffer, inputPtr, bytes.length).set(bytes);
+    try { mod.exports.webui_state_restore(inputPtr, bytes.length); } catch (e) { _islandLog('island ' + name + ' webui_state_restore threw: ' + e.message, 'warn'); }
+    return true;
+  }
+  function saveAllIslandRegions() {
+    var els = document.querySelectorAll('[data-webui-island]');
+    for (var i = 0; i < els.length; i++) { saveIslandRegionState(els[i]); }
+  }
+  function reconcileIslandRegions(changed) {
+    for (var i = 0; i < changed.length; i++) {
+      var n = changed[i];
+      if (!n || n.nodeType !== 1 || !n.getAttribute) { continue; }
+      if (n.getAttribute('data-webui-island')) { mountIslandRegion(n); continue; }
+      if (n.querySelectorAll) {
+        var inner = n.querySelectorAll('[data-webui-island]');
+        for (var j = 0; j < inner.length; j++) { mountIslandRegion(inner[j]); }
+      }
+    }
+  }
   function _islandLog(msg, level) {
     try {
       if (level === 'warn') { console.warn('[WebUIEngine] ' + msg); }
       else { console.log('[WebUIEngine] ' + msg); }
     } catch (e) { }
   }
-
   var _statusEl = null;
   var _statusText = null;
   var _statusTimer = null;
@@ -1615,6 +1844,10 @@ window.WebUIEngine = (function () {
 
     _islandSanitize = fragmentPatcher.sanitize;
     _islandConfig = config;
+    _islandApply = fragmentPatcher.applyHotOp;
+    fragmentPatcher.setOnReplace(function (el) { saveIslandRegionState(el); });
+    afterPatchHooks.push(reconcileIslandRegions);
+    document.addEventListener('webui:connected', saveAllIslandRegions);
 
     eventDelegator.mount();
 
@@ -1667,6 +1900,7 @@ window.WebUIEngine = (function () {
     }
     instance.wsClient.disconnect();
     instance.eventDelegator.unmount();
+    instance.fragmentPatcher.setOnReplace(null);
     instance.fragmentPatcher.reset();
     instance.stateStore.clear();
     instance = null;
