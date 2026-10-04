@@ -115,15 +115,14 @@ func renderViewportEnginePage(state: BenchState, router: EventRouter, items: Int
 	return html
 }
 
-/// the Viewport's degrade render (the full list) with the engine's lease
-/// attribute on the root container — the attribute (`data-webui-lease=
-/// "viewport"`) is the served wire the engine's window manager discovers.
+/// the Viewport's degrade render (the full list). the engine's windowing lease
+/// (`data-webui-lease="viewport"`) is emitted BY the Viewport component itself
+/// since DX-7d — the pre-DX-7d server-adapter string-replace that injected it
+/// was a no-op duplicate and is RETIRED here (d-docs:466, d-to-e:54): the
+/// component is the single source of the lease, so the bench serves the
+/// component's bytes verbatim.
 func viewportHTML(_ viewport: Viewport<Int, BenchFeedItem>) -> String {
-	var html = viewport.render()
-	html = html.replacingOccurrences(
-		of: "<ul id=\"feed-list\" class=\"list list--virtual\"",
-		with: "<ul id=\"feed-list\" class=\"list list--virtual\" data-webui-lease=\"viewport\"")
-	return html
+	viewport.render()
 }
 
 // MARK: - page assembly
