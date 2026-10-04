@@ -154,10 +154,10 @@ public enum ViewportDefaults {
 ///
 /// | element | contract |
 /// |---|---|
-/// | container | `<ul id="<id>" class="list list--virtual" … data-webui-viewport data-viewport-total data-viewport-rowsize data-viewport-overscan>` — the discovery anchor the engine finds the region by |
-/// | rows | `<li id="<id>-r<i>" class="list__item" data-viewport-row data-key="<key>">` — `i` is the row's GLOBAL index (stable across window shifts), `data-key` its keyed identity (`<key>` is the author key rendered through `keyString`) |
-/// | slice | when the server renders a window (`window:` set), a leading + trailing `<li class="list__item viewport-pad">` carries the unrendered height and the container adds `data-viewport-slice="<first>..<last>"` |
-/// | pager | server degrade beyond the safe page size: `<nav class="pagination pagination--compact" data-viewport-page data-viewport-pages>` with `[data-viewport-goto]` controls |
+/// | container | the discovery anchor the engine finds the region by: `<ul id="<id>"` with the designed classes `list list--virtual` and `data-webui-viewport data-viewport-total data-viewport-rowsize data-viewport-overscan` |
+/// | rows | `<li id="<id>-r<i>"` with the designed class `list__item` and `data-viewport-row data-key="<key>"` — `i` is the row's GLOBAL index (stable across window shifts), `data-key` its keyed identity (`<key>` is the author key rendered through `keyString`) |
+/// | slice | when the server renders a window (`window:` set), a leading + trailing `<li>` (designed class `list__item`, plus `viewport-pad`) carries the unrendered height and the container adds `data-viewport-slice="<first>..<last>"` |
+/// | pager | server degrade beyond the safe page size: `<nav id="<id>-pager">` with the designed classes `pagination pagination--compact`, `data-viewport-page data-viewport-pages`, and `[data-viewport-goto]` controls |
 ///
 /// behaviors:
 ///
