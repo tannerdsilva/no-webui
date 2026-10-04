@@ -765,3 +765,25 @@ func renderBufferAdditionsPin() {
 	ModifiedView(content: Text("z"), modifier: ModifierOnly()).render(into: &wrapped)
 	#expect(wrapped.finish() == "<b>z</b>")
 }
+
+// MARK: - placement hints (the continuum surface's additive half, t3.2)
+
+@Test("placement hints are additive and byte-identical")
+func placementHintSurfacePins() {
+	// no hint = today's bytes; a hint adds none either — placement is a
+	// precompile decision, never markup.
+	let bare = rendered(Text("x"))
+	#expect(rendered(Text("x").lease(.viewport)) == bare)
+	#expect(rendered(Text("x").lease(.echo)) == bare)
+
+	// the hint survives in the type for the build scan, and the vocabulary is
+	// closed: exactly the two engine-local behaviors, nothing else.
+	let leased = Text("x").lease(.viewport)
+	#expect(leased.modifier.hint == .viewport)
+	#expect(Text("x").lease(.echo).modifier.hint == .echo)
+	#expect(LeaseHint.allCases == [.viewport, .echo])
+
+	// a container-level hint is byte-identical to the bare container too.
+	let list = Div { Text("a") }
+	#expect(rendered(list.lease(.viewport)) == rendered(list))
+}
