@@ -1301,7 +1301,7 @@ window.WebUIEngine = (function () {
   }
 
   function createWindowManager() {
-    var reg = {}, booted = false, LSEL = '[data-webui-lease="viewport"]';
+    var reg = {}, booted = false, LSEL = '[data-webui-lease="viewport"],[data-webui-viewport]';
     function put(w, r, i) {
       if (!r.parentNode) {
         r.style.position = 'absolute';
@@ -1331,7 +1331,8 @@ window.WebUIEngine = (function () {
       w.a = ns; w.b = ne;
     }
     function init(el) {
-      if (!el || !el.getAttribute || el.getAttribute('data-webui-lease') !== 'viewport') { return null; }
+      var ls = el && el.getAttribute ? el.getAttribute('data-webui-lease') : null;
+      if (!el || !el.getAttribute || (ls !== 'viewport' && !el.hasAttribute('data-webui-viewport'))) { return null; }
       var id = el.id || '', w = reg[id];
       if (w && w.el === el && w.r.length) { wnd(w, 1); return w; }
       var rows = [];
@@ -1342,8 +1343,12 @@ window.WebUIEngine = (function () {
       w = reg[id] || (reg[id] = { el: el, r: rows, h: 24, ov: 0, m: 'doc', a: 0, b: -1, sp: null });
       w.el = el; w.r = rows;
       var f = rows[0];
-      w.h = (f && f.offsetHeight > 0) ? f.offsetHeight : (parseInt(el.getAttribute('data-webui-row-height'), 10) || 24);
-      w.ov = parseInt(el.getAttribute('data-webui-overscan'), 10) || 0;
+      var rh = parseInt(el.getAttribute('data-webui-row-height'), 10);
+      if (!(rh > 0)) { rh = parseInt(el.getAttribute('data-viewport-rowsize'), 10); }
+      w.h = (rh > 0) ? rh : ((f && f.offsetHeight > 0) ? f.offsetHeight : 24);
+      var ov = parseInt(el.getAttribute('data-webui-overscan'), 10);
+      if (!(ov > 0)) { ov = parseInt(el.getAttribute('data-viewport-overscan'), 10); }
+      w.ov = ov > 0 ? ov : 0;
       while (el.firstChild) { el.removeChild(el.firstChild); }
       var s = document.createElement('div');
       s.setAttribute('data-webui-window-spacer', '1');

@@ -337,6 +337,85 @@ async function measureScroll(pg, label) {
   await pg.close();
 }
 
+// ---- DX-7e: discovery + parameter reconciliation (declared values, not fallbacks) ----
+// the engine must accept BOTH discovery spellings (the lease today, and D's
+// data-webui-viewport the component emits after this wave) and read the
+// windowing parameters from BOTH name sets — data-webui-row-height OR
+// data-viewport-rowsize, data-webui-overscan OR data-viewport-overscan —
+// with the first-row offsetHeight fallback only when NEITHER is present.
+// red-team finding this closes: the engine silently ran on fallbacks (24 px
+// rows, default overscan band) because it read only its own attr names.
+{
+  const DX_ROWS = 2000;
+  const RENDER_H = 40; // the rows' real offsetHeight (rendered inline)
+  const DECL_ROW_CPX = 37; // component spelling: data-viewport-rowsize
+  const DECL_ROW_EPX = 38; // engine spelling: data-webui-row-height
+  const dxRows = rowsHtml(0, DX_ROWS); // rowsHtml renders ROW_H (40) px rows
+  const dxBody = `
+<style>
+  body { font: 13px ui-monospace, monospace; padding: 0; margin: 0; }
+  #dx-c, #dx-e, #dx-n { position: relative; height: 200px; overflow-y: auto; }
+</style>
+<div class="bench">
+  <div id="dx-c" data-webui-viewport data-viewport-rowsize="${DECL_ROW_CPX}" data-viewport-overscan="2" style="position:relative;height:200px;overflow-y:auto">${dxRows}</div>
+  <div id="dx-e" data-webui-lease="viewport" data-webui-row-height="${DECL_ROW_EPX}" style="position:relative;height:200px;overflow-y:auto">${dxRows}</div>
+  <div id="dx-n" data-webui-lease="viewport" style="position:relative;height:200px;overflow-y:auto">${dxRows}</div>
+</div>`;
+  const dxSrv = await startProbeServer(9270, dxBody, {
+    enginePath: join(ROOT, "designer/assets/webui-engine.js"),
+  });
+  ok(`DX-7e reconciliation fixture up on :9270`);
+  process.on("exit", () => { dxSrv.close(); });
+  const dpg = await context.newPage();
+  dpg.on("pageerror", (err) => bad("page error: " + err.message));
+  await dpg.goto(dxSrv.base + "/", { waitUntil: "load" });
+  await dpg.waitForSelector("#probe[data-ready]", { timeout: 15000 });
+  await dpg.waitForFunction(() => {
+    const sp = document.querySelector("#dx-c [data-webui-window-spacer]");
+    return sp && document.querySelectorAll("#dx-c .feed-item").length > 0;
+  }, { timeout: 15000 });
+  // scroll each self-scrolling container to mid-list so the window bands are
+  // container-local and fully formed (a top-of-list window clamps the above-band).
+  await dpg.evaluate(() => {
+    document.getElementById("dx-c").scrollTop = 1000 * 37;
+    document.getElementById("dx-e").scrollTop = 1000 * 38;
+    document.getElementById("dx-n").scrollTop = 1000 * 40;
+    document.getElementById("dx-c").dispatchEvent(new Event("scroll"));
+    document.getElementById("dx-e").dispatchEvent(new Event("scroll"));
+    document.getElementById("dx-n").dispatchEvent(new Event("scroll"));
+  });
+  await dpg.waitForTimeout(250);
+  const dx = await dpg.evaluate(() => {
+    const snap = (id) => {
+      const el = document.getElementById(id);
+      const sp = el && el.querySelector("[data-webui-window-spacer]");
+      return {
+        attached: el ? el.querySelectorAll(".feed-item").length : -1,
+        spacerH: sp ? parseFloat(sp.style.height) : 0,
+      };
+    };
+    return { c: snap("dx-c"), e: snap("dx-e"), n: snap("dx-n") };
+  });
+  // dx-c: discovered via data-webui-viewport alone; declared rowsize 37 must
+  // win over the rendered 40 px measurement; declared overscan 2 must hold the
+  // window to ~visible+2+2 (~11 rows at 200px/37px), NOT the fallback default
+  // band (~one viewport's worth each side, ~19 rows) the red-team caught.
+  check(`DX-7e: data-webui-viewport discovery windows the container (attached ${dx.c.attached} << 2000)`, dx.c.attached > 0 && dx.c.attached < 500, JSON.stringify(dx.c));
+  check(`DX-7e: data-viewport-rowsize=${DECL_ROW_CPX} honored, not the 40 px offsetHeight (spacerH=${dx.c.spacerH} ~= ${DX_ROWS * DECL_ROW_CPX})`, Math.abs(dx.c.spacerH - DX_ROWS * DECL_ROW_CPX) < DECL_ROW_CPX, `spacerH=${dx.c.spacerH} expected~=${DX_ROWS * DECL_ROW_CPX}`);
+  check(`DX-7e: data-viewport-overscan=2 honored (window ${dx.c.attached} in [8,13] ~= visible+2+2, not the default band)`, dx.c.attached >= 8 && dx.c.attached <= 13, String(dx.c.attached));
+  // dx-e: lease discovery preserved; engine-spelling data-webui-row-height=38
+  // honored; overscan undeclared -> the fallback default band stays (~19 rows),
+  // distinct from a declared-2 window.
+  check(`DX-7e: data-webui-lease discovery still windows (attached ${dx.e.attached} << 2000)`, dx.e.attached > 0 && dx.e.attached < 500, JSON.stringify(dx.e));
+  check(`DX-7e: data-webui-row-height=${DECL_ROW_EPX} honored (spacerH=${dx.e.spacerH})`, Math.abs(dx.e.spacerH - DX_ROWS * DECL_ROW_EPX) < DECL_ROW_EPX, `spacerH=${dx.e.spacerH} expected~=${DX_ROWS * DECL_ROW_EPX}`);
+  check(`DX-7e: overscan fallback band when undeclared (attached ${dx.e.attached} in [14,24])`, dx.e.attached >= 14 && dx.e.attached <= 24, String(dx.e.attached));
+  // dx-n: no params at all -> the first-row offsetHeight fallback must still
+  // run (40 px) — kept only when NEITHER name set is present.
+  check(`DX-7e: offsetHeight fallback kept when neither attr present (spacerH≈${DX_ROWS * RENDER_H})`, Math.abs(dx.n.spacerH - DX_ROWS * RENDER_H) < RENDER_H, `spacerH=${dx.n.spacerH} expected≈${DX_ROWS * RENDER_H}`);
+  await dpg.close();
+  dxSrv.close();
+}
+
 await browser.close();
 close();
 console.log("");
