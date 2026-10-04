@@ -137,3 +137,158 @@ throttled dominance) is unchanged at these scales.
   mutation census must observe a stable ancestor (a whole-region replace kills
   observers attached to the replaced node).
 - the d0 verdict lives in `continuum-notes/b-d0-results.md`.
+
+## wave 3 — i3-gate prep, echo-settled ruling, bench re-run (base `f9faaba`)
+
+_commit `b3fa06f` (b-lint live-tree) — t2.6 re-verified against D's LANDED
+markers. commit `eafa482` (d3-gate harness). the content below is the wave-3
+doc contribution (fragments → b-docs.md, never the shared docs)._
+
+### 1. b-lint vs the landed imports shapes (re-verify, wave 3)
+
+ran `designer/probes/b-lint.mjs` against the **real** markers now in the tree:
+D's compiled fixture (`Tests/WebUIContinuumMacroTests/ContinuumCompiledFixture.swift`,
+`@HotView("counter", imports: [ClockCapability.self], budget: IslandBudget(maxBytes:
+16_384, maxGzipBytes: 4_096))`) plus the macro-expansion suite's spellings. the
+probe now adds two **live-tree** assertions on top of the six fixture ones
+(`8/8`): restricted grants flag the fixture's `clock` import, and the fully
+granted run exits 0. **the accepted spelling set needed NO tightening** — every
+landed spelling is one the scanner already accepts:
+
+| spelling | live in tree at? | normalized |
+|---|---|---|
+| array of `.self` types `[ClockCapability.self]` | compiled fixture + `HotViewMacroTests` | `clock` |
+| single string `imports: "clock"` | hot-view spellings in tests | `clock` |
+| empty array `imports: []` | expansion suite | none |
+| dot-case `.surface_acquire` | (fixture `forms/` only today) | `surface_acquire` |
+| multi-import `[ClockCapability.self, LogCapability.self]` | `HotViewMacroTests` | `clock, log` |
+
+the two `@HotView` markers that land in the **plugin-scanned** dirs
+(`Sources/WebUI` today) carry no imports; the lint gate over the real tree is
+green (`2 components, 7 classes, 0 unclaimed`, capability check clean). the
+spec message is unchanged and verbatim.
+
+### 2. the d3 gate harness (i3-gate single-command measurement)
+
+`designer/d3-gate.mjs` — ONE command, lane ports 9200–9219. measures the three
+i3 gates against the plan's explicit budgets (§5):
+
+```
+node designer/d3-gate.mjs [--bench-port 9210] [--probe-port 9211]
+                          [--items 10000] [--throttle 80] [--echo-chars 16]
+```
+
+1. **feed 10k scroll p95** (plan §5 "60 fps / p95 ≤ 20 ms"): naive full-list +
+   the two windowed variants, loopback AND throttled (recipe 6 is a gate, not
+   advice). the naive 10k full-render *wall* (~62 ms p95) is **recorded, not
+   asserted green** — it is precisely why windowing exists (d0 verdict). the
+   budget-bearing checks are the windowed variants.
+2. **grid echo < 50 ms @ 80 ms rtt** (plan §5 "keystroke echo < 50 ms at
+   80 ms rtt"): the t1.4 **engine-local** echo contract (`data-webui-echo`)
+   driven under an 80 ms rtt link, measured entirely in page time (keydown
+   recorder + MutationObserver on the echo targets, installed from outside);
+   asserts p95 < 50 ms **and zero ws frames during typing** (a server round
+   trip can never pass this gate).
+3. **degrade** (t2.6): a `data-webui-island` region whose `.wasm` is **not
+   served** (404) must stay `unmapped`, keep its **server-rendered content**,
+   and leave the engine instance alive.
+
+writes `.bench/d3-gate.json`; exits non-zero on a gate failure.
+
+**dry-run baseline on the merged tree (f9faaba, recorded honestly):**
+
+| gate | result | number |
+|---|---|---|
+| scroll naive 10k throttled | ⚠ recorded wall | p95 62.4 ms (loopback 62.9) — the full-render wall |
+| scroll windowed throttled | **FAIL → t3.3** | p95 52.8–66.4 ms — server-orchestrated window step round-trips *per scroll event* (d0 finding); not the engine-local path yet |
+| scroll windowedOps throttled | **FAIL → t3.3** | p95 35.4–66.0 ms — same cause |
+| grid echo @ 80 ms rtt | **PASS** | p95 **0.2 ms**, p50 0.1 ms, 16/16 samples, **0 ws frames** (engine-local) — the t1.4 echo is real and in budget |
+| echo authoritative wins | **PASS** | server `text` op overwrites the overlay and clears it |
+| degrade | **PASS** | `unmapped` + server-rendered `<p>…fallback…</p>` intact + engine alive |
+
+the echo gate passing at 0.2 ms while the bench editor's *server* echo settles
+at ~360–450 ms is exactly the desktop-grade story: the engine-local path is
+what the <50 ms budget means; the naive round trip is debounce-bound by design.
+the gate cannot fully go green until engine/island-local windowing (`t3.3`)
+lands — the harness is prepared, the baseline is recorded, and the two FAILs
+are now the tracking signal for that work.
+
+### 3. the echo-settled ruling (311→448 ms): run variance, NOT a metric change
+
+asked: is the editor echo-settled move (d0 311/368 → wave-2 448/435) real drift
+or a metric-meaning change? re-read the recipe (continuum-bench `echoLatency`),
+the engine source, and re-measured **isolated, repeat=5** on the merged tree:
+
+| run | loopback settled (ms) | throttled settled (ms) |
+|---|---|---|
+| d0 (8eac8ae) | 311 | 368 |
+| wave-2 (merged, repeat=1, the "one noisy run" wave-2 itself flagged) | 448.1 | 434.9 |
+| wave-3 isolated repeat=5 | 361.1 median (316.3–453.4) | 415.0 median (310.4–444.0) |
+
+**ruling: the wave-3 "spike" was single-run variance on a loaded machine, not
+drift and not a metric-meaning change.** three independent facts:
+
+- **the measured circuit is unchanged.** `git diff 8eac8ae..f9faaba --
+  Sources/WebUIBench/` is empty (the editor fixture is byte-identical) and the
+  engine's debounce (`debounceInputMs 300 / maxWait 1000`) + `echo`/`clearEcho`
+  body are unchanged across the merge. t1.4's engine-local echo cannot be the
+  cause: it only activates on a `data-webui-echo` attribute, and **the bench
+  editor has none** — its echo is still the naive server round trip the recipe
+  has always measured. the metric's meaning is unchanged.
+- **repeat=5 brackets d0.** the wave-3 isolated loopback samples spread 316.3–
+  453.4 (median 361.1); d0's 311 and wave-2's 448 are both inside that spread.
+  single-run deltas of ±50–130 ms at the debounce edge are not distinguishable
+  from variance at this scale (the trailing debounce timer + MutationObserver
+  delivery add real jitter).
+- the throttled median (415) sitting *above* loopback (361) by ~54 ms is the
+  honest rtt signature; wave-2's throttled-below-loopback inversion (435 < 448)
+  is itself the fingerprint of a corrupted (contended) run.
+
+**conclusion for the records: do NOT treat 448 as a regression, and do NOT
+change the metric or the recipe** (recipe changes are E/D's). the honest
+current reading is editor echo-settled ≈ **361 ms loopback / 415 ms throttled**
+(debounce 300 + rtt + server), unchanged within noise of d0. the budget that
+matters for the i3 gate is the engine-local echo (see §2, 0.2 ms), not this
+server round-trip number. handoff to E at i3 stays informational: the bench
+editor echo remains a server-round-trip fixture by design; if it should ever
+measure the local path, that is a fixture change + its own pin, to be decided
+with E/D, not silently.
+
+### 4. wave-3 bench re-run (merged tree, isolated, repeat=3 except editor repeat=5)
+
+| metric | d0 (recorded) | wave-2 (one run) | wave-3 isolated | delta vs d0 |
+|---|---|---|---|---|
+| tti feed@10k | 102 / 709 ms | 138.2 / 707.5 | **98.0 / 429.4** | loop −4, thr −280 (throttled tti noisy) |
+| tti grid 500×10 | 43 / 784 | 42.9 / 784.4 | **42.9 / 784.4** | — |
+| tti dashboard 8×100 | 97 / 762 | 99.3 / 783.1 | **95.0 / 485.5** | thr −277 (noisy) |
+| tti editor | 23 / 756 | 24.1 / 767.4 | **11.9 / 467.9** | thr −288 (noisy) |
+| scroll p95 feed 10k | 62.4 / 61.5 | 62.4 / 62.4 | **61.1–62.3 / 60.8–62.3** | — (the wall) |
+| echo settled editor | 311 / 368 | 448.1 / 434.9 | **361.1 med / 415.0 med** (r5) | +50 / +47, within spread (see §3) |
+| append-100 replace | 1,501,978 B / 46 ms | 71.5 ms | **1,501,978 B / 43.0–49.6** | — |
+| append-100 op | 19,531 B / 33 ms | 32.5 ms | **19,531 B / 30.4–31.1** | — |
+| grid sort | 81,920 B / 32 / 86 | 78.6 | **81,920 B / 32.2** | — |
+| dashboard tick | 278,399 B / 67 / 293 | 325 | **278,399 B / 70.6–74.1** | — |
+| window step naive/ops | 8,694 / 2,191 B | 10.5 / 4.8 thr | **8,694 / 2,191 B; 0.7–0.9 loop, 4.6–8.8 thr** | — |
+
+all five benches green (feed 7/7, grid 5/5, dashboard 5/5, editor 7/7,
+windowed 5/5 = 29/29 preconditions). conclusion-bearing numbers are unchanged:
+77× replace/op byte gap, 4× window-step byte gap, the 62 ms full-render scroll
+wall, throttled dominance. throttled tti moved *down* ~280 ms vs the wave-2
+one-run (contended) reading but stays well above loopback — tti at 80 ms rtt is
+noisy at repeat=1; treated as qualitative only.
+
+### 5. canonical-gate fold-in list (wave-3 → polish wave, lane B owns)
+
+which lane-B probes belong in which canonical gate, for the orchestrator's
+fold-in (never edited by the lane; listed here for tracking):
+
+| canonical gate | lane-B probes/clients to fold | note |
+|---|---|---|
+| build ladder (`swift build` + plugin) | `WebUIContinuumTool` lint/generate gate (already wired via `WebUIContinuumPlugin` — t2.6 capability check + budget plugin) | the class-inventory + capability grant gate is already in the build; nothing new to add |
+| `plugin smoke` | `designer/probes/b-lint.mjs` (8/8) as a standalone probe; `designer/probes/b-interaction-smoke.mjs` (ws interaction smoke) | fold as a probe list entry, not more build commands |
+| `fullstack-smoke` | `designer/probes/b-windowed-smoke.mjs` (naive + ops window advance) | already fullstack-shaped; ensure it's invoked with a lane port on the fold-in |
+| `browser-smoke` | engine-path probes stay in the existing browser-smoke; lane-B adds `designer/d3-gate.mjs` as the agg gate | run d3-gate on a lane port **after** the smoke ladder, before the bench refresh |
+| bench ladder (i3/eval) | `designer/continuum-bench.mjs` (the five benches) + `designer/d3-gate.mjs` | the d3-gate is the single-command i3 measurement; the five benches are the periodic refresh |
+
+the two windowed-scroll FAILs in §2 are the fold-in's tracking signal: the
+polish wave's job is `t3.3` engine/island-local windowing, not a bench change.
