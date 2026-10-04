@@ -651,4 +651,12 @@ _committed `task/d-surface2`. plan §2.3 + b-docs:571-573._
 - to C (also in d-to-c.md): W2 codec bodies delegate to `IslandRuntime`/
   `HotOpCodec` per the design above — the generated shims chase C's real
   signatures at W2 start.
+- to B (also in d-to-b.md): the generated adapter type-name pin
+  (`IslandRuntime<<Name>Island>.run()`); the DX-11a smoke-page byte-identity
+  exception (wired table rows changed); the `islands[]` measured-row exposure
+  for the macro-side `budget:` tightening comparison; the scan's
+  cross-file-duplicate-name build error.
+- to C (also in d-to-c.md): the runtime codec accessors
+  `IslandRuntime<I>.encodedState()` / `.decodePendingOps()` + the consumer-graph
+  visibility for the generated spell swap-in.
 
