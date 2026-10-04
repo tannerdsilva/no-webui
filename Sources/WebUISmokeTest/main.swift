@@ -762,6 +762,16 @@ extension SmokeApp {
 				case "/ui/webui-shell.js":
 					text = WebUIAssets.shell; contentType = "text/javascript; charset=utf-8"
 					cacheControl = "public, max-age=3600"
+				case let manifestURL where manifestURL == "/ui/continuum-manifest.json" || manifestURL.hasPrefix("/ui/continuum-manifest.json?"):
+					// the generated engine slice (continuum §1.5): the scanner-built
+					// attribute allowlist + component inventory the engine fetches at
+					// boot and swaps for its conservative seed. content-addressed; the
+					// stamp is the cache key. this is the reference host registration
+					// (the WebUIAsset-style wiring, hand-rolled here like the other
+					// /ui assets).
+					text = ContinuumEngineManifest.text
+					contentType = ContinuumEngineManifest.contentType
+					cacheControl = "public, max-age=31536000, immutable"
 				case "/", "/index.html":
 					text = self.pageHTML; contentType = "text/html; charset=utf-8"
 				default:

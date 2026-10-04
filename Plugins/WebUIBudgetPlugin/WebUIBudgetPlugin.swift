@@ -83,7 +83,7 @@ struct WebUIBudgetPlugin: CommandPlugin {
     /// island-bound code free of the APIs named in `WebUIIslandPlugin`'s doc comment.
     ///
     /// re-pinned i3 (2026-10-03): 200,000 -> 240,000. the probe fixture grew with the
-    /// kernel-parity work (`webui_run_corpus` — ~218,600 stripped): a dev fixture, not a
+    /// kernel-parity work (`webui_run_corpus` — 231,984 stripped / 99,360 gz): a dev fixture, not a
     /// shipped surface, but it rides this global cap until a per-island
     /// `@HotView(budget:)` marker covers it. a real shipping island should carry its own
     /// declared pin; this global stays the generous-but-finite backstop.
