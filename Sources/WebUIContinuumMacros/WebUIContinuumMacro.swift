@@ -61,9 +61,6 @@ private let hotViewSpelling =
 private struct HotViewArguments {
 	let name: String
 	let imports: ExprSyntax?
-	/// `imports:` written as a literally empty array — equivalent to absent, and
-	/// the only spelling that is (so "imports ⇒ budget" cannot false-positive on it).
-	let importsIsEmpty: Bool
 	let budget: ExprSyntax?
 }
 
@@ -72,11 +69,6 @@ private struct HotViewArguments {
 /// parameter type (`[any HostCapability.Type]`), at the use site.
 private let importsFixHint =
 	"imports: takes HostCapability types, not wire strings or values — write imports: [ClockCapability.self]; a capability's wireName is its wire spelling"
-
-private func isEmptyArrayLiteral(_ expression: ExprSyntax) -> Bool {
-	guard let array = expression.as(ArrayExprSyntax.self) else { return false }
-	return array.elements.isEmpty
-}
 
 private func validateImports(_ expression: ExprSyntax) throws {
 	if expression.is(StringLiteralExprSyntax.self) {
@@ -106,7 +98,7 @@ private func hotViewArguments(of node: AttributeSyntax) throws -> HotViewArgumen
 		case nil:
 			guard name == nil else {
 				throw MacroExpansionErrorMessage(
-					"@HotView takes exactly one island name — the first, unlabeled argument; capabilities go in imports: and the pin in budget:"
+					"@HotView takes exactly one island name — the first, unlabeled argument; capabilities go in imports: (budget: is an optional tightening pin)"
 				)
 			}
 			guard let literal = argument.expression.as(StringLiteralExprSyntax.self),
@@ -140,7 +132,6 @@ private func hotViewArguments(of node: AttributeSyntax) throws -> HotViewArgumen
 	return HotViewArguments(
 		name: name,
 		imports: imports,
-		importsIsEmpty: imports.map(isEmptyArrayLiteral) ?? true,
 		budget: budget
 	)
 }
@@ -204,17 +195,35 @@ private func renderBuilderMessage(in declaration: some DeclGroupSyntax) -> Strin
 	return nil
 }
 
-/// a declaration that names host imports is a sized island: the budget pin is
-/// mandatory (`WebUIBudgetPlugin` enforces the generated pin before ship).
-private func missingBudgetMessage(arguments: HotViewArguments) -> String? {
-	guard arguments.imports != nil, !arguments.importsIsEmpty, arguments.budget == nil else { return nil }
-	return "@HotView: missing budget: — a declaration that names host imports is a sized island; add budget: IslandBudget(maxBytes: 16_384, maxGzipBytes: 4_096) (the budget plugin pins it before ship)"
-}
+/// budget diagnostics (DX-3, W2): the `imports:` ⇒ `budget:` requirement
+/// **retired** — non-empty `imports:` auto-defaults the budget (the build
+/// auto-pins it from the measurement). the only remaining budget diagnostic
+/// is the *tighter-than-measured* refusal: a declared pin below the measured
+/// auto-pin can never hold. it needs lane B's measured row (`maxBytes/raw/gz/
+/// sha` per island in the work-dir manifest — b-docs:571–573 handoff), which
+/// is not on the tree at W2-D start; until it lands the comparison stays
+/// dormant and the macro is strictly additive (defined in d-docs.md +
+/// d-to-b.md, no refusal emitted).
 
 // MARK: - the plan (shared by both macro roles)
 
 /// everything both roles emit from: parsed + validated once, so the peer role
 /// (export shims) and the extension role (descriptor + adapter) cannot drift.
+///
+/// budget semantics (DX-3, W2): `budget:` is a **tightening-only** ceiling —
+/// the build measures every island and auto-pins `maxBytes`/`maxGzipBytes`
+/// (measured × 1.05) into `ContinuumManifest.json`'s `islands[]` (lane B), so
+/// a declaration that names host imports no longer needs a pin: non-empty
+/// `imports:` **auto-defaults** the budget (the wave-1 sentinel
+/// `IslandBudget(maxBytes: 0, maxGzipBytes: nil)` is the auto marker the
+/// build substitutes the measured pin for). the only budget diagnostic that
+/// remains is the *tighter-than-measured* refusal — a declared pin below the
+/// measured auto-pin can never hold — and it compares against the measured
+/// row B exposes (`maxBytes/raw/gz/sha` per island in the work-dir manifest;
+/// handoff b-docs:571–573). that row is not on the tree at W2-D start, so the
+/// comparison is defined-but-dormant: the macro emits the declared pin
+/// verbatim and adds no refusal (the additive reading — continuum-notes/
+/// d-docs.md + d-to-b.md carry the definition and the dependency).
 private struct HotViewPlan {
 	let name: String
 	let typeName: String
@@ -230,9 +239,6 @@ private func hotViewPlan(of node: AttributeSyntax, on structDecl: StructDeclSynt
 	let arguments = try hotViewArguments(of: node)
 	guard !arguments.name.isEmpty else {
 		throw MacroExpansionErrorMessage("@HotView requires a non-empty island name — as @HotView(\"feed\")")
-	}
-	if let message = missingBudgetMessage(arguments: arguments) {
-		throw MacroExpansionErrorMessage(message)
 	}
 	if let message = missingStateActionMessage(in: structDecl) {
 		throw MacroExpansionErrorMessage(message)

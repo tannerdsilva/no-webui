@@ -344,7 +344,7 @@ struct HotViewMacroNegativeTests {
 			struct TwoNames {
 			}
 			""",
-			message: "@HotView takes exactly one island name — the first, unlabeled argument; capabilities go in imports: and the pin in budget:"
+			message: "@HotView takes exactly one island name — the first, unlabeled argument; capabilities go in imports: (budget: is an optional tightening pin)"
 		)
 	}
 
@@ -408,22 +408,6 @@ struct HotViewMacroNegativeTests {
 		)
 	}
 
-	@Test("imports: without a budget is refused — a sized island pins one")
-	func missingBudgetThrows() {
-		assertExpansionThrows(
-			"""
-			@HotView("feed", imports: [ClockCapability.self])
-			struct Unpinned {
-				typealias State = FeedState
-				typealias Action = FeedAction
-				@HotBuilder func render(state: State) -> HotTree { Hot.Text(id: "feed-status", "ready") }
-				static func reduce(state: inout State, action: Action) -> [HotEffect] { [] }
-			}
-			""",
-			message: "@HotView: missing budget: — a declaration that names host imports is a sized island; add budget: IslandBudget(maxBytes: 16_384, maxGzipBytes: 4_096) (the budget plugin pins it before ship)"
-		)
-	}
-
 	@Test("missing State/Action throws, naming both")
 	func missingStateActionThrows() {
 		assertExpansionThrows(
@@ -478,6 +462,27 @@ struct HotViewMacroNegativeTests {
 			""",
 			message: "@HotView: render(state:) must be @HotBuilder — annotate it so the body is type-checked against the hot vocabulary (Hot.Text, Hot.Container, Hot.Spacer)"
 		)
+	}
+
+	@Test("imports: without a budget auto-defaults the budget (DX-3 W2, tightening-only)")
+	func importsWithoutBudgetAutoDefaults() {
+		// the remembered `imports:` ⇒ `budget:` rule retired: a declaration
+		// that names host imports no longer needs a pin — the build measures
+		// and auto-pins. the emitted budget is the wave-1 sentinel (the auto
+		// marker the build substitutes the measured pin for).
+		let text = expandedText(of: """
+		@HotView("feed", imports: [ClockCapability.self])
+		struct Feed {
+			typealias State = FeedState
+			typealias Action = FeedAction
+			@HotBuilder func render(state: State) -> HotTree { Hot.Text(id: "feed-status", "ready") }
+			static func reduce(state: inout State, action: Action) -> [HotEffect] { [] }
+		}
+		""")
+		#expect(text.contains("grants: [ClockCapability.self]"))
+		#expect(text.contains("imports: [any HostCapability.Type]"))
+		#expect(text.contains("IslandBudget(maxBytes: 0, maxGzipBytes: nil)"))
+		#expect(!text.contains("missing budget"))
 	}
 
 	@Test("an explicitly empty imports: does not require a budget (equivalent to absent)")
