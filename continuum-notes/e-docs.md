@@ -460,3 +460,126 @@ the 77,000 / 18,500 pin. **do NOT re-pin** — the orchestrator re-pins at i3.
 
 
 
+
+---
+
+## CONTINUUM_DX wave 3 (lane E) — canonical bench re-runs + final reconciliations
+
+commits: none code-side — this wave re-runs and reconciles, it does not grow the
+engine (W3 E row: "canonical bench re-runs (§3.4) + final reconciliations"). all
+measurements on `3381e89` (integration base, merged + pushed first). transcripts
+in `.bench/` (gitignored, evidence on disk): `d3-gate-w3.log`/`d3-gate.json`,
+`continuum-bench-w3.log`/`feed-10000[-throttled].json`,
+`e-probes-w3.log`, `dx-acceptance-w3.log`. no re-pins (orchestrator's).
+
+### canonical bench re-runs (per §3.4) — measured vs W1/i1 records
+
+**d3 gate (`node designer/d3-gate.mjs`) — 14/14 PASS** (lane ports 9210/9211,
+WebUIBench rebuilt from the merged tree; the engine asset is the served
+`designer/assets/webui-engine.js`, 75,438 B, byte-identical to the W2 head):
+
+| gate | W1/i1 record | W3 measured | delta |
+|---|---|---|---|
+| engine scroll-work p95, loopback | 2.30 ms (e-windowed W2) / d3 2.4 ms (i2) | 2.40 ms (e-windowed) · 2.50 ms (d3, n=120) | +0.1–0.2, within noise band 2.4 |
+| engine scroll-work p95, throttled 80 ms | 2.20 ms (W2) / 2.6 (d3 i2) | 2.20 ms (e-windowed) · 2.50 ms (d3, n=120) | 0 / −0.1, within noise |
+| grid echo p95 @ 80 ms rtt | 0.2 ms / 0 ws frames (i3 polish) · 0.3 ms (i1) | **0.3 ms** (n=16) **· 0 ws frames** · authoritative wins + clears | 0 |
+| degrade (artifact absent) | PASS | **PASS** — unmapped (`state:"unmapped"`), server-rendered `<p id="server-rendered">` intact, engine alive | 0 |
+| naive wall (full-render rAF p95) | 62.4/61.5 ms (i1 10 s continuous) | **62.5/61.9 ms** (continuum-bench 10 s) · 39.3/39.6 (d3 short sample — sampling-window note below) | ≈0 |
+
+all ceiling assertions: scroll-work ≤ 20 ms both modes (2.40–2.50), echo < 50 ms
+(0.3), attached rows bounded (34–56 ≤ 90), window-only mutation churn (childList
+902/923, characterData 0, attributes 0). host refresh floor re-measured in-gate:
+p50 33.3 / p95 33.5 ms (30 Hz) — the absolute rAF budget stays unmeasurable on
+this host, recorded not harcoded. engine-local rAF p95 67.6/67.3 recorded for 60
+Hz hosts.
+
+**continuum-bench (`node designer/continuum-bench.mjs --bench feed --items 10000`) — 7/7 PASS**:
+
+| metric | §3.4 canonical | W3 measured | delta |
+|---|---|---|---|
+| append-100 op bytes | ≈ 19,531 B | **19,531 B** (both modes) | 0 (exact) |
+| append-100 op round trip | ~31 ms | 33.0 ms loopback · 29.4 ms throttled | within noise; **op plane is rtt-immune** (throttled ≱ loopback) |
+| append-100 replace | — | 1,501,978 B / 45.1 ms loopback · 1,623,578 B / 1,392 ms throttled | the full-region wall (77× the op bytes); rtt-bound |
+| census | — | replace = 1 childList; op = 100 childList, 0 char/attr | op plane adds rows, never text/attr churn |
+| naive wall (rAF p95) | ≈ 62 ms | 62.5/61.9 ms (10 s continuous wheel) | ≈0 |
+| tti | 98–102 ms | p50 95.1 / p95 103.2 (loopback) | within noise |
+
+**e-probes — all 9 green on the merged tree, counts unchanged** (no regression,
+delta 0 vs i2): e-ops 8 · e-echo 6 (0 ws frames) · e-island-decoder 19 ·
+e-island-wasm (silent-throw probe: exit-0 ⇒ all asserts incl. unknown-import
+throw + degrade paths) · e-island-e2e 17 · e-island-e2e-real 21 (artifact
+173,846 B) · e-windowed 31 (incl. DX-7e both-discovery + A1 factor/absolute
+discriminators) · e-manifest 20 (v1+v2+404) · e-input-desc 7.
+
+### final reconciliations
+
+- **acceptance dry-run (the dx5-demo reconciliation):** `node
+  designer/dx-acceptance.mjs --framework <lane-e> --port 9190` — **26/26 PASS**
+  on a fresh home-dir prep (`~/dx-accept`), matching the i2 record exactly:
+  preflight ×4, prep, step 1 one `@HotView`, step 2 **plain `swift build`
+  cross-builds the feed island in-build** (the DX-5 direct cross-compile —
+  green against THIS integration tree), step 3 server 200, step 4 mount via the
+  islands[] content-addressed URL (convention URL NOT requested), event
+  round-trip, state survival, DOGFOOD attr+text ops with zero whole-region
+  replace, asserts a–d, teardown.
+- **overscan factor path under the bench fixture:** the `windowed=engine` bench
+  page (`renderViewportEnginePage`) serves lane D's `Viewport` verbatim —
+  `data-webui-lease="viewport"` · `data-viewport-rowsize="52"` ·
+  `data-viewport-overscan="2"` (the default **factor**, Viewport.swift:275).
+  the d3 scroll run stayed window-bounded (attached 34–56 ≤ 90) through the
+  sustained scroll — the A1 factor reading holds under the canonical fixture
+  (vis≈15 → ≈31-row band + reform overshoot); the exact factor-vs-absolute
+  discrimination is pinned by e-windowed 31/31 (factor 2 → 12–13 rows vs
+  absolute 2 → 10–11 vs undeclared 16–20).
+- **i1/i2 fallout:** none found in lane-E-owned files on the merged tree. the
+  i2 open items sit elsewhere: the D codec literal-runtime spell (C/D), the
+  engine byte-account owner sign-off (orchestrator §7 exception — see budget),
+  the 55-minute D2 relaunch (branch of record `task/d-surface2`, already
+  integrated here).
+
+### budget — final numbers (no re-pin)
+
+engine on `3381e89` (the base == this head, engine untouched in W3):
+
+- **75,438 raw / 18,195 gz** — `wc -c` + `zlib.gzipSync` (default level; the
+  W2-fragment method — measured byte-for-byte identical to the W2 branch-head
+  record). **delta vs W2: +0 / +0.**
+- **served measure (`swift package plugin budget`): engine 75,438 / 18,087
+  ok/ok under the 77,000 / 18,500 pin — PASS.**
+- cumulative arc E deltas stand: **+703 raw / +181 gz** vs the W2 base
+  (74,735/18,014) / **+271 gz** vs the W1-recorded 17,924 gz baseline (both
+  within the +2,048 / +512 arc ceiling; gz reading depends on the method —
+  stated above). the i2 owner-sign-off exception (+2,304 raw vs +2,048; the
+  "registry handling" reading +1,699/+480) is unchanged by this wave.
+
+### assumptions / notes
+
+1. no owner engine-budget directive reached the branch mid-wave (origin/dev-
+   continuum still `3381e89`; continuum-notes carry none) → final numbers
+   reported, no size work, no re-pin.
+2. the two naive-wall readings are sampling-window artifacts, not fixture
+   drift: continuum-bench's continuous 10 s wheel sample (62.5/61.9 — the §3.4
+   canonical ≈62 ms) vs the d3 gate's short-step sample (39.3/39.6); both
+   RECORDED, neither asserted.
+3. canonical ports stay the orchestrator's; these runs used lane ports
+   (9210/9211, 9206, 9260–9271, 9190 acceptance).
+4. e-island-wasm prints nothing on success (throw-on-failure probe) — a green
+   unit is a zero exit.
+
+### handoffs
+
+- **to orchestrator/B (budget):** nothing to fold — engine bytes re-verified
+  identical to i2; the 77,000/18,500 pin holds; the i2 PENDING sign-off
+  exception is the only outstanding account item and it predates W3.
+- **to orchestrator (acceptance):** the lane dry-run is 26/26 on `3381e89` —
+  the i3 authoritative run and the reference-surface pin re-check (assert d)
+  are yours.
+- **to C/D (DX-11b/DX-9 when they land):** no e-probe/e-bench regression risk
+  measured — the op plane, echo, windowing, and the manifest path are stable at
+  the current engine bytes.
+
+### next-slice
+
+- named-table windowing rung + table slice-mode (CONTINUUM_DX §6) · engine hot
+  twins of the built-ins if the owner green-lights the separate workstream ·
+  carry any i3 owner items that land in E-owned files.
