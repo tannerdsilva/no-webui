@@ -139,3 +139,91 @@ i2. sources of truth: `Sources/WebUISharedCore/Continuum.swift`
 kernels (t4.1/t4.2) + parity suite; t3.4 input types (`KeyEvent`/
 `ModifierSet`/`Selection`/`ClipboardPayload`/`UndoStack`); `ContinuumDescriptor`
 home decision for lane D's expansion (suggested: WebUISharedCore).
+
+---
+
+# lane-c docs fragment — WAVE 3 (final build wave: t4.1 kernels · t4.2 parity · t3.4 input types)
+
+for orchestrator folding at i3. sources of truth:
+`Sources/WebUISharedCore/Kernels/` (aec186a, 43be694), `webui_run_corpus` +
+`KernelParity` + `designer/probes/c-parity.mjs` (4301d4f, 43be694),
+`Sources/WebUISharedCore/{KeyEvent,Selection,ClipboardPayload,UndoStack}.swift`
+(8bbd275).
+
+## what landed
+
+- **t4.1 shared kernels** in `Sources/WebUISharedCore/Kernels/` — pure,
+  generic, foundation-free, scalar-clean (each a value type or a pure static
+  function with a narrow predicate/comparator protocol):
+  `Normalizer`/`Lexer` (normalize+lex), `NumberAggregator` + `Aggregate`
+  (sum/min/max/avg/count), `KeyedSorter.stableSorted` (STABLE keyed sort —
+  stdlib sorted is not), `Filter` (predicate handles + paginate),
+  `NumberFormat.integer/grouped/fixed/percent` (hand-rolled, no Foundation),
+  `CivilDate` (Hinnant's civil algorithms, no Foundation). 28 native tests pin
+  exact outputs.
+- **t4.2 parity suite — EQUAL HASHES = the gate.** one frozen corpus
+  (`KernelCorpus`, 25 named cases over every kernel + the t3.4 primitives)
+  runs the SAME Swift natively and inside the probe island's wasm; the island
+  gains the `webui_run_corpus` export (serves `KernelParity.resultsJSON()` —
+  FNV-1a of each canonical result); the native suite asserts the frozen golden
+  table and writes `.build/webui-kernel-corpus-native.json`;
+  `designer/probes/c-parity.mjs` compares sets: **25/25 hashes equal**.
+- **the parity probe caught a real portability bug.** `Int` is 32-bit on
+  wasm32, so `format.int` (Int.min/max) hashed differently until
+  `NumberFormat.integer/grouped` went `Int64`-explicit — `Int64` bindings at
+  every corpus call site to keep the canonical strings width-stable. recorded
+  as decision 1 below.
+- **t3.4 input types** in `WebUISharedCore` — `Key` (closed enum, frozen wire
+  vocabulary via `identifier`/`init(identifier:)`, the same names E's
+  `{type,key,data}` v1 carries: "ArrowUp"…), `ModifierSet` (OptionSet,
+  shift/control/option/command/capsLock/function/numLock),
+  `KeyEvent`, `Selection` (anchor/focus, clamp-at-0), `ClipboardPayload`
+  (text + tsv interchange), `UndoStack<Action>` (generic, pure). 25 native
+  tests; the corpus links them into wasm and hashes them (parity green).
+
+## budget + artifact (the deliberate re-pin; enforcement handoff)
+
+- probe island `WebUIProbeIsland.wasm` — measured wave-2: **173,846 B / 80,620
+  gzip** · after t4.2: **218,632 / 95,248** · after t3.4 (input cases linked):
+  **231,984 / 99,360**. the declared `IslandBudget` was re-pinned
+  deliberately to **240,000 / 105,000** (~3.4% raw headroom) in
+  `ProbeIsland.budget`.
+- **enforcement gap (handoff to B/orchestrator at i3):** the budget plugin
+  enforces the probe via the GLOBAL `islandCeiling = 200_000`
+  (`WebUIBudgetPlugin`, B's file) because `ContinuumManifest.json` only
+  carries pins from `@HotView` markers (WebUI sources) — the hand-written
+  probe's declared budget is NOT yet emitted into the manifest. `plugin budget`
+  currently flags `WebUIProbeIsland.wasm: 218632 > 200000` (231,984 after
+  t3.4). the fix is integration-side: either emit the probe's declared pin
+  into the manifest (extend `WebUIContinuumTool.islandPins` to scan
+  hand-written `ContinuumIsland.budget` — those declarations live in
+  `Sources/WebUIIslandCore/` + `Sources/WebUIProbeIsland/`) or raise the
+  global island ceiling to ≥ 240,000. the DECLARED pin stays the source of
+  truth either way.
+
+## decisions recorded
+
+1. **Int-width stability is a kernel API contract.** any public kernel taking
+   `Int` would behave differently on wasm32; formatting entry points are
+   `Int64`-explicit and the corpus never lets a width-sensitive value sneak
+   through (grep `format.int`). documented in FormatNumber.swift.
+2. **canonical corpus strings never interpolate raw Doubles** — doubles pass
+   through `NumberFormat.fixed` (my formatter, placement-identical), never
+   `String(Double)` whose digit generation may differ in the embedded stdlib.
+3. **hash = FNV-1a 64-bit over the canonical result's UTF-8.** determinism is
+   the goal, not collision resistance. both sides compute bit-identical
+   hashes from bit-identical strings via pure integer math.
+4. **`webui_run_corpus()` takes no input** (the corpus is compile-time-frozen
+   in WebUISharedCore) and writes `KernelParity.resultsJSON()` to the frame
+   buffer — an ordered `cases` array (order is part of the contract).
+5. **`ContinuumDescriptor` stays in WebUI** (adjudication, no action — host-
+   side metadata, no wasm consumer yet).
+
+## handoffs
+
+- **to B/orchestrator:** the budget enforcement gap above (probe pin emission
+  or global-ceiling bump); the declared pin is 240,000/105,000, artifact
+  231,984/99,360.
+- **to D:** the t3.4 shapes + the parity gate recipe are in `c-to-d.md`.
+- **to E:** `webui_run_corpus` is a NEW probe export (additive — the ABI is
+  unchanged; c-ops regression 15/15) — updated contract in `c-to-e.md`.

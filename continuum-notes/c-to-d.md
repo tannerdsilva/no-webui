@@ -1,80 +1,127 @@
-# lane-c → lane-d: the seam vocabulary the macro adapters compile against
+# lane-c → lane-d: wave-3 handoff — input types (t3.4) + kernels (t4.1) + corpus (t4.2)
 
-lane D owns `@HotView`/`@HotClass`/`@HotBuilder` + the generated adapters.
-everything below is landed on `task/c-islands` (commit 7283904) in
-`Sources/WebUISharedCore/Continuum.swift`, shapes per DESKTOP_GRADE §1.3.3–1.3.5.
-compile against these exactly.
+landed on `task/c-islands` (lane-c wave 3) in `Sources/WebUISharedCore/`
+(KeyEvent.swift, Selection.swift, ClipboardPayload.swift, UndoStack.swift) and
+`Sources/WebUISharedCore/Kernels/` (t4.1 + KernelCorpus/KernelParity). lane D
+consumes the t3.4 types for its delivery/modifiers half this wave — compile
+against these shapes exactly.
 
-## the types
+## the t3.4 types (all in WebUISharedCore, wasm-visible, scalar-clean)
 
-```swift
-public struct ElementID: Sendable, Hashable, Codable, ExpressibleByStringLiteral { public let raw: String ... }
-public struct AttributeName: Sendable, Hashable, Codable, ExpressibleByStringLiteral { public let raw: String ... }
-public enum HotOp: Sendable, Equatable { case text(ElementID, String); case attr(ElementID, AttributeName, String); case insert(parent: ElementID, before: ElementID?, html: String); case remove(ElementID); case move(ElementID, before: ElementID?) }
-public protocol HostCapability: Sendable { static var wireName: String { get } }
-// six structs: FrameSchedule("frame_schedule") InputSubscription("input_subscribe") SurfaceAcquisition("surface_acquire") StatePersistence("state_persist") ClockCapability("clock") LogCapability("log")
-public enum HotEffect: Sendable { case ops([HotOp]); case save; case log(String) }
-public struct IslandBudget: Sendable, Equatable { public let maxBytes: Int; public let maxGzipBytes: Int?; public init(maxBytes: Int, maxGzipBytes: Int? = nil) }
-public protocol ContinuumIsland: Sendable { associatedtype State: HotState; associatedtype Action: HotAction; static var name: String { get }; static var imports: [any HostCapability.Type] { get }; static var budget: IslandBudget { get }; static func reduce(state: inout State, action: Action) -> [HotEffect] }
-```
-
-## the codable gate — read this before generating any `Codable` conformance
-
-`Codable` is `@_unavailableInEmbedded` in the embedded wasm sdk
-(verified: `Swift.Codable:2:18: 'Codable' has been explicitly marked
-unavailable here`). the seam types declare Codable on the **host surface
-only**:
+### KeyEvent.swift
 
 ```swift
-#if !hasFeature(Embedded)
-extension ElementID: Codable {}
-extension AttributeName: Codable {}
-public protocol HotState: Codable, Sendable, Equatable {}
-public protocol HotAction: Codable, Sendable {}
-#else
-public protocol HotState: Sendable, Equatable {}
-public protocol HotAction: Sendable {}
-#endif
+public enum Key: Sendable, Hashable, Equatable {
+    case enter, tab, escape, backspace, delete
+    case arrowUp, arrowDown, arrowLeft, arrowRight
+    case home, end, pageUp, pageDown
+    case space
+    case function(Int)         // f1…f24
+    case printable(String)     // one unicode scalar, as a string
+    case unknown               // anything the vocabulary does not name
+}
+
+public struct ModifierSet: OptionSet, Sendable, Hashable {
+    public let rawValue: UInt16
+    public init(rawValue: UInt16)
+    public static let shift, control, option, command, capsLock, function, numLock
+    // (apple names: option/command are the ⌥ and ⌘ on this platform)
+}
+
+public struct KeyEvent: Sendable, Equatable {
+    public let key: Key
+    public let modifiers: ModifierSet
+    public let isRepeat: Bool
+    public init(key: Key, modifiers: ModifierSet, isRepeat: Bool = false)
+}
 ```
 
-consequence for D: the macro-generated `reduce`/adapter code inside the island
-target must NOT synthesize `Codable` for `State`/`Action`, and must not route
-state through `JSONEncoder`/`Decoder`. the island path serializes with
-`JSONValue.parse`/`serialize` + `HotOpCodec`. `ContinuumIsland.reduce` is pure
-and placement-free — it runs in wasm and in native tests (parity by
-construction), so D's adapter can (and should) reference `reduce` directly.
+wire bridge for E's `{type,key,data}` v1 and D's engine-side composition
+forwarding — `Key(identifier:)` / `Key.identifier` canonical strings
+(parse failure → `.unknown`; the set is frozen in c-to-d).
 
-## hand-written-equivalent rule
+### Selection.swift
 
-per §9, one hand-written `ContinuumIsland` conformance must live in tests
-proving the macro expansion is equal to hand-written code. the probe island
-(`Sources/WebUIProbeIsland/main.swift`, t2.5 skeleton) is the wasm proof; a
-test-side conformance is up to D's expansion tests.
+```swift
+public struct Selection: Sendable, Equatable {
+    public var anchor: Int       // the press-side leaf index
+    public var focus: Int        // the drag-side leaf index
+    public init(anchor: Int, focus: Int)
 
-## placements reminder (never compile to wasm)
+    public var start: Int        // min(anchor, focus)
+    public var end: Int          // max(anchor, focus)
+    public var range: Range<Int> // start..<end (empty when collapsed)
+    public var isEmpty: Bool     // anchor == focus
+    public mutating func collapse(at index: Int)
+    public func extending(to index: Int) -> Selection
+    public func shifted(by delta: Int) -> Selection   // clamps at 0 (never negative)
+    public func union(_ other: Selection) -> Selection
+}
+```
 
-`HotView`/`HotPrimitive`/the macro *declarations* belong in `WebUI` (host
-only); the macro *implementation* in a host-only target; swift-syntax must
-never enter a wasm-compiled dependency chain.
+leaf indices are character/run positions, not utf8 byte offsets. an index below
+0 is treated as 0 by the clamping ops.
 
-## WAVE 2 — the hand-written equivalent is now live
+### ClipboardPayload.swift
 
-`WebUIIslandCore.ProbeIsland` (commit 2281abe) is a full hand-written
-`ContinuumIsland` — typed `ProbeState`/`ProbeAction`, pure `reduce`
-(`[HotEffect]`), `budget`, `imports`, `name` — and it runs *in wasm* (the
-probe artifact, 692cf17). it is your reference fixture for what a generated
-adapter must emit.
+```swift
+public struct ClipboardPayload: Sendable, Equatable {
+    public var text: String          // the textual form
+    public var tsv: String?          // tab-delimited interchange form
+    public init(text: String, tsv: String? = nil)
 
-- **the ABI names differ from the macro's stubs.** the probe's runtime entry
-  points are the fixed engine-facing names (`webui_render_region`,
-  `webui_on_event`, `webui_take_ops`, `webui_state_save/restore`) wired
-  directly to `ProbeIsland.reduce`. your `<name>_encode`/`<name>_decode` stubs
-  (d-to-c.md) can delegate to `HotOpCodec.encodeBatch` (new, 85d323e) without
-  changing naming — they wrap, they do not re-implement the record layout.
-- **`IslandBudget` for a generated island** should be declared like the
-  probe's: `IslandBudget(maxBytes: …)` satisfied by the built artifact's
-  stripped size (probe: 173,846 B → pin 200,000).
-- **keep `reduce` pure and placement-free** — lane C's native tests in
-  `Tests/WebUIIslandCoreTests/ProbeIslandTests.swift` prove the same source
-  that runs in wasm; D's expansion tests can do the same against a generated
-  island. (the codable gate above still applies to generated `State`/`Action`.)
+    public static func tsv(rows: [[String]]) -> String   // cells joined with \t, rows with \n
+    public func tsvRows() -> [[String]]                  // inverse; splits only on \t / \n
+    public var hasTabularData: Bool
+}
+```
+
+grids and editors share this interchange: write a table as
+`ClipboardPayload(text: <paste-form>, tsv: ClipboardPayload.tsv(rows:))`, read
+it back with `tsvRows()`. cells with embedded tab/newline are the caller's
+problem (documented; the split is naive on purpose — deterministic parity).
+
+### UndoStack.swift
+
+```swift
+public struct UndoStack<Action>: Sendable {
+    public private(set) var undoLimit: Int
+    public init(undoLimit: Int = 100)          // 0 = unlimited
+    public mutating func push(_ action: Action)
+    @discardableResult public mutating func undo() -> Action?
+    @discardableResult public mutating func redo() -> Action?
+    public var canUndo: Bool
+    public var canRedo: Bool
+    public var undoCount: Int
+    public var redoCount: Int
+    public mutating func clear()
+}
+```
+
+pure and placement-free — natively tested (Tests/WebUISharedCoreTests/
+InputTypesTests) and linked into the probe island's wasm via the parity corpus
+(its `undo.stack` case exists in KernelCorpus). push clears the redo lane.
+`Action` is unconstrained (any Sendable value).
+
+## t4.1 kernel surface (if D's viewport/components need them)
+
+`Sources/WebUISharedCore/Kernels/`:
+- `Normalizer` (value type; trim/collapse/ASCII-fold recipe) + `Lexer` (predicate-handle tokenizer: `tokens(in:isToken:)`, `words(in:)`)
+- `NumberAggregator` (incremental sum/min/max/avg/count) + `Aggregate` (array form)
+- `KeyedSorter.stableSorted(_:key:by:)` — STABLE keyed sort (stdlib sorted is not)
+- `Filter.filter/count/paginate(_:_:offset:limit:)` — include-predicate + windowing
+- `NumberFormat.integer/grouped/fixed/percent` — deterministic, hand-rolled
+  (fixed does NOT print what a decimal eye expects for binary-non-representables —
+  it is placement-deterministic by design; pinned in KernelTests)
+- `CivilDate` (proleptic Gregorian y/m/d; `iso8601()/longForm()/shortForm()`; epoch-day mapping)
+
+## the parity gate (t4.2) — D may re-run it
+
+`swift test` (writes `.build/webui-kernel-corpus-native.json`) + `node designer/probes/c-parity.mjs`
+against the probe wasm artifact. EQUAL HASHES = the gate. adding a corpus case
+is deliberate: freeze new goldens in `KernelParityGoldenTests`.
+
+## ContinuumDescriptor — host-side for now
+
+adjudicated 2026-10-03: `ContinuumDescriptor` STAYS in WebUI this wave (host-side
+metadata; no wasm consumer yet). recorded in the sidecar; no action from D.
