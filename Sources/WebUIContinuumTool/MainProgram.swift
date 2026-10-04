@@ -534,6 +534,7 @@ enum WebUIContinuumTool {
 			case "lint": try Run.lint(rest)
 			case "wasm-cross": try Run.wasmCross(rest)
 			case "measure": try Run.measure(rest)
+			case "scaffold": try Run.scaffold(rest)
 			case "self", "--self", "-h", "--help", "help": printSelf()
 			default:
 				writeError("unknown verb '\(verb)'")
@@ -590,6 +591,16 @@ enum WebUIContinuumTool {
 		                 --work-dir <dir> --manifest <out.json>
 		                 (emitted by WebUIAutobuildPlugin as its own llbuild
 		                 command: artifact inputs -> manifest output)
+		  scaffold      DX-2 onboarding verb: --add-island <Name> appends the
+		                 two Package entries (product + executableTarget,
+		                 append-only anchors) and generates Sources/<Name>/
+		                 main.swift — the 3-line runtime form naming the
+		                 macro-produced adapter <Name>.<Name>Island.
+		                 --bootstrap --name <App> --framework <no-webui path>
+		                 inserts the once-per-app inert continuum block (path
+		                 dep + WebUIAutobuildPlugin on the app target).
+		                 --print previews without writing; --package overrides
+		                 the product-dep package name (default no-webui).
 		""")
 	}
 

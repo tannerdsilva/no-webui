@@ -58,6 +58,13 @@ let package = Package(
             name: "WebUIAutobuildPlugin",
             targets: ["WebUIAutobuildPlugin"]
         ),
+        // dx-2: the scaffold command plugin — appends island product+target
+        // entries + generates the 3-line runtime-form main for an existing
+        // app. see Plugins/WebUIScaffoldPlugin.
+        .plugin(
+            name: "WebUIScaffoldPlugin",
+            targets: ["WebUIScaffoldPlugin"]
+        ),
         // a consumer attaches this plugin and ships an `Assets/webui-assets.json`; the
         // plugin runs the framework's tool over it on every build.
         .plugin(
@@ -509,6 +516,24 @@ let package = Package(
                 .target(name: "WebUIContinuumTool"),
             ]
         ),
+        // dx-2 scaffold command plugin: `swift package --disable-sandbox plugin
+        // scaffold` — append-only Package.swift edits (product+target entries /
+        // the once-per-app bootstrap block) + the generated island main.
+        .plugin(
+            name: "WebUIScaffoldPlugin",
+            capability: .command(
+                intent: .custom(
+                    verb: "scaffold",
+                    description: "Append an island (product + executableTarget + the 3-line runtime-form main) or bootstrap an existing app with the once-per-app continuum block (path dep + WebUIAutobuildPlugin). Append-only anchors; --print previews without writing."
+                ),
+                permissions: [
+                    .writeToPackageDirectory(reason: "append island product+target entries to Package.swift and write Sources/<Name>/main.swift (DX-2 scaffold)"),
+                ]
+            ),
+            dependencies: [
+                .target(name: "WebUIContinuumTool"),
+            ]
+        ),
         .plugin(
             name: "WebUIShowcasePlugin",
             capability: .command(
@@ -624,6 +649,12 @@ let package = Package(
             name: "WebUIAssetToolTests",
             dependencies: [
                 "WebUIAssetTool",
+            ]
+        ),
+        .testTarget(
+            name: "WebUIContinuumToolTests",
+            dependencies: [
+                "WebUIContinuumTool",
             ]
         ),
         .testTarget(
