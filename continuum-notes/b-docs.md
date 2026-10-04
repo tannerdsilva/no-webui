@@ -424,3 +424,158 @@ node designer/continuum-bench.mjs --bench {feed,grid,dashboard,editor,windowed} 
 node designer/d3-gate.mjs                                   -> D3 GATE PASS 14/14 (2× stable)
 swift package --disable-sandbox plugin budget               -> budget: PASS (see budget gate)
 ```
+
+---
+
+## CONTINUUM_DX W1 — lane B (base `ec1bcbc`): autobuild demo-or-kill, content pin, scaffold/auto-pin designs
+
+_this wave's lane-B scope per CONTINUUM_DX §4.3: the DX-5 demo-or-kill spike,
+`dx-content-pin.mjs` implementation, and the DX-2/DX-3 designs (implementation
+is W2). the verdict sections below carry the measured numbers._
+
+### DX-5 verdict + the mechanism (the load-bearing result)
+
+see the report (`lane: b` final answer) and `designer/gates/dx5-demo.sh` for the
+reproducible runner; one-line verdict: **candidate (b) — direct two-stage swiftc
+from a build-tool plugin — cross-builds the REAL island graph from a plain
+`swift build` in a home-dir scratch app.** details:
+
+- the plugin: `Plugins/WebUIAutobuildPlugin` (buildTool, product `WebUIAutobuildPlugin`).
+  consumer attaches it to its own target; at every `swift build` it emits one
+  build command per island. the graph root is found in the attached package or
+  via `context.package.dependencies` (`PackageDependency.package.directoryURL`;
+  verified — no `PackageDependency.name` in Swift 6.0's API). islands are
+  discovered by the house text rule: a `Sources/<Name>/main.swift|Main.swift`
+  that imports `WebUIIslandCore`. consumer islands (the DX-5 end state) live in
+  the ATTACHED package's Sources and are cross-built too (`--main-dir`).
+- the command: `WebUIContinuumTool wasm-cross` (new verb, `Sources/WebUIContinuumTool/WasmCross.swift`).
+  two-stage swiftc reproducing EXACTLY the ground-truth lines SwiftPM emits for
+  `--swift-sdk swift-6.4.0-RELEASE_wasm-embedded` (captured via `swift build -v`):
+  compile each module (`-parse-as-library -package-name no-webui -static-stdlib
+  -enable-experimental-feature Embedded -Osize -wmo`, `-emit-module` for the two
+  leaves so the next module imports them), link (`-emit-executable --gc-sections
+  -static-stdlib -enable-experimental-feature Embedded -wmo -lswift_Concurrency
+  -lc++`) + `-lswiftUnicodeDataTables` from the sdk's
+  `…/embedded/wasm32-unknown-wasip1/` dir — the one piece the stock line omits,
+  without which the link fails on `_swift_stdlib_getNormData` (measured; the
+  `wasm-island` verb already worked around it).
+- the compiler is the **swiftly-hosted toolchain swiftc**
+  (`~/Library/Developer/Toolchains/swift-*.xctoolchain/usr/bin/swiftc`, resolved
+  host-side, `WEBUI_WASM_SWIFTC` override) — the ground-truth log itself execs
+  that path; the Xcode frontend cannot (no `swift-autolink-extract`, sdk modules
+  unreadable). the sandbox's `(allow process*)` lets the command exec it.
+- the trap honored: artifact lands in **`context.pluginWorkDirectoryURL`** (the
+  only package-adjacent writable zone under the `(allow file-read*)`+tmp-only
+  seatbelt on a home-dir checkout), never `.build/out/Products/…` (a build
+  command may not write that on a home-dir project; `/tmp` runners get it "for
+  free" — the acceptance test must keep its home-dir shape).
+- equivalence anchor: direct-build Probe = 232878 B stripped vs the nested
+  release 231984 B (i3 record) → 0.4%; Validate 163708 vs 164921 → 0.7%.
+- warm cost ≈ 0 from llbuild (declared inputs/outputs), NOT an in-tool hash —
+  measured in the runner; targeted invalidation (an edit to ONE consumer island
+  re-runs exactly its command).
+- same-wave machinery the plan demanded: recursion-guard env convention
+  (`WEBUI_ISLAND_NESTED=1` — backstop in the tool, set on children), named
+  prereq diagnostics (missing swiftc → `[WebUIAutobuild] cannot cross-build …
+  swiftly toolchain is a one-time machine prerequisite`; missing sdk → names
+  `swift sdk list`).
+
+### dx-content-pin — the I1 harness (implemented, clean at base)
+
+`node designer/dx-content-pin.mjs` (hermetic default; `--serve` for live
+servers on lane ports 9201-9205) + the golden fixtures under
+`designer/dx-baseline/` (pages + manifest + base.txt + pages.txt; captured at
+W0 into `/tmp/dx-content-baseline/`, committed verbatim). three mechanics per
+§3.1:
+
+1. **nonce canonicalization** — `nonce="…"` / `'nonce-…'` → `nonce="N"` /
+   `'nonce-N'` before hashing. the model is self-proving: `blocks-index` vs
+   `blocks-standalone` are the same 4090-byte page from TWO processes — raw
+   hashes differ, canonical hashes equal (asserted in both modes).
+2. **the exemption register** — `/ui/continuum-manifest.json`: byte-identical at
+   base, a diff fails unless registered-additive (version key bumped, additive
+   keys only); `webui-engine.js`: I3-governed, NEVER a byte fail — raw+gz delta
+   account reported (the `plugin budget` gate owns the ceiling); page migrations
+   (DX-11a): byte-identical to the captured bytes or the migration is wrong.
+   everything else (smoke/blocks-index/block-1(dashboard)/showcase pages, shell,
+   minified sheet `served == comment-stripped working file`) is byte-pinned.
+3. **provenance note**: the W0 record's "canonical" values were NOT reproducible
+   from the captured bytes by any nonce-normalizing transform (unrecorded W0
+   transform, most likely a fixed-nonce re-render hash). the committed PAGE
+   BYTES are the gold (raw hashes match W0's raw column exactly); pages.txt's
+   canonical column was regenerated with the harness's documented transform
+   (same spec intent, one format of record). recorded in the baseline README.
+
+### DX-2 scaffold — design (implementation W2)
+
+the `continuum` surface lands as a new command plugin
+(`WebUIScaffoldPlugin`, verb `scaffold`, `--writeToPackageDirectory`), executing
+`WebUIContinuumTool scaffold` (the tool already owns every other build-side
+verb; a plugin cannot import a library). no port. two sub-surfaces:
+
+- **`--add-island <Name>`** — appends the two Package entries (product +
+  executableTarget, beside their sibling blocks, one per commit per the shared
+  hygiene) and generates `Sources/<Name>/main.swift` — the **3-line form once
+  lane-C's DX-1 `IslandRuntime<NameIsland>.run()` lands** (`#if os(WASI)
+  IslandRuntime<NameIsland>.run() #endif`); until then the reactor-shell
+  template (the exact FeedIsland main from this wave's demo runner). every
+  generated file carries the house `generated — do not edit` header. zero
+  Package.swift edits for the SECOND island onward (the autobuild plugin scans
+  the package; no manifest-side magic — candidate (c) is dead).
+- **`--bootstrap [--name <App>]`** — for an EXISTING app: inserts the
+  once-per-app inert continuum block (the §0.3 acceptance "template for new
+  apps" has an equivalent committed block; this is the existing-app path): the
+  framework path dep + `WebUIAutobuildPlugin` on the app target. the block is
+  STATIC ("never changes per island" — the §0.3 frontier stated honestly);
+  afterwards islands need no further manifest edits.
+- prereq/UX: refuses to patch a manifest with uncommitted structure it cannot
+  anchor on (append-only anchors only); a `--print` mode emits the snippet for
+  teams that decline write permission; port-free (command plugin, on demand).
+- W2 gate: scaffold a fixture consumer under the acceptance runner's prep, then
+  the §0.3 preflight; the generated main compiles for BOTH host (inert) and wasm
+  (autobuild cross-builds it).
+
+### DX-3 auto-pin — design (implementation W2)
+
+the measured pin rides the artifact the autobuild command already produces; no
+second measurement pass:
+
+- `wasm-cross` (or a tiny sibling `measure` mode) computes, at build time:
+  `sha` (sha256 over the stripped artifact — via WebUIBuild's rawdog-sha path),
+  `raw` (stripped byte count), `gz` (gzip length), and the pins
+  `maxBytes = ceil(raw × 1.05)`, `maxGzipBytes = ceil(gz × 1.05)`.
+- writes into `ContinuumManifest.json`'s `islands[]` per island: the pin keys
+  stay EXACTLY `name/maxBytes/maxGzipBytes` — the schema `WebUIBudgetPlugin`
+  already reads (one budget path — I5; no silent fall-back to the global
+  ceiling). the NEW `raw/gz/sha/url` keys sit ALONGSIDE the pins, additive +
+  versioned (the manifest route's exemption-register rule: version bump, no key
+  removals); they never replace the pin — the red-team fold.
+- `budget:` becomes tightening-only: a declared pin below the measured auto-pin
+  is the error; non-empty `imports:` auto-defaults the budget and the
+  remembered rule retires. the diagnostic change lives in the **macro**
+  (`WebUIContinuumMacro`, lane D §2.3), which needs the measured row exposed —
+  handoff to D at i1.
+- the manifest emission (currently the `generate` verb's
+  `ContinuumEngineManifest+Generated.swift` → served `/ui/continuum-manifest.json`)
+  and the autobuild's measured rows must MERGE in one payload; design keeps the
+  generate path authoritative for the allowlist/union and merges islands[] from
+  the work-dir manifest at serve-emission time. pin stays green because the
+  route is on the register (additive-only change at the version bump).
+
+### handoffs (this wave)
+
+- to C (DX-1, W2): `IslandRuntime` must absorb the reactor-shell boilerplate the
+  demo's FeedIsland main still carries (utf8Decode/writeFrame/buffer discipline
+  — the same block the probe hand-copies, now shown to be consumer-visible); the
+  scaffold template (B, W2) emits the 3-line form only when it lands.
+- to D (W2): the measured-row exposure for the macro-side tightening diagnostic
+  (§2.3) — B exposes `maxBytes/raw/gz/sha` per island in the work-dir manifest;
+  D consumes for the `imports:→budget` retirement.
+- to B-W2 (self): the gorilla in the room is the map of the plan's §4.5 row:
+  `--add-island/--bootstrap` impl, auto-pin impl, W2's artillery on the verb
+  surface.
+- to E (acceptance, W2): `~/dx-demo` is the home-dir shape the §0.3 acceptance
+  run must use (never /tmp — it flatters the sandbox); the serving seam reads
+  artifacts from the plugin work dir (lane-E's `WebUIServer` island routes +
+  the built-in manifest route should read `designer`-produced assets at i1+,
+  decided with the plan's DX-6 row).

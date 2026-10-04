@@ -1,0 +1,20 @@
+{
+  "kind": "continuum-engine-slice",
+  "version": 1,
+  "attributeAllowlist": ["class","aria-*","data-*"],
+  "components": {
+"WebUIEngineStatus":[
+			"engine-status-mirror",
+			"engine-status-mirror__dot",
+			"engine-status-mirror__state",
+			"engine-status-mirror__state--connected",
+			"engine-status-mirror__state--reconnecting"
+		],
+"WebUIThemeToggle":[
+			"theme-toggle",
+			"theme-toggle__btn"
+		]
+  },
+  "union": ["engine-status-mirror","engine-status-mirror__dot","engine-status-mirror__state","engine-status-mirror__state--connected","engine-status-mirror__state--reconnecting","theme-toggle","theme-toggle__btn"],
+  "islands": []
+}
