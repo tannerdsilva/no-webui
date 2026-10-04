@@ -251,6 +251,17 @@ let smokePageStyle: String = """
 
 // MARK: - Page assembly (renders interactive views, registers handlers)
 
+/// the validate region's args — declaration-ordered (`WebUIIslandArgs`), the
+/// byte-identity carrier for the W0 capture payload:
+/// `{"value":"a","rules":[{"rule":"required"},{"rule":"minLength","arg":4}]}`.
+private let islandValidateArgs = WebUIIslandArgs([
+	.init("value", "a"),
+	.init("rules", [
+		.object([.init("rule", "required")]),
+		.object([.init("rule", "minLength"), .init("arg", 4)]),
+	]),
+])
+
 func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
 	let ctx = RenderContext(router: router)
 	let body = ctx.withValueBody {
@@ -418,8 +429,8 @@ func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
 						Text("Type a value: ")
 						Raw("<input id=\"island-input\" data-island-input=\"island-validate\" class=\"input\" type=\"text\" value=\"a\">")
 					}
-					Raw("<div id=\"island-validate\" data-webui-island=\"validate\" data-webui-args='{\"value\":\"a\",\"rules\":[{\"rule\":\"required\"},{\"rule\":\"minLength\",\"arg\":4}]}'></div>")
-					Raw("<div id=\"island-never\" data-webui-island=\"never-built\" data-webui-args='{}'></div>")
+					WebUIIsland("validate", args: islandValidateArgs)
+					WebUIIsland(id: "island-never", name: "never-built")
 					Div(class: "smoke__chart-hint") {
 						Text("The chip above is composed by a lazily loaded wasm island (no round trip).")
 					}
