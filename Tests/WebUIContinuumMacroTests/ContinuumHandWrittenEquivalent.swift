@@ -52,6 +52,16 @@ struct HandCounterIsland: ContinuumIsland {
 	static var imports: [any HostCapability.Type] { [ClockCapability.self] }
 	static var budget: IslandBudget { IslandBudget(maxBytes: 16_384, maxGzipBytes: 4_096) }
 
+	// DX-9 (CONTINUUM_DX §2.9): the hand-written mirror of the macro-emitted
+	// element-id vocabulary (the ProbeIslandIDs pattern, hand-kept). the
+	// equivalence suite diffs it against `MacroCounter.MacroCounterIsland
+	// .elementIDs`.
+	static let elementIDs: Set<ElementID> = [
+		ElementID("counter"),
+		ElementID("counter-count"),
+		ElementID("counter-label"),
+	]
+
 	static func reduce(state: inout State, action: Action) -> [HotEffect] {
 		HandCounter.reduce(state: &state, action: action)
 	}

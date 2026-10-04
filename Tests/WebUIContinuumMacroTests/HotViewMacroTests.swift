@@ -65,6 +65,15 @@ extension Feed: ContinuumServerPath {
 		    IslandBudget(maxBytes: 0, maxGzipBytes: nil)
 		}
 
+		// DX-9 vocabulary (CONTINUUM_DX §2.9, lane D): the literal `id:`
+		// arguments of the @HotBuilder body — the macro-emitted mirror of the
+		// hand-kept ProbeIslandIDs pattern (d-docs §DX-9). the runtime's
+		// CONTINUUM_ID_CHECK dev check reads this; interpolated/dynamic ids
+		// defer to isKnownElementID and are never collected here.
+		static let elementIDs: Set<ElementID> = [
+			ElementID("feed-status")
+		]
+
 		static func reduce(state: inout State, action: Action) -> [HotEffect] {
 			Feed.reduce(state: &state, action: action)
 		}
@@ -148,6 +157,15 @@ extension Feed: ContinuumServerPath {
 		static var budget: IslandBudget {
 		    IslandBudget(maxBytes: 16_384, maxGzipBytes: 4_096)
 		}
+
+		// DX-9 vocabulary (CONTINUUM_DX §2.9, lane D): the literal `id:`
+		// arguments of the @HotBuilder body — the macro-emitted mirror of the
+		// hand-kept ProbeIslandIDs pattern (d-docs §DX-9). the runtime's
+		// CONTINUUM_ID_CHECK dev check reads this; interpolated/dynamic ids
+		// defer to isKnownElementID and are never collected here.
+		static let elementIDs: Set<ElementID> = [
+			ElementID("feed-status")
+		]
 
 		static func reduce(state: inout State, action: Action) -> [HotEffect] {
 			Feed.reduce(state: &state, action: action)
@@ -236,6 +254,15 @@ extension Feed: ContinuumServerPath {
 		    IslandBudget(maxBytes: 4_096)
 		}
 
+		// DX-9 vocabulary (CONTINUUM_DX §2.9, lane D): the literal `id:`
+		// arguments of the @HotBuilder body — the macro-emitted mirror of the
+		// hand-kept ProbeIslandIDs pattern (d-docs §DX-9). the runtime's
+		// CONTINUUM_ID_CHECK dev check reads this; interpolated/dynamic ids
+		// defer to isKnownElementID and are never collected here.
+		public static let elementIDs: Set<ElementID> = [
+			ElementID("feed-status")
+		]
+
 		public static func reduce(state: inout State, action: Action) -> [HotEffect] {
 			Feed.reduce(state: &state, action: action)
 		}
@@ -285,11 +312,63 @@ extension Feed: ContinuumServerPath {
 			"name: \"feed\"", "grants: [ClockCapability.self]",
 			"budget: IslandBudget(maxBytes: 16_384)",
 			"imports: [any HostCapability.Type]", "[ClockCapability.self]",
+			// DX-9: the macro-emitted element-id vocabulary is always present.
+			"elementIDs", "Set<ElementID>", "ElementID(\"feed-status\")",
 		] {
 			#expect(text.contains(expected), "missing \(expected) in expansion")
 		}
 		#expect(!text.contains("continuumClasses")) // no @HotClass sibling → no inventory
 		#expect(text.contains("Feed.reduce(state: &state, action: action)"))
+	}
+
+	@Test("DX-9 — the elementIDs emission: literal collection, spelled form, interpolation + foreign ids skipped, sorted, []-fallback")
+	func elementIDVocabulary() {
+		// multi-literal body with every collection rule exercised: the plain
+		// literal, the spelled `ElementID("…")` form, an interpolated id (must
+		// NOT be collected), and a labelled id: on a non-hot call (still
+		// collected — over-collection is permissive-safe).
+		let text = expandedText(of: """
+		@HotView("feed")
+		struct Feed {
+			typealias State = FeedState
+			typealias Action = FeedAction
+			@HotBuilder func render(state: State) -> HotTree {
+				Hot.Container(id: "panel") {
+					Hot.Text(id: "feed-status", state.label)
+					Hot.Text(id: ElementID("counter-label"), String(state.count))
+					Hot.Text(id: "row-\\(state.key)", state.label)
+				}
+				hotHelper(id: "helper-id")
+			}
+			static func reduce(state: inout State, action: Action) -> [HotEffect] { [] }
+		}
+		""")
+		// collected: the four literals (incl. the spelled + non-hot id),
+		// sorted lexically, deduped.
+		let expectedIDs = "static let elementIDs: Set<ElementID> = [\n"
+			+ "\t\t\tElementID(\"counter-label\"),\n"
+			+ "\t\t\tElementID(\"feed-status\"),\n"
+			+ "\t\t\tElementID(\"helper-id\"),\n"
+			+ "\t\t\tElementID(\"panel\")\n"
+			+ "\t\t]"
+		#expect(text.contains(expectedIDs), "missing the emitted vocabulary: \(expectedIDs)")
+		// the interpolated id is NEVER statically knowable — deferred to the
+		// runtime dev check's isKnownElementID family, not collected here.
+		#expect(!text.contains("ElementID(\"row-"))
+	}
+
+	@Test("DX-9 — a render body with no literal ids emits the empty vocabulary (strict default)")
+	func elementIDEmptyVocabulary() {
+		let text = expandedText(of: """
+		@HotView("bare")
+		struct Bare {
+			typealias State = FeedState
+			typealias Action = FeedAction
+			@HotBuilder func render(state: State) -> HotTree { Hot.KeyedList(id: KeyedListID(state)) { k in Hot.Spacer() } }
+			static func reduce(state: inout State, action: Action) -> [HotEffect] { [] }
+		}
+		""")
+		#expect(text.contains("static let elementIDs: Set<ElementID> = []"))
 	}
 
 	@Test("name-only stays additive: the declaration is untouched")
@@ -386,6 +465,23 @@ struct HotViewMacroNegativeTests {
 			}
 			""",
 			message: "@HotView takes at most one imports: argument"
+		)
+	}
+
+	@Test("a declared elementIDs member collides with the DX-9 generated vocabulary")
+	func elementIDCollisionThrows() {
+		assertExpansionThrows(
+			"""
+			@HotView("feed")
+			struct Feed {
+				typealias State = FeedState
+				typealias Action = FeedAction
+				static let elementIDs: Set<ElementID> = []
+				@HotBuilder func render(state: State) -> HotTree { Hot.Text(id: "feed-status", "ready") }
+				static func reduce(state: inout State, action: Action) -> [HotEffect] { [] }
+			}
+			""",
+			message: "@HotView: your declared `static let elementIDs` would collide with the generated DX-9 id vocabulary — @HotView walks the @HotBuilder body and emits it; remove yours (or drop @HotView and hand-write the ContinuumServerPath conformance)"
 		)
 	}
 
