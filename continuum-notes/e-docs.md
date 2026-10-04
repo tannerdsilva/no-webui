@@ -237,3 +237,104 @@ wave-3 scope; the mechanism is the designed trip-and-rein. recommend the i3/i4
 re-pin at ~**74,500 raw / 18,000 gz** (~2-3% headroom) — orchestrator/B decision,
 recorded here. `swift package plugin budget` will report this breach until then.
 
+---
+
+## CONTINUUM_DX wave 1 (lane E, DX-7e + DX-8e) — the junction reconciliations
+
+commits `fa9cce0` (DX-7e) + `3f27072` (DX-8e) on `task/e-engine`, base `ec1bcbc`.
+net engine growth within the I3 arc budget: **+1,601 raw / +368 gz** (ceiling
++2,048 / +512). measured 74,735 raw / 17,924 gz.
+
+### DX-7e — discovery + windowing-parameter reconciliation (engine side)
+
+`createWindowManager` now accepts **both** discovery spellings:
+`[data-webui-lease="viewport"]` (today) and `[data-webui-viewport]` (D's
+component marker) — `LSEL` carries both, and `init` gates on either. the
+junction is robust whichever side lands first at i1.
+
+windowing parameters read from **both name sets**, declared-value-first:
+
+| parameter | E spelling | D spelling |
+|---|---|---|
+| row height | `data-webui-row-height` | `data-viewport-rowsize` |
+| overscan | `data-webui-overscan` | `data-viewport-overscan` |
+
+precedence now: declared (E name, then D name) → first-row `offsetHeight` →
+24 px. the **offsetHeight fallback runs only when NEITHER name set is present**
+(the red-team finding: the engine silently ran on fallbacks — 24 px rows and the
+default overscan band — because it read only `data-webui-*`).
+
+`e-windowed.mjs` grew the DX-7e section (30/30 on :9266 + a :9270 reconciliation
+page, self-scrolling containers): declared `data-viewport-rowsize="37"` is
+honored over the rendered 40 px measurement (spacer = 2000×37); declared
+`data-viewport-overscan="2"` holds the window to visible+2+2 ≈ 11 rows (vs the
+undeclared fallback band ≈ 19); lease discovery + `data-webui-row-height` +
+the neither-present offsetHeight fallback are all pinned.
+
+**recorded divergence for i1 (lane D / reconciler):** the D spelling's unit is
+a *factor* (`ViewportSizing`: window = visible × overscan, `overscan=2` ⇒
+window ≈ 2× visible) while the engine's `w.ov` is an absolute *row count*
+pasted above/below (default = one visible band each side, ≈ 3× visible). W1
+aliases the D attr to the engine's unit (declared 2 ⇒ 2 rows each side) — the
+declared value is consumed, which is the red-team's requirement — but a
+factor-vs-count semantic match is NOT reproduced. if D's factor reading must
+survive, the reconciler should convert (`w.ov = visible × (N−1)/2`) or empty
+out the D attr from the component (the lease emission makes the params
+redundant). recorded, not silently claimed.
+
+### DX-8e — `data-webui-input` delivery wiring (red-team gap closed)
+
+`islandRegionSubscribed`/`deliverIslandEvent` accept the descriptor as a
+**sibling** of `data-webui-island-events` (same JSON-array parser; union of
+both). tokens are InputParity channel names mapped from DOM event types by the
+new `INPUT_CHAN` table:
+
+| channel | DOM events | delegated at W1 |
+|---|---|---|
+| `key` | `keydown` **only** | yes (already) |
+| `composition` | `compositionstart/update/end` | yes (added to `EVENT_TYPES`) |
+| `selection` / `clipboard` / `undo` | `select·selectionchange` / `copy·cut·paste` / `undo·redo` | subscribed only — DOM events NOT delegated at W1 |
+
+**key = keydown only** — `keypress` (legacy) and `keyup` (double-counts releases)
+would triple every `KeyEvent`; `KeyEvent`/`isRepeat` is a press channel. the
+keydown/keyup/keypress→`key` normalization inside `deliverIslandEvent` is
+unchanged for legacy `data-webui-island-events` spellings.
+
+**modifier booleans ride `data`** — the key payload already carries
+`ctrlKey/shiftKey/altKey/metaKey` (booleans-as-strings) from `extractEventData`;
+that is the **v2 modifier pre-seed** (no v1 wire field; the island keys on
+`key` alone). pinned by `e-input-desc.mjs`.
+
+**I4 guard (per-page cost):** composition events must reach islands ONLY —
+`handleEvent` short-circuits any `composition*` event to the island-region path
+and returns, so a non-opted page (or a component without `data-event`) cannot
+start emitting `{type:'event', event:'compositionupdate'}` ws round-trips. zero
+new per-page network on non-opted pages; +3 document listeners (the delegator
+already had 15) with no observable behavior change.
+
+**space normalization (the recorded choice):** the DOM spacebar's
+`event.key === " "` is kept as the single space scalar `" "` — the wire form of
+`Key.printable(" ")` per d-to-e's transport table — and `"Spacebar"` (legacy)
+is normalized to it. the engine deliberately does **not** rewrite `" "` →
+`"Space"`: `.space`/`"Space"` will not fire from a real browser (d-docs
+boundary #3). probe pins `{type:"key", key:" "}`.
+
+`e-input-desc.mjs` (new, 7/7 on :9271): descriptor-only region receives
+`{type:"key", key:"a", data:{...modifiers}}`; space arrives as `key:" "`;
+`["key","composition"]` receives `{type:"composition", key:"composition",
+data:{data,isComposing}}`; a click in a key-only region is NOT delivered
+(descriptor-gated). regressions: `e-island-e2e` 17/17, `e-island-e2e-real`
+21/21, `e-windowed` 30/30.
+
+### handoffs
+
+- **to lane D / reconciler:** (1) the overscan unit divergence (above) — decide
+  factor-vs-count before W2 or accept the W1 alias; (2) Viewport emits BOTH
+  `data-webui-viewport` (styling marker) and `data-webui-lease="viewport"`
+  (discovery) after this wave — the engine accepts either; (3) composition is
+  island-only at W1 (guard is deliberate, not a bug).
+- **to lane B:** `plugin budget` will flag the engine at 74,735/17,924 vs the
+  i2 pin 72,000/17,000 — the arc budget authorizes it; the i3 re-pin
+  (~74,500/18,000 advice above) absorbs both.
+
+
