@@ -313,8 +313,78 @@ private func memberCollisionMessage(in declaration: some DeclGroupSyntax, adapte
 		if name == adapterName {
 			return "@HotView: your declared `\(adapterName)` would collide with the generated island adapter — @HotView emits it; rename your member (the generated adapter is named `\(adapterName)`)"
 		}
+		if name == "elementIDs" {
+			return "@HotView: your declared `static let elementIDs` would collide with the generated DX-9 id vocabulary — @HotView walks the @HotBuilder body and emits it; remove yours (or drop @HotView and hand-write the ContinuumServerPath conformance)"
+		}
 	}
 	return nil
+}
+
+// MARK: - DX-9 — the macro-emitted element-id vocabulary (CONTINUUM_DX §2.9)
+//
+// the literal-only walk of the @HotBuilder body: every `id:` argument spelled
+// as a string literal (`Hot.Text(id: "feed-status", …)`, `Hot.Container(id:
+// "panel", …)`, `Hot.KeyedList(id: "feed", …)`, …) — or as the spelled
+// `ElementID("…")` literal form — is collected into the generated
+// `static let elementIDs: Set<ElementID>`, the macro-emitted mirror of the
+// hand-kept `ProbeIslandIDs` pattern (d-docs §DX-9).
+//
+// the LITERAL-ONLY boundary: interpolated / dynamic ids (`ElementID("t-\(key)")`,
+// key-derived `-k<key>` list ids) are NOT statically knowable — they defer to
+// the runtime dev check's `isKnownElementID` family, never to compile time.
+// over-collection is permissive-safe (the dev check ignores ids the island
+// never emits); a missed literal is the only bug class — and this walk is the
+// whole-value collection, so a missed literal is a body rewrite that drops the
+// call, not a walk bug.
+private final class ElementIDLiteralCollector: SyntaxVisitor {
+	var ids: Set<String> = []
+
+	init() {
+		super.init(viewMode: .sourceAccurate)
+	}
+
+	override func visit(_ node: FunctionCallExprSyntax) -> SyntaxVisitorContinueKind {
+		for argument in node.arguments {
+			guard argument.label?.text == "id" else { continue }
+			collectID(from: argument.expression)
+		}
+		return .visitChildren
+	}
+
+	private func collectID(from expression: ExprSyntax) {
+		// the plain literal: `id: "feed-status"`. `representedLiteralValue` is
+		// nil for interpolated segments — the literal-only boundary, enforced
+		// by the syntax node, not by a re-resolution.
+		if let literal = expression.as(StringLiteralExprSyntax.self),
+			let value = literal.representedLiteralValue {
+			ids.insert(value)
+			return
+		}
+		// the spelled form: `id: ElementID("feed-status")`.
+		if let call = expression.as(FunctionCallExprSyntax.self),
+			call.calledExpression.trimmedDescription == "ElementID",
+			let argument = call.arguments.first,
+			let literal = argument.expression.as(StringLiteralExprSyntax.self),
+			let value = literal.representedLiteralValue {
+			ids.insert(value)
+		}
+	}
+}
+
+/// the literal `id:` values the `@HotBuilder render(state:)` body spells, in
+/// sorted order (deterministic emission; the expansion suite pins the exact
+/// text).
+private func renderBodyElementIDs(in declaration: some DeclGroupSyntax) -> [String] {
+	for member in declaration.memberBlock.members {
+		guard let function = member.decl.as(FunctionDeclSyntax.self) else { continue }
+		guard function.name.text == "render" else { continue }
+		guard function.signature.parameterClause.parameters.count == 1 else { continue }
+		guard let body = function.body else { continue }
+		let collector = ElementIDLiteralCollector()
+		collector.walk(body)
+		return Array(collector.ids).sorted()
+	}
+	return []
 }
 
 // MARK: - the plan (shared by both macro roles)
@@ -330,6 +400,9 @@ private struct HotViewPlan {
 	let access: String
 	let grantsSource: String
 	let budgetSource: String
+	/// DX-9: the literal `id:` values the render body spells, sorted (may be
+	/// empty — the always-emitted declaration still carries the vocabulary).
+	let elementIDs: [String]
 }
 
 private func hotViewPlan(of node: AttributeSyntax, on structDecl: StructDeclSyntax) throws -> HotViewPlan {
@@ -366,7 +439,8 @@ private func hotViewPlan(of node: AttributeSyntax, on structDecl: StructDeclSynt
 		// the copied expressions; the sentinel budget is the wave-1 "unset" value
 		// the name-only signature has always emitted (additive).
 		grantsSource: arguments.imports?.trimmedDescription ?? "[]",
-		budgetSource: arguments.budget?.trimmedDescription ?? "IslandBudget(maxBytes: 0, maxGzipBytes: nil)"
+		budgetSource: arguments.budget?.trimmedDescription ?? "IslandBudget(maxBytes: 0, maxGzipBytes: nil)",
+		elementIDs: renderBodyElementIDs(in: structDecl)
 	)
 }
 
@@ -376,6 +450,17 @@ private func hotViewPlan(of node: AttributeSyntax, on structDecl: StructDeclSynt
 /// export shims for `struct Feed` are `_continuumEncodeFeed`/`_continuumDecodeFeed`.
 private func shimName(_ prefix: String, _ typeName: String) -> String {
 	prefix + typeName
+}
+
+/// the `static let elementIDs` value: the literal ids as a `Set<ElementID>`
+/// literal (`[]` when the render body spells none — the always-emitted
+/// declaration still carries the vocabulary, so a check build fails loudly on
+/// any op instead of silently passing an undeclared island).
+private func elementIDsSource(_ ids: [String]) -> String {
+	guard !ids.isEmpty else { return "[]" }
+	let linePrefix = String(repeating: "\t", count: 3)
+	let lines = ids.map { linePrefix + "ElementID(\"" + $0 + "\")" }
+	return "[\n" + lines.joined(separator: ",\n") + "\n\t\t]"
 }
 
 // MARK: - HotClassMacro
@@ -463,11 +548,18 @@ public struct HotViewMacro: ExtensionMacro, PeerMacro {
 			\t\(raw: plan.access)struct \(raw: plan.islandName): ContinuumIsland {
 			\t\t\(raw: plan.access)typealias State = \(raw: plan.typeName).State
 			\t\t\(raw: plan.access)typealias Action = \(raw: plan.typeName).Action
-			\t\t\(raw: plan.access)static var name: String { "\(raw: plan.name)" }
-			\t\t\(raw: plan.access)static var imports: [any HostCapability.Type] { \(raw: plan.grantsSource) }
-			\t\t\(raw: plan.access)static var budget: IslandBudget { \(raw: plan.budgetSource) }
+					\(raw: plan.access)static var name: String { "\(raw: plan.name)" }
+					\(raw: plan.access)static var imports: [any HostCapability.Type] { \(raw: plan.grantsSource) }
+					\(raw: plan.access)static var budget: IslandBudget { \(raw: plan.budgetSource) }
 
-			\t\t\(raw: plan.access)static func reduce(state: inout State, action: Action) -> [HotEffect] {
+					// DX-9 vocabulary (CONTINUUM_DX §2.9, lane D): the literal `id:`
+					// arguments of the @HotBuilder body — the macro-emitted mirror of the
+					// hand-kept ProbeIslandIDs pattern (d-docs §DX-9). the runtime's
+					// CONTINUUM_ID_CHECK dev check reads this; interpolated/dynamic ids
+					// defer to isKnownElementID and are never collected here.
+					\(raw: plan.access)static let elementIDs: Set<ElementID> = \(raw: elementIDsSource(plan.elementIDs))
+
+					\(raw: plan.access)static func reduce(state: inout State, action: Action) -> [HotEffect] {
 			\t\t\t\(raw: plan.typeName).reduce(state: &state, action: action)
 			\t\t}
 

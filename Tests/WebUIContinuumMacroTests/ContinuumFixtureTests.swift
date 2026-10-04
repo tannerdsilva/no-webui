@@ -50,6 +50,26 @@ struct ContinuumFixtureTests {
 		#expect(MacroCounter.continuumClasses == ["counter", "counter__label"])
 	}
 
+	@Test("DX-9 — the macro-emitted elementIDs equals the hand-written mirror (ProbeIslandIDs pattern)")
+	func elementIDVocabularyEquivalence() {
+		// the macro walks the @HotBuilder body and emits the literal `id:`
+		// vocabulary; the hand-written equivalent mirrors it (ProbeIslandIDs
+		// is the always-compiled fallback this is diffed against). the two
+		// generations MUST agree — a walked-miss (the only DX-9 bug class)
+		// fails here.
+		#expect(MacroIsland.elementIDs == HandCounterIsland.elementIDs)
+		#expect(MacroIsland.elementIDs == [
+			ElementID("counter"),
+			ElementID("counter-count"),
+			ElementID("counter-label"),
+		])
+		// every op the fixture can emit targets a KNOWN id — the hand-written
+		// island's ops pass the dev-check vocabulary by construction.
+		#expect(MacroIsland.elementIDs.contains(ElementID("counter-label")))
+		#expect(MacroIsland.elementIDs.contains(ElementID("counter")))
+		#expect(!MacroIsland.elementIDs.contains(ElementID("counter-lable")))
+	}
+
 	@Test("the generated island adapter matches the hand-written one")
 	func adapterEquivalence() {
 		#expect(MacroIsland.name == HandCounterIsland.name)

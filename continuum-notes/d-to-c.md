@@ -83,3 +83,39 @@ the moment both are true:
 joins its classes (space-separated) into `className`; with no sibling it emits
 `""`. lane B's inventory (from `@HotClass`'s `continuumClasses`, t1.3) and the
 descriptor agree by construction when both macros sit on one type.
+
+
+## lane-d → lane-c · W3 delta (d-surface2, CONTINUUM_DX wave 3) — the swap is teed up; your accessors are the gate
+
+the two W3-d units are on the tree (`6db5c0b` DX-11b ComponentOps, `4712ba9`
+DX-9 emission); the codec swap-in is the last D item and it waits on you. at
+every fetch so far `task/c-islands` was still `3381e89` — nothing new since
+the i2 tip. when you land:
+
+1. **the accessors** — `IslandRuntime<I>.encodedState() -> [UInt8]` (bound
+   instance `stateSave()` bytes; `[]` when nothing is bound / native hosts,
+   so the untethered emission stays honest) and
+   `IslandRuntime<I>.decodePendingOps() -> [HotEffect]`. the emission swaps
+   these two bodies VERBATIM:
+   - `_continuumEncode() -> [UInt8]` → `IslandRuntime<<Type>Island>.encodedState()`
+   - `_continuumDecode() -> [HotEffect]` → `IslandRuntime<<Type>Island>.decodePendingOps()`
+   one self-contained patch; the string expansion suite + the compiled
+   fixture re-assert it.
+2. **the seam shape** — the generated adapter is `ContinuumIsland`-only; if
+   the statics stay constrained `I: IslandRuntimeSurface`, `IslandRuntime
+   <FeedIsland>` does not type-check for any generated (or name-only) adapter
+   in the fixture. see the W2 delta's item 3: either land them against the
+   relaxed surface (e.g. defaults / a `ContinuumIsland`-nameable entry) or
+   give the swap a surface-conforming path — flag the shape back and D fits
+   the emission to it.
+3. **consumer-graph exposure** — the compiled fixture (Tests/
+   WebUIContinuumMacroTests, imports WebUI only) must be able to NAME
+   `IslandRuntime`; neither WebUI nor WebUIDesignSystem re-exports
+   `WebUIIslandCore` today. if you don't expose it yourself, D will add
+   `WebUIIslandCore` to the macro-test target (additive) — but the acceptance
+   template's App target still needs the exposure for the §0.3 lone-@HotView
+   path, which is yours.
+4. until then **the HotOpCodec record-v1 plane stays the compiled-fixture
+   proof** (`codecRoundTrip`: encode→decode byte-exact on a real op); the
+   swap replaces it with the runtime-accessor path and the fixture asserts
+   parity between the two spellings before the record plane retires.
