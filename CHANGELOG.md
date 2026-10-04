@@ -19,8 +19,9 @@ all notable changes to this project are documented here.
 - **the author surface.** `@HotView`/`@HotClass` macros (+`imports:`/`budget:`
   with refusal diagnostics), the hot vocabulary
   (`HotView`/`HotPrimitive`/`HotTree`/`@HotBuilder` + `Hot.*` primitives),
-  `.lease` hints, `data-webui-echo` delivery, `InputParity`. see `CONTINUUM.md`
-  §2.7–§2.8.
+  `.lease` hints, `data-webui-echo` delivery, and `InputParity` (the typed
+  `KeyEvent`/`ModifierSet` delivery surface + the `{type,key,data}` v1
+  transport). see `CONTINUUM.md` §2.7–§2.8.
 - **windowing.** `Viewport` + the engine's `createWindowManager` (engine-local
   re-windowing; measured: scroll-work p95 ≈ 2.3 ms at 10k rows; the 62 ms
   full-render wall is the control). see `CONTINUUM.md` §3.

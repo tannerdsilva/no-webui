@@ -226,10 +226,14 @@ markup, no bytes — the hint lives in the type). delivery wiring:
   `.lease(.echo)` stays byte-identical.
 - `InputParity` descriptor: `data-webui-input='["key","composition"]'` (the
   sibling spell of the island-events descriptor) + `onKeyEvent` +
-  `compositionForwarded()` (ime channel). the delivery surface currently
-  wears `ParityKeyEvent`/`ParityModifiers`; the polish re-point maps them
-  onto `WebUISharedCore.KeyEvent`/`ModifierSet` (the frozen t3.4 shapes incl.
-  `Key.identifier` ↔ the `{type,key,data}` v1 vocabulary).
+  `compositionForwarded()` (ime channel). the delivery surface rides
+  `WebUISharedCore`'s typed `KeyEvent`/`ModifierSet`/`Key` (the wave-3 twins
+  were deleted in polish); `KeyEvent.islandPayloadV1` is the transport
+  mapping `{"type":"key","key":<Key.identifier>}` — `data` omitted on the
+  key channel, `modifiers`/`isRepeat` pre-seed v2, and `event.key == " "`
+  parses to `.printable(" ")` (the recorded space friction). probe:
+  `designer/probes/d-transport.mjs`. wiring `data-webui-input` into the
+  engine's island delivery is the next slice.
 
 ## 3. windowing (t3.3)
 
@@ -337,14 +341,18 @@ the plugin runs the lint as a second build step and writes a
 | `c-ops.mjs` | the island's ABI byte-exact in node (no engine) |
 | `c-parity.mjs` | native↔island equal hashes |
 | `d-viewport.mjs` | source ⇄ sheet ⇄ handoff contract |
+| `d-transport.mjs` | the KeyEvent → `{type,key,data}` v1 transport rule (parses the real identifier table) |
 | `b-lint.mjs` / `b-budget-pins.mjs` | grants lint / per-island pins |
 | `b-interaction-smoke.mjs` / `b-windowed-smoke.mjs` | bench interactions |
 | `designer/continuum-bench.mjs` | the six §3 recipes (d0 harness) |
-| `designer/d3-gate.mjs` | the d3 gate: echo budget, degrade, scroll tracking |
+| `designer/d3-gate.mjs` | the d3 gate: echo budget, degrade, scroll (engine-local fixture, floor-based criterion) |
+| `designer/gates/b-probe-fold.mjs` | the fold-in runner the canonical gates invoke |
 
 the in-repo ladder: `plugin wasm-island` (fresh clones) → `swift build` →
-`swift test` → `plugin smoke` → `plugin fullstack-smoke` → `plugin budget` →
-`node designer/browser-smoke.mjs` → the wave probes. canonical ports
+`swift test` → `plugin smoke` (folds b-lint + b-interaction; 19/19 pin holds)
+→ `plugin fullstack-smoke` (folds b-windowed; 22/22 pin holds) →
+`plugin budget` → `node designer/browser-smoke.mjs` (folds the d3 gate as its
+agg; 46/46) → the wave probes. canonical ports
 (9090/9091/9092/9123/9130) are for the orchestrator; lanes use their blocks.
 
 ## 7. decisions of record + open items
@@ -357,8 +365,13 @@ drain = whole-record batches (the i1 freeze); `HotView` does not inherit
 WebUI; the engine budget's four deliberate re-pins (the plugin comment holds
 the trip history).
 
-open items: the d3-gate's windowed fixtures on the engine-local path + the
-floor-relative criterion (in polish); row-level ops for detached window rows;
-a server-side window-slice fetch path; `@HotView` consumer-page wiring;
-`AttrWrapper` dynamic attr ops; d5 (durable local state / live documents) and
-d6 (webview shell) remain separable future arcs.
+open items: the d3 gate is
+**closed** (14/14 — engine-local fixture rendering `Viewport`, criterion
+re-based onto engine scroll-work p95 ≤ 20 ms per the measured 30 Hz host
+floor; a 60 Hz host run can re-enable the absolute rAF assertion); align the
+component's `data-webui-viewport` discovery attribute with the lease
+attribute the engine consumes; wire `data-webui-input` into the engine's
+island delivery; v2 key-channel `modifiers`/`isRepeat`; row-level ops for
+detached window rows; a server-side window-slice fetch path; `@HotView`
+consumer-page wiring; `AttrWrapper` dynamic attr ops; d5 (durable local state
+/ live documents) and d6 (webview shell) remain separable future arcs.
