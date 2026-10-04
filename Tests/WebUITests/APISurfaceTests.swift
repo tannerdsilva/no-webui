@@ -787,3 +787,41 @@ func placementHintSurfacePins() {
 	let list = Div { Text("a") }
 	#expect(rendered(list.lease(.viewport)) == rendered(list))
 }
+
+// MARK: - the t3.3/t3.4 additive surface (compile-time pins, additive only)
+
+@Test("the t3.4 delivery surface compiles and stays additive")
+func t34DeliverySurfacePins() {
+	// echo delivery: the target-carrying form is the ONLY form that emits
+	// bytes; the bare form stays byte-identical (pinned above).
+	let echo = Text("x").lease(.echo, echoTo: "preview")
+	#expect(echo.modifier.echoTarget == "preview")
+	#expect(Text("x").lease(.echo).modifier.echoTarget == nil)
+
+	// input-parity modifiers: closed subscription vocabulary, descriptor spell.
+	let parity = Div { Text("x") }.inputParity(.key, .composition)
+	#expect(rendered(parity).contains("data-webui-input='[\"key\",\"composition\"]'"))
+	#expect(rendered(Div { Text("x") }.compositionForwarded()).contains("data-webui-composition=\"\""))
+	#expect(rendered(Div { Text("x") }.onKeyEvent { _ in }).contains("data-webui-input='[\"key\"]'"))
+
+	// the hot capacity primitives: keyed identity + promotion compile.
+	_ = Hot.KeyedList(id: "vp", keys: ["a"]) { key in Hot.Text(id: ElementID(key), key) }
+	_ = Hot.AttrWrapper(attributes: [Hot.HotAttribute("data-key", "a")]) { Hot.Spacer().hotTree }
+	_ = HotTree.attended(attributes: [], content: .spacer)
+
+	// the t3.3 Viewport component + the pure math.
+	_ = ViewportWindow(first: 0, lastExclusive: 10)
+	#expect(ViewportSizing.visibleCount(viewportHeight: 600, rowHeight: 52) == 12)
+	_ = Viewport(id: "vp", items: [ViewportPinItem(title: "x")], keyedBy: \.title) { item, _ in Text(item.title) }
+}
+
+private struct ViewportPinItem: Sendable {
+	var title: String
+}
+
+@Test("the t3.3 windowing math surface compiles (scroll anchoring)")
+func t33WindowingSurfacePins() {
+	#expect(ViewportAnchor.scrollDelta(oldFirst: 6, newFirst: 0, rowHeight: 52) == 312)
+	#expect(ViewportAnchor.anchorRow(scrollTop: 1040, rowHeight: 52) == 20)
+	#expect(InputParity.allCases.map(\.wireName) == ["key", "selection", "clipboard", "undo", "composition"])
+}

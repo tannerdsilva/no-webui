@@ -203,3 +203,92 @@ for `@HotView("feed", imports: [ClockCapability.self], budget: IslandBudget(...)
 - `CHANGELOG.md` (unreleased): "@HotView gains imports:/budget: with refusal
   diagnostics; the hot vocabulary (HotView/HotPrimitive/HotTree/@HotBuilder) +
   the compiled equivalent fixture; .lease placement hints (inert, byte-identical)".
+
+---
+
+# lane d — wave 3 notes (t3.3 complete + t3.4 delivery)
+
+branch `task/d-surface`; merged `origin/dev-continuum` @ `f9faaba` (i2) first.
+three green units pushed: `4e4f08b` (Viewport), `6e5954d` (t3.4 delivery),
+`009e982` (KeyedList/AttrWrapper).
+
+## what landed (commits)
+
+- `4e4f08b` feat(design-system): `Viewport<ID, Item>` in
+  `Sources/WebUIDesignSystemCore/Viewport.swift` + the pure windowing spec
+  (`ViewportSizing`/`ViewportWindow`/`ViewportAnchor`) + `Tests/WebUITests/
+  ViewportTests.swift` (13) + `designer/probes/d-viewport.mjs` + the DOM
+  contract handoff in `continuum-notes/d-to-e.md`.
+- `6e5954d` feat(webui): t3.4 delivery — `.lease(.echo, echoTo:)` →
+  `data-webui-echo` emission (buffered decorate path), `InputParity`
+  descriptor modifiers + `compositionForwarded()` + `onKeyEvent` in
+  `Sources/WebUI/InputParity.swift`; additive pins in `APISurfaceTests`.
+- `009e982` feat(webui): `Hot.KeyedList` + `Hot.AttrWrapper` (the `.attended`
+  `HotTree` case) in `ContinuumHot.swift` + `HotPrimitiveTests` (11).
+
+## the t3.3 `Viewport` DOM contract (handoff to E — in `d-to-e.md`)
+
+engine finds `[data-webui-viewport]`; reads `data-viewport-total`/
+`-rowsize` (52) /`-overscan` (2); rows `<li id="<id>-r<i>" data-viewport-row
+data-key="<key>">` (i = global index — stable across window shifts; data-key =
+keyed identity); sliced renders emit `.viewport-pad` height pads +
+`data-viewport-slice="<first>..<last>"`; server degrade = full list,
+paginated past `data-viewport-safe` (10 000, the d0-measured 10k ceiling)
+with a self-wiring `.pagination` pager. anchoring on patch:
+`ViewportAnchor.scrollDelta = (oldFirst−newFirst)×rowHeight`.
+
+## the windowing semantics the engine's JS twin must match (pinned)
+
+`visible = ceil(rectHeight/rowHeight)`; `window = visible×overscan` (2×, ≈ one
+band above + one below the anchor), clamped to `[0,total)`; lead depth
+`(window−visible)/2`; the anchor row is the first survivor at/above the old
+top edge; re-window when the anchor leaves the visible band.
+
+## t3.4 delivery decisions (conservative choices)
+
+1. **`.lease(.echo)` stays byte-identical; only `.lease(.echo, echoTo:)`
+   emits.** the wave-2 pin ("no attribute when unhinted") survives — a hint
+   without a target cannot know where to echo, so it is not an echo source.
+   recorded as the conservative reading of "delivery wiring".
+2. **D-side payloads wear the `Parity`/`ParityKeyEvent` names, not C's.** C
+   owns the wasm-visible `KeyEvent`/`Selection`/`ClipboardPayload`/`UndoStack`
+   in `WebUISharedCore` and lands them this wave; D's modifiers must compile
+   NOW, so the typed handler surface uses D-named delivery twins
+   (`ParityKeyEvent.key/modifiers`), whose shapes mirror the frozen §t3.4
+   names. i3 hook-up (one file, mechanical): re-point the modifier handler
+   signatures at C's types once they merge (typealias/param swap) — no
+   behavioral change; recorded here so the reconciler treats it as a
+   substitution, not a duplicate.
+3. **`InputParity` descriptor is a JSON-array attribute** (`data-webui-input=
+   '["key","composition"]'`) — the sibling spell of E's existing
+   `data-webui-island-events`, so the engine's t3.4 forwarding reads both with
+   one parser. closed vocabulary; `inputParity()` with no args emits nothing.
+4. **`HotTree.attended` laminates attributes onto the element its content
+   opens**; content that opens no element (empty/fragment/spacer) drops them
+   (pinned). attribute-only changes produce no ops (v1 boundary — the engine's
+   `attr` op is the future dynamic-row-state channel).
+5. **id etymology differs by placement (documented for E):** the server
+   Viewport rows are positionally addressed (`-r<i>`, a slot) + keyed by
+   `data-key`; the hot `KeyedList` rows are key-derived (`-k<key>`) so the hot
+   diff reconciles by key. both emit the same `data-key` identity channel; the
+   engine windows by membership in the full ordered list.
+
+## gates run (wave 3)
+
+- `swift build` — green after each unit; `swift test` for each unit's filter
+  green (Viewport 13, delivery 8, hot primitives 11, pins 3).
+- `node designer/probes/d-viewport.mjs` — all contract checks green.
+- final full `swift build` + `swift test` + macro filter — see the lane report.
+
+## doc fragments (wave 3, for the orchestrator)
+
+- `CONTINUUM.md`: the t3.3 `Viewport` section (the signal: windowed surface +
+  server degrade) + the DOM-contract table; the t3.4 delivery section
+  (`.lease(.echo, echoTo:)`, the `InputParity` descriptor, composition
+  forwarding, the `ParityKeyEvent` grammar + the i3 hook-up); the
+  component-promotion path (`AttrWrapper`/`attended`) — how an existing
+  design-system component gains `hotOps` without forking the hot vocabulary.
+- `CHANGELOG.md` (unreleased): "Viewport windowing component (t3.3) with the
+  engine DOM contract + server-degrade pagination; t3.4 input-parity
+  delivery (data-webui-echo emission, data-webui-input descriptor,
+  composition forwarding, ParityKeyEvent); Hot.KeyedList + Hot.AttrWrapper".
