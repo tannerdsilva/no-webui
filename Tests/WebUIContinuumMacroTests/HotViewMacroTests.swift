@@ -83,16 +83,26 @@ extension Feed: ContinuumServerPath {
 		// adapter reads the BOUND runtime instance through lane C's W3 accessors —
 		// `IslandRuntime<<Type>Island>.encodedState()` (the exact webui_state_save
 		// payload) / `.decodePendingOps()` (the pending records, decode-only — never
-		// drains). host/native builds never bind a runtime, so the statics report the
-		// drained contract ([], no effects). the macro emits a ContinuumIsland-only
-		// adapter; the spell requires the adapter to satisfy IslandRuntimeSurface at
-		// the use site — author-supplied (the template-feed shape, c-to-d W3 item 3).
+		// drains). the spell is `os(WASI)`-gated: host/native builds never bind a
+		// runtime, so they compile the drained contract ([], no effects) with no
+		// extra imports or surface boilerplate — a lone host-only `@HotView` (the
+		// acceptance's one-struct path) stays one struct. a wasm-bound island needs
+		// the adapter to satisfy IslandRuntimeSurface at the use site —
+		// author-supplied (the template-feed shape, c-to-d W3 item 3).
 		static func _continuumEncode() -> [UInt8] {
+			#if os(WASI)
 			IslandRuntime<Feed.FeedIsland>.encodedState()
+			#else
+			[]
+			#endif
 		}
 
 		static func _continuumDecode() -> [HotEffect] {
+			#if os(WASI)
 			IslandRuntime<Feed.FeedIsland>.decodePendingOps()
+			#else
+			[]
+			#endif
 		}
 	}
 }
@@ -170,16 +180,26 @@ extension Feed: ContinuumServerPath {
 		// adapter reads the BOUND runtime instance through lane C's W3 accessors —
 		// `IslandRuntime<<Type>Island>.encodedState()` (the exact webui_state_save
 		// payload) / `.decodePendingOps()` (the pending records, decode-only — never
-		// drains). host/native builds never bind a runtime, so the statics report the
-		// drained contract ([], no effects). the macro emits a ContinuumIsland-only
-		// adapter; the spell requires the adapter to satisfy IslandRuntimeSurface at
-		// the use site — author-supplied (the template-feed shape, c-to-d W3 item 3).
+		// drains). the spell is `os(WASI)`-gated: host/native builds never bind a
+		// runtime, so they compile the drained contract ([], no effects) with no
+		// extra imports or surface boilerplate — a lone host-only `@HotView` (the
+		// acceptance's one-struct path) stays one struct. a wasm-bound island needs
+		// the adapter to satisfy IslandRuntimeSurface at the use site —
+		// author-supplied (the template-feed shape, c-to-d W3 item 3).
 		static func _continuumEncode() -> [UInt8] {
+			#if os(WASI)
 			IslandRuntime<Feed.FeedIsland>.encodedState()
+			#else
+			[]
+			#endif
 		}
 
 		static func _continuumDecode() -> [HotEffect] {
+			#if os(WASI)
 			IslandRuntime<Feed.FeedIsland>.decodePendingOps()
+			#else
+			[]
+			#endif
 		}
 	}
 }
@@ -260,16 +280,26 @@ extension Feed: ContinuumServerPath {
 		// adapter reads the BOUND runtime instance through lane C's W3 accessors —
 		// `IslandRuntime<<Type>Island>.encodedState()` (the exact webui_state_save
 		// payload) / `.decodePendingOps()` (the pending records, decode-only — never
-		// drains). host/native builds never bind a runtime, so the statics report the
-		// drained contract ([], no effects). the macro emits a ContinuumIsland-only
-		// adapter; the spell requires the adapter to satisfy IslandRuntimeSurface at
-		// the use site — author-supplied (the template-feed shape, c-to-d W3 item 3).
+		// drains). the spell is `os(WASI)`-gated: host/native builds never bind a
+		// runtime, so they compile the drained contract ([], no effects) with no
+		// extra imports or surface boilerplate — a lone host-only `@HotView` (the
+		// acceptance's one-struct path) stays one struct. a wasm-bound island needs
+		// the adapter to satisfy IslandRuntimeSurface at the use site —
+		// author-supplied (the template-feed shape, c-to-d W3 item 3).
 		public static func _continuumEncode() -> [UInt8] {
+			#if os(WASI)
 			IslandRuntime<Feed.FeedIsland>.encodedState()
+			#else
+			[]
+			#endif
 		}
 
 		public static func _continuumDecode() -> [HotEffect] {
+			#if os(WASI)
 			IslandRuntime<Feed.FeedIsland>.decodePendingOps()
+			#else
+			[]
+			#endif
 		}
 	}
 }
