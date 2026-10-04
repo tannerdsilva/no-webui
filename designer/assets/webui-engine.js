@@ -1326,8 +1326,8 @@ window.WebUIEngine = (function () {
       if (!f && ns === w.a && ne === w.b) { return; }
       for (var i = w.a; i < ns && i <= w.b; i++) { del(w, i); }
       for (var j = ne + 1; j <= w.b; j++) { del(w, j); }
-      for (var k = w.a - 1; k >= ns; k--) { if (w.r[k]) { put(w, w.r[k], k); } }
-      for (var m = Math.max(w.b + 1, 0); m <= ne; m++) { if (w.r[m]) { put(w, w.r[m], m); } }
+      for (var k = Math.min(w.a - 1, ne); k >= ns; k--) { if (w.r[k]) { put(w, w.r[k], k); } }
+      for (var m = Math.max(w.b + 1, ns); m <= ne; m++) { if (w.r[m]) { put(w, w.r[m], m); } }
       w.a = ns; w.b = ne;
     }
     function init(el) {
@@ -1352,6 +1352,7 @@ window.WebUIEngine = (function () {
       w.sp.style.height = (w.r.length * w.h) + 'px';
       var cs = getComputedStyle(el);
       w.m = ((cs.overflowY === 'auto' || cs.overflowY === 'scroll') && el.scrollHeight > el.clientHeight) ? 'win' : 'doc';
+      w.a = 0; w.b = -1;
       wnd(w, 1);
       return w;
     }
