@@ -69,3 +69,25 @@ cross-checks source ⇄ sheet ⇄ this note.
   window patch so the anchor row stays visually put — the generalization of
   the engine's landed scroll survival; the anchor is the first survivor at or
   above the previous first row (`ViewportWindow.anchorRow`).
+
+## wave 3 / polish — the t3.4 input-parity contract (for the engine half)
+
+D's delivery surface (now re-pointed onto C's real `KeyEvent`, polish unit
+`7d5aa80`) declares input-parity channels via `data-webui-input='["key",…]'`
+— the declared SIBLING of your `data-webui-island-events` array spell (one
+parser reads both). its five tokens map 1:1 onto `InputParity.wireName`:
+`key`/`selection`/`clipboard`/`undo`/`composition`.
+
+- **next-slice (yours):** wire `data-webui-input` into
+  `islandRegionSubscribed`/`deliverIslandEvent` alongside
+  `data-webui-island-events`. until then the descriptor is declaration-side
+  only; regions reachable today still declare via `data-webui-island-events`.
+- **key payload, v1** (frozen in c-to-e; proven by your real-island probe):
+  `{"type":"key","key":"<Key.identifier>"}` — `data` OMITTED on the key
+  channel. the `data` you already forward for keydown (the four modifier
+  booleans as strings) stays INFORMATIONAL at v1: D's `KeyEvent.modifiers`/
+  `isRepeat` have no v1 wire field; the island reduces on `key` alone. keep
+  the booleans — they pre-seed the v2 modifier field. full mapping + the
+  space friction (`" "` parses to printable, not `.space`) in
+  `continuum-notes/d-docs.md` (polish section) + `designer/probes/d-transport.mjs`.
+

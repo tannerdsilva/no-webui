@@ -75,10 +75,32 @@ struct LeaseDeliveryTests {
 		// the handler is carried in the type (the .lease pattern) — the scan
 		// reads it; here we prove it round-trips the modifier's type.
 		#expect(view is ModifiedView<Div, KeyEventDeliveryModifier>)
-		// the typed grammar is closed + equatable, and composes with parity
-		let event = ParityKeyEvent(key: .arrowUp, modifiers: [.shift, .option])
+		// the typed grammar is closed + equatable, and composes with parity —
+		// now lane C's REAL KeyEvent/ModifierSet/Key (twins removed at polish)
+		let event = KeyEvent(key: .arrowUp, modifiers: [.shift, .option])
 		#expect(event.modifiers.contains(.shift))
 		#expect(event.modifiers.contains(.option))
-		#expect(event == ParityKeyEvent(key: .arrowUp, modifiers: [.shift, .option]))
+		#expect(event == KeyEvent(key: .arrowUp, modifiers: [.shift, .option]))
+	}
+
+	@Test("KeyEvent → island payload {type,key} v1 (the transport mapping)")
+	func islandPayloadV1() {
+		// the v1 key-channel payload: type "key" + the canonical identifier
+		let event = KeyEvent(key: .arrowUp, modifiers: [.shift, .option], isRepeat: true)
+		#expect(event.islandPayloadV1 == ["type": "key", "key": "ArrowUp"])
+		// v1 boundary (c-to-e: the key row's data = —): modifiers/isRepeat have
+		// no wire field yet — the payload omits data entirely and carries only
+		// the two keys above.
+		#expect(event.islandPayloadV1.count == 2)
+		#expect(event.islandPayloadV1["modifiers"] == nil)
+		#expect(event.islandPayloadV1["isRepeat"] == nil)
+		// printable + named identifiers map onto the same wire strings the
+		// island's Key(identifier:) parses back (never-trapping round-trip)
+		#expect(KeyEvent(key: .printable("a"), modifiers: []).islandPayloadV1 == ["type": "key", "key": "a"])
+		#expect(KeyEvent(key: .function(5), modifiers: []).islandPayloadV1["key"] == "F5")
+		#expect(Key(identifier: "ArrowUp") == .arrowUp)
+		#expect(Key(identifier: "F5") == .function(5))
+		#expect(Key(identifier: "a") == .printable("a"))
+		#expect(Key(identifier: "NotARealKey") == .unknown)
 	}
 }
