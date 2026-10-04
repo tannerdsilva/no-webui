@@ -154,7 +154,7 @@ public enum ViewportDefaults {
 ///
 /// | element | contract |
 /// |---|---|
-/// | container | the discovery anchor the engine finds the region by: `<ul id="<id>"` with the designed classes `list list--virtual` and `data-webui-viewport data-viewport-total data-viewport-rowsize data-viewport-overscan` |
+/// | container | the discovery anchor the engine finds the region by: `<ul id="<id>"` with the designed classes `list list--virtual`, `data-webui-viewport` (styling/system marker), the engine's windowing lease `data-webui-lease="viewport"` (what the pooler selects), and `data-viewport-total data-viewport-rowsize data-viewport-overscan` (the numeric inputs) |
 /// | rows | `<li id="<id>-r<i>"` with the designed class `list__item` and `data-viewport-row data-key="<key>"` — `i` is the row's GLOBAL index (stable across window shifts), `data-key` its keyed identity (`<key>` is the author key rendered through `keyString`) |
 /// | slice | when the server renders a window (`window:` set), a leading + trailing `<li>` (designed class `list__item`, plus `viewport-pad`) carries the unrendered height and the container adds `data-viewport-slice="<first>..<last>"` |
 /// | pager | server degrade beyond the safe page size: `<nav id="<id>-pager">` with the designed classes `pagination pagination--compact`, `data-viewport-page data-viewport-pages`, and `[data-viewport-goto]` controls |
@@ -269,6 +269,7 @@ public struct Viewport<ID: Hashable & Sendable, Item: Sendable>: View {
 	private func container(open: Bool, total: Int, extra: String) -> String {
 		"<ul id=\"\(htmlEscape(id))\" class=\"list list--virtual\""
 			+ " data-webui-viewport"
+			+ " data-webui-lease=\"viewport\""
 			+ " data-viewport-total=\"\(total)\""
 			+ " data-viewport-rowsize=\"\(rowHeightPx)\""
 			+ " data-viewport-overscan=\"\(ViewportSizing.defaultOverscan)\""

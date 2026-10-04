@@ -142,6 +142,22 @@ struct ViewportRenderTests {
 		#expect(!html.contains("viewport-pad"))
 	}
 
+	@Test("the container emits the engine lease once, alongside the discovery + numeric attrs")
+	func leaseEmission() {
+		let html = viewport(items).render()
+		// the engine's windowing pooler selects containers by
+		// [data-webui-lease="viewport"] — exactly one, on the container.
+		#expect(html.components(separatedBy: "data-webui-lease=\"viewport\"").count - 1 == 1)
+		// it rides right after the discovery marker, ahead of the numeric attrs;
+		// all four data-viewport-* attrs stay (E accepts both name sets this wave).
+		#expect(html.hasPrefix("<ul id=\"vp\" class=\"list list--virtual\" data-webui-viewport data-webui-lease=\"viewport\" data-viewport-total=\"30\" data-viewport-rowsize=\"52\" data-viewport-overscan=\"2\""))
+		#expect(html.contains(" data-viewport-total=\"30\""))
+		#expect(html.contains(" data-viewport-rowsize=\"52\""))
+		#expect(html.contains(" data-viewport-overscan=\"2\""))
+		// rows and pads never carry the lease
+		#expect(!html.replacingOccurrences(of: "<ul id=\"vp\" class=\"list list--virtual\" data-webui-viewport data-webui-lease=\"viewport\"", with: "").contains("data-webui-lease=\"viewport\""))
+	}
+
 	@Test("a windowed render slices with height pads so the scrollbar spans the full list")
 	func windowedSlice() {
 		// 12 visible × 2 overscan = 24 rows around anchor 15
