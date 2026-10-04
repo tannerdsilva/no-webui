@@ -525,3 +525,97 @@ for orchestrator folding at i2. sources of truth:
   `swift test` in the ladder so the drift check is armed; `plugin budget`
   remains the enforcement gate (global ceiling 240,000 today; the code-side
   declarations are what these islands ride).
+
+---
+
+# lane-c docs fragment — CONTINUUM_DX WAVE 3 (the codec-state accessors + the DX-9 runtime half e2e)
+
+for orchestrator folding into `Documentation/CONTINUUM.md` + `CHANGELOG.md` at
+i3. sources of truth: `Sources/WebUIIslandCore/IslandRuntime.swift`
+(`encodedState()`/`decodePendingOps()` + `IslandRuntimeCore.decodePendingOps()`,
+commit `0bd15f1`), `Sources/WebUISharedCore/Continuum.swift`
+(`HotOpCodec.decodeBatch`, `0bd15f1`), `Tests/WebUIIslandCoreTests/`
+(`CodecStateAccessorTests.swift`, `MacroVocabularyFixtureTests.swift`, `8ef9289`),
+`continuum-notes/c-to-d.md` (W3 addendum).
+
+## what landed (lane c, wave 3 — the d-to-c.md swap-in surface)
+
+- **`IslandRuntime<I>.encodedState()` / `.decodePendingOps()`** (public
+  statics) — the two accessors lane D's generated `_continuumEncode`/
+  `_continuumDecode` bodies swap to verbatim (`IslandRuntime<<Type>Island>
+  .encodedState()` / `.decodePendingOps()`, the d-to-c W2-delta contract):
+  - `encodedState() -> [UInt8]` — the bound instance's retained-state
+    snapshot bytes: `IslandRuntimeBridge<I>.box.core.stateSave()`, the exact
+    payload `webui_state_save` serves (the engine's
+    `restoreIslandRegionState` path). `[]` when nothing is bound.
+  - `decodePendingOps() -> [HotEffect]` — the bound instance's currently-
+    pending records decoded back into leaf effects, each record via
+    `HotOpCodec.decodeBatch` into `.ops([…])`. empty when nothing is bound or
+    nothing is pending. **READS, never drains** — `webui_take_ops` stays the
+    only queue consumer, so a decode accessor can never double-apply
+    (recorded as decision 1 below).
+  - both are strict-additive members of the runtime slice (same file, no new
+    compilation unit) — the probe/validate artifacts are **size-exact after
+    the wave** (233,952 B / 176,669 B), because nothing the existing islands
+    reference changed and the new members are dead-stripped until a consumer
+    names them (the DX-9 discipline, held).
+- **`HotOpCodec.decodeBatch(_:) -> [HotOp]`** — the exact inverse of
+  `encodeBatch` (back-to-back record-v1 stream → ops), sharing the extracted
+  `decodeRecord(from:)` core with strict single-record `decode` (behavior-
+  identical; the trailing-bytes guard stays in `decode`). native-testable,
+  the shape lane D's `decodePendingOps()` delegation decodes.
+- **`IslandRuntimeCore.decodePendingOps()`** — the buffer-free, native-
+  testable core half of the accessor (wasm-exact: the bridge forwards
+  `box.core.decodePendingOps()`); the `CodecStateAccessorTests` suite pins the
+  byte-faithful decode of queued records (single + multi-op batches), the
+  read-never-drains property, and the host unbound contract.
+
+## DX-9 end-to-end, runtime half (the macro-emitted id vocabulary)
+
+- lane D's `@HotView` `elementIDs` emission was **NOT on origin/dev-continuum
+  at W3-C time** (checked at 3381e89 — no `elementIDs` in
+  `WebUIContinuumMacro.swift`); per the brief, the runtime half was
+  implemented against the documented spell (c-to-d.md W2 addendum) and proven
+  by `MacroVocabularyFixtureTests` — a compilation-unit fixture spelling the
+  emission EXACTLY as documented (whole-body `static var elementIDs:
+  Set<ElementID>` literal collection + the keyed-row `isKnownElementID`
+  family override) that diffs bidirectionally against the always-compiled
+  hand-written `ProbeIslandIDs` fallback — the d-docs §DX-9 equivalent-fixture
+  diff, kept out of production code. the fixture also proves the emitted
+  get-only literal shape satisfies `IslandRuntimeSurface.elementIDs` verbatim
+  and that the runtime's pure detector consumes the macro-shaped vocabulary.
+- **check-mode wasm re-proven end-to-end** (the W2 recipe re-run after the
+  accessor land): probe cross-built with `-DCONTINUUM_ID_CHECK`, `c-ops`
+  15/15 + `c-parity` 4/4 pass against the check build (every script event
+  enforced the id check with no trap); production artifact restored at
+  233,952 B. full flag suite: 1,296 green.
+
+## decisions recorded
+
+1. **`decodePendingOps()` is a read, not a drain** — an accessor the macro's
+   `_continuumDecode` delegates to must be repeatable without consuming the
+   queue; draining stays exclusively on `webui_take_ops`. documented in-file.
+2. **kept `I: IslandRuntimeSurface` on `IslandRuntime`** — the enum's
+   constraint is NOT relaxed: the d-to-c point-3 relaxation was judged
+   unnecessary and byte-risky, and the consumer-graph exposure (the other
+   half of D's swap gate) is not lane-C surface. flagged in c-to-d.md (§W3
+   addendum) so lane D can decide the final emission spelling against the
+   real constraint.
+3. **`decodeBatch` shares `decodeRecord` with `decode`** — one parser, two
+   entry points; the refactor is behavior-identical (existing codec tests
+   passed unchanged, plus the new batch suite).
+
+## handoffs
+
+- **to D (W3 addendum, c-to-d.md):** the two accessors' exact spell is live;
+  `_continuumEncode()` → `IslandRuntime<<Type>Island>.encodedState()`,
+  `_continuumDecode()` → `IslandRuntime<<Type>Island>.decodePendingOps()`.
+  the swap additionally needs the macro's `elementIDs` emission (not yet on
+  origin) + the consumer-graph exposure of `WebUIIslandCore` (D/B's package
+  work), and the `IslandRuntimeSurface` constraint on `IslandRuntime` is the
+  spelling reality D should compile the emission against (decision 2).
+- **to the orchestrator:** ladder green end-to-end at `8ef9289`; the
+  equivalent-fixture tests in `MacroVocabularyFixtureTests` are the diff point
+  for lane D's `elementIDs` emission when it merges (string-suite re-point).
+- **probe/validate artifacts:** 233,952 B / 176,669 B — size-exact vs the
+  W2 anchors, budget PASS.
