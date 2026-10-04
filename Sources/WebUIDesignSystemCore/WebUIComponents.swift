@@ -1065,7 +1065,21 @@ public struct WebUITable: View {
                     expanded ? "tr--expanded" : nil,
                 ].compactMap { $0 }.joined(separator: " ")
                 let trAttrs = trClass.isEmpty ? "" : " class=\"\(trClass)\""
-                html += "<tr\(trAttrs)>"
+                // DX-11a (CONTINUUM_DX §2.11): the typed per-control id
+                // vocabulary on INTERACTIVE tables (wired = typed handlers) —
+                // every data row carries `{id}-r{rowIndex}` + `data-key`
+                // (the same rowId the select/expand control ids derive from),
+                // so an op-emitting handler can target rows with attr/text
+                // ops instead of a whole-region replace. gated on wired so a
+                // static table (no handlers, no ops) stays byte-identical;
+                // attribute order id → data-key → class.
+                let trIdKey: String
+                if wired, let tableID = id {
+                    trIdKey = " id=\"\(htmlEscape(tableID))-r\(rowIndex)\" data-key=\"\(htmlEscape(rowId))\""
+                } else {
+                    trIdKey = ""
+                }
+                html += "<tr\(trIdKey)\(trAttrs)>"
                 if hasSelect {
                     var selectHandler: EventHandler? = nil
                     if let onSelect {

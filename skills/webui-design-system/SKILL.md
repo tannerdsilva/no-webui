@@ -32,6 +32,8 @@ WebSocket. The web is only the delivery surface.
   trees, badges, empty states, and the app-frame shell components.
 - You are debugging a rendered page — content flush against a container edge,
   wrong theme, poor contrast, or a `/ws` console error.
+- You want a capability island (wasm state + op stream) hosted on a page —
+  see *Islands* below.
 
 Don't use for: hand-written static HTML/CSS/JS landing pages, client-only SPAs,
 or maintaining the no-webui package itself (that's the repo's `README`/`AGENTS.md`).
@@ -151,22 +153,49 @@ let doc = WebUIDocument(
 `WebUIDocument` assembles the full HTML document with the design-system CSS
 and JS runtime embedded, an auto-generated CSP + nonce, and the theme.
 
-## Client mode (run the same UI in wasm)
+## Islands (run capability code in wasm)
 
-The same `View`/`ViewModifier` core can run **inside the browser** — the
-- **the client runtime is the engine** (`/ui/webui-engine.js`, shipped by the
-  framework): a consumer app links `WebUICore` and nothing else. the published
-  `WebUIClientRuntime` / `.wasm` client product **was deleted** — the engine plus
-  per-page wasm capability islands is the client architecture now.
-- **capability islands are the wasm path**: cross-build one with
-  `swift package --disable-sandbox plugin wasm-island --product TheirIsland`
-  (isolated scratch root; custom sections stripped by default; needs
-  `--disable-sandbox`), declare the capability on the page, and the engine
-  lazy-loads it — degrading to the base path when the artifact is absent. the
-  repo's `WebUIValidateIsland` is the reference island: one Foundation-free core,
-  compiled to wasm and exercised natively by the same tests.
-- **if you came here for a wasm *client* app: that path is gone.** migrate to the
-  engine, or to an island for the specific local behaviour you needed.
+A capability island is a small Foundation-free wasm module a page hosts: the
+engine lazy-loads it, the island owns the region's state (op stream out, state
+channel back), and an absent artifact degrades to `unmapped` with the
+server-rendered page intact. the consumer path is **zero manual verbs**:
+
+```bash
+swift build            # compiles the app AND cross-builds + auto-pins every island
+swift run App          # serves the page; the engine mounts the island regions
+```
+
+to author an island:
+
+- write the island logic as a `@HotView` struct in your app (one declaration
+  emits the server path, the generated adapter, and the id vocabulary), and
+  give it a `Sources/<Name>/main.swift` that imports `WebUIIslandCore` (the
+  scanner's text rule) — or generate both with the scaffold:
+  `webui-continuum scaffold --package-dir . --add-island <Name>` (the tool
+  binary lives in the framework's `.build`; inside the framework home use
+  `swift package --disable-sandbox plugin scaffold --add-island <Name>`).
+  `scaffold --bootstrap --name <App> --framework <path>` adds the once-per-app
+  inert block (framework dependency + `WebUIAutobuildPlugin`) to an existing
+  app; `--print` previews without writing.
+- declare the region with `WebUIIsland(id:name:args:)` (or the derived
+  `WebUIIsland("feed", args:)` form). a pre-emitted region receives events
+  ONLY through its descriptor — splice
+  `data-webui-island-events='["click"]'` beside the view's markup. keep the
+  island self-contained: the `@HotView` struct is not yet the island's
+  source — the logic lives in `Sources/<Name>/`.
+- when you want an explicit one-shot check of the whole verification path —
+  build → wasm cross-build → measure/pin → the budget row — the **single**
+  verb is `verify`:
+  `<no-webui path>/.build/…/WebUIContinuumTool verify --package-dir . --framework <no-webui path>`
+  (inside the framework home: `swift package --disable-sandbox plugin verify`).
+  it prints a per-stage verdict and fails on any budget breach.
+- `plugin wasm-island` is an **internal** framework verb (the in-repo ladder);
+  consumers never name it, and consumer packages cannot invoke a dependency's
+  command plugins — that is why `verify`/`scaffold` surface as the tool
+  binary from a consumer app.
+- **if you came here for a wasm *client* app: that path is gone.** the engine
+  plus per-page capability islands is the client architecture now; migrate to
+  the engine, or to an island for the specific local behaviour you needed.
 
 ## Tokens & theming
 
@@ -324,6 +353,7 @@ Serve the page and check it in a browser before shipping:
 | Serve your page live (shared library + NIO server + `/ws`) & the `*__body` convention | `references/live-server-and-showcase.md` |
 | Top-bar provider + thinking-effort (RuntimeSettings, `reasoning_effort`, `WebUISelect`) | `references/runtime-provider-effort-settings.md` |
 | Interactive server-re-rendered regions (table sort/select/expand) | `references/interactive-table-recipe.md` |
+| Engine-first delivery: documents, routes, capability islands | `references/engine-delivery.md` |
 | WCAG contrast audit + guardrail tests | `references/contrast-audit.md` |
 | Render-token whitelist bounce (token-gated socket) | `references/render-token-whitelist-bounce.md` |
 | Pitfalls & debugging (CSS cascade, Swift escape/arg-order) | `references/pitfalls-and-debugging.md` |
@@ -337,6 +367,11 @@ in its `README.md`, `AGENTS.md`, and `Documentation/*`; reach for those (or the
 
 ## Consumer gotchas
 
+- **A bare `WebUIIsland("feed")` region mounts but receives no delegated
+  events** — island delivery is descriptor-gated; splice
+  `data-webui-island-events='["click"]'` beside the region. keep consumer
+  islands self-contained (`Sources/<Name>/main.swift` importing
+  `WebUIIslandCore`) until `@HotView` island discovery lands.
 - **Content flush against a container edge** → missing `__body` wrapper (pad via
   `__body`, not the container). See the `*__body` section above.
 - **`/ws` console error at load** → the runtime is on but your server doesn't

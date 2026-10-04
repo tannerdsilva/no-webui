@@ -16,7 +16,12 @@ import RAW_sha256
 // rather than minting wrong addresses.
 
 /// lowercase hex of `sha256(bytes)`.
-func sha256Hex(_ bytes: [UInt8]) -> String {
+///
+/// public since DX-3 (CONTINUUM_DX §2.3): `WebUIContinuumTool measure` computes
+/// the per-island auto-pin row (`sha`/`raw`/`gz` + `maxBytes`/`maxGzipBytes`)
+/// over the stripped artifact through this same facade — one sha implementation
+/// for every build-side consumer, still pinned against `shasum -a 256`.
+public func sha256Hex(_ bytes: [UInt8]) -> String {
 	var hasher = RAW_sha256.Hasher()
 	bytes.withUnsafeBytes { buffer in
 		hasher.update(buffer)

@@ -386,4 +386,125 @@ struct WebUIServerSeamsTests {
 			#expect(String(decoding: body, as: UTF8.self) == probePlain)
 		}
 	}
+
+	// MARK: DX-6b — the built-in manifest route + island routes read the
+	// WebUIAutobuildPlugin work dir (CONTINUUM_DX §2.6 / lane-B W2).
+
+	/// a scratch autobuild work directory: two fake island artifacts + the
+	/// DX-3 measured ContinuumManifest.json. the artifact bytes are valid-wasm
+	/// magic so the route's byte-for-byte transfer is honest.
+	func makeWorkDir() throws -> URL {
+		let dir = FileManager.default.temporaryDirectory
+			.appendingPathComponent("webui-dx6b-\(UUID().uuidString)")
+		try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+		var feed = Data("feed-island-wasm-bytes".utf8)
+		feed.insert(contentsOf: [0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00], at: 0)
+		try feed.write(to: dir.appendingPathComponent("FeedIsland.wasm"))
+		try "validate-bytes".data(using: .utf8)!.write(to: dir.appendingPathComponent("WebUIValidateIsland.wasm"))
+		let manifest = """
+		{
+		  "kind": "continuum-engine-slice",
+		  "version": 2,
+		  "islands": [{"name":"FeedIsland","maxBytes":100000,"raw":95000,"gz":40000,"sha":"abc","url":"/__assets/webui-FeedIsland.wasm"}]
+		}
+		"""
+		try manifest.write(to: dir.appendingPathComponent("ContinuumManifest.json"), atomically: true, encoding: .utf8)
+		return dir
+	}
+
+	@Test("DX-6b: island routes read the autobuild work dir and serve the existing URL convention")
+	func islandRoutesFromWorkDir() async throws {
+		let workDir = try makeWorkDir()
+		defer { try? FileManager.default.removeItem(at: workDir) }
+		let port = try await freePort(base: 23000)
+		let server = WebUIServer(
+			requestRender: { _ in "<p>page</p>" },
+			router: EventRouter(),
+			config: WebUIServerConfig(
+				host: "127.0.0.1", port: port,
+				islandWorkDirectory: workDir
+			)
+		)
+		let task = Task { try await server.start() }
+		_ = try await waitForServe(port: port)
+		defer { Task { await server.stop() }; task.cancel() }
+
+		// the existing URL convention: /__assets/webui-<name>.wasm.
+		let (feed, feedStatus) = try await getData("http://127.0.0.1:\(port)/__assets/webui-feed.wasm")
+		#expect(feedStatus == 200)
+		#expect(feed.prefix(4) == Data([0x00, 0x61, 0x73, 0x6D]))
+		let feedOnDisk = try Data(contentsOf: workDir.appendingPathComponent("FeedIsland.wasm"))
+		#expect(feed == feedOnDisk)
+
+		// the frame's own island resolves by containment ("validate" <->
+		// WebUIValidateIsland.wasm) — the URL convention the smoke host uses.
+		let (validate, validateStatus) = try await getData("http://127.0.0.1:\(port)/__assets/webui-validate.wasm")
+		#expect(validateStatus == 200)
+		#expect(validate == "validate-bytes".data(using: .utf8))
+
+		// absent artifact = 404 = the engine's degrade path.
+		let (_, missing) = try await getData("http://127.0.0.1:\(port)/__assets/webui-ghost.wasm")
+		#expect(missing == 404)
+
+		// the built-in manifest route merges the measured islands[] into the
+		// generate path (which stays authoritative for allowlist/union).
+		let (manifest, manifestStatus) = try await get("http://127.0.0.1:\(port)/ui/continuum-manifest.json")
+		#expect(manifestStatus == 200)
+		#expect(manifest.contains("\"version\": 2"))
+		#expect(manifest.contains("\"components\""), "generate-path section preserved")
+		#expect(manifest.contains("\"attributeAllowlist\""))
+		#expect(manifest.contains("\"union\""), "generate-path union preserved")
+		#expect(manifest.contains("\"FeedIsland\""))
+		#expect(manifest.contains("\"maxBytes\": 100000"))
+	}
+
+	@Test("DX-6b: without a work dir the manifest route serves the generated slice (byte-identical, additive register intact)")
+	func noWorkDirManifestByteIdentity() async throws {
+		// a server that does NOT configure the seam must behave exactly as the
+		// reference hosts do: no island routes, and the manifest is only present
+		// if the host registered it — the content pin's byte-identity.
+		let port = try await freePort(base: 23100)
+		let server = WebUIServer(
+			requestRender: { _ in "<p>page</p>" },
+			router: EventRouter(),
+			config: WebUIServerConfig(
+				host: "127.0.0.1", port: port,
+				assets: [WebUIAsset(ContinuumEngineManifest.self, path: "/ui/continuum-manifest.json").registration]
+			)
+		)
+		let task = Task { try await server.start() }
+		_ = try await waitForServe(port: port)
+		defer { Task { await server.stop() }; task.cancel() }
+
+		let (_, missing) = try await getData("http://127.0.0.1:\(port)/__assets/webui-feed.wasm")
+		#expect(missing == 404)
+
+		let (manifest, manifestStatus) = try await get("http://127.0.0.1:\(port)/ui/continuum-manifest.json")
+		#expect(manifestStatus == 200)
+		#expect(manifest == String(decoding: ContinuumEngineManifest.body, as: UTF8.self))
+	}
+
+	@Test("DX-6b: a work-dir WITH no measured manifest keeps the generated slice byte-verbatim")
+	func emptyWorkDirKeepsSlice() async throws {
+		let dir = FileManager.default.temporaryDirectory
+			.appendingPathComponent("webui-dx6b-empty-\(UUID().uuidString)")
+		try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+		defer { try? FileManager.default.removeItem(at: dir) }
+		let port = try await freePort(base: 23200)
+		let server = WebUIServer(
+			requestRender: { _ in "<p>page</p>" },
+			router: EventRouter(),
+			config: WebUIServerConfig(
+				host: "127.0.0.1", port: port,
+				islandWorkDirectory: dir
+			)
+		)
+		let task = Task { try await server.start() }
+		_ = try await waitForServe(port: port)
+		defer { Task { await server.stop() }; task.cancel() }
+
+		let (manifest, manifestStatus) = try await get("http://127.0.0.1:\(port)/ui/continuum-manifest.json")
+		#expect(manifestStatus == 200)
+		#expect(manifest == String(decoding: ContinuumEngineManifest.body, as: UTF8.self))
+	}
 }

@@ -6,6 +6,7 @@ import WebUIDesignSystem
 import WebUIAuth
 import WebUIBuild
 import WebUIServer
+import WebUIChart
 
 // MARK: - Public API surface pins
 //
@@ -764,4 +765,161 @@ func renderBufferAdditionsPin() {
 	var wrapped = HTMLBuffer()
 	ModifiedView(content: Text("z"), modifier: ModifierOnly()).render(into: &wrapped)
 	#expect(wrapped.finish() == "<b>z</b>")
+}
+
+// MARK: - placement hints (the continuum surface's additive half, t3.2)
+
+@Test("placement hints are additive and byte-identical")
+func placementHintSurfacePins() {
+	// no hint = today's bytes; a hint adds none either — placement is a
+	// precompile decision, never markup.
+	let bare = rendered(Text("x"))
+	#expect(rendered(Text("x").lease(.viewport)) == bare)
+	#expect(rendered(Text("x").lease(.echo)) == bare)
+
+	// the hint survives in the type for the build scan, and the vocabulary is
+	// closed: exactly the two engine-local behaviors, nothing else.
+	let leased = Text("x").lease(.viewport)
+	#expect(leased.modifier.hint == .viewport)
+	#expect(Text("x").lease(.echo).modifier.hint == .echo)
+	#expect(LeaseHint.allCases == [.viewport, .echo])
+
+	// a container-level hint is byte-identical to the bare container too.
+	let list = Div { Text("a") }
+	#expect(rendered(list.lease(.viewport)) == rendered(list))
+}
+
+// MARK: - the t3.3/t3.4 additive surface (compile-time pins, additive only)
+
+@Test("the t3.4 delivery surface compiles and stays additive")
+func t34DeliverySurfacePins() {
+	// echo delivery: the target-carrying form is the ONLY form that emits
+	// bytes; the bare form stays byte-identical (pinned above).
+	let echo = Text("x").lease(.echo, echoTo: "preview")
+	#expect(echo.modifier.echoTarget == "preview")
+	#expect(Text("x").lease(.echo).modifier.echoTarget == nil)
+
+	// input-parity modifiers: closed subscription vocabulary, descriptor spell.
+	let parity = Div { Text("x") }.inputParity(.key, .composition)
+	#expect(rendered(parity).contains("data-webui-input='[\"key\",\"composition\"]'"))
+	#expect(rendered(Div { Text("x") }.compositionForwarded()).contains("data-webui-composition=\"\""))
+	#expect(rendered(Div { Text("x") }.onKeyEvent { _ in }).contains("data-webui-input='[\"key\"]'"))
+
+	// the hot capacity primitives: keyed identity + promotion compile.
+	_ = Hot.KeyedList(id: "vp", keys: ["a"]) { key in Hot.Text(id: ElementID(key), key) }
+	_ = Hot.AttrWrapper(attributes: [Hot.HotAttribute("data-key", "a")]) { Hot.Spacer().hotTree }
+	_ = HotTree.attended(attributes: [], content: .spacer)
+
+	// the t3.3 Viewport component + the pure math.
+	_ = ViewportWindow(first: 0, lastExclusive: 10)
+	#expect(ViewportSizing.visibleCount(viewportHeight: 600, rowHeight: 52) == 12)
+	_ = Viewport(id: "vp", items: [ViewportPinItem(title: "x")], keyedBy: \.title) { item, _ in Text(item.title) }
+}
+
+private struct ViewportPinItem: Sendable {
+	var title: String
+}
+
+@Test("the t3.3 windowing math surface compiles (scroll anchoring)")
+func t33WindowingSurfacePins() {
+	#expect(ViewportAnchor.scrollDelta(oldFirst: 6, newFirst: 0, rowHeight: 52) == 312)
+	#expect(ViewportAnchor.anchorRow(scrollTop: 1040, rowHeight: 52) == 20)
+	#expect(InputParity.allCases.map(\.wireName) == ["key", "selection", "clipboard", "undo", "composition"])
+}
+
+// MARK: - DX-11a — the table/pagination/chart id-key contract (CONTINUUM_DX §2.11)
+
+private func dx11aWiredTable(_ router: EventRouter) -> String {
+	RenderContext.$current.withValue(RenderContext(router: router)) {
+		WebUITable(
+			headers: ["Name", "Age"],
+			rows: [[Text("Alice"), Text("30")], [Text("Bob"), Text("25")]],
+			id: "tbl",
+			sortableColumns: [0, 1],
+			selectable: true,
+			rowIds: ["alice", "bob"],
+			expandedRows: ["alice"],
+			rowDetails: ["alice": Text("detail")]
+		)
+		.onSort { _, _ in [] }
+		.onSelectAll { _ in [] }
+		.onSelect { _, _ in [] }
+		.onToggleExpand { _, _ in [] }
+		.render()
+	}
+}
+
+/// DX-11a byte-diff gate: the typed per-control id vocabulary — every data row
+/// of an id-carrying WebUITable carries `{id}-r{i}` + `data-key` (the same
+/// rowId its select/expand controls derive from), so an op-emitting handler can
+/// target rows with attr/text ops instead of a whole-region replace; sortable
+/// header controls keep `{id}-sort-{i}`; WebUIPagination keeps
+/// `{id}-prev/next/page-{n}/rows`; chart marks keep `{id}-mark-*`. a
+/// display-only table (no id) stays byte-identical (no row ids, no data-key).
+@Test("DX-11a — WebUITable rows gain `{id}-r{i}` + data-key; control ids pinned byte-exact")
+func dx11aTableIDKeyContract() {
+	let router = EventRouter()
+	let html = dx11aWiredTable(router)
+
+	// the row id-key vocabulary, byte-exact (attribute order id → data-key)
+	#expect(html.contains("<tr id=\"tbl-r0\" data-key=\"alice\""), "emitted: \(html)")
+	#expect(html.contains("<tr id=\"tbl-r1\" data-key=\"bob\""), "emitted: \(html)")
+
+	// every control keeps its stable id (the op targets DX-11b handlers emit)
+	#expect(html.contains("id=\"tbl-sort-0\""))
+	#expect(html.contains("id=\"tbl-sort-1\""))
+	#expect(html.contains("id=\"tbl-select-all\""))
+	#expect(html.contains("id=\"tbl-select-alice\""))
+	#expect(html.contains("id=\"tbl-expand-alice\""))
+
+	// the row key IS the selection key — one id vocabulary, no string math
+	#expect(html.contains("data-component-id=\"tbl-select-alice\""))
+	#expect(html.contains("data-component-id=\"tbl-expand-alice\""))
+
+	// fallback keys when rowIds is absent: `-r{i}` still derives, data-key = row-{i}
+	let fallbackRouter = EventRouter()
+	let fallback = RenderContext.$current.withValue(RenderContext(router: fallbackRouter)) {
+		WebUITable(headers: ["A"], rows: [[Text("1")]], id: "t")
+			.onSort { _, _ in [] }
+			.render()
+	}
+	#expect(fallback.contains("<tr id=\"t-r0\" data-key=\"row-0\""))
+
+	// a static table (no typed handlers) stays byte-identical: no row ids,
+	// no data-key — even with an id
+	let staticID = rendered(WebUITable(headers: ["A"], rows: [[Text("1")]], id: "s"))
+	#expect(!staticID.contains("-r0"))
+	#expect(!staticID.contains("data-key"))
+
+	// a display-only table (no id) stays byte-identical
+	let plain = rendered(WebUITable(headers: ["A"], rows: [[Text("1")]]))
+	#expect(!plain.contains("-r0"))
+	#expect(!plain.contains("data-key"))
+}
+
+@Test("DX-11a — WebUIPagination + chart marks expose stable ids; display forms byte-identical")
+func dx11aPaginationAndChartIDPins() {
+	// pagination ids (already existing — pinned as the contract)
+	let pager = rendered(WebUIPagination(page: 2, pages: 5, id: "pg", rowsPerPage: 25))
+	#expect(pager.contains("id=\"pg-prev\""))
+	#expect(pager.contains("id=\"pg-next\""))
+	#expect(pager.contains("id=\"pg-page-1\""))
+	#expect(pager.contains("id=\"pg-page-2\""))
+	#expect(pager.contains("id=\"pg-page-5\""))
+	#expect(pager.contains("id=\"pg-rows\""))
+
+	// display pagination (no id) carries no control ids
+	let plainPager = rendered(WebUIPagination(page: 1, pages: 3))
+	#expect(!plainPager.contains("pg-prev"))
+	#expect(!plainPager.contains("id=\"pg-page-"))
+
+	// chart marks: `{id}-mark-{n}` (sectors/bars) — pinned as the contract
+	let chart = Chart([
+		ChartMark(spec: MarkSpec(kind: .sector, angle: .value("V", 25), series: "Z")),
+		ChartMark(spec: MarkSpec(kind: .sector, angle: .value("V", 75), series: "W")),
+	]).chartID("cm")
+	let chartHTML = rendered(chart)
+	#expect(chartHTML.contains("id=\"cm\""))
+	#expect(chartHTML.contains("id=\"cm-mark-0\""))
+	#expect(chartHTML.contains("id=\"cm-mark-1\""))
 }

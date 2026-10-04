@@ -2,7 +2,7 @@
 
 the default client runtime is the framework-owned **engine** (`webui-engine.js`,
 ~30 kb, shipped asset, no consumer-facing JS). the retired wasm-only default is
-gone; the wasm client remains available via an explicit
+gone; wasm survives as per-page capability islands (see below).
 
 ## Document contract (what every default page emits)
 
@@ -49,19 +49,29 @@ gone; the wasm client remains available via an explicit
 
 ## Capability islands
 
-- the engine lazily fetches `/__assets/webui-<name>.wasm` only for capabilities
-  declared in `webui-config.capabilities`; an absent artifact degrades to
+- the engine lazily fetches the island's wasm — the URL comes from the served
+  manifest's `islands[]` (`/ui/continuum-manifest.json`, content-addressed)
+  with the name-convention `/__assets/webui-<name>.wasm` fallback (v1
+  payload / 404). an absent artifact degrades to
   `data-webui-island-state="unmapped"` with a console warning, and the page
   stays fully server-rendered + engine-driven.
-- a region is `<div data-webui-island="validate" data-webui-args='{…}'>`; the
-  module composes it via the region contract (`webui_input_ptr` /
-  `webui_render_region` / `webui_frame_ptr|len`), sanitized before mount.
-- build islands with
-  `swift package --disable-sandbox plugin wasm-island --sdk swift-6.4.0-RELEASE_wasm-embedded`
-  (the plugin links the sdk's `libswiftUnicodeDataTables.a` automatically).
+- a region is `<div data-webui-island="validate" data-webui-args='{…}'>` —
+  declare it with the `WebUIIsland(id:name:args:)` view (the pinned byte
+  contract: attribute order id → data-webui-island → data-webui-args,
+  single-quoted args); the module composes it via the region contract
+  (`webui_input_ptr` / `webui_render_region` / `webui_frame_ptr|len`),
+  sanitized before mount.
+- islands build AUTOMATICALLY inside a plain `swift build`
+  (`WebUIAutobuildPlugin`; the once-per-app block comes from `scaffold
+  --bootstrap` or the app template). `plugin wasm-island` is an internal
+  framework verb (no `--sdk` flag — the swiftly toolchain is resolved
+  host-side); the ONE consumer-facing verification verb is `verify`:
+  `webui-continuum verify --package-dir . --framework <no-webui path>`
+  (or `swift package --disable-sandbox plugin verify` in the framework
+  home).
 - island logic must stay **scalar-clean** (no `Character(...)`, no
   `String(decoding:as:)`, no `firstRange`) and dependency-free of swift-log —
-  see `WebUISharedCore` for the pattern and the measured 160 kb result.
+  see `WebUISharedCore` for the pattern.
 
 ## Verify (per change)
 

@@ -188,6 +188,28 @@ struct WebUISmokePlugin: CommandPlugin {
         } else {
             Diagnostics.error("smoke gate failed")
         }
+
+        // lane-B fold-in (b-docs §5, polish): the canonical smoke gate adds the
+        // lane-B probe list (b-lint + b-interaction-smoke) as a node step. the
+        // probe fold script self-spawns its servers on lane ports (9200–9219)
+        // and tears them down; it never shares this gate's port. pins above
+        // (25-component count, byte-integrity, CSP) are untouched.
+        if fail == 0 {
+            let fold = context.package.directoryURL
+                .appendingPathComponent("designer/gates/b-probe-fold.mjs")
+            let probe = Process()
+            probe.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            probe.arguments = ["node", fold.path, "--lint", "--interaction"]
+            probe.standardOutput = FileHandle.standardOutput
+            probe.standardError = FileHandle.standardError
+            try probe.run()
+            probe.waitUntilExit()
+            if probe.terminationStatus != 0 {
+                Diagnostics.error("lane-B probe fold-in failed (exit \(probe.terminationStatus))")
+            } else {
+                print("SMOKE + LANE-B FOLD PASS")
+            }
+        }
     }
 
     /// the `bodyBase64` payload of the generated embed file, decoded — the bytes the server

@@ -51,6 +51,20 @@ let package = Package(
             name: "WebUIIslandPlugin",
             targets: ["WebUIIslandPlugin"]
         ),
+        // dx-5: the autobuild plugin a consumer attaches to its own target —
+        // a plain `swift build` then cross-builds the real island graph via
+        // direct swiftc (no nested SwiftPM). see Plugins/WebUIAutobuildPlugin.
+        .plugin(
+            name: "WebUIAutobuildPlugin",
+            targets: ["WebUIAutobuildPlugin"]
+        ),
+        // dx-2: the scaffold command plugin — appends island product+target
+        // entries + generates the 3-line runtime-form main for an existing
+        // app. see Plugins/WebUIScaffoldPlugin.
+        .plugin(
+            name: "WebUIScaffoldPlugin",
+            targets: ["WebUIScaffoldPlugin"]
+        ),
         // a consumer attaches this plugin and ships an `Assets/webui-assets.json`; the
         // plugin runs the framework's tool over it on every build.
         .plugin(
@@ -60,6 +74,12 @@ let package = Package(
         .library(
             name: "WebUIIslandCore",
             targets: ["WebUIIslandCore"]
+        ),
+        // the zero-dep leaf, exposed for consumer islands that import it
+        // directly alongside WebUIIslandCore (dx-5 consumer island mains).
+        .library(
+            name: "WebUISharedCore",
+            targets: ["WebUISharedCore"]
         ),
         .executable(
             name: "WebUIExample",
@@ -80,6 +100,20 @@ let package = Package(
         .executable(
             name: "WebUIShowcaseServer",
             targets: ["WebUIShowcaseServer"]
+        ),
+.executable(
+            name: "WebUIBench",
+            targets: ["WebUIBench"]
+        ),
+        .executable(
+            name: "WebUIContinuumTool",
+            targets: ["WebUIContinuumTool"]
+        ),
+        // the stateful probe capability island (DESKTOP_GRADE t2.5) — built
+        // for wasm via the wasm-island plugin; the host product is inert.
+        .executable(
+            name: "WebUIProbeIsland",
+            targets: ["WebUIProbeIsland"]
         ),
     ],
     dependencies: [
@@ -123,6 +157,7 @@ let package = Package(
             name: "WebUI",
             dependencies: [
                 "WebUICore",
+                "WebUIContinuumMacros",
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "RAW", package: "rawdog"),
                 .product(name: "RAW_sha256", package: "rawdog"),
@@ -130,6 +165,7 @@ let package = Package(
             ],
             plugins: [
                 "WebUIAssetPlugin",
+                "WebUIContinuumPlugin",
             ]
         ),
         // the capability-island core: same-swift logic that compiles to a
@@ -145,6 +181,13 @@ let package = Package(
         ),
         .executableTarget(
             name: "WebUIValidateIsland",
+            dependencies: [
+                "WebUIIslandCore",
+                "WebUISharedCore",
+            ]
+        ),
+        .executableTarget(
+            name: "WebUIProbeIsland",
             dependencies: [
                 "WebUIIslandCore",
                 "WebUISharedCore",
@@ -255,6 +298,17 @@ let package = Package(
             name: "WebUIIconTool"
         ),
 
+        // ── Continuum Tool (class inventory + build lint + served manifest, d1/d2) ──
+        .executableTarget(
+            name: "WebUIContinuumTool",
+            dependencies: [
+                // the served, content-addressed engine slice rides the same
+                // WebUIAssetBuilder emitter as the css/js assets — one
+                // implementation of stamping, gzip and the prose gate.
+                .target(name: "WebUIBuild"),
+            ]
+        ),
+
         // ── Wasm Tool (validates + hashes the prebuilt client artifact) ──
         .executableTarget(
             name: "WebUIWasmTool",
@@ -266,6 +320,19 @@ let package = Package(
         // ── @Theme Macro ────────────────────────────────────────
         .macro(
             name: "WebUIDesignSystemMacros",
+            dependencies: [
+                .product(name: "SwiftSyntax", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
+                .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
+            ]
+        ),
+
+        // ── @HotView / @HotClass Macros (the continuum surface) ─
+        // host-compiled compiler plugin (swift-syntax, already vendored above).
+        // its declarations live inert in `WebUI`; the implementation must never
+        // enter a wasm-compiled chain — a compiler plugin cannot cross-build.
+        .macro(
+            name: "WebUIContinuumMacros",
             dependencies: [
                 .product(name: "SwiftSyntax", package: "swift-syntax"),
                 .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
@@ -292,6 +359,21 @@ let package = Package(
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOHTTP1", package: "swift-nio"),
                 .product(name: "NIOCore", package: "swift-nio"),
+                .product(name: "NIOWebSocket", package: "swift-nio"),
+            ]
+        ),
+        // ── Bench host (desktop-grade measurement fixtures, d0) ──
+        .executableTarget(
+            name: "WebUIBench",
+            dependencies: [
+                "WebUI",
+                "WebUIChart",
+                "WebUICore",
+                "WebUIDesignSystem",
+                .product(name: "Logging", package: "swift-log"),
+                .product(name: "NIOCore", package: "swift-nio"),
+                .product(name: "NIOHTTP1", package: "swift-nio"),
+                .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOWebSocket", package: "swift-nio"),
             ]
         ),
@@ -382,6 +464,16 @@ let package = Package(
                 .target(name: "WebUIIconTool"),
             ]
         ),
+        // the static half of the continuum class machinery: scans the
+        // design-system core sources every build and emits
+        // `Continuum+Generated.swift` into the WebUI target.
+        .plugin(
+            name: "WebUIContinuumPlugin",
+            capability: .buildTool(),
+            dependencies: [
+                .target(name: "WebUIContinuumTool"),
+            ]
+        ),
         // the file half of the asset toolkit: a target shipping `Assets/webui-assets.json`
         // attaches this; the plugin runs the framework's own tool over the manifest.
         .plugin(
@@ -410,6 +502,56 @@ let package = Package(
             ),
             dependencies: [
                 .target(name: "WebUIWasmTool"),
+            ]
+        ),
+        // dx-5 build-tool plugin: the cross-build runs INSIDE a plain
+        // `swift build` (the developer's default command, no flags) via the
+        // framework's WebUIContinuumTool `wasm-cross` verb. the command
+        // declares the island sources as inputs and the artifact as output,
+        // so warm builds are llbuild-skipped and a source edit invalidates.
+        .plugin(
+            name: "WebUIAutobuildPlugin",
+            capability: .buildTool(),
+            dependencies: [
+                .target(name: "WebUIContinuumTool"),
+            ]
+        ),
+        // dx-2 scaffold command plugin: `swift package --disable-sandbox plugin
+        // scaffold` — append-only Package.swift edits (product+target entries /
+        // the once-per-app bootstrap block) + the generated island main.
+        .plugin(
+            name: "WebUIScaffoldPlugin",
+            capability: .command(
+                intent: .custom(
+                    verb: "scaffold",
+                    description: "Append an island (product + executableTarget + the 3-line runtime-form main) or bootstrap an existing app with the once-per-app continuum block (path dep + WebUIAutobuildPlugin). Append-only anchors; --print previews without writing."
+                ),
+                permissions: [
+                    .writeToPackageDirectory(reason: "append island product+target entries to Package.swift and write Sources/<Name>/main.swift (DX-2 scaffold)"),
+                ]
+            ),
+            dependencies: [
+                .target(name: "WebUIContinuumTool"),
+            ]
+        ),
+        // dx-8 verify command plugin: `swift package --disable-sandbox plugin
+        // verify` runs the FULL island verification path against this package —
+        // host build -> wasm cross-build -> DX-3 measure/pin -> the
+        // WebUIBudgetPlugin budget row (one budget path). the consolidated
+        // consumer-facing island-verification verb (`wasm-island` stays
+        // internal); the same surface is usable from a consumer app via the
+        // tool directly (`webui-continuum verify --package-dir <app>
+        // --framework <no-webui path>`).
+        .plugin(
+            name: "WebUIVerifyPlugin",
+            capability: .command(
+                intent: .custom(
+                    verb: "verify",
+                    description: "Run the full island verification path (host build -> wasm cross-build -> DX-3 measure/auto-pin -> the budget row) and print a per-stage verdict. Belt-and-suspenders: a plain `swift build` already cross-builds + auto-pins the islands (zero manual verbs)."
+                )
+            ),
+            dependencies: [
+                .target(name: "WebUIContinuumTool"),
             ]
         ),
         .plugin(
@@ -508,7 +650,12 @@ let package = Package(
                 .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
                 .product(name: "Logging", package: "swift-log"),
             ],
-            resources: [.copy("orphan-class-baseline.txt")]
+            resources: [
+                .copy("orphan-class-baseline.txt"),
+                // the W0-captured smoke island regions — the byte-identity
+                // target of WebUIIslandTests (CONTINUUM_DX DX-4a).
+                .copy("Fixtures/dx-w0-island-regions.html"),
+            ]
         ),
         .testTarget(
             name: "WebUIWasmToolTests",
@@ -525,6 +672,12 @@ let package = Package(
             ]
         ),
         .testTarget(
+            name: "WebUIContinuumToolTests",
+            dependencies: [
+                "WebUIContinuumTool",
+            ]
+        ),
+        .testTarget(
             name: "WebUIBuildTests",
             dependencies: [
                 "WebUIBuild",
@@ -534,6 +687,14 @@ let package = Package(
             name: "WebUIIslandCoreTests",
             dependencies: [
                 "WebUIIslandCore",
+                "WebUISharedCore",
+            ]
+        ),
+        // the seam vocabulary + the hand-rolled scalar-clean op-stream codec
+        // (record format v1, DESKTOP_GRADE §t2.3) — round-trips + edge cases.
+        .testTarget(
+            name: "WebUISharedCoreTests",
+            dependencies: [
                 "WebUISharedCore",
             ]
         ),
@@ -549,6 +710,29 @@ let package = Package(
             dependencies: [
                 "WebUIDesignSystem",
                 "WebUIDesignSystemMacros",
+                .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxMacroExpansion", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxMacrosGenericTestSupport", package: "swift-syntax"),
+                .product(name: "SwiftParser", package: "swift-syntax"),
+                .product(name: "SwiftDiagnostics", package: "swift-syntax"),
+            ]
+        ),
+        // the continuum surface expansion suite: string-based expansion tests only
+        // in wave 1 — generated members are asserted by name/shape but never
+        // compiled (lane C's vocabulary is unmerged). the compiled end-to-end
+        // fixture and the hand-written-equivalent rule join in wave 2.
+        //
+        // W3 (c-to-d addendum item 2): the target gains `WebUIIslandCore` — the
+        // consumer-graph exposure the runtime-accessor spell needs (the swapped
+        // `IslandRuntime<<Type>Island>.encodedState()` / `.decodePendingOps()`
+        // bodies must name `IslandRuntime`; neither WebUI nor WebUIDesignSystem
+        // re-exports WebUIIslandCore). additive.
+        .testTarget(
+            name: "WebUIContinuumMacroTests",
+            dependencies: [
+                "WebUI",
+                "WebUIIslandCore",
+                "WebUIContinuumMacros",
                 .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
                 .product(name: "SwiftSyntaxMacroExpansion", package: "swift-syntax"),
                 .product(name: "SwiftSyntaxMacrosGenericTestSupport", package: "swift-syntax"),

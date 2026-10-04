@@ -251,6 +251,17 @@ let smokePageStyle: String = """
 
 // MARK: - Page assembly (renders interactive views, registers handlers)
 
+/// the validate region's args — declaration-ordered (`WebUIIslandArgs`), the
+/// byte-identity carrier for the W0 capture payload:
+/// `{"value":"a","rules":[{"rule":"required"},{"rule":"minLength","arg":4}]}`.
+private let islandValidateArgs = WebUIIslandArgs([
+	.init("value", "a"),
+	.init("rules", [
+		.object([.init("rule", "required")]),
+		.object([.init("rule", "minLength"), .init("arg", 4)]),
+	]),
+])
+
 func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
 	let ctx = RenderContext(router: router)
 	let body = ctx.withValueBody {
@@ -418,8 +429,8 @@ func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
 						Text("Type a value: ")
 						Raw("<input id=\"island-input\" data-island-input=\"island-validate\" class=\"input\" type=\"text\" value=\"a\">")
 					}
-					Raw("<div id=\"island-validate\" data-webui-island=\"validate\" data-webui-args='{\"value\":\"a\",\"rules\":[{\"rule\":\"required\"},{\"rule\":\"minLength\",\"arg\":4}]}'></div>")
-					Raw("<div id=\"island-never\" data-webui-island=\"never-built\" data-webui-args='{}'></div>")
+					WebUIIsland("validate", args: islandValidateArgs)
+					WebUIIsland(id: "island-never", name: "never-built")
 					Div(class: "smoke__chart-hint") {
 						Text("The chip above is composed by a lazily loaded wasm island (no round trip).")
 					}
@@ -762,6 +773,16 @@ extension SmokeApp {
 				case "/ui/webui-shell.js":
 					text = WebUIAssets.shell; contentType = "text/javascript; charset=utf-8"
 					cacheControl = "public, max-age=3600"
+				case let manifestURL where manifestURL == "/ui/continuum-manifest.json" || manifestURL.hasPrefix("/ui/continuum-manifest.json?"):
+					// the generated engine slice (continuum §1.5): the scanner-built
+					// attribute allowlist + component inventory the engine fetches at
+					// boot and swaps for its conservative seed. content-addressed; the
+					// stamp is the cache key. this is the reference host registration
+					// (the WebUIAsset-style wiring, hand-rolled here like the other
+					// /ui assets).
+					text = ContinuumEngineManifest.text
+					contentType = ContinuumEngineManifest.contentType
+					cacheControl = "public, max-age=31536000, immutable"
 				case "/", "/index.html":
 					text = self.pageHTML; contentType = "text/html; charset=utf-8"
 				default:

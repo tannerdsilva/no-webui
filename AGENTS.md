@@ -61,9 +61,15 @@ the wasm client is a separate product built with the official swift 6.4 wasm sdk
 (the swiftly-hosted `swift-6.4-RELEASE` toolchain — the Xcode frontend cannot
 read the sdk's prebuilt modules and lacks `swift-autolink-extract`; wasm commands
 need the swiftly shim, not `source ~/.swiftly/env.sh`, which is
-PATH-order-dependent in spawn contexts). the *native* way to produce an
-island artifact is the `wasm-island` plugin verb (see below) — it wraps the raw
-invocation in an isolated scratch build root:
+PATH-order-dependent in spawn contexts).
+a consumer never invokes a cross-build verb: a plain `swift build` cross-builds
+the app's island graph automatically (`WebUIAutobuildPlugin`, DX-5), and
+`plugin verify` (framework home) / the `webui-continuum` tool (consumer shape)
+runs the full explicit check — host build → cross-build → measure/pin → budget
+row. the verb below is framework-internal tooling (the in-repo ladder + the
+artifact path `WebUIWasmPlugin` validates): `wasm-island` is the maintainer's
+cross-build verb, not a consumer step — it wraps the raw invocation in an
+isolated scratch build root:
 
 ```bash
 swift package --disable-sandbox plugin wasm-island [--product TheirIsland] [--no-strip]
@@ -99,6 +105,10 @@ for the designer workflow.
 | `fullstack-smoke` | `swift package --disable-sandbox plugin fullstack-smoke` | self-contained gate: spawns the server, drives live WebSocket round-trips (click/echo/redirect/optimistic) via node, tears down. |
 | `probe` | `swift package plugin probe [port]` | connect-based port check (bind-probe is sandbox-denied). |
 | `showcase` | `swift package plugin showcase --allow-writing-to-package-directory` | regenerates `designer/previews/showcase.html` directly (declared `writeToPackageDirectory`). add `--output <path>` for ad-hoc targets. |
+| `verify` | `swift package --disable-sandbox plugin verify` | the one explicit island check (DX-8): host build → cross-build every discovered island → DX-3 measure/auto-pin → budget row. consumers use the `webui-continuum verify` tool form (dependency command plugins are not invocable via SwiftPM). |
+| `scaffold` | `swift package plugin scaffold --allow-writing-to-package-directory` | DX-2: `--add-island <Name>` appends the manifest entries + generates the runtime-form main (plain `swift build` then cross-builds it); `--bootstrap` inserts the once-per-app inert block; `--print` previews without writing. |
+| `budget` | `swift package plugin budget` | the shipped-surface budget gate (I3) + the per-island DX-3 measured rows. |
+| `wasm-island` | `swift package --disable-sandbox plugin wasm-island [--product X]` | framework-INTERNAL cross-build (the ladder + artifact path); consumers never call it (see the island note above). |
 
 svg icon toolset (an executable target, not a plugin — the plugin
 `WebUIIconPlugin` runs `generate` automatically during every build):

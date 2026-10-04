@@ -19,7 +19,7 @@ window.WebUIEngine = (function () {
   };
 
   var LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3, silent: 4 };
-  var EVENT_TYPES = ['click', 'input', 'change', 'submit', 'keydown', 'keyup', 'keypress', 'focus', 'blur', 'focusin', 'focusout', 'mouseover', 'mouseout', 'mousedown', 'mouseup'];
+  var EVENT_TYPES = ['click', 'input', 'change', 'submit', 'keydown', 'keyup', 'keypress', 'focus', 'blur', 'focusin', 'focusout', 'mouseover', 'mouseout', 'mousedown', 'mouseup', 'compositionstart', 'compositionupdate', 'compositionend'];
   var LOST_ANCHOR_WARNED = {};
   var LOST_OPEN_WARNED = {};
   var RETAINED_OPEN = {};
@@ -308,6 +308,17 @@ window.WebUIEngine = (function () {
       log.debug('Event delegation unmounted');
     }
 
+    function echoInput(event) {
+      var target = event.target;
+      if (!target || !target.getAttribute) return;
+      var echoId = target.getAttribute('data-webui-echo');
+      if (!echoId) return;
+      var value = target.value === undefined || target.value === null ? '' : String(target.value);
+      if (typeof fragmentPatcher.echo === 'function') {
+        fragmentPatcher.echo(echoId, value);
+      }
+    }
+
     function applyPrediction(componentEl, componentId) {
       var raw = componentEl.getAttribute('data-optimistic');
       if (!raw) return;
@@ -333,6 +344,9 @@ window.WebUIEngine = (function () {
     }
 
     function handleEvent(event) {
+      if (event.type === 'input') {
+        echoInput(event);
+      }
       if (event.type === 'keydown') {
         var treeRow = event.target && event.target.closest && event.target.closest('.tree--interactive [role=treeitem]');
         if (treeRow && (event.key === 'Enter' || event.key === ' ')) {
@@ -364,6 +378,17 @@ window.WebUIEngine = (function () {
           }
           restoreModalFocus();
         }
+      }
+
+      var islRegion = event.target && event.target.closest ? event.target.closest('[data-webui-island]') : null;
+      if (event.type.indexOf('composition') === 0) {
+        if (islRegion && islRegion.getAttribute && islandRegionSubscribed(islRegion, event.type)) { deliverIslandEvent(islRegion, event); }
+        return;
+      }
+      if (islRegion && islRegion.getAttribute && islandRegionSubscribed(islRegion, event.type)) {
+        if (event.type === 'submit' && typeof event.preventDefault === 'function') { event.preventDefault(); }
+        deliverIslandEvent(islRegion, event);
+        return;
       }
 
       var componentEl = findComponent(event);
@@ -524,6 +549,11 @@ window.WebUIEngine = (function () {
             metaKey: String(event.metaKey),
           };
 
+        case 'compositionstart':
+        case 'compositionupdate':
+        case 'compositionend':
+          return { data: String(event.data || ''), isComposing: !!event.isComposing };
+
         case 'focus':
         case 'blur':
         case 'mouseover':
@@ -614,6 +644,42 @@ window.WebUIEngine = (function () {
       }
     }
 
+    function deliverIslandEvent(region, event) {
+      var name = region.getAttribute('data-webui-island');
+      if (!name) return;
+      var mod = islandModules[name];
+      if (!mod || !mod.exports || typeof mod.exports.webui_on_event !== 'function') return;
+      var evType = effectiveTypes(event)[0] || event.type;
+      if (evType === 'keydown' || evType === 'keyup' || evType === 'keypress') { evType = 'key'; }
+      else if (evType === 'compositionstart' || evType === 'compositionupdate' || evType === 'compositionend') { evType = 'composition'; }
+      var key = (event.key !== undefined && event.key !== null) ? String(event.key) : null;
+      if (evType === 'composition') { key = 'composition'; }
+      else if (key === ' ' || key === 'Spacebar') { key = ' '; }
+      if (key === null) {
+        var owner = event.target;
+        while (owner && owner !== region && owner.nodeType === 1 && owner.id === '') { owner = owner.parentNode; }
+        if (owner && owner !== region && owner.nodeType === 1 && owner.id) { key = String(owner.id); }
+      }
+      var payload = {
+        type: evType,
+        key: key === null ? undefined : key,
+        data: extractEventData(event, region),
+      };
+      var bytes = new TextEncoder().encode(JSON.stringify(payload));
+      if (bytes.length > 65536) {
+        _islandLog('island ' + name + ' event payload too large — dropped', 'warn');
+        return;
+      }
+      var inputPtr = mod.exports.webui_input_ptr();
+      new Uint8Array(mod.memory.buffer, inputPtr, bytes.length).set(bytes);
+      try {
+        mod.exports.webui_on_event(inputPtr, bytes.length);
+      } catch (e) {
+        _islandLog('island ' + name + ' webui_on_event threw: ' + e.message, 'warn');
+      }
+      drainIslandOps(name, mod.exports);
+    }
+
     function reset(config_) {
       config = config_;
     }
@@ -628,6 +694,14 @@ window.WebUIEngine = (function () {
     var transitionInFlight = false;
     var callbackPending = false;
     var queued = [];
+    var warnedOnce = {};
+    var onReplace = null;
+
+    function warnOnce(key, message) {
+      if (warnedOnce[key]) return;
+      warnedOnce[key] = true;
+      log.warn(message);
+    }
 
 
     function patch(fragments, seq, optimistic) {
@@ -653,10 +727,16 @@ window.WebUIEngine = (function () {
     function enqueue(fragments) {
       for (var i = 0; i < fragments.length; i++) {
         var f = fragments[i];
+        var op = (f.op === undefined || f.op === null) ? 'replace' : String(f.op);
         var coalesced = false;
-        if (f.op !== 'append') {
-          for (var j = 0; j < queued.length; j++) {
-            if (queued[j].id === f.id) { queued[j] = f; coalesced = true; break; }
+        if (op !== 'append' && op !== 'remove') {
+          for (var j = queued.length - 1; j >= 0; j--) {
+            var queuedOp = (queued[j].op === undefined || queued[j].op === null) ? 'replace' : String(queued[j].op);
+            if (queued[j].id === f.id && queuedOp !== 'remove') {
+              queued[j] = f;
+              coalesced = true;
+              break;
+            }
           }
         }
         if (!coalesced) { queued.push(f); }
@@ -682,7 +762,7 @@ window.WebUIEngine = (function () {
       if (mm && mm('(prefers-reduced-motion: reduce)').matches) return false;
       for (var i = 0; i < fragments.length; i++) {
         var f = fragments[i];
-        if (f && (f.op === 'append' || f.op === 'text')) return false;
+        if (f && (f.op === 'append' || f.op === 'text' || f.op === 'remove' || f.op === 'attr' || f.op === 'move')) return false;
         if (f && f.transition === false) return false;
         var el = f && f.id ? document.getElementById(f.id) : null;
         if (el && el.closest && el.closest('[data-webui-transition="off"]')) return false;
@@ -724,23 +804,35 @@ window.WebUIEngine = (function () {
       var changed = [];
       for (var i = 0; i < fragments.length; i++) {
         var f = fragments[i];
-        if (!f.id || (f.html === undefined && f.op !== 'text')) {
+        var op = (f.op === undefined || f.op === null) ? 'replace' : String(f.op);
+        if (!f.id) {
           if (optimistic) continue;
           log.warn('Invalid fragment at index ' + i);
           continue;
         }
-        var op = (f.op === undefined || f.op === null) ? 'replace' : String(f.op);
-        if (op !== 'replace' && op !== 'append' && op !== 'text') {
-          log.warn('Unknown fragment op "' + op + '" for #' + f.id + ' — skipped');
+        if (op === 'replace' || op === 'append') {
+          if (f.html === undefined) {
+            if (optimistic) continue;
+            log.warn('Invalid fragment at index ' + i);
+            continue;
+          }
+        }
+        if (op !== 'replace' && op !== 'append' && op !== 'text' && op !== 'remove' && op !== 'attr' && op !== 'move') {
+          warnOnce('op:' + op, 'Unknown fragment op "' + op + '" for #' + f.id + ' — skipped');
           continue;
         }
         if (optimistic) {
+          if (op !== 'replace' && op !== 'append') {
+            warnOnce('opt:' + op, 'Fragment op "' + op + '" for #' + f.id + ' is not allowed in optimistic patches — skipped');
+            continue;
+          }
           if (op === 'replace') { armPending(f.id); }
         } else {
           clearPending(f.id);
         }
         if (op === 'text') {
           setTextContent(f.id, f.text === undefined || f.text === null ? '' : String(f.text));
+          clearEcho(f.id);
           var textNode = document.getElementById(f.id);
           if (textNode) { changed.push(textNode); }
           continue;
@@ -750,11 +842,39 @@ window.WebUIEngine = (function () {
           if (added) { changed.push(added); }
           continue;
         }
+        if (op === 'remove') {
+          var removed = removeFragmentElement(f.id);
+          if (removed) { changed.push(removed); }
+          continue;
+        }
+        if (op === 'attr') {
+          var attrNode = applyAttrFragment(f);
+          if (attrNode) { changed.push(attrNode); }
+          continue;
+        }
+        if (op === 'move') {
+          var moved = moveFragmentElement(f);
+          if (moved) { changed.push(moved); }
+          continue;
+        }
         replaceElement(f.id, f.html);
+        clearEcho(f.id);
         var node = document.getElementById(f.id);
         if (node) { changed.push(node); }
       }
       if (changed.length) { runHooks(afterPatchHooks, changed); }
+    }
+
+    var echoOverlay = {};
+    function echo(id, value) {
+      var el = document.getElementById(id);
+      if (!el) return false;
+      echoOverlay[id] = true;
+      setTextContent(id, value);
+      return true;
+    }
+    function clearEcho(id) {
+      delete echoOverlay[id];
     }
 
     function setTextContent(id, value) {
@@ -786,6 +906,92 @@ window.WebUIEngine = (function () {
       if (anchor) { container.insertBefore(fragment, anchor); }
       else { container.appendChild(fragment); }
       return first.nodeType === 1 ? first : container;
+    }
+
+    var ATTR_ALLOW_EXACT = { 'class': true };
+    var ATTR_ALLOW_PREFIX = ['aria-', 'data-'];
+    function attrNameAllowed(name) {
+      if (ATTR_ALLOW_EXACT[name]) return true;
+      for (var i = 0; i < ATTR_ALLOW_PREFIX.length; i++) {
+        if (name.indexOf(ATTR_ALLOW_PREFIX[i]) === 0) return true;
+      }
+      return false;
+    }
+
+    function removeFragmentElement(id) {
+      var el = document.getElementById(id);
+      if (!el) { log.warn('Element not found: #' + id); return null; }
+      var parent = el.parentNode;
+      el.remove();
+      return parent || el;
+    }
+
+    function applyAttrFragment(f) {
+      var el = document.getElementById(f.id);
+      if (!el) { log.warn('Element not found: #' + f.id); return null; }
+      var name = f.name === undefined || f.name === null ? '' : String(f.name);
+      if (!name) {
+        warnOnce('attr-no-name', 'attr fragment for #' + f.id + ' missing name — skipped');
+        return null;
+      }
+      if (!attrNameAllowed(name)) {
+        warnOnce('attr-name:' + name, 'attr fragment for #' + f.id + ' names "' + name + '" — not on the allowlist, skipped');
+        return null;
+      }
+      var value = f.value === undefined || f.value === null ? '' : String(f.value);
+      el.setAttribute(name, value);
+      return el;
+    }
+
+    function moveFragmentElement(f) {
+      var el = document.getElementById(f.id);
+      if (!el) { log.warn('Element not found: #' + f.id); return null; }
+      var parent = el.parentNode;
+      if (!parent) { log.warn('move fragment for #' + f.id + ' has no parent — skipped'); return null; }
+      var anchor = null;
+      if (f.before) {
+        anchor = document.getElementById(f.before);
+        if (anchor && anchor.parentNode !== parent) {
+          log.warn('move anchor #' + f.before + ' is not a sibling of #' + f.id + ' — appended at the end');
+          anchor = null;
+        }
+        if (!anchor) { log.warn('move anchor #' + f.before + ' not found — appended at the end'); }
+      }
+      parent.insertBefore(el, anchor);
+      return el;
+    }
+
+    function applyHotOp(op) {
+      if (!op) return false;
+      if (op.c === 'text') {
+        clearPending(op.id);
+        setTextContent(op.id, op.value);
+        clearEcho(op.id);
+        return true;
+      }
+      if (op.c === 'attr') {
+        if (!attrNameAllowed(op.name)) {
+          warnOnce('hot-attr:' + op.name, 'island op attr "' + op.name + '" — not on the allowlist, skipped');
+          return false;
+        }
+        clearPending(op.id);
+        applyAttrFragment({ id: op.id, name: op.name, value: op.value });
+        return true;
+      }
+      if (op.c === 'insert') {
+        clearPending(op.parent);
+        return !!appendChildFragment(op.parent, op.html, op.before || undefined);
+      }
+      if (op.c === 'remove') {
+        clearPending(op.id);
+        return !!removeFragmentElement(op.id);
+      }
+      if (op.c === 'move') {
+        clearPending(op.id);
+        var moved = moveFragmentElement({ id: op.id, before: op.before || undefined });
+        return !!moved;
+      }
+      return false;
     }
 
     function armPending(id) {
@@ -871,6 +1077,9 @@ window.WebUIEngine = (function () {
         }
       }
 
+      if (onReplace) {
+        try { onReplace(el, id); } catch (e) { }
+      }
       var savedState = saveInputState(el);
 
       el.parentNode.replaceChild(fragment, el);
@@ -1091,7 +1300,102 @@ window.WebUIEngine = (function () {
       settleMs = ms;
     }
 
-    return { patch: patch, reset: reset, setSettle: setSettle, sanitize: sanitizeFragment };
+    function setAttrAllowlist(exact, prefixes) {
+      if (exact && typeof exact === 'object') { ATTR_ALLOW_EXACT = exact; }
+      if (Array.isArray(prefixes)) { ATTR_ALLOW_PREFIX = prefixes; }
+    }
+
+    return { patch: patch, reset: reset, setSettle: setSettle, setAttrAllowlist: setAttrAllowlist, sanitize: sanitizeFragment, echo: echo, echoOverlay: echoOverlay, applyHotOp: applyHotOp, setOnReplace: setOnReplace };
+
+    function setOnReplace(fn) {
+      onReplace = fn;
+    }
+  }
+
+  function createWindowManager() {
+    var reg = {}, booted = false, LSEL = '[data-webui-lease="viewport"],[data-webui-viewport]';
+    function put(w, r, i) {
+      if (!r.parentNode) {
+        r.style.position = 'absolute';
+        r.style.left = '0';
+        r.style.right = '0';
+      }
+      r.style.top = (i * w.h) + 'px';
+      if (!r.parentNode) { w.el.insertBefore(r, w.sp); }
+    }
+    function del(w, i) {
+      var r = w.r[i];
+      if (r && r.parentNode) { r.parentNode.removeChild(r); }
+    }
+    function wnd(w, f) {
+      if (!w.sp || !w.r.length) { return; }
+      var win = w.m === 'win';
+      var v = win ? w.el.clientHeight : (window.innerHeight || 400);
+      var t = win ? (w.el.scrollTop || 0) : -w.el.getBoundingClientRect().top;
+      var vis = Math.max(1, Math.ceil(v / w.h));
+      var ov = w.ovA > 0 ? w.ovA : (w.ovF > 0 ? Math.ceil(vis * (w.ovF - 1) / 2) : vis);
+      var ns = Math.max(0, Math.floor(t / w.h) - ov);
+      var ne = Math.min(w.r.length - 1, Math.ceil((t + v) / w.h) + ov);
+      if (!f && ns === w.a && ne === w.b) { return; }
+      for (var i = w.a; i < ns && i <= w.b; i++) { del(w, i); }
+      for (var j = ne + 1; j <= w.b; j++) { del(w, j); }
+      for (var k = Math.min(w.a - 1, ne); k >= ns; k--) { if (w.r[k]) { put(w, w.r[k], k); } }
+      for (var m = Math.max(w.b + 1, ns); m <= ne; m++) { if (w.r[m]) { put(w, w.r[m], m); } }
+      w.a = ns; w.b = ne;
+    }
+    function init(el) {
+      var ls = el && el.getAttribute ? el.getAttribute('data-webui-lease') : null;
+      if (!el || !el.getAttribute || (ls !== 'viewport' && !el.hasAttribute('data-webui-viewport'))) { return null; }
+      var id = el.id || '', w = reg[id];
+      if (w && w.el === el && w.r.length) { wnd(w, 1); return w; }
+      var rows = [];
+      for (var i = 0; i < el.children.length; i++) {
+        var c = el.children[i];
+        if (!c.getAttribute || c.getAttribute('data-webui-window-spacer') === null) { rows.push(c); }
+      }
+      w = reg[id] || (reg[id] = { el: el, r: rows, h: 24, ovA: 0, ovF: 0, m: 'doc', a: 0, b: -1, sp: null });
+      w.el = el; w.r = rows;
+      var f = rows[0];
+      var rh = parseInt(el.getAttribute('data-webui-row-height'), 10);
+      if (!(rh > 0)) { rh = parseInt(el.getAttribute('data-viewport-rowsize'), 10); }
+      w.h = (rh > 0) ? rh : ((f && f.offsetHeight > 0) ? f.offsetHeight : 24);
+      var oa = parseInt(el.getAttribute('data-webui-overscan'), 10);
+      var of = parseInt(el.getAttribute('data-viewport-overscan'), 10);
+      w.ovA = oa > 0 ? oa : 0;
+      w.ovF = of > 0 ? of : 0;
+      while (el.firstChild) { el.removeChild(el.firstChild); }
+      var s = document.createElement('div');
+      s.setAttribute('data-webui-window-spacer', '1');
+      el.appendChild(s);
+      w.sp = s;
+      w.sp.style.height = (w.r.length * w.h) + 'px';
+      var cs = getComputedStyle(el);
+      w.m = ((cs.overflowY === 'auto' || cs.overflowY === 'scroll') && el.scrollHeight > el.clientHeight) ? 'win' : 'doc';
+      w.a = 0; w.b = -1;
+      wnd(w, 1);
+      return w;
+    }
+    function onScroll() {
+      for (var k in reg) { var w = reg[k]; if (w.el && w.el.isConnected) { wnd(w, 0); } }
+    }
+    function boot() {
+      if (!booted) { booted = true; document.addEventListener('scroll', onScroll, true); }
+      var els = document.querySelectorAll(LSEL);
+      for (var i = 0; i < els.length; i++) { init(els[i]); }
+    }
+    function reconcile(changed) {
+      if (!changed) { return; }
+      for (var i = 0; i < changed.length; i++) {
+        var n = changed[i];
+        if (!n || n.nodeType !== 1) { continue; }
+        init(n);
+        if (n.querySelectorAll) {
+          var in2 = n.querySelectorAll(LSEL);
+          for (var j = 0; j < in2.length; j++) { init(in2[j]); }
+        }
+      }
+    }
+    return { boot: boot, reconcile: reconcile };
   }
 
   var UNSAFE_PROTOCOLS = /^(javascript|data|vbscript):/i;
@@ -1290,21 +1594,79 @@ window.WebUIEngine = (function () {
 
   var _islandSanitize = null;
   var _islandConfig = null;
+  var _islandApply = null;
   var islandModules = {};
   var islandLoading = {};
-  function buildImports(module) {
+  var islandUrlMap = {};
+  var manifestReady = Promise.resolve(null);
+  var islandRegionState = {};
+  var islandRafHosts = [];
+  var islandRafGoing = false;
+  var ISLAND_HOST = {
+    webui_log: function (h) { return function (p, l) { var t = islandStr(h, p, l); if (t !== null) { try { console.log('[island:' + h.name + '] ' + t); } catch (e) { } } return 0; }; },
+    webui_now_ms: function () { return function () { return (typeof performance === 'undefined' || !performance.now) ? Date.now() : performance.now(); }; },
+    webui_raf: function (h) { return function (i) { islandRafRegister(h, i); return 0; }; },
+    webui_store_get: function (h) { return function (p, l) { var k = islandStr(h, p, l); if (!k) return 0; var v = null; try { v = window.localStorage.getItem(k); } catch (e) { } return (v === null) ? 0 : islandFrameWrite(h, v); }; },
+    webui_store_set: function (h) { return function (kp, kl, vp, vl) { var k = islandStr(h, kp, kl); if (k === null) return 0; var v = (vp === undefined) ? '' : (islandStr(h, vp, vl) || ''); try { window.localStorage.setItem(k, v); } catch (e) { } return 0; }; },
+    webui_surface: function () { return function () { return 0; }; },
+  };
+  function islandStr(h, p, l) { var m = h.exports && h.exports.memory; return (m && l) ? new TextDecoder().decode(new Uint8Array(m.buffer, p, l)) : null; }
+  function buildImports(module, host) {
     var imports = {};
     var declared = WebAssembly.Module.imports(module);
     for (var i = 0; i < declared.length; i++) {
       var imp = declared[i];
       var bucket = imports[imp.module] || (imports[imp.module] = {});
-      bucket[imp.name] = function () { return 0; };
+      if (imp.name.indexOf('webui_') === 0 && !ISLAND_HOST[imp.name]) { throw new Error('island imports unknown host fn ' + imp.name); }
+      bucket[imp.name] = ISLAND_HOST[imp.name] ? ISLAND_HOST[imp.name](host) : function () { return 0; };
     }
     return imports;
   }
-  function instantiateIsland(module) {
-    return WebAssembly.instantiate(module, buildImports(module)).then(function (result) {
+  function islandFrameWrite(h, text) {
+    var e = h.exports;
+    if (!e || typeof e.webui_frame_ptr !== 'function') return 0;
+    var m = e.memory;
+    var ptr = e.webui_frame_ptr();
+    var b = new TextEncoder().encode(text);
+    var cap = m.buffer.byteLength - ptr - 4;
+    if (cap < 0) return 0;
+    if (b.length > cap) { b = b.slice(0, cap); }
+    var w = new Uint8Array(m.buffer, ptr, b.length + 4);
+    w[0] = b.length & 255; w[1] = (b.length >>> 8) & 255; w[2] = (b.length >>> 16) & 255; w[3] = b.length >>> 24;
+    w.set(b, 4);
+    return ptr;
+  }
+  function islandRafRegister(h, i) {
+    if (typeof requestAnimationFrame !== 'function') { return; }
+    (h.raf = h.raf || {})[i] = true;
+    if (islandRafHosts.indexOf(h) === -1) { islandRafHosts.push(h); }
+    if (!islandRafGoing) { islandRafGoing = true; requestAnimationFrame(islandRafTick); }
+  }
+  function islandRafTick() {
+    islandRafGoing = false;
+    var live = [];
+    for (var i = 0; i < islandRafHosts.length; i++) {
+      var h = islandRafHosts[i];
+      var idx = [];
+      for (var k in h.raf) { if (h.raf[k]) { idx.push(Number(k)); h.raf[k] = false; } }
+      if (!idx.length) { continue; }
+      live.push(h);
+      var ex = h.exports;
+      if (ex && typeof ex.webui_frame_tick === 'function') {
+        for (var j = 0; j < idx.length; j++) {
+          try { ex.webui_frame_tick(idx[j]); } catch (e) { }
+          if (_islandApply) { drainIslandOps(h.name, ex); }
+        }
+      }
+    }
+    islandRafHosts = live;
+    if (islandRafHosts.length) { islandRafGoing = true; requestAnimationFrame(islandRafTick); }
+  }
+  function instantiateIsland(module, name) {
+    var host = { exports: null, name: name };
+    return WebAssembly.instantiate(module, buildImports(module, host)).then(function (result) {
       var inst = result && result.instance ? result.instance : result;
+      host.exports = inst.exports;
       return inst.exports;
     });
   }
@@ -1325,6 +1687,7 @@ window.WebUIEngine = (function () {
       islandState(el, 'unmapped');
       return false;
     }
+    restoreIslandRegionState(el, name);
     var args = {};
     try { args = JSON.parse(el.getAttribute('data-webui-args') || '{}'); } catch (e) { }
     var payload = new TextEncoder().encode(JSON.stringify({ name: name, args: args }));
@@ -1347,50 +1710,102 @@ window.WebUIEngine = (function () {
   function loadIsland(name) {
     if (islandModules[name]) { return Promise.resolve(islandModules[name]); }
     if (islandLoading[name]) { return islandLoading[name]; }
-    var url = '/__assets/webui-' + name + '.wasm';
-    islandLoading[name] = fetch(url)
-      .then(function (r) { if (!r.ok) { throw new Error('island fetch ' + r.status); } return r; })
-      .then(function (res) {
-        if (typeof WebAssembly.compileStreaming === 'function' && res && res.body) {
-          return WebAssembly.compileStreaming(Promise.resolve(res));
-        }
-        return res.arrayBuffer().then(function (bytes) { return new WebAssembly.Module(bytes); });
-      })
-      .then(instantiateIsland)
-      .then(function (exports) {
-        if (!exports) { return null; }
-        if (typeof exports._start === 'function') {
-          try { exports._start(); } catch (e) { }
-        }
-        ensureIslandMemory(exports);
-        islandModules[name] = { exports: exports, memory: exports.memory };
-        return islandModules[name];
-      })
-      .catch(function (err) {
-        islandLoading[name] = null;
-        if (err && err.message) {
-          _islandLog('island ' + name + ' unavailable (' + err.message + '); page stays server-rendered', 'warn');
-        }
-        return null;
-      });
+    islandLoading[name] = manifestReady.then(function () {
+      var url = islandUrlMap[name] || '/__assets/webui-' + name + '.wasm';
+      return fetch(url)
+        .then(function (r) { if (!r.ok) { throw new Error('island fetch ' + r.status); } return r; })
+        .then(function (res) {
+          if (typeof WebAssembly.compileStreaming === 'function' && res && res.body) {
+            return WebAssembly.compileStreaming(Promise.resolve(res));
+          }
+          return res.arrayBuffer().then(function (bytes) { return new WebAssembly.Module(bytes); });
+        })
+        .then(function (mod) { return instantiateIsland(mod, name); })
+        .then(function (exports) {
+          if (!exports) { return null; }
+          if (typeof exports._start === 'function') {
+            try { exports._start(); } catch (e) { }
+          }
+          ensureIslandMemory(exports);
+          islandModules[name] = { exports: exports, memory: exports.memory };
+          return islandModules[name];
+        })
+        .catch(function (err) {
+          islandLoading[name] = null;
+          if (err && err.message) {
+            _islandLog('island ' + name + ' unavailable (' + err.message + '); page stays server-rendered', 'warn');
+          }
+          return null;
+        });
+    });
     return islandLoading[name];
+  }
+  function drainIslandOps(name, ex) {
+    if (typeof ex.webui_take_ops !== 'function') { return 0; }
+    var applied = 0;
+    var batches = 0;
+    while (++batches <= 64) {
+      var len = 0;
+      try { len = ex.webui_take_ops(); } catch (e) { _islandLog('island ' + name + ' webui_take_ops threw: ' + e.message, 'warn'); break; }
+      if (!len || len > 262144) { break; }
+      var bytes = (function () {
+        try { return new Uint8Array(ex.memory.buffer, ex.webui_frame_ptr(), len).slice(); }
+        catch (e) { return null; }
+      })();
+      if (!bytes) { _islandLog('island ' + name + ' webui_take_ops frame out of bounds — drain stopped', 'warn'); break; }
+      var at = 0;
+      var good = true;
+      while (at < bytes.length) {
+        var rec = null;
+        try { rec = decodeHotOpRecord(bytes, at); } catch (e) { good = false; break; }
+        if (!rec || !_islandApply) { good = false; break; }
+        _islandApply(rec.op);
+        applied++;
+        at = rec.next;
+      }
+      if (!good) { _islandLog('island ' + name + ' emitted a malformed op record — drain stopped', 'warn'); break; }
+    }
+    return applied;
+  }
+  function decodeHotOpRecord(bytes, start) {
+    var p = start;
+    var td = new TextDecoder();
+    function take(n) { if (p + n > bytes.length) { throw new RangeError('trunc'); } var s = p; p += n; return s; }
+    function u8() { return bytes[take(1)]; }
+    function u16() { var s = take(2); return bytes[s] | (bytes[s + 1] << 8); }
+    function u32() { var s = take(4); return bytes[s] | (bytes[s + 1] << 8) | (bytes[s + 2] << 16) | (bytes[s + 3] * 16777216); }
+    function id16() { var n = u16(); return td.decode(bytes.subarray(take(n), p)); }
+    function id32() { var n = u32(); return td.decode(bytes.subarray(take(n), p)); }
+    function optId() { var n = u16(); if (n === 0xffff) { return null; } return td.decode(bytes.subarray(take(n), p)); }
+    if (u8() !== 1) { throw new RangeError('ver'); }
+    var op = u8();
+    var eid = id16();
+    var r = null;
+    if (op === 1) { r = { c: 'text', id: eid, value: id32() }; }
+    else if (op === 2) { r = { c: 'attr', id: eid, name: id16(), value: id32() }; }
+    else if (op === 3) { r = { c: 'insert', parent: eid, before: optId(), html: id32() }; }
+    else if (op === 4) { r = { c: 'remove', id: eid }; }
+    else if (op === 5) { r = { c: 'move', id: eid, before: optId() }; }
+    else { throw new RangeError('op' + op); }
+    return { op: r, next: p };
+  }
+  function mountIslandRegion(el) {
+    if (el.getAttribute('data-webui-island-state') === 'mounted') { return; }
+    var name = el.getAttribute('data-webui-island');
+    if (!name) { return; }
+    if (_islandConfig && _islandConfig.capabilities && _islandConfig.capabilities.indexOf(name) === -1) {
+      islandState(el, 'unmapped');
+      return;
+    }
+    var ref = el;
+    loadIsland(name).then(function (mod) {
+      if (mod) { islandRender(ref, name); }
+      else { islandState(ref, 'unmapped'); }
+    });
   }
   function mountAllIslands() {
     var regions = document.querySelectorAll('[data-webui-island]');
-    for (var i = 0; i < regions.length; i++) {
-      (function (el) {
-        var name = el.getAttribute('data-webui-island');
-        if (!name) { return; }
-        if (_islandConfig && _islandConfig.capabilities && _islandConfig.capabilities.indexOf(name) === -1) {
-          islandState(el, 'unmapped');
-          return;
-        }
-        loadIsland(name).then(function (mod) {
-          if (mod) { islandRender(el, name); }
-          else { islandState(el, 'unmapped'); }
-        });
-      })(regions[i]);
-    }
+    for (var i = 0; i < regions.length; i++) { mountIslandRegion(regions[i]); }
   }
   function wireIslandInputs() {
     document.addEventListener('input', function (e) {
@@ -1400,6 +1815,7 @@ window.WebUIEngine = (function () {
       if (!regionId) { return; }
       var region = document.getElementById(regionId);
       if (!region || !region.getAttribute) { return; }
+      if (islandRegionSubscribed(region, 'input')) { return; }
       var name = region.getAttribute('data-webui-island');
       if (!name || !islandModules[name]) { return; }
       var args = {};
@@ -1409,13 +1825,68 @@ window.WebUIEngine = (function () {
       islandRender(region, name);
     });
   }
+  function islandRegionSubscribed(region, type) {
+    var raw = region.getAttribute('data-webui-island-events');
+    var list = null;
+    if (raw) { try { list = JSON.parse(raw); } catch (e) { list = null; } }
+    if (list && Array.isArray(list)) {
+      if (list.indexOf(type) !== -1) { return true; }
+      if (type === 'focusin' && list.indexOf('focus') !== -1) { return true; }
+      if (type === 'focusout' && list.indexOf('blur') !== -1) { return true; }
+    }
+    var raw2 = region.getAttribute('data-webui-input');
+    if (!raw2) { return false; }
+    var list2 = null;
+    try { list2 = JSON.parse(raw2); } catch (e) { return false; }
+    if (!Array.isArray(list2)) { return false; }
+    var chan = INPUT_CHAN[type];
+    return chan !== undefined && list2.indexOf(chan) !== -1;
+  }
+  var INPUT_CHAN = { keydown: 'key', compositionstart: 'composition', compositionupdate: 'composition', compositionend: 'composition', select: 'selection', copy: 'clipboard', cut: 'clipboard', paste: 'clipboard', undo: 'undo', redo: 'undo' };
+  function saveIslandRegionState(el) {
+    if (!el || !el.getAttribute) { return; }
+    var name = el.getAttribute('data-webui-island');
+    if (!name) { return; }
+    var mod = islandModules[name];
+    if (!mod || !mod.exports || typeof mod.exports.webui_state_save !== 'function') { return; }
+    try {
+      var ptr = mod.exports.webui_state_save();
+      var len = (typeof mod.exports.webui_frame_len === 'function') ? mod.exports.webui_frame_len() : 0;
+      if (!ptr || !len) { return; }
+      islandRegionState[name + '|' + (el.id || '')] = new Uint8Array(mod.memory.buffer, ptr, len).slice();
+    } catch (e) { _islandLog('island ' + name + ' webui_state_save threw: ' + e.message, 'warn'); }
+  }
+  function restoreIslandRegionState(el, name) {
+    var mod = islandModules[name];
+    if (!mod || !mod.exports || typeof mod.exports.webui_state_restore !== 'function') { return false; }
+    var bytes = islandRegionState[name + '|' + (el.id || '')];
+    if (!bytes || !bytes.length || bytes.length > 65536) { return false; }
+    var inputPtr = mod.exports.webui_input_ptr();
+    new Uint8Array(mod.memory.buffer, inputPtr, bytes.length).set(bytes);
+    try { mod.exports.webui_state_restore(inputPtr, bytes.length); } catch (e) { _islandLog('island ' + name + ' webui_state_restore threw: ' + e.message, 'warn'); }
+    return true;
+  }
+  function saveAllIslandRegions() {
+    var els = document.querySelectorAll('[data-webui-island]');
+    for (var i = 0; i < els.length; i++) { saveIslandRegionState(els[i]); }
+  }
+  function reconcileIslandRegions(changed) {
+    for (var i = 0; i < changed.length; i++) {
+      var n = changed[i];
+      if (!n || n.nodeType !== 1 || !n.getAttribute) { continue; }
+      if (n.getAttribute('data-webui-island')) { mountIslandRegion(n); continue; }
+      if (n.querySelectorAll) {
+        var inner = n.querySelectorAll('[data-webui-island]');
+        for (var j = 0; j < inner.length; j++) { mountIslandRegion(inner[j]); }
+      }
+    }
+  }
   function _islandLog(msg, level) {
     try {
       if (level === 'warn') { console.warn('[WebUIEngine] ' + msg); }
       else { console.log('[WebUIEngine] ' + msg); }
     } catch (e) { }
   }
-
   var _statusEl = null;
   var _statusText = null;
   var _statusTimer = null;
@@ -1495,8 +1966,40 @@ window.WebUIEngine = (function () {
 
     _islandSanitize = fragmentPatcher.sanitize;
     _islandConfig = config;
+    _islandApply = fragmentPatcher.applyHotOp;
+    fragmentPatcher.setOnReplace(function (el) { saveIslandRegionState(el); });
+    afterPatchHooks.push(reconcileIslandRegions);
+
+    var windowManager = createWindowManager();
+    afterPatchHooks.push(function (changed) { windowManager.reconcile(changed); });
+
+    document.addEventListener('webui:connected', saveAllIslandRegions);
 
     eventDelegator.mount();
+
+    var attrManifestLoaded = function () {
+      manifestReady = fetch('/ui/continuum-manifest.json').then(function (r) { return r.ok ? r.json() : null; }).then(function (j) {
+        if (!j) { return null; }
+        if (Array.isArray(j.attributeAllowlist) && j.attributeAllowlist.length === 0) { return j; }
+        if (Array.isArray(j.attributeAllowlist)) {
+          var exact = {}, prefixes = [];
+          for (var i = 0; i < j.attributeAllowlist.length; i++) {
+            var e = String(j.attributeAllowlist[i]).trim();
+            if (!e) { continue; }
+            if (e.slice(-1) === '*' || e.slice(-1) === '-') { prefixes.push(e.slice(0, -1)); } else { exact[e] = true; }
+          }
+          fragmentPatcher.setAttrAllowlist(exact, prefixes);
+        }
+        if (Array.isArray(j.islands)) {
+          for (var k = 0; k < j.islands.length; k++) {
+            var en = j.islands[k];
+            if (en && en.name && typeof en.url === 'string' && en.url) { islandUrlMap[en.name] = en.url; }
+          }
+        }
+        return j;
+      }).catch(function () { return null; });
+    };
+    attrManifestLoaded();
 
     hookLog = log;
     wsClient.connect();
@@ -1509,7 +2012,7 @@ window.WebUIEngine = (function () {
       window.addEventListener('online', function () {
         if (instance && instance.wsClient) { instance.wsClient.connect(); }
       });
-      wireIslandInputs(); mountAllIslands();
+      wireIslandInputs(); windowManager.boot(); mountAllIslands();
     };
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', bootIslands);
@@ -1547,6 +2050,7 @@ window.WebUIEngine = (function () {
     }
     instance.wsClient.disconnect();
     instance.eventDelegator.unmount();
+    instance.fragmentPatcher.setOnReplace(null);
     instance.fragmentPatcher.reset();
     instance.stateStore.clear();
     instance = null;
