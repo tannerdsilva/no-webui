@@ -372,7 +372,7 @@ budget, unchanged by throttle (engine-local: the wire isn't in the path).
 
 ## POLISH wave — §2: bench `--repeat` default 3 + final numbers refresh (base `d5cb0c4`)
 
-_commit pending (this section). the `--repeat` default in
+_commit `822dd13` (this section). the `--repeat` default in
 `designer/continuum-bench.mjs` is bumped **1 → 3** (each metric now samples
 three times by default; the isolation lesson of the echo-settled ruling §3 —
 single-run numbers on this loaded host are noise-tier)._
