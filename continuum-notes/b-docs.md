@@ -618,3 +618,60 @@ is NOT the naive comment-stripped working file (the asset tool's minify is more
 aggressive); serve mode asserts served-sheet determinism across processes +
 the pinned working-file hash (fixture mode), and W2 may fold the exact
 transform if a stricter assertion is wanted.
+
+---
+
+## CONTINUUM_DX W2 — lane B (base `95ba7b7`): DX-5 serving seam, DX-2 scaffold, DX-3 auto-pin, DX-6b server routes
+
+_commits `6ca7431` (DX-3) · `2041634` (DX-6b seam) · `5d0a040` (DX-2 scaffold) · `b22e5aa` (bench lease retire). this section is the W2 doc contribution (fragments → b-docs, never the shared docs)._
+
+### DX-3 auto-pin (commit `6ca7431`) — measured rows become the budget
+
+- `WebUIContinuumTool measure` (new verb): scans the WebUIAutobuildPlugin work dir for the cross-built `<Product>.wasm` artifacts and writes the measured per-island rows into the work-dir `ContinuumManifest.json` islands[]:
+  - pin keys stay EXACTLY `name/maxBytes/maxGzipBytes` — the schema `WebUIBudgetPlugin` reads (one budget path, I5; no silent fall-back to the global ceiling).
+  - NEW `raw/gz/sha/url` sit ALONGSIDE the pins (additive, version 2) — never replacing them (the red-team fold).
+  - `maxBytes = ceil(raw × 1.05)`; `maxGzipBytes = ceil(gz × 1.05)`; `sha` = sha256 of the STRIPPED artifact via `WebUIBuild.sha256Hex` (made public — the rawdog-sha path, one sha implementation for every build-side consumer).
+- the plugin emits `measure` as its OWN build command: inputFiles = the island artifacts, outputFiles = the work-dir manifest — so llbuild orders it after every cross-build, skips it warm, and there is no shared-file race.
+- `WebUIBudgetPlugin` now reads the autobuild work-dir manifest too (via the same plugin-outputs walk + a `--autobuild-manifest` override for probes) and enforces the TIGHTEST of declared-vs-measured per FIELD (tightening-only: a declared pin can only lower the auto-pin, never loosen it; the macro-side diagnostic for a wasted looser declaration is lane D's).
+- `b-budget-pins.mjs` grew 4 → 10 checks: measured breach + both tightening directions.
+
+### DX-6b + the serving seam (commit `2041634`)
+
+- `WebUIServerConfig.islandWorkDirectory: URL?` (default nil). nil = every reference host's byte-identical behavior (no island routes; absent seam, the manifest route does not exist — the content pin stays green, both fixture and serve modes verified). set = WebUIServer serves:
+  - `/__assets/webui-<name>.wasm` reading the autobuild work-dir artifact, name matched by the same case-insensitive containment the budget plugin uses — the existing URL convention is preserved (`webui-validate.wasm` <-> `WebUIValidateIsland.wasm`, `webui-feed.wasm` <-> `FeedIsland.wasm`); absent artifact = 404 = the engine's degrade path. ([DX-5 b-docs:601-603] artifact lands in the plugin work dir — `.build/out/Products/…` is unwritable from a build command on home dirs.)
+  - `/ui/continuum-manifest.json` = the MERGED payload: the generate path stays authoritative for allowlist/union/components; the DX-3 measured islands[] are spliced into the islands slot with the additive version bump 1 → 2 (the manifest route's exemption-register rule). work-dir manifest absent/empty = the generated slice byte-verbatim.
+- `dx5-demo.sh` grew step F: the home-dir app's DemoApp is now a real WebUIServer host (a `WebUIIsland("feed")` region + the seam config) and the runner asserts the served page renders the island region, `/__assets/webui-feed.wasm` returns the work-dir artifact byte-for-byte (valid wasm), and `/ui/continuum-manifest.json` carries the generate path + 3 measured islands at version 2 — all with ZERO manual verbs (plain `swift build` + `swift run`).
+- 3 new `WebUIServerSeamsTests`: island routes from a scratch work dir (`webui-feed`/`webui-validate`/404 ghost), byte-identity without the seam (registered-manifest case), and an empty work dir keeping the generated slice verbatim.
+
+### DX-2 scaffold (commit `5d0a040`)
+
+- `WebUIContinuumTool scaffold` verb + `Plugins/WebUIScaffoldPlugin` (command plugin, `writeToPackageDirectory`, port-free):
+  - `--add-island <Name>` — appends the two Package entries (product + executableTarget) beside their SIBLING blocks (append-only line-start anchors; refuses a manifest it cannot anchor on, never partially patches) and generates `Sources/<Name>/main.swift` — the W2 three-line RUNTIME form (lane-C landed): inert `@main` stub + `webui_island_bind` shim calling `IslandRuntime<<Type>.<Type>Island>.run()`.
+  - **the D-coordination pin**: the generated main names the macro-produced adapter (`<Type>.<Type>Island` — lane D's expansion emits `struct FeedIsland` nested in `extension Feed`). the exact string `IslandRuntime<Feed.FeedIsland>.run()` is asserted in BOTH `WebUIContinuumToolTests` and lane D's expansion suite, so a rename breaks both loudly. `--print` previews without writing; a second island onward is idempotent (regenerates the main, appends nothing).
+  - `--bootstrap --name <App> --framework <path>` — the existing-app path: inserts the once-per-app INERT continuum block (framework path dep + `WebUIAutobuildPlugin` on the app target), idempotent; refuses unanchorable manifests.
+- `designer/gates/scaffold-demo.sh` proves the whole flow on a home-dir scratch app: bootstrap → add-island → the generated main compiles for HOST (`swift build` — which also cross-builds the island + writes the DX-3 manifest via the autobuild plugin, zero manual verbs) AND WASM (`wasm-cross`, 132171 B stripped embedded, valid \0asm).
+- `WebUIContinuumToolTests` (7): adapter pin, generated header/form, --print is a dry run, append-only add, idempotent add, bootstrap insert + idempotence, unanchorable refusal.
+
+### bench lease retire (commit `b22e5aa`)
+
+- `Sources/WebUIBench/main.swift` (lane-B owned): the pre-DX-7d server-adapter string-replace that injected `data-webui-lease="viewport"` is retired — the Viewport COMPONENT has emitted it natively since DX-7d, so the replace left the attribute TWICE on the served page. the bench now serves the component's bytes verbatim (d-docs:466, d-to-e:54). d3 gate 14/14 still green.
+
+### gates (exact, W2)
+
+```
+swift build                                                   -> Build complete
+swift test (full)                                             -> 987 tests green (incl. 3 DX-6b seam tests + 7 scaffold tests)
+swift package --disable-sandbox plugin budget                -> budget: PASS (frame; measured auto-pins enforce on the consumer)
+node designer/probes/b-budget-pins.mjs                        -> 10/10 PASS
+node designer/probes/b-lint.mjs                               -> 8/8 PASS
+node designer/d3-gate.mjs                                     -> D3 GATE PASS 14/14
+node designer/dx-content-pin.mjs                              -> clean (fixture)
+node designer/dx-content-pin.mjs --serve                      -> clean (live, byte-identical at base)
+bash designer/gates/dx5-demo.sh --clean                       -> DX5DEMO PASS incl. seam step F
+bash designer/gates/scaffold-demo.sh --clean                  -> SCAFFOLDDEMO PASS (host + wasm)
+```
+
+### measured numbers (this wave)
+
+- dx5-demo seam step F: 3 islands cross-built into the work dir, served byte-for-byte at `/__assets/webui-feed.wasm`; merged manifest version 2 with 3 measured rows.
+- scaffold-demo: Feed 132171 B stripped embedded, valid wasm; host build compiles natively; wasm-cross cold ~40 s.

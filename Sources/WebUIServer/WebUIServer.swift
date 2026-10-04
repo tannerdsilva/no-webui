@@ -17,6 +17,12 @@ private enum CachedAssets {
 	static let css = ByteBuffer(string: DesignSystemAssets.minifiedCss)
 	static let engine = ByteBuffer(string: WebUIAssets.engine)
 	static let shell = ByteBuffer(string: WebUIAssets.shell)
+	/// the continuum engine slice (the generate path: attribute allowlist +
+	/// component inventory + union, compiled into the WebUI target by
+	/// WebUIContinuumPlugin). the DX-6b built-in manifest route serves this
+	/// byte-verbatim and splices the DX-3 measured islands[] in when the
+	/// autobuild work dir carries them.
+	static let continuumManifest: [UInt8] = ContinuumEngineManifest.body
 	/// the build-time pre-compressed variants, served when the client accepts gzip.
 	/// `nil` when the build host had no `gzip`, in which case the raw bytes serve.
 	/// the runtime never compresses anything — see `WebUIAssetTool.gzipBase64`.
@@ -222,6 +228,24 @@ public struct WebUIServerConfig: Sendable {
 	/// routes and the page route are matched first, so an entry here can
 	/// neither shadow nor disable them. duplicate paths: the last entry wins.
 	public var assets: [WebUIServerAsset]
+	/// the DX-5/DX-6 seam: the ``WebUIAutobuildPlugin`` work directory a
+	/// consumer's `swift build` cross-built its islands into. when `nil`, the
+	/// server has NO island routes and the built-in manifest route serves the
+	/// generated engine slice byte-verbatim (every reference host's current
+	/// behavior — the content pin's byte-identity is untouched). when set, the
+	/// server additionally serves:
+	///   - `/__assets/webui-<name>.wasm` reading `<dir>/<Product>.wasm`
+	///     (name matched against the artifact by the same case-insensitive
+	///     containment the budget plugin uses, so the existing URL convention
+	///     is preserved — "validate" <-> WebUIValidateIsland.wasm), and
+	///   - `/ui/continuum-manifest.json` as the MERGED payload: the generate
+	///     path stays authoritative for the allowlist/union/components, while
+	///     `islands[]` is spliced in from the work-dir ContinuumManifest.json
+	///     (the DX-3 measured rows: name/maxBytes/maxGzipBytes + raw/gz/sha/
+	///     url, version 2, additive — the manifest route's exemption-register
+	///     rule). absent a work-dir manifest, the route serves the generated
+	///     slice verbatim.
+	public var islandWorkDirectory: URL?
 
 	public init(
 		host: String = "0.0.0.0",
@@ -231,7 +255,8 @@ public struct WebUIServerConfig: Sendable {
 		assetCacheSeconds: Int = 3600,
 		pagePath: String = "/",
 		themeSheet: ThemeSheet? = nil,
-		assets: [WebUIServerAsset] = []
+		assets: [WebUIServerAsset] = [],
+		islandWorkDirectory: URL? = nil
 	) {
 		self.host = host
 		self.port = port
@@ -241,6 +266,7 @@ public struct WebUIServerConfig: Sendable {
 		self.pagePath = pagePath
 		self.themeSheet = themeSheet
 		self.assets = assets
+		self.islandWorkDirectory = islandWorkDirectory
 	}
 }
 
@@ -727,6 +753,58 @@ final class Runner: Sendable {
 						contentType: "text/javascript; charset=utf-8",
 						cacheControl: "public, max-age=\(config.assetCacheSeconds)"
 					)
+				} else if config.islandWorkDirectory != nil,
+				          path == "/ui/continuum-manifest.json" {
+					// DX-6b built-in manifest route: the merged payload. the
+					// generate path (ContinuumEngineManifest) stays
+					// authoritative for the allowlist/union/components; when
+					// the WebUIAutobuildPlugin work dir carries a measured
+					// ContinuumManifest.json (DX-3 auto-pins), its islands[]
+					// rows are spliced in (version 1 -> 2, ADDITIVE keys only —
+					// the manifest route's exemption-register rule; the pin
+					// keys stay exactly name/maxBytes/maxGzipBytes, what
+					// WebUIBudgetPlugin reads). absent a work-dir manifest,
+					// the route serves the generated slice byte-verbatim, so a
+					// server with NO autobuild artifacts is byte-identical to
+					// the host-asset registration it supersedes (the content
+					// pin's byte-identity).
+					let body = MergedWorkManifest.payload(
+						base: CachedAssets.continuumManifest,
+						workDirectory: config.islandWorkDirectory!
+					)
+					try await respond(
+						channel: channel.channel,
+						bytes: ByteBuffer(bytes: body),
+						contentType: "application/json; charset=utf-8",
+						cacheControl: "public, max-age=\(config.assetCacheSeconds)"
+					)
+				} else if config.islandWorkDirectory != nil,
+				          path.hasPrefix("/__assets/webui-"), path.hasSuffix(".wasm") {
+					// DX-6b island route: /__assets/webui-<name>.wasm, the
+					// existing URL convention the engine's loadIsland fetches.
+					// the artifact lives in the autobuild plugin work dir as
+					// <Product>.wasm; the request name is matched against the
+					// artifacts by the same case-insensitive containment the
+					// budget plugin uses, so "validate" <-> WebUIValidateIsland
+					// and "feed" <-> FeedIsland both resolve. absent artifact
+					// = 404 = the engine's degrade path (server-rendered
+					// content stays).
+					let nameStart = path.index(path.startIndex, offsetBy: "/__assets/webui-".count)
+					let nameEnd = path.index(path.endIndex, offsetBy: -".wasm".count)
+					let name = String(path[nameStart..<nameEnd])
+					if let artifact = try? WebUIAutobuildArtifacts.resolve(
+						name: name, in: config.islandWorkDirectory!
+					) {
+						try await respond(
+							channel: channel.channel,
+							bytes: ByteBuffer(bytes: artifact),
+							contentType: "application/wasm",
+							cacheControl: "no-store"
+						)
+					} else {
+						try await respond404(channel: channel.channel)
+						return
+					}
 				} else if let asset = assets[path] {
 					// host asset: vendor css/js, fonts, app scripts. the
 					// framework routes above win, so a host asset can never
@@ -842,8 +920,102 @@ final class Runner: Sendable {
 	}
 }
 
-// MARK: - query parsing
+// MARK: - the DX-5/DX-6 seam (island serving + merged manifest)
 
+/// merges the work-dir ContinuumManifest.json's islands[] (the DX-3 measured
+/// rows) into the generate-path payload. the generate path stays authoritative
+/// for the allowlist/union/components — this is a SPLICE of the islands[]
+/// slot only, plus the version bump the exemption register requires (1 -> 2,
+/// additive). when the work-dir manifest is absent or carries no islands, the
+/// base payload is returned byte-verbatim, so a server with no autobuild
+/// artifacts is byte-identical to the modern host-asset registration.
+///
+/// the merge is textual (not parse-reemit) precisely so the base payload's
+/// bytes are never re-serialized: a binary-identical splice keeps the rest of
+/// the document exactly as the generator emitted it.
+private enum MergedWorkManifest {
+	static func payload(base: [UInt8], workDirectory: URL) -> [UInt8] {
+		let workManifest = workDirectory
+			.appendingPathComponent("ContinuumManifest.json")
+		guard let data = FileManager.default.contents(atPath: workManifest.path),
+		      let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+		      let islands = root["islands"] as? [[String: Any]], !islands.isEmpty else {
+			return base
+		}
+		guard var text = String(data: Data(base), encoding: .utf8),
+		      let slotStart = text.range(of: "\"islands\": [") else {
+			// the base payload is not the expected engine-slice shape; serve
+			// it untouched rather than corrupting the contract.
+			return base
+		}
+		// consume the ORIGINAL slot ([...]) so no stale content survives: the
+		// slot closes at the first `]` after the key (base = `[]`; declared
+		// rows, if any, cannot nest brackets inside a row).
+		guard let slotEnd = text[slotStart.upperBound...].firstIndex(of: "]") else {
+			return base
+		}
+		let rows = islands.map { rowJSON($0) }.joined(separator: ",\n")
+		// splice the islands[] slot: everything before the slot key and after
+		// the original close-bracket is preserved verbatim.
+		let prefix = String(text[..<slotStart.lowerBound])
+		let suffix = String(text[text.index(after: slotEnd)...])
+		text = prefix + "\"islands\": [\n" + rows + "\n]" + suffix
+		// additive version bump (the register rule): only ever 1 -> 2.
+		if let versionRange = text.range(of: "\"version\": 1") {
+			text.replaceSubrange(versionRange, with: "\"version\": 2")
+		}
+		return Array(text.utf8)
+	}
+
+	/// one measured island row as JSON, with the pin keys EXACTLY what the
+	/// budget plugin reads (name/maxBytes/maxGzipBytes) plus the additive
+	/// raw/gz/sha/url. the row is re-emitted key-by-key (never via a Dictionary
+	/// — key order in JSONSerialization is not stable).
+	private static func rowJSON(_ row: [String: Any]) -> String {
+		var parts: [String] = []
+		if let name = row["name"] as? String { parts.append(jsonKey("name") + jsonString(name)) }
+		for key in ["maxBytes", "maxGzipBytes", "raw", "gz"] {
+			if let v = row[key] as? Int { parts.append(jsonKey(key) + "\(v)") }
+		}
+		for key in ["sha", "url"] {
+			if let v = row[key] as? String { parts.append(jsonKey(key) + jsonString(v)) }
+		}
+		return "{ " + parts.joined(separator: ", ") + " }"
+	}
+
+	private static func jsonKey(_ key: String) -> String { "\"\(key)\": " }
+	private static func jsonString(_ value: String) -> String {
+		"\"\(value.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\""))\""
+	}
+}
+
+/// reads island artifacts out of the WebUIAutobuildPlugin work directory — the
+/// sandbox-writable zone a build command may write on a home-dir checkout
+/// (`.build/out/Products/…` is unwritable from a build command there). the
+/// engine fetches `/__assets/webui-<name>.wasm` (the existing URL convention);
+/// this resolves `name` to the artifact file by the SAME case-insensitive
+/// containment the budget plugin uses, so "validate" <-> WebUIValidateIsland
+/// and "feed" <-> FeedIsland both resolve.
+enum WebUIAutobuildArtifacts {
+	static func resolve(name: String, in workDirectory: URL) throws -> [UInt8]? {
+		guard let entries = try? FileManager.default.contentsOfDirectory(atPath: workDirectory.path) else {
+			return nil
+		}
+		let needles = [name.lowercased()]
+		for file in entries.sorted() where file.hasSuffix(".wasm") {
+			let fileName = (file as NSString).deletingPathExtension
+			let lower = fileName.lowercased()
+			for needle in needles where lower.contains(needle) || needle.contains(lower) {
+				let path = workDirectory.appendingPathComponent(file)
+				guard let data = FileManager.default.contents(atPath: path.path), !data.isEmpty else { continue }
+				return [UInt8](data)
+			}
+		}
+		return nil
+	}
+}
+
+// MARK: - query parsing
 /// parse an `a=1&b=2` query string into decoded pairs. `+` decodes to a space
 /// (form encoding) and `%XX` to its byte; a malformed escape stays verbatim
 /// rather than being dropped, so a bad parameter cannot silently vanish. the

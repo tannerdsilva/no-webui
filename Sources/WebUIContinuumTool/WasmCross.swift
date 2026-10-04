@@ -1,4 +1,5 @@
 import Foundation
+import WebUIBuild
 #if os(Linux)
 import Glibc
 #else
@@ -33,6 +34,61 @@ import Darwin
 // `~/Library/org.swift.swiftpm/swift-sdks/`.
 
 extension WebUIContinuumTool.Run {
+
+	// MARK: - the dx-3 `measure` verb (CONTINUUM_DX §2.3 — auto-pinned budgets)
+	//
+	// `measure --work-dir <dir> --manifest <out.json>` scans the autobuild
+	// work dir for the cross-built `<Product>.wasm` artifacts and writes the
+	// measured per-island rows into the work-dir ContinuumManifest.json:
+	//   name/maxBytes/maxGzipBytes  — the EXACT pin keys WebUIBudgetPlugin
+	//     reads (name = the artifact product; the budget plugin matches by the
+	//     same case-insensitive containment it already uses, so "validate" <-> 
+	//     "WebUIValidateIsland.wasm" and "feed" <-> "FeedIsland.wasm" both
+	//     resolve) — plus ADDITIVE raw/gz/sha/url beside the pins (never
+	//     replacing them — the red-team fold).
+	//   maxBytes = ceil(raw × 1.05); maxGzipBytes = ceil(gz × 1.05); sha over
+	//     the STRIPPED artifact (WebUIBuild's rawdog-sha path, public facade);
+	//     url = the existing URL convention "/__assets/webui-<name>.wasm".
+	//
+	// the plugin invokes this as its OWN build command (declared inputFiles =
+	// every island artifact, outputFiles = the manifest), so llbuild orders it
+	// AFTER the cross-build commands and skips it when no artifact changed —
+	// no per-command sidecar writes, no shared-file races. the manifest the
+	// budget plugin reads is found by the same plugin-outputs walk as the
+	// generate-path one; at serve-emission WebUIServer splices these rows into
+	// the served /ui/continuum-manifest.json (generate path stays
+	// authoritative for allowlist/union), so one payload carries both.
+	static func measure(_ argv: [String]) throws {
+		let workDir = try Args.require(argv, "--work-dir")
+		let manifest = try Args.require(argv, "--manifest")
+		guard let entries = try? FileManager.default.contentsOfDirectory(atPath: workDir) else {
+			WebUIContinuumTool.writeError("[WebUIAutobuild] measure: cannot list work dir \(workDir)")
+			exit(1)
+		}
+		var rows: [String] = []
+		for file in entries.filter({ $0.hasSuffix(".wasm") }).sorted() {
+			let path = (workDir as NSString).appendingPathComponent(file)
+			guard let bytes = FileManager.default.contents(atPath: path), !bytes.isEmpty else { continue }
+			let raw = bytes.count
+			let gz = gzip(Data(bytes))?.count
+			let sha = sha256Hex([UInt8](bytes))
+			let name = (file as NSString).deletingPathExtension
+			let maxBytes = Int((Double(raw) * 1.05).rounded(.up))
+			var row = "{\"name\":\"\(name)\",\"maxBytes\":\(maxBytes),\"raw\":\(raw),\"sha\":\"\(sha)\",\"url\":\"/__assets/webui-\(name).wasm\""
+			if let gz {
+				row += ",\"gz\":\(gz),\"maxGzipBytes\":\(Int((Double(gz) * 1.05).rounded(.up)))"
+			}
+			row += "}"
+			rows.append(row)
+		}
+		// one payload: the budget plugin reads islands[] (schema name/maxBytes/
+		// maxGzipBytes); NEW raw/gz/sha/url sit alongside, additive, version 2.
+		let payload = "{\n  \"kind\": \"continuum-engine-slice\",\n  \"version\": 2,\n  \"islands\": ["
+			+ rows.joined(separator: ",\n") + "]\n}\n"
+		try payload.write(toFile: manifest, atomically: true, encoding: .utf8)
+		print("[WebUIAutobuild] measure: \(rows.count) island(s) pinned into \(manifest) (raw/gz/sha + maxBytes/maxGzipBytes)")
+	}
+
 	/// `wasm-cross --graph <pkg root> --product <Island> --obj <dir> --out <artifact.wasm>
 	///              [--main-dir <dir>] [--sdk <id>] [--swiftc <path>] [--mod-cache <dir>]
 	///              [--no-strip] [--skip-unicode-tables]`

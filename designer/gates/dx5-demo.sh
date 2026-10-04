@@ -61,6 +61,11 @@ let package = Package(
     targets: [
         .executableTarget(
             name: "DemoApp",
+            dependencies: [
+                .product(name: "WebUI", package: "no-webui"),
+                .product(name: "WebUIDesignSystem", package: "no-webui"),
+                .product(name: "WebUIServer", package: "no-webui"),
+            ],
             plugins: [.plugin(name: "WebUIAutobuildPlugin", package: "no-webui")]
         ),
         .executableTarget(
@@ -73,10 +78,57 @@ let package = Package(
     ]
 )
 EOF
+  # the consumer host: a WebUIServer that reads the island artifacts from the
+  # WebUIAutobuildPlugin work dir (the DX-6b seam). zero manual verbs — a plain
+  # `swift build` cross-built them, and this `swift run` serves them.
   cat > "$DEMO/Sources/DemoApp/main.swift" <<'EOF'
-print("dx-demo app — islands cross-built by WebUIAutobuildPlugin inside this swift build")
+import Foundation
+import Logging
+import WebUI
+import WebUIDesignSystem
+import WebUIServer
+
+@main
+struct DemoApp {
+    static func main() async throws {
+        let port = CommandLine.arguments.firstIndex(of: "--port").flatMap {
+            Int(CommandLine.arguments[$0 + 1])
+        } ?? 9301
+        // the autobuild work dir: the sandbox-writable zone the build command
+        // wrote the islands into (never .build/out/Products on a home dir).
+        let workDir = CommandLine.arguments.firstIndex(of: "--work-dir").map {
+            $0 + 1
+        }.flatMap { CommandLine.arguments.indices.contains($0) ? CommandLine.arguments[$0] : nil }
+            ?? ".build/plugins/outputs/dx-demo/DemoApp/destination/WebUIAutobuildPlugin"
+
+        let router = EventRouter()
+        let body = RenderContext.$current.withValue(RenderContext(router: router)) {
+            Div(class: "bench") {
+                Heading("dx-demo — island served from the autobuild work dir", level: .h1)
+                WebUIIsland("feed", args: .empty)
+            }.render()
+        }
+        let page = WebUIDocument(
+            title: "dx-demo seam",
+            body: body
+        ).render()
+        let server = WebUIServer(
+            render: { page },
+            router: router,
+            config: WebUIServerConfig(
+                host: "127.0.0.1", port: port,
+                islandWorkDirectory: URL(fileURLWithPath: workDir)
+            )
+        )
+        print("dx-demo seam server on http://127.0.0.1:\(port) (island work dir: \(workDir))")
+        try await server.start()
+    }
+}
 EOF
-  # the consumer island: the demo-owned reactor shell (see report/b-docs).
+  # the consumer island: the W2 3-line runtime form (CONTINUUM_DX DX-1, lane C).
+  # the scaffold emits exactly this shape for a new island — the island adapter
+  # type is the frame's ProbeIsland here (the demo's stand-in for a consumer's
+  # hand-written `ContinuumIsland`).
   cat > "$DEMO/Sources/FeedIsland/main.swift" <<'EOF'
 import WebUIIslandCore
 import WebUISharedCore
@@ -87,71 +139,9 @@ struct FeedIsland {
 }
 
 #if os(WASI)
-private let frameCapacity = 1 << 17
-private let inputCapacity = 1 << 16
-nonisolated(unsafe) private var retained = ProbeState()
-
-@_expose(wasm, "webui_input_ptr")
-func webuiInputPtr() -> Int { Int(bitPattern: InputBuffer.buffer) }
-@_expose(wasm, "webui_frame_ptr")
-func webuiFramePtr() -> Int { Int(bitPattern: FrameBuffer.buffer) }
-@_expose(wasm, "webui_frame_len")
-func webuiFrameLen() -> Int { FrameBuffer.length }
-@_expose(wasm, "webui_render_region")
-func webuiRenderRegion(_ ptr: UnsafeRawPointer?, _ len: Int) -> Int {
-    guard let ptr, len > 0 else { return 0 }
-    _ = utf8Decode(ptr, len)
-    writeFrame(ProbeIsland.regionHTML(state: retained, renderCount: 0, eventCount: 0))
-    return webuiFramePtr()
-}
-@_expose(wasm, "webui_on_event")
-func webuiOnEvent(_ ptr: UnsafeRawPointer?, _ len: Int) -> Int {
-    guard let ptr, len > 0 else { return 0 }
-    let action = ProbeIsland.decodeEvent(json: utf8Decode(ptr, len))
-    var state = retained
-    let ops = ProbeIsland.reduceOps(state: &state, action: action)
-    retained = state
-    if !ops.isEmpty, let record = try? HotOpCodec.encodeBatch(ops) { writeFrameBytes(record) }
-    return webuiFramePtr()
-}
-@_expose(wasm, "webui_take_ops")
-func webuiTakeOps() -> UInt32 { UInt32(FrameBuffer.length) }
-
-private func utf8Decode(_ ptr: UnsafeRawPointer, _ len: Int) -> String {
-    let bytes = UnsafeRawBufferPointer(start: ptr, count: len)
-    var out = ""; var i = 0
-    while i < len {
-        let b = bytes[i]; let scalar: UInt32; let width: Int
-        if b < 0x80 { scalar = UInt32(b); width = 1 }
-        else if (b & 0xE0) == 0xC0, i + 1 < len, (bytes[i + 1] & 0xC0) == 0x80 {
-            scalar = (UInt32(b & 0x1F) << 6) | UInt32(bytes[i + 1] & 0x3F); width = 2
-        } else if (b & 0xF0) == 0xE0, i + 2 < len, (bytes[i + 1] & 0xC0) == 0x80, (bytes[i + 2] & 0xC0) == 0x80 {
-            scalar = (UInt32(b & 0x0F) << 12) | (UInt32(bytes[i + 1] & 0x3F) << 6) | UInt32(bytes[i + 2] & 0x3F); width = 3
-        } else if (b & 0xF8) == 0xF0, i + 3 < len, (bytes[i + 1] & 0xC0) == 0x80, (bytes[i + 2] & 0xC0) == 0x80, (bytes[i + 3] & 0xC0) == 0x80 {
-            scalar = (UInt32(b & 0x07) << 18) | (UInt32(bytes[i + 1] & 0x3F) << 12) | (UInt32(bytes[i + 2] & 0x3F) << 6) | UInt32(bytes[i + 3] & 0x3F); width = 4
-        } else { out.unicodeScalars.append("\u{FFFD}"); i += 1; continue }
-        if let v = Unicode.Scalar(scalar) { out.unicodeScalars.append(v) } else { out.unicodeScalars.append("\u{FFFD}") }
-        i += width
-    }
-    return out
-}
-private func writeFrame(_ text: String) {
-    let n = min(text.utf8.count, frameCapacity)
-    text.withCString { c in FrameBuffer.buffer.copyMemory(from: UnsafeRawPointer(c), byteCount: n) }
-    FrameBuffer.length = n
-}
-private func writeFrameBytes(_ bytes: [UInt8]) {
-    bytes.withUnsafeBufferPointer { buf in
-        FrameBuffer.buffer.copyMemory(from: UnsafeRawPointer(buf.baseAddress!), byteCount: buf.count)
-    }
-    FrameBuffer.length = bytes.count
-}
-private enum FrameBuffer {
-    nonisolated(unsafe) static let buffer = UnsafeMutableRawPointer.allocate(byteCount: frameCapacity, alignment: 16)
-    nonisolated(unsafe) static var length = 0
-}
-private enum InputBuffer {
-    nonisolated(unsafe) static let buffer = UnsafeMutableRawPointer.allocate(byteCount: inputCapacity, alignment: 16)
+@_silgen_name("webui_island_bind")
+func webuiIslandBind() {
+    IslandRuntime<ProbeIsland>.run()
 }
 #endif
 EOF
@@ -220,6 +210,55 @@ GUARD_OUT=$(WEBUI_ISLAND_NESTED=1 "$TOOL" wasm-cross --graph "$FRAMEWORK" --prod
 echo "$GUARD_OUT" | grep -q "recursion guard set" || fail "recursion guard did not short-circuit: $GUARD_OUT"
 [ ! -f /tmp/dxdemo-guard-out.wasm ] || fail "guard run wrote an artifact"
 echo "guard: WEBUI_ISLAND_NESTED=1 short-circuits the cross-build (no artifact, no recursion)"
+
+echo "== step F: SERVING SEAM — the consumer's served page reads the work-dir artifacts (DX-6b) =="
+# the app's DemoApp (WebUIServer) serves the islands the autobuild put in the
+# work dir; fetch the existing URL convention + the merged manifest.
+DEMO_BIN="$(find "$DEMO/.build" -name DemoApp -type f 2>/dev/null | head -1)"
+[ -n "$DEMO_BIN" ] || fail "DemoApp binary not found after the seam build"
+SEAM_PORT=9319
+"$DEMO_BIN" --port "$SEAM_PORT" --work-dir "$ARTDIR" > /tmp/dxdemo-seam.log 2>&1 &
+SEAM_PID=$!
+cleanup_seam() { kill "$SEAM_PID" 2>/dev/null; wait "$SEAM_PID" 2>/dev/null; }
+trap cleanup_seam EXIT
+READY=0
+for _ in $(seq 1 60); do
+  if curl -sf "http://127.0.0.1:$SEAM_PORT/" >/dev/null 2>&1; then READY=1; break; fi
+  sleep 0.25
+done
+[ "$READY" = 1 ] || fail "seam server did not come up — see /tmp/dxdemo-seam.log"
+# the page itself references the island region.
+curl -sf "http://127.0.0.1:$SEAM_PORT/" > /tmp/dxdemo-seam-page.html || fail "seam page fetch failed"
+grep -q 'data-webui-island="feed"' /tmp/dxdemo-seam-page.html || fail "seam page does not render the island region"
+# the existing URL convention serves the work-dir artifact byte-for-byte.
+curl -sf "http://127.0.0.1:$SEAM_PORT/__assets/webui-feed.wasm" > /tmp/dxdemo-seam-feed.wasm || fail "seam island fetch failed (webui-feed.wasm)"
+cmp -s /tmp/dxdemo-seam-feed.wasm "$ARTDIR/FeedIsland.wasm" || fail "served island bytes != work-dir artifact (seam)"
+[ "$(head -c 4 /tmp/dxdemo-seam-feed.wasm | xxd -p)" = "0061736d" ] || fail "served island is not valid wasm (seam)"
+# the merged manifest carries the measured islands rows (DX-3) + the
+# generate-path sections.
+curl -sf "http://127.0.0.1:$SEAM_PORT/ui/continuum-manifest.json" > /tmp/dxdemo-seam-manifest.json || fail "seam manifest fetch failed"
+python3 - "$ARTDIR/ContinuumManifest.json" /tmp/dxdemo-seam-manifest.json <<'PY'
+import json, sys
+work = json.load(open(sys.argv[1]))["islands"]
+served_text = open(sys.argv[2]).read()
+served = json.loads(served_text)
+assert served["kind"] == "continuum-engine-slice"
+assert served["version"] == 2, served["version"]
+assert "attributeAllowlist" in served and "components" in served and "union" in served, "generate path must stay authoritative"
+assert served["islands"], "islands[] must be merged"
+by_name = {r["name"]: r for r in served["islands"]}
+for row in work:
+    assert row["name"] in by_name, f"missing island {row['name']}"
+    got = by_name[row["name"]]
+    for key in ("maxBytes", "maxGzipBytes", "raw", "gz", "sha", "url"):
+        assert key in got, f"island {row['name']} missing {key}"
+print("seam manifest: generate path +", len(served["islands"]), "measured islands merged (version 2)")
+PY
+[ $? -eq 0 ] || fail "seam manifest merge assertion failed"
+kill "$SEAM_PID" 2>/dev/null || true
+wait "$SEAM_PID" 2>/dev/null || true
+trap - EXIT
+echo "seam: served page + island artifact + merged manifest all read from the autobuild work dir (zero manual verbs)"
 
 echo ""
 echo "DX5DEMO PASS — candidate (b) cross-builds the real island graph from a plain swift build in a home-dir app."
