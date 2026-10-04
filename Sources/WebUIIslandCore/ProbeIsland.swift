@@ -253,3 +253,17 @@ public enum ProbeIsland: ContinuumIsland {
 		value.unicodeScalars.elementsEqual(literal.unicodeScalars)
 	}
 }
+
+// MARK: - the DX-1 runtime conformance (CONTINUUM_DX §2.1)
+//
+// ProbeIsland stays the "one hand-written equivalent" fixture; the runtime
+// slice (`IslandRuntime.swift`) parameterizes over this surface. every hook
+// (decodeEvent / regionHTML / stateToJSON / stateFromJSON) already exists as
+// ProbeIsland's hand-written static func with EXACTLY the required signature —
+// this conformance is the entire Delta-1 conversion, and the behavior is
+// proven against the recorded probe fixtures by (a) the native runtime
+// behavior-equivalence test and (b) c-ops.mjs 15/15 + c-parity 25/25 on the
+// converted wasm artifact.
+extension ProbeState: IslandEmptyState {}
+
+extension ProbeIsland: IslandRuntimeSurface {}
