@@ -1,32 +1,22 @@
 import WebUIIslandCore
 import WebUISharedCore
 
-// MARK: - probe island logic
+// MARK: - probe island — the wasi reactor (DESKTOP_GRADE t2.5, wave 2)
 //
-// the stateful probe skeleton (DESKTOP_GRADE t2.5). wave 1 ships the mount +
-// event + state surfaces with minimal bodies; wave 2 fills them with typed
-// state and the op stream (`HotOpCodec`, record format v1 — §t2.3). the island
-// is a wasi reactor: `@main` installs nothing (the host build just needs a
-// main; the real surface is the wasi exports below).
-
-/// the probe's retained state + the pure helpers the exports call. survives
-/// across calls and, via `webui_state_save` / `webui_state_restore`, across
-/// region remounts (the RETAINED_OPEN precedent generalized, t2.4).
-public enum ProbeIsland {
-
-	/// wave-1 self-describing mount html; wave 2 renders typed `State`.
-	public static func regionHTML(renderCount: Int, eventCount: Int) -> String {
-		return "<div class=\"island island--probe\" data-island-state=\"mounted\""
-			+ " data-island-renders=\"\(renderCount)\" data-island-events=\"\(eventCount)\">"
-			+ "<span class=\"island__msg\">probe island · renders \(renderCount) · events \(eventCount)</span>"
-			+ "</div>"
-	}
-
-	/// wave-1 state snapshot as json; wave 2 serializes typed `State`.
-	public static func snapshotJSON(renderCount: Int, eventCount: Int) -> String {
-		return "{\"renderCount\":\(renderCount),\"eventCount\":\(eventCount)}"
-	}
-}
+// the wave-1 skeleton becomes real. all logic lives in the typed island core
+// (`WebUIIslandCore.ProbeIsland` — pure, placement-free, natively tested);
+// this file is only the ABI plumbing between the engine and that logic:
+//
+//   webui_render_region  mount: render the retained typed state to region html
+//   webui_on_event       events in: decode {type,key,data} v1 → typed action →
+//                        reduce → encode record-v1 → queue for the op stream
+//   webui_take_ops       op-stream out: serve whole records back-to-back from
+//                        the frame buffer; 0 = empty (the wave-2 freeze shape)
+//   webui_state_save / webui_state_restore   state channel across remounts
+//
+// scalar-clean (the embedded runtime's rules): no Foundation, no
+// `Character(...)` by-value construction, no `String(decoding:as:)` —
+// `utf8Decode`/`writeFrame` are copied verbatim from the validate template.
 
 @main
 struct WebUIProbeIsland {
@@ -34,20 +24,58 @@ struct WebUIProbeIsland {
 }
 
 #if os(WASI)
-// the stateful probe capability island — abi v2's minimal skeleton: the same
-// region contract as the validate island (`webui_input_ptr` /
-// `webui_frame_ptr` / `webui_frame_len`) plus `webui_render_region` (mount
-// html), `webui_on_event` (events in), and the `webui_state_save` /
-// `webui_state_restore` pair that makes state survive remounts.
 private let frameCapacity = 1 << 18
 private let inputCapacity = 1 << 16
 
+// MARK: - retained state
+
+/// everything that survives across calls and, via the state channel, across
+/// region remounts: the typed probe state plus the reactor's bookkeeping.
 private struct RetainedState {
+	var probe = ProbeState()
 	var renderCount = 0
 	var eventCount = 0
 	var restoredBytes = 0
 }
 nonisolated(unsafe) private var retained = RetainedState()
+
+// MARK: - the op stream (webui_take_ops drain)
+
+/// the island's out-queue. `webui_on_event` appends one encoded record per
+/// event; `webui_take_ops` serves whole records back-to-back into the frame
+/// buffer and the engine drains until it returns 0 — the interface freeze
+/// recorded at i1 ("records back-to-back, each record-v1; the engine drains
+/// until 0 and never holds references across calls").
+private struct OpStream {
+	private var pending: [[UInt8]] = []
+
+	mutating func append(_ record: [UInt8]) {
+		pending.append(record)
+	}
+
+	/// copies as many whole records into the frame as fit; a single record that
+	/// exceeds the frame is still served whole (records are input-bounded at
+	/// 1<<16 by the event buffer, the frame is 1<<18). returns the byte count
+	/// served, 0 when nothing is pending.
+	mutating func takeBatch() -> Int {
+		var out: [UInt8] = []
+		out.reserveCapacity(frameCapacity)
+		while let first = pending.first, out.count + first.count <= frameCapacity {
+			out.append(contentsOf: first)
+			pending.removeFirst()
+		}
+		if out.isEmpty, let first = pending.first {
+			out = first
+			pending.removeFirst()
+		}
+		guard !out.isEmpty else { return 0 }
+		writeFrameBytes(out)
+		return out.count
+	}
+}
+nonisolated(unsafe) private var opStream = OpStream()
+
+// MARK: - the export surface
 
 @_expose(wasm, "webui_input_ptr")
 func webuiInputPtr() -> Int {
@@ -68,11 +96,10 @@ func webuiFrameLen() -> Int {
 func webuiRenderRegion(_ ptr: UnsafeRawPointer?, _ len: Int) -> Int {
 	guard let ptr, len > 0 else { return 0 }
 	retained.renderCount += 1
-	// the mount envelope is `{name, args}` — read it now so a wave-2 typed
-	// mount can seed state from args; wave 1 only proves the input path.
-	let json = utf8Decode(ptr, len)
-	_ = json
-	writeFrame(ProbeIsland.regionHTML(renderCount: retained.renderCount, eventCount: retained.eventCount))
+	// the mount envelope is `{name, args}`; the restored typed state (via
+	// webui_state_restore before the remount render) is already in `retained`.
+	_ = utf8Decode(ptr, len)
+	writeFrame(ProbeIsland.regionHTML(state: retained.probe, renderCount: retained.renderCount, eventCount: retained.eventCount))
 	return Int(bitPattern: FrameBuffer.buffer)
 }
 
@@ -81,36 +108,47 @@ func webuiOnEvent(_ ptr: UnsafeRawPointer?, _ len: Int) -> Int {
 	guard let ptr, len > 0 else { return 0 }
 	retained.eventCount += 1
 	let payload = utf8Decode(ptr, len)
-	// wave 1: acknowledge + surface the count as the frame payload; wave 2
-	// feeds typed actions through `ContinuumIsland.reduce` and emits the op
-	// stream via `HotOpCodec`.
-	writeFrame("{\"ok\":true,\"events\":\(retained.eventCount),\"payload\":\"\(JSONValue.escapeString(payload))\"}")
+	let action = ProbeIsland.decodeEvent(json: payload)
+	var state = retained.probe
+	let ops = ProbeIsland.reduceOps(state: &state, action: action)
+	retained.probe = state
+	// an encode failure is unreachable for probe-produced ops (ids/values are
+	// small and well-formed); a dropped record is safer than a torn frame.
+	if !ops.isEmpty, let record = try? HotOpCodec.encodeBatch(ops) {
+		opStream.append(record)
+	}
 	return Int(bitPattern: FrameBuffer.buffer)
+}
+
+@_expose(wasm, "webui_take_ops")
+func webuiTakeOps() -> UInt32 {
+	UInt32(opStream.takeBatch())
 }
 
 @_expose(wasm, "webui_state_save")
 func webuiStateSave() -> Int {
-	// wave 1: snapshot the retained counters as json in the frame; wave 2
-	// serializes typed `State` through the island's own codec.
-	writeFrame(ProbeIsland.snapshotJSON(renderCount: retained.renderCount, eventCount: retained.eventCount))
+	let json = ProbeIsland
+		.stateToJSON(state: retained.probe, renderCount: retained.renderCount, eventCount: retained.eventCount)
+		.serialize()
+	writeFrame(json)
 	return Int(bitPattern: FrameBuffer.buffer)
 }
 
 @_expose(wasm, "webui_state_restore")
 func webuiStateRestore(_ ptr: UnsafeRawPointer?, _ len: Int) -> Int {
 	guard let ptr, len > 0 else { return 0 }
-	retained.restoredBytes = len
-	// wave 1: parse the snapshot json into the retained counters so a remount
-	// continues where the previous region left off; wave 2 decodes typed State.
 	let snapshot = utf8Decode(ptr, len)
-	if let root = try? JSONValue.parse(snapshot),
-	   case .object(let dict) = root {
-		if case .number(let renders)? = dict["renderCount"] { retained.renderCount = Int(renders) }
-		if case .number(let events)? = dict["eventCount"] { retained.eventCount = Int(events) }
+	if let restored = ProbeIsland.stateFromJSON(snapshot) {
+		retained.probe = restored.state
+		retained.renderCount = restored.renderCount
+		retained.eventCount = restored.eventCount
+		retained.restoredBytes = len
 	}
 	writeFrame("{\"ok\":true,\"restored\":\(len)}")
 	return Int(bitPattern: FrameBuffer.buffer)
 }
+
+// MARK: - scalar-clean primitives (verbatim from the validate template)
 
 /// strict-enough utf-8 decode into a `String` without touching the
 /// normalization tables: `String(decoding:as:)` canonicalizes, which the
@@ -162,6 +200,13 @@ private func writeFrame(_ text: String) {
 		FrameBuffer.buffer.copyMemory(from: UnsafeRawPointer(c), byteCount: n)
 	}
 	FrameBuffer.length = n
+}
+
+private func writeFrameBytes(_ bytes: [UInt8]) {
+	bytes.withUnsafeBufferPointer { buf in
+		FrameBuffer.buffer.copyMemory(from: UnsafeRawPointer(buf.baseAddress!), byteCount: buf.count)
+	}
+	FrameBuffer.length = bytes.count
 }
 
 private enum FrameBuffer {

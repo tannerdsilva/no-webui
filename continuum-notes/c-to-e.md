@@ -60,3 +60,63 @@ sanitized once at the boundary.
 - multi-record op-stream call shape (`webui_take_ops`) — open.
 - `webui_on_event` currently acks with json + a counter; wave 2 routes typed
   actions through `ContinuumIsland.reduce` → `HotEffect.ops` → this codec.
+
+## WAVE 2 — the take_ops drain (RESOLVED) + event vocabulary (frozen)
+
+### `webui_take_ops() -> u32` — the drain contract (the i1 freeze, implemented)
+
+the call shape wave 1 flagged as open is now resolved and shipped in the probe
+island (`Sources/WebUIProbeIsland/main.swift`, `WebUIIslandCore.ProbeIsland`):
+
+- **each call returns the byte length of the next batch** sitting in the frame
+  buffer (`webui_frame_ptr` / `webui_frame_len` agree with the return value);
+  `0` = nothing pending. **the engine must drain until it sees 0** and never
+  hold a reference across calls (copy out, don't alias).
+- a batch is **whole records back-to-back** — zero padding, zero framing, each
+  record exactly record-v1 above. multi-record batches are the norm when more
+  than one event queued before the drain (one event → one record).
+- records are served whole: a batch never splits a record across calls. the
+  island serves as many records as fit the frame buffer (1<<18); a single
+  record is input-bounded at 1<<16, so it always fits.
+- `webui_on_event` **queues**, it does not serve: after delivering an event,
+  the engine runs the drain loop above. after `webui_render_region` the stream
+  is empty (mount produces no ops).
+
+engine-side drain (reference):
+
+```js
+while ((n = exports.webui_take_ops()) > 0) {
+  const bytes = new Uint8Array(memory.buffer, exports.webui_frame_ptr(), n);
+  // decode records back-to-back until bytes is exhausted (each record-v1)
+}
+```
+
+### the probe's event vocabulary (`webui_on_event` payload, `{type,key,data}` v1)
+
+decode → `ProbeIsland.decodeEvent` → typed `ProbeAction` → `reduce` → ops.
+unknown/malformed payloads reduce to `.noop` and the drain sees an empty stream.
+
+| type | key | data | action → ops |
+|---|---|---|---|
+| `key` | `ArrowUp` | — | increment(1) → `text(probe-counter, c)` |
+| `key` | `ArrowDown` | — | decrement(1) → `text(probe-counter, c)` |
+| `click` | `probe-inc` | — | increment(1) → `text(probe-counter, c)` |
+| `click` | `probe-dec` | — | decrement(1) → `text(probe-counter, c)` |
+| `click` | `probe-clear` | — | clear → `remove(probe-item-kN)` per item |
+| `input` | `probe-field` | `{"value":"…"}` (non-empty) | addItem(v) → `insert(parent: probe-list, before: nil, html: <li id="probe-item-kN">escaped</li>)` |
+
+counter/list ids: `probe-counter`, `probe-list`, `probe-item-kN` (the same
+ids the mount html stamps — mount html + op stream stay consistent).
+
+### probe region mounts
+
+`webui_render_region` receives the `{name, args}` envelope; it renders the
+**current retained typed state** (already restored if the engine called
+`webui_state_restore` before the remount render). element ids above are the
+delta targets.
+
+### size + budget (measured)
+
+`WebUIProbeIsland.wasm` 173,846 B stripped / 80,620 B gzip —
+`IslandBudget(maxBytes: 200_000, maxGzipBytes: 90_000)` declared on
+`ProbeIsland` (kB tier, comparable to validate's 164,670).

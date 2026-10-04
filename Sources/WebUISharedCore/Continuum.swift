@@ -210,6 +210,20 @@ public enum HotOpCodec {
 		guard reader.isAtEnd else { throw HotOpCodecError.trailingBytes }
 		return op
 	}
+
+	/// encodes an op sequence into one back-to-back record stream — the exact
+	/// payload `webui_take_ops()` serves (the wave-2 freeze: records back-to-back,
+	/// each record-v1; the engine drains until 0). one failing op aborts the whole
+	/// batch with the same typed error `encode` throws, so a frame never carries a
+	/// silently-truncated record.
+	public static func encodeBatch(_ ops: [HotOp]) throws -> [UInt8] {
+		var out: [UInt8] = []
+		out.reserveCapacity(ops.count * 8)
+		for op in ops {
+			out.append(contentsOf: try encode(op))
+		}
+		return out
+	}
 }
 
 // MARK: - codec writers
