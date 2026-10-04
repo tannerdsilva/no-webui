@@ -689,14 +689,16 @@ open items: the d3 gate is
 re-based onto engine scroll-work p95 ≤ 20 ms per the measured 30 Hz host
 floor; a 60 Hz host run can re-enable the absolute rAF assertion); v2
 key-channel `modifiers`/`isRepeat`; row-level ops for detached window rows;
-a server-side window-slice fetch path; `AttrWrapper` dynamic attr ops; the
-generated codec bodies still carry the HotOpCodec drained-batch form — they
-swap to `IslandRuntime<<Type>Island>.encodedState()` /
-`.decodePendingOps()` once the consumer graph exposes `WebUIIslandCore`
-(the accessors are live); `@HotView` island DISCOVERY (an island's source BEING
+a server-side window-slice fetch path; `AttrWrapper` dynamic attr ops;
+**the generated codec bodies landed** (W3): they read
+`IslandRuntime<<Type>Island>.encodedState()` /
+`.decodePendingOps()` on wasm and compile the drained `[]` contract on
+non-WASI hosts (the `os(WASI)` gate, `15610d6` — a lone host-only `@HotView`
+stays one struct; a wasm-bound island carries the author-supplied
+`IslandRuntimeSurface`); `@HotView` island DISCOVERY (an island's source BEING
 the `@HotView` struct, not a scan-found `Sources/<Name>/main.swift`) is next —
 keep a consumer island self-contained until it lands; d5 (durable local state
 / live documents) and d6 (webview shell) remain separable future arcs. the
-i2-recorded engine-budget owner sign-off exception (the +2,304 raw vs +2,048
-ceiling reading; the registry-handling reading +1,699/+480) is the one
-outstanding byte account item, unchanged by the DX waves.
+i2-recorded engine-budget exception was **owner-signed-off** (2026-10-04:
++2,304 raw accepted vs the +2,048 arc budget; the 77,000/18,500 pin unchanged
+and green) — no outstanding byte-account items.
