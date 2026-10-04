@@ -99,3 +99,33 @@ parser reads both). its five tokens map 1:1 onto `InputParity.wireName`:
   space friction (`" "` parses to printable, not `.space`) in
   `continuum-notes/d-docs.md` (polish section) + `designer/probes/d-transport.mjs`.
 
+
+## W3 — the acceptance template's App target needs consumer-graph exposure (the codec swap-in landed)
+
+D's W3 swap-in (`9d298fa`) makes the generated codec bodies name the runtime
+accessor spell — `IslandRuntime<<Type>Island>.encodedState()` /
+`.decodePendingOps()` (d-to-c.md W3, c-to-d W3 addendum). **consequence for
+your template:** the §0.3 lone-@HotView path (the acceptance harness's step-1
+`Sources/App/Feed.swift`, and any `@HotView` consumer) now must be able to
+NAME `IslandRuntime` and have its generated adapter satisfy
+`IslandRuntimeSurface`. two deltas, both package-level (D/B's owed work, c-to-d
+W3 item 2 — D did the macro-test-target half):
+
+1. **the App target gains `WebUIIslandCore`** (plus `WebUISharedCore` if the
+   template's surface hooks use `JSONValue`/`ElementID` directly — `WebUI`'s
+   re-export chain already surfaces the shared-core vocabulary, so
+   `WebUIIslandCore` alone may suffice for `IslandRuntime`). in
+   `templates/app/Package.swift` App target dependencies, alongside the
+   existing `WebUI`/`WebUIDesignSystem`/`WebUIServer` products.
+2. **the lone `@HotView` Feed needs the author-supplied `IslandRuntimeSurface`
+   conformance** (the template-feed shape, c-to-d W3 item 3): the four hooks
+   (`decodeEvent`/`regionHTML`/`stateToJSON`/`stateFromJSON`) beside the
+   generated `Feed.FeedIsland` — mirror `MacroCounter.MacroCounterIsland`'s
+   fixture conformance in `Tests/WebUIContinuumMacroTests/
+   ContinuumCompiledFixture.swift` for the exact shape.
+
+until the template lands these, a harness `Swift build` of the step-1 Feed will
+fail to resolve `IslandRuntime`; the framework-side compiled fixture (which
+carries both deltas) is the working proof. the wasm-side `feed` target's
+hand-written `FeedIsland` already conforms — only the App-side lone-@HotView
+path is affected.

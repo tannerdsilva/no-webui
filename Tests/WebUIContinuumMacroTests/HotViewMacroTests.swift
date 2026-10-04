@@ -78,27 +78,21 @@ extension Feed: ContinuumServerPath {
 			Feed.reduce(state: &state, action: action)
 		}
 
-		// t2.3 codec entry points (CONTINUUM_DX W2, lane D — d-docs codec design):
-		// the runtime slice owns the retained state per wasm instance; the
-		// generated adapter carries none, so an untethered surface reports the
-		// drained batch. bodies delegate to the runtime slice's record codec on
-		// the record-v1 plane — the exact HotOpCodec webui_take_ops serves
-		// (IslandRuntime.swift); `IslandRuntime<<Type>Island>.encodedState()` /
-		// `.decodePendingOps()` swap these bodies verbatim when lane C's accessors
-		// land (d-to-c.md).
+		// t2.3 codec entry points (CONTINUUM_DX W3, lane D — the swap-in, d-to-c.md W3):
+		// the runtime slice owns the retained state per wasm instance; the generated
+		// adapter reads the BOUND runtime instance through lane C's W3 accessors —
+		// `IslandRuntime<<Type>Island>.encodedState()` (the exact webui_state_save
+		// payload) / `.decodePendingOps()` (the pending records, decode-only — never
+		// drains). host/native builds never bind a runtime, so the statics report the
+		// drained contract ([], no effects). the macro emits a ContinuumIsland-only
+		// adapter; the spell requires the adapter to satisfy IslandRuntimeSurface at
+		// the use site — author-supplied (the template-feed shape, c-to-d W3 item 3).
 		static func _continuumEncode() -> [UInt8] {
-			// the pending op batch, record-v1 — the drained batch is empty.
-			(try? HotOpCodec.encodeBatch([])) ?? []
+			IslandRuntime<Feed.FeedIsland>.encodedState()
 		}
 
 		static func _continuumDecode() -> [HotEffect] {
-			// the drained (empty) record stream decodes to no records — the
-			// record-decode loop is exercised for real by the equivalence suite
-			// on recorded record-v1 batches.
-			guard let op = try? HotOpCodec.decode([]) else {
-			    return []
-			}
-			return [.ops([op])]
+			IslandRuntime<Feed.FeedIsland>.decodePendingOps()
 		}
 	}
 }
@@ -171,27 +165,21 @@ extension Feed: ContinuumServerPath {
 			Feed.reduce(state: &state, action: action)
 		}
 
-		// t2.3 codec entry points (CONTINUUM_DX W2, lane D — d-docs codec design):
-		// the runtime slice owns the retained state per wasm instance; the
-		// generated adapter carries none, so an untethered surface reports the
-		// drained batch. bodies delegate to the runtime slice's record codec on
-		// the record-v1 plane — the exact HotOpCodec webui_take_ops serves
-		// (IslandRuntime.swift); `IslandRuntime<<Type>Island>.encodedState()` /
-		// `.decodePendingOps()` swap these bodies verbatim when lane C's accessors
-		// land (d-to-c.md).
+		// t2.3 codec entry points (CONTINUUM_DX W3, lane D — the swap-in, d-to-c.md W3):
+		// the runtime slice owns the retained state per wasm instance; the generated
+		// adapter reads the BOUND runtime instance through lane C's W3 accessors —
+		// `IslandRuntime<<Type>Island>.encodedState()` (the exact webui_state_save
+		// payload) / `.decodePendingOps()` (the pending records, decode-only — never
+		// drains). host/native builds never bind a runtime, so the statics report the
+		// drained contract ([], no effects). the macro emits a ContinuumIsland-only
+		// adapter; the spell requires the adapter to satisfy IslandRuntimeSurface at
+		// the use site — author-supplied (the template-feed shape, c-to-d W3 item 3).
 		static func _continuumEncode() -> [UInt8] {
-			// the pending op batch, record-v1 — the drained batch is empty.
-			(try? HotOpCodec.encodeBatch([])) ?? []
+			IslandRuntime<Feed.FeedIsland>.encodedState()
 		}
 
 		static func _continuumDecode() -> [HotEffect] {
-			// the drained (empty) record stream decodes to no records — the
-			// record-decode loop is exercised for real by the equivalence suite
-			// on recorded record-v1 batches.
-			guard let op = try? HotOpCodec.decode([]) else {
-			    return []
-			}
-			return [.ops([op])]
+			IslandRuntime<Feed.FeedIsland>.decodePendingOps()
 		}
 	}
 }
@@ -267,27 +255,21 @@ extension Feed: ContinuumServerPath {
 			Feed.reduce(state: &state, action: action)
 		}
 
-		// t2.3 codec entry points (CONTINUUM_DX W2, lane D — d-docs codec design):
-		// the runtime slice owns the retained state per wasm instance; the
-		// generated adapter carries none, so an untethered surface reports the
-		// drained batch. bodies delegate to the runtime slice's record codec on
-		// the record-v1 plane — the exact HotOpCodec webui_take_ops serves
-		// (IslandRuntime.swift); `IslandRuntime<<Type>Island>.encodedState()` /
-		// `.decodePendingOps()` swap these bodies verbatim when lane C's accessors
-		// land (d-to-c.md).
+		// t2.3 codec entry points (CONTINUUM_DX W3, lane D — the swap-in, d-to-c.md W3):
+		// the runtime slice owns the retained state per wasm instance; the generated
+		// adapter reads the BOUND runtime instance through lane C's W3 accessors —
+		// `IslandRuntime<<Type>Island>.encodedState()` (the exact webui_state_save
+		// payload) / `.decodePendingOps()` (the pending records, decode-only — never
+		// drains). host/native builds never bind a runtime, so the statics report the
+		// drained contract ([], no effects). the macro emits a ContinuumIsland-only
+		// adapter; the spell requires the adapter to satisfy IslandRuntimeSurface at
+		// the use site — author-supplied (the template-feed shape, c-to-d W3 item 3).
 		public static func _continuumEncode() -> [UInt8] {
-			// the pending op batch, record-v1 — the drained batch is empty.
-			(try? HotOpCodec.encodeBatch([])) ?? []
+			IslandRuntime<Feed.FeedIsland>.encodedState()
 		}
 
 		public static func _continuumDecode() -> [HotEffect] {
-			// the drained (empty) record stream decodes to no records — the
-			// record-decode loop is exercised for real by the equivalence suite
-			// on recorded record-v1 batches.
-			guard let op = try? HotOpCodec.decode([]) else {
-			    return []
-			}
-			return [.ops([op])]
+			IslandRuntime<Feed.FeedIsland>.decodePendingOps()
 		}
 	}
 }

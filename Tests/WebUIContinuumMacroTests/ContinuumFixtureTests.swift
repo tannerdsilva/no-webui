@@ -1,5 +1,6 @@
 import Testing
 import WebUI
+import WebUIIslandCore
 
 // MARK: - macro vs hand-written equivalence
 //
@@ -78,17 +79,19 @@ struct ContinuumFixtureTests {
 		#expect(MacroIsland.budget == HandCounterIsland.budget)
 
 		// the peer-emitted `@_expose(wasm, …)` export shims compile and delegate
-		// to the adapter's codec entries. the generated entries report the
-		// drained batch — an untethered generated surface holds no retained
-		// state (the runtime slice owns it per wasm instance); the state-plane
-		// accessor (`IslandRuntime<<Type>Island>.encodedState()` /
-		// `.decodePendingOps()`) is lane C's W2 surface (d-to-c.md). the
-		// non-empty record plane is proven real by `codecRoundTrip` below.
+		// to the adapter's codec entries. W3: the entries are the runtime-accessor
+		// spell (`IslandRuntime<<Type>Island>.encodedState()` /
+		// `.decodePendingOps()`, d-to-c.md W3) — the exact `webui_state_save` /
+		// pending-records reads. on host builds nothing is ever bound (the bind
+		// shim is wasm-only), so they report the drained contract — `[]` / no
+		// effects — which is what the untethered generated surface claims. the
+		// spell parity vs the record-v1 plane is asserted by `codecRoundTrip`
+		// below.
 		#expect(_continuumEncodeMacroCounter() == [])
 		#expect(_continuumDecodeMacroCounter().isEmpty)
 
-		// anti-shackle: the hand-written adapter carries the SAME codec
-		// bodies, so the two generations agree on the drained batch.
+		// anti-shackle: the hand-written adapter carries the SAME codec bodies,
+		// so the two generations agree on the drained batch.
 		#expect(HandCounterIsland._continuumEncode() == MacroIsland._continuumEncode())
 		#expect(HandCounterIsland._continuumDecode().isEmpty == MacroIsland._continuumDecode().isEmpty)
 	}
@@ -178,25 +181,35 @@ struct ContinuumFixtureTests {
 
 	@Test("the codec entry's record plane round-trips real ops byte-exactly (the webui_take_ops drain codec)")
 	func codecRoundTrip() {
-		// the generated entries delegate to the runtime slice's record codec:
-		// `_continuumEncode` operates on the island's pending op batch via
-		// HotOpCodec.encodeBatch — the exact call the runtime's webui_take_ops
-		// drain produces (IslandRuntime.swift queues each reduce's ops through
-		// it) — and `_continuumDecode` decodes records via HotOpCodec.decode.
-		// drive that exact codec on a REAL, non-empty op and prove
-		// byte-exact identity, so the delegated plane is the live one.
+		// W3 (d-to-c.md): the generated entries are the runtime-accessor spell —
+		// `IslandRuntime<<Type>Island>.encodedState()` / `.decodePendingOps()` —
+		// backed by the runtime's record-v1 plane (the exact codec the drain
+		// `webui_take_ops` serves). on host nothing is bound, so both entries
+		// read the drained contract. two proofs stay:
+		//
+		// (1) the swap's SPELL PARITY: the runtime accessor reads what the
+		// record plane encodes. the drained surface is the codec's encoding of
+		// zero ops ([], byte-exact — the pin that retired the `{ [] }` stub),
+		// and the decode of that empty stream is no effects.
+		#expect(IslandRuntime<MacroIsland>.encodedState() == (try? HotOpCodec.encodeBatch([])) ?? [])
+		#expect(MacroIsland._continuumEncode() == IslandRuntime<MacroIsland>.encodedState())
+		#expect(MacroIsland._continuumDecode().isEmpty)
+		#expect(IslandRuntime<MacroIsland>.decodePendingOps().isEmpty)
+
+		// (2) the record-v1 plane itself is LIVE and byte-exact: encode a REAL,
+		// non-empty op and decode it back to the identical op — the exact codec
+		// the runtime queues reduce ops through, so a non-empty batch round-trips.
 		let op = HotOp.text("counter-label", "alpha")
 		let batch = (try? HotOpCodec.encodeBatch([op])) ?? []
 		#expect(!batch.isEmpty)
-		#expect(MacroIsland._continuumEncode().isEmpty) // untethered = drained (empty) batch
 		let decoded = try? HotOpCodec.decode(batch)
 		#expect(decoded == op)
 
-		// the drained batch IS the empty record stream — the codec's encoding
-		// of zero ops, byte-exact (the pin that retires the `{ [] }` stub form
-		// without hiding it: the entry is a real codec call, not a literal).
-		#expect(MacroIsland._continuumEncode() == (try? HotOpCodec.encodeBatch([])) ?? [])
+		// anti-shackle: the hand-written adapter carries the SAME spell, so the
+		// two generations agree on the drained contract (both read the unbound
+		// runtime as `[]`).
 		#expect(HandCounterIsland._continuumEncode() == MacroIsland._continuumEncode())
+		#expect(IslandRuntime<HandCounterIsland>.encodedState() == IslandRuntime<MacroIsland>.encodedState())
 	}
 
 	@Test("the @HotBuilder body and the explicit tree are the same value")

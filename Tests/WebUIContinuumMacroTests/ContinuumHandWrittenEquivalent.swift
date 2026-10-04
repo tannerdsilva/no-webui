@@ -1,4 +1,5 @@
 import WebUI
+import WebUIIslandCore
 
 // MARK: - the hand-written equivalent (anti-shackle rule 3)
 //
@@ -67,17 +68,40 @@ struct HandCounterIsland: ContinuumIsland {
 	}
 
 	// the hand-written codec entries (the macro emits the same bodies): the
-	// drained-batch contract — the runtime slice owns retained state per wasm
-	// instance, so the untethered surface reports an empty pending batch on the
-	// record-v1 plane (HotOpCodec.encodeBatch of nothing / decode of the empty
-	// record stream = truncatedRecord → no effects). the record loop is proven
-	// real by ContinuumFixtureTests.codecRoundTrip.
+	// W3 swap — read the BOUND runtime instance through lane C's accessors
+	// (`IslandRuntime<HandCounterIsland>.encodedState()` / `.decodePendingOps()`).
+	// on host builds nothing is ever bound, so both report the drained
+	// contract ([] / no effects) — exactly the macro generation's reading.
 	static func _continuumEncode() -> [UInt8] {
-		(try? HotOpCodec.encodeBatch([])) ?? []
+		IslandRuntime<HandCounterIsland>.encodedState()
 	}
 
 	static func _continuumDecode() -> [HotEffect] {
-		guard let op = try? HotOpCodec.decode([]) else { return [] }
-		return [.ops([op])]
+		IslandRuntime<HandCounterIsland>.decodePendingOps()
+	}
+}
+
+// MARK: - the same author-supplied surface path as the macro fixture (W3 swap) —
+//
+// `IslandRuntime<HandCounterIsland>` requires `I: IslandRuntimeSurface`; the
+// hand-written island supplies the four hooks mirroring `MacroCounterIsland`'s
+// (anti-shackle: the two generations carry the SAME surface + bodies, so the
+// runtime-accessor spell compiles for both and they agree on the drained
+// contract).
+extension HandCounterIsland: IslandRuntimeSurface {
+	static func decodeEvent(json: String) -> CounterAction {
+		MacroCounter.MacroCounterIsland.decodeEvent(json: json)
+	}
+
+	static func regionHTML(state: CounterState, renderCount: Int, eventCount: Int) -> String {
+		MacroCounter.MacroCounterIsland.regionHTML(state: state, renderCount: renderCount, eventCount: eventCount)
+	}
+
+	static func stateToJSON(state: CounterState, renderCount: Int, eventCount: Int) -> JSONValue {
+		MacroCounter.MacroCounterIsland.stateToJSON(state: state, renderCount: renderCount, eventCount: eventCount)
+	}
+
+	static func stateFromJSON(_ json: String) -> (state: CounterState, renderCount: Int, eventCount: Int)? {
+		MacroCounter.MacroCounterIsland.stateFromJSON(json)
 	}
 }

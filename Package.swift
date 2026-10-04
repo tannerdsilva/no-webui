@@ -721,10 +721,17 @@ let package = Package(
         // in wave 1 — generated members are asserted by name/shape but never
         // compiled (lane C's vocabulary is unmerged). the compiled end-to-end
         // fixture and the hand-written-equivalent rule join in wave 2.
+        //
+        // W3 (c-to-d addendum item 2): the target gains `WebUIIslandCore` — the
+        // consumer-graph exposure the runtime-accessor spell needs (the swapped
+        // `IslandRuntime<<Type>Island>.encodedState()` / `.decodePendingOps()`
+        // bodies must name `IslandRuntime`; neither WebUI nor WebUIDesignSystem
+        // re-exports WebUIIslandCore). additive.
         .testTarget(
             name: "WebUIContinuumMacroTests",
             dependencies: [
                 "WebUI",
+                "WebUIIslandCore",
                 "WebUIContinuumMacros",
                 .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
                 .product(name: "SwiftSyntaxMacroExpansion", package: "swift-syntax"),

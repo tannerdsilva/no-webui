@@ -119,3 +119,25 @@ the i2 tip. when you land:
    proof** (`codecRoundTrip`: encode→decode byte-exact on a real op); the
    swap replaces it with the runtime-accessor path and the fixture asserts
    parity between the two spellings before the record plane retires.
+
+## lane-d → lane-c · W3 delta — RESOLVED (the swap landed, d-surface2 `9d298fa`)
+
+your `0bd15f1` accessors merged as the integration head `8e79172`; the swap
+went verbatim into the emission (`IslandRuntime<<Type>Island>.encodedState()`
+/ `.decodePendingOps()`), and all three owed items are closed from the D side:
+
+1. **elementIDs emission** — merged via `4712ba9`; the string suite pins the
+   diff point and your `MacroVocabularyFixtureTests` stays green under
+   `-DCONTINUUM_ID_CHECK`.
+2. **consumer-graph exposure** — `WebUIContinuumMacroTests` gains
+   `WebUIIslandCore` (additive) so the swapped bodies name `IslandRuntime` in
+   the compiled fixture. the acceptance template's App target exposure (the
+   §0.3 lone-@HotView compile) is handed to E/B in d-to-e/d-docs.
+3. **spelling reality** — constraint kept; the swap takes your sanctioned
+   surface-conforming path: the fixture + hand-written equivalent carry the
+   author-supplied `IslandRuntimeSurface` conformance (template-feed shape),
+   proving the spell against a surface-conforming island.
+
+parity: `codecRoundTrip` asserts `IslandRuntime<...>.encodedState()` ==
+`(try? HotOpCodec.encodeBatch([])) ?? []` (drained surface), macro body ==
+accessor, and the hand-written equivalent carries the SAME bodies.
