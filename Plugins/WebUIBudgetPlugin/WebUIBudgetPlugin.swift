@@ -58,9 +58,11 @@ struct WebUIBudgetPlugin: CommandPlugin {
         // the former 46,000 / 11,600 pin — the mechanism working as designed.
         // re-pinned i1 (2026-10-03): the anticipated second trip — the merged
         // wave-1 tree (base + lane e's op apply / coalescer / echo) measured
-        // 56,818 raw / 13,602 gz (the gz pin tripped by 2 bytes). deliberate
-        // re-pin at ~5-6% headroom, orchestrator-side at integration.
-        Ceiling(surface: "engine", label: "webui-engine.js", raw: 60_000, gz: 14_500),
+        // 56,818 raw / 13,602 gz. deliberate re-pin at ~5-6% headroom.
+        // re-pinned i2 (2026-10-03): third trip — the island-seam engine half
+        // (typed imports, events-in, drain loop, state channel) merged at
+        // 68,188 raw / 16,185 gz. deliberate re-pin, ~5% headroom.
+        Ceiling(surface: "engine", label: "webui-engine.js", raw: 72_000, gz: 17_000),
         Ceiling(surface: "sheet", label: "design-system.css", raw: 335_000, gz: 49_500),
         Ceiling(surface: "shell", label: "webui-shell.js", raw: 1_700, gz: 650),
     ]
