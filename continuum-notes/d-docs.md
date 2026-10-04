@@ -660,3 +660,155 @@ _committed `task/d-surface2`. plan §2.3 + b-docs:571-573._
   `IslandRuntime<I>.encodedState()` / `.decodePendingOps()` + the consumer-graph
   visibility for the generated spell swap-in.
 
+
+
+---
+
+# lane d — CONTINUUM_DX wave 3 (DX-11b op-emitting handlers + DX-9 emission half)
+
+branch `task/d-surface2`; merged `origin/dev-continuum` @ `3381e89` (the i2
+tip) first. two green units pushed: `6db5c0b` (DX-11b ComponentOps), `4712ba9`
+(DX-9 emission). the codec swap-in (unit 3) chases lane C's accessors — not on
+the tree at push time; status at the bottom.
+
+## what landed (commits)
+
+- `6db5c0b` feat(design-system): `Sources/WebUIDesignSystemCore/ComponentOps.swift`
+  — the DX-11b op-emitting handler factories (CONTINUUM_DX §2.11) + the
+  anti-shackle vocabulary/emission suite `Tests/WebUITests/ComponentOpsTests.swift`
+  (10 tests).
+- `4712ba9` feat(macros): the DX-9 emission half — `@HotView` walks the
+  `@HotBuilder render(state:)` body and emits `static let elementIDs:
+  Set<ElementID>` in the generated adapter; expansion suite 44 tests incl. the
+  walk boundary cases; compiled fixture + hand-written mirror diffed.
+
+## DX-11b — the op-emitting handlers (CONTINUUM_DX §2.11 "built-in helpers")
+
+`ComponentOps` (D-owned, WebUIDesignSystemCore) turns component events into
+`FragmentOp` payloads (`.attr`/`.text` on the DX-11a id vocabulary) instead of
+whole-region replaces. surface:
+
+- **id derivation, one spelling** — `tableRowID` (`{id}-r{i}`),
+  `tableSortControlID` (`{id}-sort-{i}`), `tableSelectControlID`
+  (`{id}-select-{rowId}`), `tableExpandControlID`, `paginationPageID`
+  (`{id}-page-{n}`), `chartMarkID` (`{id}-mark-{i}`). the tests diff these
+  against the components' own rendered markup (vocabulary cross-check).
+- **atomics** — `classOp` / `ariaCheckedOp` / `ariaExpandedOp` / `ariaCurrentOp`
+  / `textOp` (the hand-written dictionary every composed helper is pinned
+  against — anti-shackle: a host may write these by hand and get identical
+  bytes).
+- **composed event→ops** — `tableRowSelect` (row class + control aria-checked),
+  `tableSelectAll` (select-all + every row), `tableSort` (header affordance on
+  active + previously-active columns), `tableExpand` (row class + aria-expanded),
+  `chartMarkSelect` (toggles `chart__mark--selected` onto the host's base
+  classes), `paginationPage` (active page class + aria-current, previous
+  reverts).
+
+decisions / boundaries (conservative):
+
+1. **every op is a REAL op** — `op != nil && op != .replace && html.isEmpty`
+   asserted for every helper; a handler returning these never triggers a
+   whole-region replace (the §2.11 claim, and the acceptance dogfood's
+   "responds with OPERATIONS" half).
+2. **aria-sort boundary (recorded):** `aria-sort` lives on the `<th>`, which
+   carries NO DX-11a id (the id is on the inner `.sort` span — the DX-11a pin;
+   moving it to the `<th>` is the W3 routing re-target d-docs already deferred).
+   the sort helper therefore patches the pinned span via `attr class` (the
+   visible sort affordance: `sort` / `sort sort--active[ sort--desc]`), NOT
+   `aria-sort`. the th-id re-target is the gate for a true aria-sort op.
+3. **table row select derives `{id}-r{i}` from `rowIds`** (the handler receives
+   the row KEY; the index comes from the same `rowIds` array the table renders
+   with — no string math). rows with additional state (selected AND expanded)
+   compose `classOp(tableRowID(...), [own markers] + ["tr--selected"])`.
+4. **structural items stay out of the attr/text plane** — the expand detail-row
+   insert and table row reorder (a sort's row movement) need structural ops /
+   a parent id the components do not emit; the helpers own the affordance +
+   selection deltas (§2.11's "ops + ids + server-render", the rung the
+   FragmentOp plane supports today).
+5. **the components are UNTOUCHED** — static (unwired) tables/charts/pagers
+   stay byte-identical (the wired gate from DX-11a); no new byte exceptions
+   beyond the already-registered DX-11a row-id one.
+6. chart marks across modes: sectors/categorical `{id}-mark-{i}`, points
+   `{id}-mark-pt`, categorical bars `{id}-mark-{cat}-{series}` — the composed
+   `chartMarkSelect` takes the concrete mark id (via `chartMarkID` for the
+   index form); the vocabulary cross-check pins the index + pt forms.
+
+## DX-9 — the @HotView emission half (the runtime check half is lane C's)
+
+- the macro collects the LITERAL `id:` arguments of the `@HotBuilder body` —
+  the plain literal (`Hot.Text(id: "feed-status", ...)`), the spelled form
+  (`id: ElementID("counter-label")`), across Text/Container/KeyedList and any
+  labelled `id:` call (over-collection is permissive-safe). `represented-
+  LiteralValue` is nil for interpolated segments, so the literal-only boundary
+  is enforced by the syntax node, not a re-resolution.
+- emission: `static let elementIDs: Set<ElementID> = [ElementID(...), ...]` —
+  sorted lexically, deduped, ALWAYS present in the adapter (empty `[]` when the
+  body spells none — the strict default: a check build fails loudly on any op
+  rather than silently passing an undeclared island). unconditional emission is
+  deliberate: the expander cannot see the consumer's build flags; a static set
+  referenced by nobody is dead-stripped in production (the I4 zero-runtime-tax
+  reading), while check builds read it. `ElementID` resolves through the same
+  re-export chain the other generated members use (no new dependency).
+- author-declared `elementIDs` → build error with the fix hint (member
+  collision diagnostic).
+- **the equivalent-fixture diff (anti-shackle):** `HandCounterIsland.elementIDs`
+  hand-mirrors the vocabulary (ProbeIslandIDs pattern); `ContinuumFixtureTests.
+  elementIDVocabularyEquivalence` asserts macro == hand-written == the exact
+  three literals, and the walk-boundary tests pin interpolation-skip + `[]`
+  fallback + sorted multi-literal emission.
+- **end-to-end with C's check:** `swift test -Xswiftc -DCONTINUUM_ID_CHECK
+  --filter IslandIDCheckTests` green — the macro emission compiles under the
+  flag; C's IslandIDCheck + the probe's hand-written vocabulary are C's half
+  and stayed green here.
+
+## the codec swap-in — status at push time
+
+`origin/task/c-islands` was still `3381e89` (= the merge base) when both W3
+units pushed: lane C's `encodedState()` / `decodePendingOps()` statics AND the
+`WebUIIslandCore` consumer-graph exposure (d-to-c.md items 1+2) are NOT on the
+tree. the swap stays the two emitted bodies, isolated and pinned (the d-docs
+W2 delta): `_continuumEncode()` -> `IslandRuntime<<Type>Island>.encodedState()`,
+`_continuumDecode()` -> `IslandRuntime<<Type>Island>.decodePendingOps()`, re-
+asserted by the expansion suite + compiled fixture; the HotOpCodec record-v1
+plane stays the compiled-fixture proof until then. re-fetch + merge the moment
+`task/c-islands` advances.
+
+## gates run (wave 3)
+
+- `swift build` — green after each unit.
+- `swift test --filter WebUIContinuumMacroTests` — 44 green (expansion +
+  walk boundaries + fixture equivalence + misuse incl. the elementIDs
+  collision).
+- `swift test --filter ComponentOps` — 10 green; dx11a byte-diff gate green.
+- full `swift test` — all bundles green (999-test WebUITests bundle etc.);
+  no failures.
+- `swift test -Xswiftc -DCONTINUUM_ID_CHECK --filter IslandIDCheckTests` — 6
+  green (DX-9 flag build).
+- `node designer/probes/d-viewport.mjs` — all contract checks green.
+- `node designer/probes/d-transport.mjs` — 15 PASS, 0 FAIL.
+
+## doc fragments (W3, for the orchestrator)
+
+- `CONTINUUM.md` §2.11: mark DX-11b shipped — the ComponentOps table (id
+  derivation, atomics, composed helpers), the ops-not-replace contract, the
+  aria-sort + structural boundaries, and the acceptance dogfood's helper half
+  (`ComponentOps` is the built-in factory the template's hand-written dogfood
+  ops can now adopt).
+- `CHANGELOG.md` (unreleased): "DX-11b op-emitting handlers (ComponentOps:
+  table select/sort/expand, chart mark select, pagination page — attr/text ops
+  on the DX-11a ids, never whole-region replaces); DX-9 @HotView emission: the
+  literal-id walk → static elementIDs mirror of ProbeIslandIDs".
+
+## handoffs
+
+- to E: `ComponentOps` is the built-in op factory the dogfood host's
+  whole-region handlers can migrate to (the template still hand-writes its
+  `FragmentUpdate.attr(.text)` answers — those are exactly the dictionaries
+  ComponentOps now owns). chart mark ids differ by render mode
+  (`-mark-{i}` / `-mark-pt` / `-mark-{cat}-{series}`) — the helper takes the
+  concrete id.
+- to C (also in d-to-c.md): the swap-in dependency stands; the moment the two
+  statics + the consumer-graph exposure land, the emission swaps verbatim.
+- to B: no new byte exceptions beyond the DX-11a row-id one (components
+  untouched); the DX-9 emission is macro-text only, nothing the content-pin
+  serves changed.
