@@ -413,10 +413,10 @@ struct BEMTests {
             sortableColumns: [0, 1],
             sort: (column: 0, direction: .descending)
         ).render()
-        #expect(html.contains("<th class=\"sort-cell\" aria-sort=\"descending\">"))
+        #expect(html.contains("<th id=\"staff-th-0\" class=\"sort-cell\" aria-sort=\"descending\">"))
         #expect(html.contains("<span class=\"sort sort--active sort--desc\" id=\"staff-sort-0\">Name"))
         // inactive sortable column ("Age"): sort affordance but no aria-sort
-        #expect(html.contains("<th class=\"sort-cell\"><span class=\"sort\" id=\"staff-sort-1\">Age"))
+        #expect(html.contains("<th id=\"staff-th-1\" class=\"sort-cell\"><span class=\"sort\" id=\"staff-sort-1\">Age"))
         // exactly one aria-sort on the page (the active column only)
         let ariaCount = html.components(separatedBy: "aria-sort").count - 1
         #expect(ariaCount == 1)
@@ -437,8 +437,8 @@ struct BEMTests {
         // per-row controls (server is source of truth for state)
         #expect(html.contains("id=\"staff-select-a\""))
         #expect(html.contains("id=\"staff-select-b\""))
-        // selected row styling
-        #expect(html.contains("<tr class=\"tr--selected\">"))
+        // selected row styling + the DX-11a row id/key contract
+        #expect(html.contains("<tr id=\"staff-r1\" class=\"tr--selected\" data-key=\"b\">"))
         // select column present in header + each row (3 cells)
         let selectColCount = html.components(separatedBy: "class=\"table__select-col").count - 1
         #expect(selectColCount == 3)
@@ -471,8 +471,8 @@ struct BEMTests {
         // carry aria-expanded, the rest are disabled
         #expect(html.contains("id=\"staff-expand-a\" aria-expanded=\"true\""))
         #expect(html.contains("id=\"staff-expand-b\" aria-disabled=\"true\""))
-        // only the expanded row has a detail row
-        #expect(html.contains("<tr class=\"tr--expanded\">"))
+        // only the expanded row has a detail row + carries the DX-11a row id/key
+        #expect(html.contains("<tr id=\"staff-r0\" class=\"tr--expanded\" data-key=\"a\">"))
         #expect(html.contains("<tr class=\"table__detail-row\"><td colspan=\"2\"><div class=\"table__detail\">details for a</div>"))
     }
 

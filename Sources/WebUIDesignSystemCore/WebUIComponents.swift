@@ -876,6 +876,10 @@ public struct WebUITable: View {
     /// handlers (`onSort`/`onSelectAll`/`onSelect`/`onToggleExpand`) under
     /// stable control ids derived from this value (`{id}-sort-{col}`,
     /// `{id}-select-all`, `{id}-select-{rowId}`, `{id}-expand-{rowId}`).
+    /// When set, the id/key contract (DX-11a) also lands: rows carry a
+    /// positional slot id (`{id}-r{i}`) plus `data-key` (the keyed identity
+    /// channel), and sortable `<th>`s carry `{id}-th-{i}` (the `aria-sort`
+    /// state carrier) — the vocabulary op-emitting handlers target.
     public let id: String?
     /// Column indices that may be clicked to sort (emit `.sort` affordance).
     public let sortableColumns: Set<Int>
@@ -1027,14 +1031,17 @@ public struct WebUITable: View {
                 let sortAttrs = wired
                     ? controlAttributes(id: "\(base)-sort-\(i)", handler: sortHandler)
                     : ""
+                // DX-11a: the sortable header's own id — the state carrier
+                // the `aria-sort` op targets (DX-11b). addressed tables only.
+                let thID = id != nil ? " id=\"\(htmlEscape(base))-th-\(i)\"" : ""
                 if let sort, sort.column == i {
                     let aria = sort.direction == .ascending ? "ascending" : "descending"
                     let desc = sort.direction == .descending ? " sort--desc" : ""
-                    html += "<th class=\"\(sortPrefix)\" aria-sort=\"\(aria)\">"
+                    html += "<th\(thID) class=\"\(sortPrefix)\" aria-sort=\"\(aria)\">"
                     html += "<span class=\"sort sort--active\(desc)\" id=\"\(htmlEscape(base))-sort-\(i)\"\(sortAttrs)>\(htmlEscape(h))\(sortArrow)</span>"
                     html += "</th>"
                 } else if sortableColumns.contains(i) {
-                    html += "<th class=\"\(sortPrefix)\">"
+                    html += "<th\(thID) class=\"\(sortPrefix)\">"
                     html += "<span class=\"sort\" id=\"\(htmlEscape(base))-sort-\(i)\"\(sortAttrs)>\(htmlEscape(h))\(sortArrow)</span>"
                     html += "</th>"
                 } else if let a = align {
@@ -1064,7 +1071,16 @@ public struct WebUITable: View {
                     selected ? "tr--selected" : nil,
                     expanded ? "tr--expanded" : nil,
                 ].compactMap { $0 }.joined(separator: " ")
-                let trAttrs = trClass.isEmpty ? "" : " class=\"\(trClass)\""
+                // DX-11a: the per-row id/key contract — a positional slot id
+                // (`{id}-r{i}`) plus the keyed identity channel (`data-key`),
+                // the pair the Viewport rows also expose. op-emitting handlers
+                // (DX-11b) target these ids; addressed tables only (a typed
+                // handler requires a caller id, so un-addressed tables stay
+                // byte-identical).
+                var trAttrs = ""
+                if id != nil { trAttrs += " id=\"\(htmlEscape(base))-r\(rowIndex)\"" }
+                if !trClass.isEmpty { trAttrs += " class=\"\(trClass)\"" }
+                if id != nil { trAttrs += " data-key=\"\(htmlEscape(rowId))\"" }
                 html += "<tr\(trAttrs)>"
                 if hasSelect {
                     var selectHandler: EventHandler? = nil
