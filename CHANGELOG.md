@@ -33,6 +33,76 @@ all notable changes to this project are documented here.
   per-island budget pins. see `CONTINUUM.md` §5.
 - new: `Documentation/CONTINUUM.md` — the living reference for the seam.
 
+### continuum — island authoring, scaffold/verify, auto-pin, ops (continuum_dx)
+
+- **the island runtime slice.** `IslandRuntime<I>` (`WebUIIslandCore`)
+  owns the entire wasm export surface; an island main slims to an inert
+  `@main` stub + a `webui_island_bind` shim + one-line extra-export shims.
+  two additive probe-neutral hooks (consumeMountEnvelope — the args-derived
+  mount contract; the input-driven `writeExport(input:_:compute:)`,
+  preserving the frozen `webui_validate` contract byte-exact).
+  behavior-equivalence proven natively + on wasm (c-ops 15/15, c-parity
+  25/25). probe 233,952 B / validate 176,669 B — the size anchors. see
+  `CONTINUUM.md` §2.9.
+- **measurement-fed island budgets.** declared `IslandBudget` dimensions
+  live in `[measured, ceil(measured × 1.05)]` (`BudgetDriftTests` names the
+  exact re-pin on drift); validate re-pinned 200,000/90,000 → 185,503/85,265;
+  `budget:` is tightening-only (positive literal pins; `maxBytes: 0` is the
+  auto spelling, refused). see `CONTINUUM.md` §2.6.
+- **the DX-3 auto-pin + an additive version-2 manifest.** the `measure` verb
+  writes `islands[]` rows (`name/maxBytes/maxGzipBytes` + additive
+  `raw/gz/sha/url`) into the autobuild work-dir manifest; `WebUIBudgetPlugin`
+  enforces the TIGHTEST of declared-vs-measured per field; the served
+  manifest is versioned (v2 = additive `islands[]`, consumed by the engine
+  as content-addressed island URLs with the name-convention fallback). with
+  the DX-6b seam (`WebUIServerConfig.islandWorkDirectory`) `WebUIServer`
+  serves the island artifacts + the merged manifest itself — a home-dir app
+  needs ZERO manual verbs. see `CONTINUUM.md` §5.2.
+- **the DX-2 scaffold.** `WebUIContinuumTool scaffold` (`--add-island
+  <Name>` / `--bootstrap --name <App> --framework <path>` / `--print`)
+  appends the Package entries + generates the runtime-form `main.swift`
+  naming the macro-produced adapter; a second island needs zero manifest
+  edits. see `CONTINUUM.md` §5.4.
+- **the DX-8 verify verb.** the ONE consumer-facing island-verification
+  verb — build → cross-build → measure/pin → the budget row, with a
+  per-stage verdict; deadlock-free via work-dir TMPDIR isolation. `plugin
+  wasm-island` is internal; no getting-started path names any required
+  manual verb. see `CONTINUUM.md` §5.4.
+- **`WebUIIsland` region view (DX-4a)** — byte-identical to the hand-written
+  smoke markup, with the declaration-ordered `WebUIIslandArgs` serialization
+  (int renders `4`, never `4.0`); `Viewport` emits
+  `data-webui-lease="viewport"` (DX-7d, the modifier stays inert); the
+  reference host (smoke) renders its island regions with the generated view.
+  see `CONTINUUM.md` §2.1/§2.7.
+- **the DX-9 id vocabulary.** the `@HotView` macro walks the `@HotBuilder`
+  body and emits `static let elementIDs` (a strict `[]` default); the
+  `-DCONTINUUM_ID_CHECK` dev check traps on any op targeting an unknown id,
+  and production builds compile the check + its vocabulary out (zero trace,
+  the probe at its anchor). see `CONTINUUM.md` §2.9.
+- **the DX-11a ops id vocabulary.** wired `WebUITable` rows carry
+  `<tr id="{id}-r{i}" data-key="{rowId}">`; sort/select/expand controls,
+  pagination and chart marks address the same one-vocabulary ids; static
+  components stay byte-identical (the smoke page's wired-table rows are the
+  one registered content-pin exception). see `CONTINUUM.md` §2.10.
+- **DX-11b op-emitting handlers.** `ComponentOps` (table select/sort/expand,
+  chart mark select, pagination page) emits `.attr`/`.text` ops on the
+  DX-11a ids — never whole-region replaces (a real-op contract asserted for
+  every helper). see `CONTINUUM.md` §2.11.
+- **the codec-state accessors.** `IslandRuntime<I>.encodedState()` /
+  `.decodePendingOps()` (a read, never a drain) + `HotOpCodec.decodeBatch` —
+  the spell the generated codec bodies swap to; the macro-emitted id
+  vocabulary is proven end-to-end against a check-mode wasm. see
+  `CONTINUUM.md` §2.4/§2.9.
+- **engine junctions.** both viewport discovery spellings accepted (DX-7e)
+  + the A1 overscan factor-vs-absolute ruling; `data-webui-input` delivery
+  wired into island routing (DX-8e — key = keydown only, composition
+  island-only); island URLs resolve through the manifest `islands[]`
+  (DX-6e). the engine growth stayed inside the arc ceiling (75,438/18,195).
+  see `CONTINUUM.md` §2.8/§3/§5.2.
+- the appendix-A consumer template + acceptance harness (`templates/app/`,
+  `designer/dx-acceptance.mjs`) and the `dx-content-pin` harness gate the
+  whole consumer path (zero verbs → CA-URL mount → dogfood ops).
+
 ### runtime — streaming patch ops and calm patches
 
 - **`FragmentUpdate` gains ops.** `append` inserts one subtree as a child of the
