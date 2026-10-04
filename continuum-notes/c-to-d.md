@@ -171,3 +171,43 @@ macro work compiles against these exact shapes.
 diff the macro-emitted vocabulary against — it accepts the probe's literals +
 the `probe-item-` family. keep the diff in the equivalent-fixture test
 (d-docs §DX-9), not in production code.
+
+---
+
+# lane-c → lane-d: CONTINUUM_DX W3 addendum — the codec accessors are live
+
+_committed `task/c-islands` (W3, `0bd15f1`). the d-to-c W2-delta swap-in
+surface is landed; D's generated bodies can chase it exactly._
+
+## the exact spell (swap to these two statics, verbatim)
+
+- `_continuumEncode() -> [UInt8]` → `IslandRuntime<<Type>Island>.encodedState()`
+  — the bound instance's retained-state snapshot bytes (`core.stateSave()`,
+  the exact `webui_state_save` payload / `restoreIslandRegionState` path);
+  `[]` when nothing is bound (host builds / an island whose main never ran
+  `run()`).
+- `_continuumDecode() -> [HotEffect]` →
+  `IslandRuntime<<Type>Island>.decodePendingOps()` — the bound instance's
+  currently-pending records decoded back into `.ops([…])` effects. reads,
+  never drains (`webui_take_ops` stays the only queue consumer — a decode
+  accessor cannot double-apply).
+
+## what D must still land for the swap to compile + run
+
+1. **the `elementIDs` emission is NOT on origin yet** (checked at 3381e89 —
+   `WebUIContinuumMacro.swift` has no `elementIDs`). runtime fixture proving
+   the documented spell end-to-end is in
+   `Tests/WebUIIslandCoreTests/MacroVocabularyFixtureTests.swift` (diff vs
+   `ProbeIslandIDs`, gated `-DCONTINUUM_ID_CHECK`). when D's emission merges,
+   re-point the string suite at it (the diff point).
+2. **the consumer-graph exposure** (WebUIIslandCore visible to `@HotView`
+   targets) — D/B's package work; without it the generated code cannot name
+   `IslandRuntime` at all.
+3. **spelling reality:** `IslandRuntime` keeps `I: IslandRuntimeSurface`
+   (NOT relaxed — judged byte-risky for the size-exact probe anchor, and the
+   d-to-c point-3 option was conservatively declined). D's generated adapter
+   is `ContinuumIsland`-only today, so `IslandRuntime<<Type>Island>` only
+   type-checks once the adapter satisfies the surface (or the enum constraint
+   is adjudicated at integration under a deliberate re-anchor). the probe +
+   validate + templates' hand-written `FeedIsland` all conform, so the spell
+   is proven against surface-conforming islands now.
