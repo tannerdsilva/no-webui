@@ -6,6 +6,7 @@ import WebUIDesignSystem
 import WebUIAuth
 import WebUIBuild
 import WebUIServer
+import WebUIChart
 
 // MARK: - Public API surface pins
 //
@@ -824,4 +825,101 @@ func t33WindowingSurfacePins() {
 	#expect(ViewportAnchor.scrollDelta(oldFirst: 6, newFirst: 0, rowHeight: 52) == 312)
 	#expect(ViewportAnchor.anchorRow(scrollTop: 1040, rowHeight: 52) == 20)
 	#expect(InputParity.allCases.map(\.wireName) == ["key", "selection", "clipboard", "undo", "composition"])
+}
+
+// MARK: - DX-11a — the table/pagination/chart id-key contract (CONTINUUM_DX §2.11)
+
+private func dx11aWiredTable(_ router: EventRouter) -> String {
+	RenderContext.$current.withValue(RenderContext(router: router)) {
+		WebUITable(
+			headers: ["Name", "Age"],
+			rows: [[Text("Alice"), Text("30")], [Text("Bob"), Text("25")]],
+			id: "tbl",
+			sortableColumns: [0, 1],
+			selectable: true,
+			rowIds: ["alice", "bob"],
+			expandedRows: ["alice"],
+			rowDetails: ["alice": Text("detail")]
+		)
+		.onSort { _, _ in [] }
+		.onSelectAll { _ in [] }
+		.onSelect { _, _ in [] }
+		.onToggleExpand { _, _ in [] }
+		.render()
+	}
+}
+
+/// DX-11a byte-diff gate: the typed per-control id vocabulary — every data row
+/// of an id-carrying WebUITable carries `{id}-r{i}` + `data-key` (the same
+/// rowId its select/expand controls derive from), so an op-emitting handler can
+/// target rows with attr/text ops instead of a whole-region replace; sortable
+/// header controls keep `{id}-sort-{i}`; WebUIPagination keeps
+/// `{id}-prev/next/page-{n}/rows`; chart marks keep `{id}-mark-*`. a
+/// display-only table (no id) stays byte-identical (no row ids, no data-key).
+@Test("DX-11a — WebUITable rows gain `{id}-r{i}` + data-key; control ids pinned byte-exact")
+func dx11aTableIDKeyContract() {
+	let router = EventRouter()
+	let html = dx11aWiredTable(router)
+
+	// the row id-key vocabulary, byte-exact (attribute order id → data-key)
+	#expect(html.contains("<tr id=\"tbl-r0\" data-key=\"alice\""), "emitted: \(html)")
+	#expect(html.contains("<tr id=\"tbl-r1\" data-key=\"bob\""), "emitted: \(html)")
+
+	// every control keeps its stable id (the op targets DX-11b handlers emit)
+	#expect(html.contains("id=\"tbl-sort-0\""))
+	#expect(html.contains("id=\"tbl-sort-1\""))
+	#expect(html.contains("id=\"tbl-select-all\""))
+	#expect(html.contains("id=\"tbl-select-alice\""))
+	#expect(html.contains("id=\"tbl-expand-alice\""))
+
+	// the row key IS the selection key — one id vocabulary, no string math
+	#expect(html.contains("data-component-id=\"tbl-select-alice\""))
+	#expect(html.contains("data-component-id=\"tbl-expand-alice\""))
+
+	// fallback keys when rowIds is absent: `-r{i}` still derives, data-key = row-{i}
+	let fallbackRouter = EventRouter()
+	let fallback = RenderContext.$current.withValue(RenderContext(router: fallbackRouter)) {
+		WebUITable(headers: ["A"], rows: [[Text("1")]], id: "t")
+			.onSort { _, _ in [] }
+			.render()
+	}
+	#expect(fallback.contains("<tr id=\"t-r0\" data-key=\"row-0\""))
+
+	// a static table (no typed handlers) stays byte-identical: no row ids,
+	// no data-key — even with an id
+	let staticID = rendered(WebUITable(headers: ["A"], rows: [[Text("1")]], id: "s"))
+	#expect(!staticID.contains("-r0"))
+	#expect(!staticID.contains("data-key"))
+
+	// a display-only table (no id) stays byte-identical
+	let plain = rendered(WebUITable(headers: ["A"], rows: [[Text("1")]]))
+	#expect(!plain.contains("-r0"))
+	#expect(!plain.contains("data-key"))
+}
+
+@Test("DX-11a — WebUIPagination + chart marks expose stable ids; display forms byte-identical")
+func dx11aPaginationAndChartIDPins() {
+	// pagination ids (already existing — pinned as the contract)
+	let pager = rendered(WebUIPagination(page: 2, pages: 5, id: "pg", rowsPerPage: 25))
+	#expect(pager.contains("id=\"pg-prev\""))
+	#expect(pager.contains("id=\"pg-next\""))
+	#expect(pager.contains("id=\"pg-page-1\""))
+	#expect(pager.contains("id=\"pg-page-2\""))
+	#expect(pager.contains("id=\"pg-page-5\""))
+	#expect(pager.contains("id=\"pg-rows\""))
+
+	// display pagination (no id) carries no control ids
+	let plainPager = rendered(WebUIPagination(page: 1, pages: 3))
+	#expect(!plainPager.contains("pg-prev"))
+	#expect(!plainPager.contains("id=\"pg-page-"))
+
+	// chart marks: `{id}-mark-{n}` (sectors/bars) — pinned as the contract
+	let chart = Chart([
+		ChartMark(spec: MarkSpec(kind: .sector, angle: .value("V", 25), series: "Z")),
+		ChartMark(spec: MarkSpec(kind: .sector, angle: .value("V", 75), series: "W")),
+	]).chartID("cm")
+	let chartHTML = rendered(chart)
+	#expect(chartHTML.contains("id=\"cm\""))
+	#expect(chartHTML.contains("id=\"cm-mark-0\""))
+	#expect(chartHTML.contains("id=\"cm-mark-1\""))
 }

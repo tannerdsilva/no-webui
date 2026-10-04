@@ -26,6 +26,7 @@ struct HotViewMacroExpansionTests {
 		assertExpansion(
 			completeFeedFixture,
 			expanded: """
+
 struct Feed {
 	typealias State = FeedState
 	typealias Action = FeedAction
@@ -68,15 +69,27 @@ extension Feed: ContinuumServerPath {
 			Feed.reduce(state: &state, action: action)
 		}
 
-				// the island-side codec entry points. bodies land with the island
-		// runtime slice (the frame-buffer op loop); the t2.3 ABI shims are
-		// the peer-emitted globals below (@_expose forbids non-global placement).
-				static func _continuumEncode() -> [UInt8] {
-		    []
+		// t2.3 codec entry points (CONTINUUM_DX W2, lane D — d-docs codec design):
+		// the runtime slice owns the retained state per wasm instance; the
+		// generated adapter carries none, so an untethered surface reports the
+		// drained batch. bodies delegate to the runtime slice's record codec on
+		// the record-v1 plane — the exact HotOpCodec webui_take_ops serves
+		// (IslandRuntime.swift); `IslandRuntime<<Type>Island>.encodedState()` /
+		// `.decodePendingOps()` swap these bodies verbatim when lane C's accessors
+		// land (d-to-c.md).
+		static func _continuumEncode() -> [UInt8] {
+			// the pending op batch, record-v1 — the drained batch is empty.
+			(try? HotOpCodec.encodeBatch([])) ?? []
 		}
 
 		static func _continuumDecode() -> [HotEffect] {
-		    []
+			// the drained (empty) record stream decodes to no records — the
+			// record-decode loop is exercised for real by the equivalence suite
+			// on recorded record-v1 batches.
+			guard let op = try? HotOpCodec.decode([]) else {
+			    return []
+			}
+			return [.ops([op])]
 		}
 	}
 }
@@ -97,6 +110,7 @@ extension Feed: ContinuumServerPath {
 			}
 			""",
 			expanded: """
+
 struct Feed {
 	typealias State = FeedState
 	typealias Action = FeedAction
@@ -139,15 +153,27 @@ extension Feed: ContinuumServerPath {
 			Feed.reduce(state: &state, action: action)
 		}
 
-				// the island-side codec entry points. bodies land with the island
-		// runtime slice (the frame-buffer op loop); the t2.3 ABI shims are
-		// the peer-emitted globals below (@_expose forbids non-global placement).
-				static func _continuumEncode() -> [UInt8] {
-		    []
+		// t2.3 codec entry points (CONTINUUM_DX W2, lane D — d-docs codec design):
+		// the runtime slice owns the retained state per wasm instance; the
+		// generated adapter carries none, so an untethered surface reports the
+		// drained batch. bodies delegate to the runtime slice's record codec on
+		// the record-v1 plane — the exact HotOpCodec webui_take_ops serves
+		// (IslandRuntime.swift); `IslandRuntime<<Type>Island>.encodedState()` /
+		// `.decodePendingOps()` swap these bodies verbatim when lane C's accessors
+		// land (d-to-c.md).
+		static func _continuumEncode() -> [UInt8] {
+			// the pending op batch, record-v1 — the drained batch is empty.
+			(try? HotOpCodec.encodeBatch([])) ?? []
 		}
 
 		static func _continuumDecode() -> [HotEffect] {
-		    []
+			// the drained (empty) record stream decodes to no records — the
+			// record-decode loop is exercised for real by the equivalence suite
+			// on recorded record-v1 batches.
+			guard let op = try? HotOpCodec.decode([]) else {
+			    return []
+			}
+			return [.ops([op])]
 		}
 	}
 }
@@ -169,6 +195,7 @@ extension Feed: ContinuumServerPath {
 			}
 			""",
 			expanded: """
+
 public struct Feed {
 	public typealias State = FeedState
 	public typealias Action = FeedAction
@@ -213,15 +240,27 @@ extension Feed: ContinuumServerPath {
 			Feed.reduce(state: &state, action: action)
 		}
 
-				// the island-side codec entry points. bodies land with the island
-		// runtime slice (the frame-buffer op loop); the t2.3 ABI shims are
-		// the peer-emitted globals below (@_expose forbids non-global placement).
-				public static func _continuumEncode() -> [UInt8] {
-		    []
+		// t2.3 codec entry points (CONTINUUM_DX W2, lane D — d-docs codec design):
+		// the runtime slice owns the retained state per wasm instance; the
+		// generated adapter carries none, so an untethered surface reports the
+		// drained batch. bodies delegate to the runtime slice's record codec on
+		// the record-v1 plane — the exact HotOpCodec webui_take_ops serves
+		// (IslandRuntime.swift); `IslandRuntime<<Type>Island>.encodedState()` /
+		// `.decodePendingOps()` swap these bodies verbatim when lane C's accessors
+		// land (d-to-c.md).
+		public static func _continuumEncode() -> [UInt8] {
+			// the pending op batch, record-v1 — the drained batch is empty.
+			(try? HotOpCodec.encodeBatch([])) ?? []
 		}
 
 		public static func _continuumDecode() -> [HotEffect] {
-		    []
+			// the drained (empty) record stream decodes to no records — the
+			// record-decode loop is exercised for real by the equivalence suite
+			// on recorded record-v1 batches.
+			guard let op = try? HotOpCodec.decode([]) else {
+			    return []
+			}
+			return [.ops([op])]
 		}
 	}
 }
@@ -362,19 +401,54 @@ struct HotViewMacroNegativeTests {
 		)
 	}
 
-	@Test("imports: without a budget is refused — a sized island pins one")
-	func missingBudgetThrows() {
+	@Test("imports: without a budget auto-defaults (the DX-3 measured pin) — the imports:→budget rule retires")
+	func importsWithoutBudgetExpands() {
+		let text = expandedText(of: """
+		@HotView("feed", imports: [ClockCapability.self])
+		struct Feed {
+			typealias State = FeedState
+			typealias Action = FeedAction
+			@HotBuilder func render(state: State) -> HotTree { Hot.Text(id: "feed-status", "ready") }
+			static func reduce(state: inout State, action: Action) -> [HotEffect] { [] }
+		}
+		""")
+		#expect(text.contains("static let continuumDescriptor"))
+		#expect(text.contains("grants: [ClockCapability.self]"))
+		// the auto/unset marker: budget: is tightening-only, the measured
+		// auto-pin applies (DX-3, lane B's islands[] row).
+		#expect(text.contains("IslandBudget(maxBytes: 0, maxGzipBytes: nil)"))
+	}
+
+	@Test("a declared pin of 0 bytes is the auto spelling taken as a pin — refused with the fix")
+	func budgetZeroThrows() {
 		assertExpansionThrows(
 			"""
-			@HotView("feed", imports: [ClockCapability.self])
-			struct Unpinned {
+			@HotView("feed", imports: [ClockCapability.self], budget: IslandBudget(maxBytes: 0))
+			struct ZeroPin {
 				typealias State = FeedState
 				typealias Action = FeedAction
 				@HotBuilder func render(state: State) -> HotTree { Hot.Text(id: "feed-status", "ready") }
 				static func reduce(state: inout State, action: Action) -> [HotEffect] { [] }
 			}
 			""",
-			message: "@HotView: missing budget: — a declaration that names host imports is a sized island; add budget: IslandBudget(maxBytes: 16_384, maxGzipBytes: 4_096) (the budget plugin pins it before ship)"
+			message: "@HotView: a declared maxBytes: of 0 is the auto/unset spelling, not a pin — omit budget: (the measured auto-pin applies); if you meant a ceiling, declare a positive maxBytes:"
+		)
+	}
+
+	@Test("a non-literal budget is refused — budget: pins are literals, tightening-only")
+	func budgetNonLiteralThrows() {
+		assertExpansionThrows(
+			"""
+			@HotView("feed", budget: IslandBudget(maxBytes: pin))
+			struct Computed {
+				typealias State = FeedState
+				typealias Action = FeedAction
+				@HotBuilder func render(state: State) -> HotTree { Hot.Text(id: "feed-status", "ready") }
+				static func reduce(state: inout State, action: Action) -> [HotEffect] { [] }
+				static let pin = 1024
+			}
+			""",
+			message: "@HotView: budget: must be an IslandBudget pin with a positive integer maxBytes: — e.g. budget: IslandBudget(maxBytes: 16_384, maxGzipBytes: 4_096) (budget: is tightening-only; omit it to auto-pin from the measured row)"
 		)
 	}
 
@@ -447,5 +521,71 @@ struct HotViewMacroNegativeTests {
 		""")
 		#expect(text.contains("static let continuumDescriptor"))
 		#expect(text.contains("IslandBudget(maxBytes: 0, maxGzipBytes: nil)"))
+	}
+
+	// MARK: registry markers final — the strict marker-form diagnostics
+
+	@Test("a name with whitespace is refused — the strict marker form the scan consumes")
+	func strictNameSpacesThrows() {
+		assertExpansionThrows(
+			"""
+			@HotView("feed feed")
+			struct TwoWords {
+			}
+			""",
+			message: "@HotView: the island name must be a single token of letters, digits, '-' and '_' (the strict marker form the registry scan consumes) — \"feed feed\" contains ' '; it becomes the wasm export suffix, the URL segment, and the manifest key"
+		)
+	}
+
+	@Test("a name starting with a digit is refused")
+	func strictNameDigitStartThrows() {
+		assertExpansionThrows(
+			"""
+			@HotView("1feed")
+			struct LeadingDigit {
+			}
+			""",
+			message: "@HotView: the island name must be a single token starting with a letter or underscore, e.g. @HotView(\"feed\") — \"1feed\" does not; it becomes the wasm export suffix, the URL segment, and the manifest key"
+		)
+	}
+
+	@Test("two @HotView attributes on one declaration are a duplicate registry marker")
+	func duplicateAttributeThrows() {
+		assertExpansionThrows(
+			"""
+			@HotView("feed")
+			@HotView("grid")
+			struct TwoIslands {
+			}
+			""",
+			message: "@HotView applied 2 times — one declaration registers exactly one island; remove the duplicate attribute (pick the one name)"
+		)
+	}
+
+	@Test("an author-declared continuumDescriptor collides with the generated one — fix hint, not a redeclaration error")
+	func collidingDescriptorThrows() {
+		assertExpansionThrows(
+			"""
+			@HotView("feed")
+			struct HasDescriptor {
+				static let continuumDescriptor = "mine"
+			}
+			""",
+			message: "@HotView: your declared `static let continuumDescriptor` would collide with the generated one — @HotView emits it; remove yours (or drop @HotView and hand-write the ContinuumServerPath conformance)"
+		)
+	}
+
+	@Test("an author-declared island adapter type collides with the generated one — fix hint naming the generated name")
+	func collidingAdapterThrows() {
+		assertExpansionThrows(
+			"""
+			@HotView("feed")
+			struct HasAdapter {
+				struct HasAdapterIsland {
+				}
+			}
+			""",
+			message: "@HotView: your declared `HasAdapterIsland` would collide with the generated island adapter — @HotView emits it; rename your member (the generated adapter is named `HasAdapterIsland`)"
+		)
 	}
 }

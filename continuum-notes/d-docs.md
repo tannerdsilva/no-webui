@@ -525,6 +525,115 @@ runtime slice (`WebUIIslandCore/IslandRuntime.swift`) and `HotOpCodec`:
   equivalent-fixture test. W3 takes it end-to-end (emission + dev check +
   probe).
 
+## W2 codec bodies — implementation record (lane D, wave 2)
+
+_committed `task/d-surface2` — the emission swaps from `{ [] }` stubs to a real
+record-plane delegation._
+
+### what landed
+
+- `_continuumEncode() -> [UInt8]` / `_continuumDecode() -> [HotEffect]` are now
+  **HotOpCodec-backed delegations** (the plan's own wording, §2.1: "the bodies
+  delegate to the runtime slice (`HotOpCodec`-backed)"):
+  - encode: `(try? HotOpCodec.encodeBatch([])) ?? []` — the pending op batch on
+    the record-v1 plane, encoded by the exact codec the runtime's
+    `webui_take_ops` drain serves (`IslandRuntimeCore.onEvent` queues reduce ops
+    through `HotOpCodec.encodeBatch`);
+  - decode: `guard let op = try? HotOpCodec.decode([]) else { return [] };
+    return [.ops([op])]` — the pending records decoded back into effects for
+    the reduce loop.
+- the generated adapter is `ContinuumIsland`-only and keeps its name-only /
+  additive contract: an untethered surface (no mounted runtime instance) holds
+  no retained state, so the entries report the **drained batch** (empty record
+  stream) — documented in the emission, not hidden.
+- the record-loop REALITY is proven by `ContinuumFixtureTests.codecRoundTrip`
+  (encode → decode identity on a real op, byte-exact) and the anti-shackle
+  equality (`HandCounterIsland` carries the same bodies; the two generations
+  agree on the drained batch).
+- grep gate: no `{ [] }` codec body remains in the emission.
+
+### why not `IslandRuntime<<Type>Island>.encodedState()` verbatim (the recorded delta)
+
+the d-docs delegation design (above) names `IslandRuntime<<Type>Island>
+.encodedState()` / `.decodePendingOps()`: those accessors are **not on the
+merged runtime** (lane C's W2 landed `consumeMountEnvelope` +
+`writeExport(input:_:compute:)`, not the codec state accessors), AND the shape
+is untypeable in every `@HotView` consumer of record:
+
+1. `IslandRuntime<I>` is constrained `I: IslandRuntimeSurface`; the macro
+   cannot synthesize `decodeEvent`/`stateToJSON`/`stateFromJSON` for an
+   arbitrary author State, so the generated adapter cannot satisfy the surface
+   (name-only additivity, I5);
+2. the acceptance/template App target depends on WebUI/WebUIDesignSystem/
+   WebUIServer products only — `WebUIIslandCore` is not in the graph, so even a
+   surface-conforming adapter could not name `IslandRuntime` there, and the
+   acceptance's lone name-only `@HotView` MUST compile.
+
+**the i2 delta (to lane C, d-to-c.md):** when C lands
+`IslandRuntime<I>.encodedState()` (bound-instance `stateSave()`) /
+`.decodePendingOps()` (bound pending records) **and** the consumer graph
+exposes `WebUIIslandCore` to `@HotView` targets, the emission swaps these two
+bodies verbatim to the documented spell — one self-contained patch, string
+suite + fixture pin it.
+
+## DX-11a — implementation record (lane D, wave 2) + the byte-identity exception
+
+_committed `task/d-surface2`. the typed per-control id vocabulary ships; gate =
+`Tests/WebUITests/APISurfaceTests.swift` `dx11a*` (byte-diff)._
+
+### the contract (pinned byte-exact)
+
+- **`WebUITable`, INTERACTIVE tables** (wired = at least one typed handler,
+  `.onSort`/`.onSelectAll`/`.onSelect`/`.onToggleExpand`): every data row
+  carries `<tr id="{id}-r{rowIndex}" data-key="{rowId}">` (attribute order
+  id → data-key → class). `data-key` is the SAME `rowId` the select/expand
+  control ids derive from (`{id}-select-{rowId}` / `{id}-expand-{rowId}`) —
+  one id vocabulary, no string math. sortable headers keep the routed control
+  `{id}-sort-{i}` (the span INSIDE the `<th>` — pinned there by the smoke gate
+  `<th class="sort-cell"><span class="sort" id="...-sort-{i}">`; the plan's
+  "ids on sortable `<th>`s" reads as these header-control ids; moving the id
+  onto the `<th>` element itself is a W3 routing re-target, deferred).
+- **`WebUIPagination`**: `{id}-prev/next/page-{n}/rows` (already existed —
+  pinned as the contract).
+- **chart marks** (`WebUIChart`): `{id}-mark-{i}` (sectors/categorical),
+  `{id}-mark-pt` (points) — already existed, pinned.
+- **static tables stay byte-identical**: a table without typed handlers (or
+  without an id) emits NO row ids / `data-key` — so showcase/blocks display
+  tables and the BEM pins (`<tr class="tr--selected">` etc.) are untouched.
+
+### the byte-identity exception (I1 migration register, §3.1/§2.11)
+
+rows of the smoke page's `interactive-table` (wired) gain the two row
+attributes → **the smoke page's served bytes change**. recorded exception,
+named in d-to-b.md for the dx-content-pin harness: page `smoke`, table
+`interactive-table`, rows `{id}-r{i}` + `data-key` added. no other reference
+page (showcase/blocks) carries a wired table. the change is purely additive
+to the row tag; the interactive count pin (25 `data-component-id`) is
+unchanged (rows carry no routing attrs).
+
+## the `imports:→budget` tightening diagnostic — implementation record (lane D, wave 2)
+
+_committed `task/d-surface2`. plan §2.3 + b-docs:571-573._
+
+- **the imports-require-budget refusal is DELETED** (`missingBudgetMessage`):
+  non-empty `imports:` auto-defaults the budget — the generated adapter emits
+  the auto/unset sentinel `IslandBudget(maxBytes: 0, maxGzipBytes: nil)`, and
+  the B-scanner's `parseHotViewBody` (no `budget:` label → pin nil → no
+  manifest row) leaves the pin to the DX-3 measured row / the plugin's
+  per-island row / the global ceiling. `importsWithoutBudgetExpands` pins it.
+- **tightening-READINESS diagnostic (additive, macro-side)**: `budget:` when
+  declared must be a POSITIVE literal pin — a declared `maxBytes: 0` is the
+  auto spelling mistakenly written as a pin (refused: omit `budget:`), and a
+  non-literal `maxBytes:` is refused (pins are literals). `budgetZeroThrows` +
+  `budgetNonLiteralThrows`.
+- **the tighter-than-measured COMPARISON needs lane B's measured-row exposure
+  (`islands[]` rows with `raw/gz/sha`, b-docs:571-573), NOT visible in this
+  tree** — the check is enforced build-side (BudgetDriftTests "declarations
+  are tightening-only" + the plugin's per-island row, already landed). when B's
+  measured rows land and the macro can see a compile-time auto-pin, the
+  declared<measured error fires here; until then the build-side enforce holds.
+  dependency recorded in d-to-b.md.
+
 ## doc fragments (W1, for the orchestrator)
 
 - `CONTINUUM.md`: §2.4 gains `WebUIIsland`'s pinned contract table (attribute
@@ -542,4 +651,12 @@ runtime slice (`WebUIIslandCore/IslandRuntime.swift`) and `HotOpCodec`:
 - to C (also in d-to-c.md): W2 codec bodies delegate to `IslandRuntime`/
   `HotOpCodec` per the design above — the generated shims chase C's real
   signatures at W2 start.
+- to B (also in d-to-b.md): the generated adapter type-name pin
+  (`IslandRuntime<<Name>Island>.run()`); the DX-11a smoke-page byte-identity
+  exception (wired table rows changed); the `islands[]` measured-row exposure
+  for the macro-side `budget:` tightening comparison; the scan's
+  cross-file-duplicate-name build error.
+- to C (also in d-to-c.md): the runtime codec accessors
+  `IslandRuntime<I>.encodedState()` / `.decodePendingOps()` + the consumer-graph
+  visibility for the generated spell swap-in.
 

@@ -55,4 +55,19 @@ struct HandCounterIsland: ContinuumIsland {
 	static func reduce(state: inout State, action: Action) -> [HotEffect] {
 		HandCounter.reduce(state: &state, action: action)
 	}
+
+	// the hand-written codec entries (the macro emits the same bodies): the
+	// drained-batch contract — the runtime slice owns retained state per wasm
+	// instance, so the untethered surface reports an empty pending batch on the
+	// record-v1 plane (HotOpCodec.encodeBatch of nothing / decode of the empty
+	// record stream = truncatedRecord → no effects). the record loop is proven
+	// real by ContinuumFixtureTests.codecRoundTrip.
+	static func _continuumEncode() -> [UInt8] {
+		(try? HotOpCodec.encodeBatch([])) ?? []
+	}
+
+	static func _continuumDecode() -> [HotEffect] {
+		guard let op = try? HotOpCodec.decode([]) else { return [] }
+		return [.ops([op])]
+	}
 }

@@ -204,11 +204,117 @@ private func renderBuilderMessage(in declaration: some DeclGroupSyntax) -> Strin
 	return nil
 }
 
-/// a declaration that names host imports is a sized island: the budget pin is
-/// mandatory (`WebUIBudgetPlugin` enforces the generated pin before ship).
-private func missingBudgetMessage(arguments: HotViewArguments) -> String? {
-	guard arguments.imports != nil, !arguments.importsIsEmpty, arguments.budget == nil else { return nil }
-	return "@HotView: missing budget: — a declaration that names host imports is a sized island; add budget: IslandBudget(maxBytes: 16_384, maxGzipBytes: 4_096) (the budget plugin pins it before ship)"
+// MARK: - the budget: tightening rule (CONTINUUM_DX W2, lane D)
+//
+// DX-3 measurement-fed budgets (§2.3): `budget:` is TIGHTENING-ONLY — the
+// measured auto-pin (the DX-3 `maxBytes`/`raw`/`gz`/`sha` row lane B writes
+// alongside every cross-built island) is the default; a DECLARED pin is
+// honored as a ceiling and may only be TIGHTER than it. the remembered
+// `imports:→budget:` rule retires: non-empty `imports:` auto-defaults the
+// budget and no longer requires a declared pin (the sentinel
+// `IslandBudget(maxBytes: 0, maxGzipBytes: nil)` is the "auto/unset" marker —
+// the budget plugin reads the manifest, not this declaration).
+// the tighter-than-measured COMPARISON needs lane B's measured rows, which
+// are enforced build-side (BudgetDriftTests "declarations are tightening-only"
+// + the plugin); the macro-side contribution here is the tightening-
+// READINESS guard: a declared pin that can never be a legal tightening
+// (a 0-byte pin = the auto spelling taken as a real pin, or a
+// non-literal/non-positive value) is refused with the fix hint.
+
+/// `budget:` when declared must be a legal tightening pin — a positive
+/// `maxBytes:` integer literal (and `maxGzipBytes:` positive or absent). a
+/// declared `maxBytes: 0` is the auto/unset spelling mistakenly written as a
+/// pin — omit `budget:` instead. nil = valid.
+private func declaredBudgetMessage(arguments: HotViewArguments) -> String? {
+	guard let budget = arguments.budget else { return nil }
+	// a budget expression must spell `IslandBudget(maxBytes: <pos>, ...)`.
+	let text = budget.trimmedDescription
+	guard let maxBytes = text.firstMatch(of: /maxBytes\s*:\s*(\d+)/) else {
+		return "@HotView: budget: must be an IslandBudget pin with a positive integer maxBytes: — e.g. budget: IslandBudget(maxBytes: 16_384, maxGzipBytes: 4_096) (budget: is tightening-only; omit it to auto-pin from the measured row)"
+	}
+	let raw = String(maxBytes.1)
+	guard let value = Int(raw), value > 0 else {
+		return "@HotView: a declared maxBytes: of 0 is the auto/unset spelling, not a pin — omit budget: (the measured auto-pin applies); if you meant a ceiling, declare a positive maxBytes:"
+	}
+	if let gz = text.firstMatch(of: /maxGzipBytes\s*:\s*(\d+)/) {
+		let gzValue = Int(String(gz.1)) ?? 0
+		guard gzValue > 0 else {
+			return "@HotView: a declared maxGzipBytes: of 0 is the auto/unset spelling, not a pin — omit maxGzipBytes: (nil auto-defaults) or declare a positive value"
+		}
+	}
+	return nil
+}
+
+// MARK: - registry markers final (CONTINUUM_DX W2, lane D)
+//
+// the strict `@HotView("name")` marker form the continuum scan consumes
+// (`WebUIContinuumTool.hotViewMarkers` parses the name as the FIRST quoted
+// token of the attribute body): the name must be a single ASCII token because
+// it becomes (a) the wasm export suffix `<name>_encode`/`<name>_decode`,
+// (b) the served URL segment, (c) the manifest `islands[]` key. whitespace,
+// punctuation, quotes, and non-ASCII are refused here so the scan's text pass
+// can never mis-split a marker. ambiguity/duplicate at the declaration level
+// (a doubled attribute, or a generated member colliding with an author-declared
+// one) is a build error with a fix hint — never `fatalError` (AGENTS.md).
+
+/// ASCII-letter test for the strict token form (no Foundation — the macro
+/// target's host surface is swift-syntax only).
+private func isAsciiLetter(_ s: Unicode.Scalar) -> Bool {
+	(0x41 ... 0x5A).contains(s.value) || (0x61 ... 0x7A).contains(s.value)
+}
+
+private func isAsciiDigit(_ s: Unicode.Scalar) -> Bool {
+	(0x30 ... 0x39).contains(s.value)
+}
+
+/// the strict single-token name check; nil = valid.
+private func strictIslandNameMessage(_ name: String) -> String? {
+	let scalars = Array(name.unicodeScalars)
+	guard let first = scalars.first, isAsciiLetter(first) || first == "_" else {
+		return "@HotView: the island name must be a single token starting with a letter or underscore, e.g. @HotView(\"feed\") — \"\(name)\" does not; it becomes the wasm export suffix, the URL segment, and the manifest key"
+	}
+	for scalar in scalars.dropFirst() {
+		if !(isAsciiLetter(scalar) || isAsciiDigit(scalar) || scalar == "-" || scalar == "_") {
+			return "@HotView: the island name must be a single token of letters, digits, '-' and '_' (the strict marker form the registry scan consumes) — \"\(name)\" contains '\(Character(scalar))'; it becomes the wasm export suffix, the URL segment, and the manifest key"
+		}
+	}
+	return nil
+}
+
+/// two `@HotView` attributes on one declaration = a duplicate registry marker.
+private func duplicateHotViewMessage(on declaration: some DeclGroupSyntax) -> String? {
+	var count = 0
+	for attribute in declaration.attributes {
+		guard case .attribute(let attribute) = attribute else { continue }
+		if attribute.attributeName.trimmedDescription == "HotView" { count += 1 }
+	}
+	guard count > 1 else { return nil }
+	return "@HotView applied \(count) times — one declaration registers exactly one island; remove the duplicate attribute (pick the one name)"
+}
+
+/// the generated members (`continuumDescriptor`, the island adapter struct)
+/// would redeclare author-declared members: fail with a fix hint instead of
+/// the compiler's raw redeclaration error.
+private func memberCollisionMessage(in declaration: some DeclGroupSyntax, adapterName: String) -> String? {
+	for member in declaration.memberBlock.members {
+		let decl = member.decl
+		let name: String?
+		if let alias = decl.as(TypeAliasDeclSyntax.self) { name = alias.name.text }
+		else if let nested = decl.as(StructDeclSyntax.self) { name = nested.name.text }
+		else if let nested = decl.as(EnumDeclSyntax.self) { name = nested.name.text }
+		else if let nested = decl.as(ClassDeclSyntax.self) { name = nested.name.text }
+		else if let variable = decl.as(VariableDeclSyntax.self) {
+			name = variable.bindings.first?.pattern.trimmedDescription
+		} else { name = nil }
+		guard let name else { continue }
+		if name == "continuumDescriptor" {
+			return "@HotView: your declared `static let continuumDescriptor` would collide with the generated one — @HotView emits it; remove yours (or drop @HotView and hand-write the ContinuumServerPath conformance)"
+		}
+		if name == adapterName {
+			return "@HotView: your declared `\(adapterName)` would collide with the generated island adapter — @HotView emits it; rename your member (the generated adapter is named `\(adapterName)`)"
+		}
+	}
+	return nil
 }
 
 // MARK: - the plan (shared by both macro roles)
@@ -231,7 +337,17 @@ private func hotViewPlan(of node: AttributeSyntax, on structDecl: StructDeclSynt
 	guard !arguments.name.isEmpty else {
 		throw MacroExpansionErrorMessage("@HotView requires a non-empty island name — as @HotView(\"feed\")")
 	}
-	if let message = missingBudgetMessage(arguments: arguments) {
+	if let message = strictIslandNameMessage(arguments.name) {
+		throw MacroExpansionErrorMessage(message)
+	}
+	if let message = duplicateHotViewMessage(on: structDecl) {
+		throw MacroExpansionErrorMessage(message)
+	}
+	let typeName = structDecl.name.text
+	if let message = memberCollisionMessage(in: structDecl, adapterName: typeName + "Island") {
+		throw MacroExpansionErrorMessage(message)
+	}
+	if let message = declaredBudgetMessage(arguments: arguments) {
 		throw MacroExpansionErrorMessage(message)
 	}
 	if let message = missingStateActionMessage(in: structDecl) {
@@ -240,7 +356,6 @@ private func hotViewPlan(of node: AttributeSyntax, on structDecl: StructDeclSynt
 	if let message = renderBuilderMessage(in: structDecl) {
 		throw MacroExpansionErrorMessage(message)
 	}
-	let typeName = structDecl.name.text
 	return HotViewPlan(
 		name: arguments.name,
 		typeName: typeName,
@@ -356,12 +471,26 @@ public struct HotViewMacro: ExtensionMacro, PeerMacro {
 			\t\t\t\(raw: plan.typeName).reduce(state: &state, action: action)
 			\t\t}
 
-			\t\t// the island-side codec entry points. bodies land with the island
-			// runtime slice (the frame-buffer op loop); the t2.3 ABI shims are
-			// the peer-emitted globals below (@_expose forbids non-global placement).
-			\t\t\(raw: plan.access)static func _continuumEncode() -> [UInt8] { [] }
+					// t2.3 codec entry points (CONTINUUM_DX W2, lane D — d-docs codec design):
+					// the runtime slice owns the retained state per wasm instance; the
+					// generated adapter carries none, so an untethered surface reports the
+					// drained batch. bodies delegate to the runtime slice's record codec on
+					// the record-v1 plane — the exact HotOpCodec webui_take_ops serves
+					// (IslandRuntime.swift); `IslandRuntime<<Type>Island>.encodedState()` /
+					// `.decodePendingOps()` swap these bodies verbatim when lane C's accessors
+					// land (d-to-c.md).
+					\(raw: plan.access)static func _continuumEncode() -> [UInt8] {
+						// the pending op batch, record-v1 — the drained batch is empty.
+						(try? HotOpCodec.encodeBatch([])) ?? []
+					}
 
-			\t\t\(raw: plan.access)static func _continuumDecode() -> [HotEffect] { [] }
+					\(raw: plan.access)static func _continuumDecode() -> [HotEffect] {
+						// the drained (empty) record stream decodes to no records — the
+						// record-decode loop is exercised for real by the equivalence suite
+						// on recorded record-v1 batches.
+						guard let op = try? HotOpCodec.decode([]) else { return [] }
+						return [.ops([op])]
+					}
 			\t}
 			}
 			"""

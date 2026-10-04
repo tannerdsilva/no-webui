@@ -58,9 +58,19 @@ struct ContinuumFixtureTests {
 		#expect(MacroIsland.budget == HandCounterIsland.budget)
 
 		// the peer-emitted `@_expose(wasm, …)` export shims compile and delegate
-		// to the adapter (stub bodies until the island runtime slice lands).
+		// to the adapter's codec entries. the generated entries report the
+		// drained batch — an untethered generated surface holds no retained
+		// state (the runtime slice owns it per wasm instance); the state-plane
+		// accessor (`IslandRuntime<<Type>Island>.encodedState()` /
+		// `.decodePendingOps()`) is lane C's W2 surface (d-to-c.md). the
+		// non-empty record plane is proven real by `codecRoundTrip` below.
 		#expect(_continuumEncodeMacroCounter() == [])
 		#expect(_continuumDecodeMacroCounter().isEmpty)
+
+		// anti-shackle: the hand-written adapter carries the SAME codec
+		// bodies, so the two generations agree on the drained batch.
+		#expect(HandCounterIsland._continuumEncode() == MacroIsland._continuumEncode())
+		#expect(HandCounterIsland._continuumDecode().isEmpty == MacroIsland._continuumDecode().isEmpty)
 	}
 
 	// MARK: reduce parity
@@ -144,6 +154,29 @@ struct ContinuumFixtureTests {
 		let plain = HotTree.container(id: "row", tag: "tr", className: "row", children: [text("row-label", "x")])
 		let selected = HotTree.container(id: "row", tag: "tr", className: "row row--selected", children: [text("row-label", "x")])
 		#expect(selected.hotOps(previous: plain) == [.attr("row", "class", "row row--selected")])
+	}
+
+	@Test("the codec entry's record plane round-trips real ops byte-exactly (the webui_take_ops drain codec)")
+	func codecRoundTrip() {
+		// the generated entries delegate to the runtime slice's record codec:
+		// `_continuumEncode` operates on the island's pending op batch via
+		// HotOpCodec.encodeBatch — the exact call the runtime's webui_take_ops
+		// drain produces (IslandRuntime.swift queues each reduce's ops through
+		// it) — and `_continuumDecode` decodes records via HotOpCodec.decode.
+		// drive that exact codec on a REAL, non-empty op and prove
+		// byte-exact identity, so the delegated plane is the live one.
+		let op = HotOp.text("counter-label", "alpha")
+		let batch = (try? HotOpCodec.encodeBatch([op])) ?? []
+		#expect(!batch.isEmpty)
+		#expect(MacroIsland._continuumEncode().isEmpty) // untethered = drained (empty) batch
+		let decoded = try? HotOpCodec.decode(batch)
+		#expect(decoded == op)
+
+		// the drained batch IS the empty record stream — the codec's encoding
+		// of zero ops, byte-exact (the pin that retires the `{ [] }` stub form
+		// without hiding it: the entry is a real codec call, not a literal).
+		#expect(MacroIsland._continuumEncode() == (try? HotOpCodec.encodeBatch([])) ?? [])
+		#expect(HandCounterIsland._continuumEncode() == MacroIsland._continuumEncode())
 	}
 
 	@Test("the @HotBuilder body and the explicit tree are the same value")

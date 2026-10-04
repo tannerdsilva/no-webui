@@ -35,13 +35,16 @@ import WebUICore
 /// the import/budget parameters type-check at the use site: `imports:` takes
 /// `HostCapability` types (`[ClockCapability.self]` — never wire strings) and
 /// `budget:` an `IslandBudget`. both stay optional (additive): name-only
-/// `@HotView("feed")` keeps working — a declaration that names host imports
-/// must pin a budget (a size-pinned island), everything else keeps the
-/// "unset" sentinel budget.
+/// `@HotView("feed")` keeps working. `budget:` is TIGHTENING-ONLY (DX-3,
+/// CONTINUUM_DX §2.3): non-empty `imports:` auto-defaults the budget from the
+/// measured pin the build writes — the older imports-require-budget rule is
+/// retired — and a DECLARED pin is a positive ceiling (a `maxBytes: 0`
+/// declaration is the auto spelling and must be omitted, not written).
 ///
 /// diagnostics refuse (never `fatalError`): a non-struct target; a missing or
-/// malformed name; a declaration without `State`/`Action`; a body not declared
-/// `@HotBuilder`; wire-string imports; and imports without a budget.
+/// malformed name; a duplicate registry marker; a declaration without
+/// `State`/`Action`; a body not declared `@HotBuilder`; wire-string imports;
+/// and a `budget:` that is not a positive literal tightening pin.
 @attached(extension, conformances: ContinuumServerPath, names: arbitrary)
 @attached(peer, names: prefixed(_continuumEncode), prefixed(_continuumDecode))
 public macro HotView(
