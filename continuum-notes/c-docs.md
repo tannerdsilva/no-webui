@@ -468,4 +468,60 @@ content-level forensics this wave ran (deterministic builds, sha256):
 - **to E:** no ABI change; `_start`, the eight exports, the drain contract are
   untouched — c-ops 15/15 + c-parity 4/4 re-verified.
 - **to B (W3, optional):** the wasm-island plugin has no `-D` passthrough; the
-  manual cross-build recipe above is the current way to check-build an island.
+  manual cross-build recipe above is the current way to check-build an island.---
+
+# lane-c docs fragment — CONTINUUM_DX WAVE 2 (auto-declared budgets: the check + the re-pin)
+
+for orchestrator folding at i2. sources of truth:
+`Tests/WebUIIslandCoreTests/BudgetDriftTests.swift`,
+`Sources/WebUIIslandCore/ValidateIsland.swift` (budget), c-to-b.md.
+
+## what landed
+
+- **the measurement-fed band check.** `BudgetDriftTests` asserts each declared
+  `IslandBudget` dimension lives in `[measured, ceil(measured × 1.05)]`
+  (raw + gzip independently) against the stripped artifacts in
+  `.build/out/Products/Release-webassembly-wasm32/` (gzip measured with
+  `gzip -n -9 -c`, the budget plugin's own tool). the upper bound IS lane B's
+  DX-3 auto-pin convention (§2.3) — the declaration may tighten, never
+  loosen past it and never sit below the artifact. failures name the exact
+  re-pin. `.enabled(if:)` when the artifacts are absent, so a fresh clone's
+  `swift test` stays order-independent; arm with `plugin wasm-island`
+  (both products) first.
+- **validate re-pinned, measurement-fed:** 200,000/90,000 → **185,503 /
+  85,265** (measured 176,669 raw / 81,205 gz — the old guess was 13% loose).
+  the artifact SIZE did not move (176,669; the constant is not size-live).
+  **probe stays 240,000/105,000** (measured 233,952/100,186 — inside the
+  band; its byte-anchor forbids gratuitous source movement).
+- **the DX-3 row cross-check (dormant until B lands).** when
+  `ContinuumManifest.json` (plugin outputs) carries `islands[]` rows, the
+  test asserts `row.raw == measured` and declared ≤ row pins
+  (tightening-only) per island name-containment. today `islands[]` is empty
+  (no `@HotView`-marked sources) → the check prints a note and skips;
+  wired, not failing.
+
+## decisions recorded (conservative choices on ambiguity)
+
+1. **assert-vs-measured, not generated constants** — the build-time→
+   compile-time flow for generating the declared numbers has a chicken-egg
+   (the constant is compiled into the artifact it pins, and any new source
+   file also shifts the probe's link layout — see the DX-9 section). the
+   conservative mechanism: the declaration stays hand-written, the CHECK
+   fails on drift and names the re-pin (reported per the brief's "choose the
+   conservative option").
+2. **the band, not exact equality** — declared == ceil(measured×1.05) is the
+   DX-3 convention value, but a tighter declared pin is legal
+   ("tightening-only" is a feature); drift = outside the band.
+3. measurement conventions: raw = file size; gz = `gzip -n -9 -c` byte count.
+   the check always measures fresh with that tool — historical gz figures in
+   the notes may come from other tools/artifact revisions and are not
+   comparison inputs.
+
+## handoffs
+
+- **to B:** continuum-notes/c-to-b.md (band convention, re-pin numbers, the
+  dormant cross-check contract, the islands[] scan-gap note).
+- **to the orchestrator:** keep `plugin wasm-island` (both products) before
+  `swift test` in the ladder so the drift check is armed; `plugin budget`
+  remains the enforcement gate (global ceiling 240,000 today; the code-side
+  declarations are what these islands ride).

@@ -73,10 +73,13 @@ public enum ValidateIsland: ContinuumIsland, IslandRuntimeSurface {
 	public static var imports: [any HostCapability.Type] { [] }
 
 	public static var budget: IslandBudget {
-		// deliberately conservative: the runtime slice + slim main move the
-		// artifact within the kB tier (was 164,447 stripped pre-conversion);
-		// measured post-conversion in c-docs.md.
-		IslandBudget(maxBytes: 200_000, maxGzipBytes: 90_000)
+		// measurement-fed (CONTINUUM_DX W2, lane C): re-pinned from the
+		// measured artifact — 176,669 B raw / 81,204 B gz → the auto-pin
+		// convention (ceil(measured × 1.05)) lands at 185,503 / 85,265. the
+		// previous 200,000/90,000 declaration was a 13%-loose guess.
+		// `BudgetDriftTests` fails if the declaration drifts outside
+		// [measured, ceil(measured × 1.05)].
+		IslandBudget(maxBytes: 185_503, maxGzipBytes: 85_265)
 	}
 
 	// MARK: reduce (inert — validate emits no ops)
