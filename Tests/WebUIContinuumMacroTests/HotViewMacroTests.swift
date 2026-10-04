@@ -487,4 +487,70 @@ struct HotViewMacroNegativeTests {
 		#expect(text.contains("static let continuumDescriptor"))
 		#expect(text.contains("IslandBudget(maxBytes: 0, maxGzipBytes: nil)"))
 	}
+
+	// MARK: registry markers final — the strict marker-form diagnostics
+
+	@Test("a name with whitespace is refused — the strict marker form the scan consumes")
+	func strictNameSpacesThrows() {
+		assertExpansionThrows(
+			"""
+			@HotView("feed feed")
+			struct TwoWords {
+			}
+			""",
+			message: "@HotView: the island name must be a single token of letters, digits, '-' and '_' (the strict marker form the registry scan consumes) — \"feed feed\" contains ' '; it becomes the wasm export suffix, the URL segment, and the manifest key"
+		)
+	}
+
+	@Test("a name starting with a digit is refused")
+	func strictNameDigitStartThrows() {
+		assertExpansionThrows(
+			"""
+			@HotView("1feed")
+			struct LeadingDigit {
+			}
+			""",
+			message: "@HotView: the island name must be a single token starting with a letter or underscore, e.g. @HotView(\"feed\") — \"1feed\" does not; it becomes the wasm export suffix, the URL segment, and the manifest key"
+		)
+	}
+
+	@Test("two @HotView attributes on one declaration are a duplicate registry marker")
+	func duplicateAttributeThrows() {
+		assertExpansionThrows(
+			"""
+			@HotView("feed")
+			@HotView("grid")
+			struct TwoIslands {
+			}
+			""",
+			message: "@HotView applied 2 times — one declaration registers exactly one island; remove the duplicate attribute (pick the one name)"
+		)
+	}
+
+	@Test("an author-declared continuumDescriptor collides with the generated one — fix hint, not a redeclaration error")
+	func collidingDescriptorThrows() {
+		assertExpansionThrows(
+			"""
+			@HotView("feed")
+			struct HasDescriptor {
+				static let continuumDescriptor = "mine"
+			}
+			""",
+			message: "@HotView: your declared `static let continuumDescriptor` would collide with the generated one — @HotView emits it; remove yours (or drop @HotView and hand-write the ContinuumServerPath conformance)"
+		)
+	}
+
+	@Test("an author-declared island adapter type collides with the generated one — fix hint naming the generated name")
+	func collidingAdapterThrows() {
+		assertExpansionThrows(
+			"""
+			@HotView("feed")
+			struct HasAdapter {
+				struct HasAdapterIsland {
+				}
+			}
+			""",
+			message: "@HotView: your declared `HasAdapterIsland` would collide with the generated island adapter — @HotView emits it; rename your member (the generated adapter is named `HasAdapterIsland`)"
+		)
+	}
 }

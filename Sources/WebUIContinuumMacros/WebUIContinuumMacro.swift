@@ -211,6 +211,78 @@ private func missingBudgetMessage(arguments: HotViewArguments) -> String? {
 	return "@HotView: missing budget: — a declaration that names host imports is a sized island; add budget: IslandBudget(maxBytes: 16_384, maxGzipBytes: 4_096) (the budget plugin pins it before ship)"
 }
 
+// MARK: - registry markers final (CONTINUUM_DX W2, lane D)
+//
+// the strict `@HotView("name")` marker form the continuum scan consumes
+// (`WebUIContinuumTool.hotViewMarkers` parses the name as the FIRST quoted
+// token of the attribute body): the name must be a single ASCII token because
+// it becomes (a) the wasm export suffix `<name>_encode`/`<name>_decode`,
+// (b) the served URL segment, (c) the manifest `islands[]` key. whitespace,
+// punctuation, quotes, and non-ASCII are refused here so the scan's text pass
+// can never mis-split a marker. ambiguity/duplicate at the declaration level
+// (a doubled attribute, or a generated member colliding with an author-declared
+// one) is a build error with a fix hint — never `fatalError` (AGENTS.md).
+
+/// ASCII-letter test for the strict token form (no Foundation — the macro
+/// target's host surface is swift-syntax only).
+private func isAsciiLetter(_ s: Unicode.Scalar) -> Bool {
+	(0x41 ... 0x5A).contains(s.value) || (0x61 ... 0x7A).contains(s.value)
+}
+
+private func isAsciiDigit(_ s: Unicode.Scalar) -> Bool {
+	(0x30 ... 0x39).contains(s.value)
+}
+
+/// the strict single-token name check; nil = valid.
+private func strictIslandNameMessage(_ name: String) -> String? {
+	let scalars = Array(name.unicodeScalars)
+	guard let first = scalars.first, isAsciiLetter(first) || first == "_" else {
+		return "@HotView: the island name must be a single token starting with a letter or underscore, e.g. @HotView(\"feed\") — \"\(name)\" does not; it becomes the wasm export suffix, the URL segment, and the manifest key"
+	}
+	for scalar in scalars.dropFirst() {
+		if !(isAsciiLetter(scalar) || isAsciiDigit(scalar) || scalar == "-" || scalar == "_") {
+			return "@HotView: the island name must be a single token of letters, digits, '-' and '_' (the strict marker form the registry scan consumes) — \"\(name)\" contains '\(Character(scalar))'; it becomes the wasm export suffix, the URL segment, and the manifest key"
+		}
+	}
+	return nil
+}
+
+/// two `@HotView` attributes on one declaration = a duplicate registry marker.
+private func duplicateHotViewMessage(on declaration: some DeclGroupSyntax) -> String? {
+	var count = 0
+	for attribute in declaration.attributes {
+		guard case .attribute(let attribute) = attribute else { continue }
+		if attribute.attributeName.trimmedDescription == "HotView" { count += 1 }
+	}
+	guard count > 1 else { return nil }
+	return "@HotView applied \(count) times — one declaration registers exactly one island; remove the duplicate attribute (pick the one name)"
+}
+
+/// the generated members (`continuumDescriptor`, the island adapter struct)
+/// would redeclare author-declared members: fail with a fix hint instead of
+/// the compiler's raw redeclaration error.
+private func memberCollisionMessage(in declaration: some DeclGroupSyntax, adapterName: String) -> String? {
+	for member in declaration.memberBlock.members {
+		let decl = member.decl
+		let name: String?
+		if let alias = decl.as(TypeAliasDeclSyntax.self) { name = alias.name.text }
+		else if let nested = decl.as(StructDeclSyntax.self) { name = nested.name.text }
+		else if let nested = decl.as(EnumDeclSyntax.self) { name = nested.name.text }
+		else if let nested = decl.as(ClassDeclSyntax.self) { name = nested.name.text }
+		else if let variable = decl.as(VariableDeclSyntax.self) {
+			name = variable.bindings.first?.pattern.trimmedDescription
+		} else { name = nil }
+		guard let name else { continue }
+		if name == "continuumDescriptor" {
+			return "@HotView: your declared `static let continuumDescriptor` would collide with the generated one — @HotView emits it; remove yours (or drop @HotView and hand-write the ContinuumServerPath conformance)"
+		}
+		if name == adapterName {
+			return "@HotView: your declared `\(adapterName)` would collide with the generated island adapter — @HotView emits it; rename your member (the generated adapter is named `\(adapterName)`)"
+		}
+	}
+	return nil
+}
+
 // MARK: - the plan (shared by both macro roles)
 
 /// everything both roles emit from: parsed + validated once, so the peer role
@@ -231,6 +303,16 @@ private func hotViewPlan(of node: AttributeSyntax, on structDecl: StructDeclSynt
 	guard !arguments.name.isEmpty else {
 		throw MacroExpansionErrorMessage("@HotView requires a non-empty island name — as @HotView(\"feed\")")
 	}
+	if let message = strictIslandNameMessage(arguments.name) {
+		throw MacroExpansionErrorMessage(message)
+	}
+	if let message = duplicateHotViewMessage(on: structDecl) {
+		throw MacroExpansionErrorMessage(message)
+	}
+	let typeName = structDecl.name.text
+	if let message = memberCollisionMessage(in: structDecl, adapterName: typeName + "Island") {
+		throw MacroExpansionErrorMessage(message)
+	}
 	if let message = missingBudgetMessage(arguments: arguments) {
 		throw MacroExpansionErrorMessage(message)
 	}
@@ -240,7 +322,6 @@ private func hotViewPlan(of node: AttributeSyntax, on structDecl: StructDeclSynt
 	if let message = renderBuilderMessage(in: structDecl) {
 		throw MacroExpansionErrorMessage(message)
 	}
-	let typeName = structDecl.name.text
 	return HotViewPlan(
 		name: arguments.name,
 		typeName: typeName,
