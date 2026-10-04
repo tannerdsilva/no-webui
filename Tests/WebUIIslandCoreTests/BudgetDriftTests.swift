@@ -16,6 +16,14 @@ import WebUISharedCore
 // the band a human may tighten; outside it the number has drifted and this
 // check names the exact re-pin.
 //
+// the gz edge carries a small fixed cross-clone allowance: the stripped
+// artifact's bytes carry a path-dependent tail (measured — the wave-2
+// adjudication; same tree, two clone paths, exactly the 368 B data tail
+// differs), so its gzip length moves a few bytes between clones while raw is
+// exactly stable. without the allowance the upper edge is a by-construction
+// flake (observed live: the validate pin failed the merged tree on a 7 B
+// cross-clone gz spread).
+//
 // measurement source: the stripped artifacts `plugin wasm-island` writes to
 // `.build/out/Products/Release-webassembly-wasm32/` (raw = file size; gzip =
 // `gzip -n -9 -c` — the same tool `WebUIBudgetPlugin` measures with). when the
@@ -73,9 +81,16 @@ func budgetMeasure(_ product: String) -> (raw: Int, gz: Int)? {
 	}
 }
 
-/// the measured band: `[measured, ceil(measured × 1.05)]`, integer-exact.
-func budgetBand(_ measured: Int) -> ClosedRange<Int> {
-	measured...((measured * 105 + 99) / 100)
+/// cross-clone measurement variance on the gz dimension: the artifact's
+/// path-dependent tail (see the header) moves its gzip length a few bytes
+/// between clones. 64 = ~9× the observed 7 B spread; the drift signal
+/// (kB-scale regressions) is unaffected.
+let crossCloneGzAllowance = 64
+
+/// the measured band: `[measured, ceil(measured × 1.05) (+ allowance for gz)]`,
+/// integer-exact. raw passes 0 — its edge stays exact.
+func budgetBand(_ measured: Int, crossCloneAllowance: Int = 0) -> ClosedRange<Int> {
+	measured...((measured * 105 + 99) / 100 + crossCloneAllowance)
 }
 
 /// lane B's merged continuum manifest (the `generate` verb's output in the
@@ -137,7 +152,7 @@ func budgetManifestURL() -> URL? {
 			return
 		}
 		let rawBand = budgetBand(measured.raw)
-		let gzBand = budgetBand(measured.gz)
+		let gzBand = budgetBand(measured.gz, crossCloneAllowance: crossCloneGzAllowance)
 
 		if !rawBand.contains(maxBytes) {
 			Issue.record("\(product) [\(island)]: declared maxBytes \(maxBytes) is outside the measured band \(rawBand.lowerBound)...\(rawBand.upperBound) — re-pin IslandBudget(maxBytes: \(rawBand.upperBound), maxGzipBytes: \(maxGzipBytes.map { _ in "\(gzBand.upperBound)" } ?? "<nil>")) (measured \(measured.raw) raw / \(measured.gz) gz)")
@@ -173,7 +188,7 @@ func budgetManifestURL() -> URL? {
 			#expect(maxBytes <= rowMax, "\(product): declared maxBytes \(maxBytes) exceeds the DX-3 auto-pin \(rowMax) — declarations are tightening-only")
 		}
 		if let rowMaxGz = row["maxGzipBytes"] as? Int, let maxGzipBytes {
-			#expect(maxGzipBytes <= rowMaxGz, "\(product): declared maxGzipBytes \(maxGzipBytes) exceeds the DX-3 auto-pin \(rowMaxGz) — declarations are tightening-only")
+			#expect(maxGzipBytes <= rowMaxGz + crossCloneGzAllowance, "\(product): declared maxGzipBytes \(maxGzipBytes) exceeds the DX-3 auto-pin \(rowMaxGz) (+\(crossCloneGzAllowance) cross-clone allowance) — declarations are tightening-only")
 		}
 	}
 }
