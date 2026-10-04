@@ -1,7 +1,12 @@
+# i2 re-baseline (2026-10-04, head f86e0f0+): smoke and showcase re-captured for the
+# sanctioned DX-11a change — interactive-table data rows gained id="<table>-r<i>"
+# data-key="<rowId>" (smoke 4 rows, showcase 3 rows). delta verified: stripping those
+# attributes from both sides leaves the canonicals byte-identical (designer/gates proof
+# run recorded in .hermes/plans CONTINUUM_DX §7). blocks-* untouched.
 === canonical (render-noise-normalized) + raw hashes, base ec1bcbc ===
-smoke canonical: 0ec8a4ceb2f32513ddf507c19b76850514edc71f6b3e3278ef037a48a9d958d8
-smoke raw:       f6213fdc17e7476a7ef81b0c3d57aa28e159900c37576e87c7f34d9ddad729dd
-smoke bytes:        26907
+smoke canonical: 1d11723ec5ccfb86d7d65d33c1f0c2238db37b67b60be3baeebf27af5047693c
+smoke raw:       af0b433ce275f84e5cdac4d76a74230414fe696a6b44f591c0faec15ca848a06
+smoke bytes:        27075
 
 blocks-index canonical: a660fe19d0642964ba5754c99636ce8800d74944f98333181c5f4b789d738f73
 blocks-index raw:       ac454c358fc895553c1f4cebca265215084fdeb1ca8e456481955eb2a2723c24
@@ -15,6 +20,6 @@ blocks-standalone canonical: a660fe19d0642964ba5754c99636ce8800d74944f98333181c5
 blocks-standalone raw:       d16f0f8d37c13995ac75d25091b1eaf1213d061105408e3d5fd4447a45554c87
 blocks-standalone bytes:        4090
 
-showcase canonical: 5a450af1bd93edcfcc04cdb2312bf98964d822358ccb96eca247fbca119c4422
-showcase raw:       e24e1dfbf6fe5aaba3f46beccfbe5cce366314d189262cae02d9308eaabc2a30
-showcase bytes:        167764
+showcase canonical: 71614e052a136de6ce93affaba170a740e50297748bfc93e6d145cff0b336e2a
+showcase raw:       caa55ee353e25db2da2b79d07d58fa16321744cb07cbf90dfe9cf378b5507051
+showcase bytes:        167887
