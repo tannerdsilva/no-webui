@@ -341,8 +341,8 @@ data:{data,isComposing}}`; a click in a key-only region is NOT delivered
 
 ## CONTINUUM_DX wave 2 (lane E) — the A1 overscan ruling, DX-6e, the template + acceptance, DX-4e wiring
 
-commits `7d3d4e8` (A1 overscan), `d517cc7` (DX-6e), + the template/harness
-commit on `task/e-engine`, base `95ba7b7`.
+commits `7d3d4e8` (A1 overscan), `d517cc7` (DX-6e), `b308484` (templates/app +
+designer/dx-acceptance.mjs) on `task/e-engine`, base `95ba7b7`.
 
 ### A1 — the overscan-unit adjudication (binding ruling, applied engine-side)
 
@@ -423,9 +423,11 @@ asserts/teardown, plus the DX-11 dogfood assertion.
 ### budget
 
 engine measured on this branch head: **75,438 raw / 18,195 gz** (base
-95ba7b7: 74,735 / 17,924) → **cumulative E2 deltas +703 raw / +271 gz** within
-the arc ceiling (+2,048 / +512). **do NOT re-pin** — the orchestrator re-pins
-at i3.
+95ba7b7 measured identically: 74,735 / 18,014) → **cumulative E2 deltas +703
+raw / +181 gz** (gzipSync, method-consistent; vs the W1-recorded 17,924 gz
+baseline the gz delta reads +271 — both within the +512 gz arc ceiling).
+`plugin budget` (served measure) reports engine 75,438 / 18,087 ok/ok under
+the 77,000 / 18,500 pin. **do NOT re-pin** — the orchestrator re-pins at i3.
 
 ### handoffs
 
