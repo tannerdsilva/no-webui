@@ -45,6 +45,11 @@ struct KernelParityShapeTests {
 			"date.weekday",
 			"date.long",
 			"date.roundtrip",
+			"key.wire",
+			"modifiers.compose",
+			"selection.ops",
+			"clipboard.tsv",
+			"undo.stack",
 		])
 	}
 
@@ -83,7 +88,8 @@ struct KernelParityGoldenTests {
 	@Test("native hashes equal the frozen golden table")
 	func golden() throws {
 		let hashes = KernelParity.hashes()
-		// FROZEN at lane-c wave 3, t4.2 (kernel-corpus v1, 20 cases). regenerate via
+		// FROZEN at lane-c wave 3 — kernel-corpus v1, 25 cases (t4.2 froze the
+		// first 20; t3.4 added the five input-primitive cases). regenerate via
 		// KernelParity only when the corpus deliberately changes.
 		let golden: [String: String] = [
 			"normalize.trim": "ee16d71b01546c5f",
@@ -106,6 +112,11 @@ struct KernelParityGoldenTests {
 			"date.weekday": "dd209b93a9bb0eb9",
 			"date.long": "0945bd63e76a37c4",
 			"date.roundtrip": "e71a39e28b0de946",
+			"key.wire": "47386f7ac343d0f4",
+			"modifiers.compose": "6aea22773699d545",
+			"selection.ops": "0cc9824a5a898ae2",
+			"clipboard.tsv": "5a582182b61f123c",
+			"undo.stack": "a757a22859eedcaa",
 		]
 		#expect(hashes.count == golden.count)
 		for (name, expected) in golden {

@@ -201,5 +201,64 @@ public enum KernelCorpus {
 			}
 			return join(fragments)
 		},
+		// ── t3.4 input primitives (wasm-linked through these cases) ─────
+		KernelCorpusCase(name: "key.wire") {
+			// identifier parse→identifier round-trip across the whole named
+			// vocabulary + function row + printable + unknown/edge inputs.
+			let names = ["Enter", "Tab", "Escape", "Backspace", "Delete",
+			             "ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight",
+			             "Home", "End", "PageUp", "PageDown", "Space",
+			             "F3", "F24", "F25", "F0", "x", "+", "🔍", "ab",
+			             "MediaPlayPause", "Unknown", "É"]
+			return join(names.map { Key(identifier: $0).identifier })
+		},
+		KernelCorpusCase(name: "modifiers.compose") {
+			var m: ModifierSet = [.shift, .command]
+			m.insert(.control)
+			m.remove(.command)
+			let a: ModifierSet = [.shift, .option]
+			let b: ModifierSet = [.option, .command]
+			return join([
+				NumberFormat.integer(Int64(m.rawValue)),
+				NumberFormat.integer(Int64(a.union(b).rawValue)),
+				NumberFormat.integer(Int64(a.intersection(b).rawValue)),
+				NumberFormat.integer(Int64(m.symmetricDifference([.control]).rawValue)),
+			])
+		},
+		KernelCorpusCase(name: "selection.ops") {
+			var sel = Selection(anchor: 5, focus: 2)
+			let ext = sel.extending(to: 8)
+			let shifted = sel.shifted(by: 4)
+			let union = sel.union(Selection(anchor: 9, focus: 6))
+			sel.collapse(at: 1)
+			return join([
+				"\(sel.start):\(sel.end)",
+				"\(ext.anchor):\(ext.focus)",
+				"\(shifted.anchor):\(shifted.focus)",
+				"\(union.anchor):\(union.focus)",
+				"\(sel.anchor):\(sel.focus)",
+			])
+		},
+		KernelCorpusCase(name: "clipboard.tsv") {
+			let rows = [["h1", "h2"], ["a", "b c"], ["d", "e"]]
+			let tsv = ClipboardPayload.tsv(rows: rows)
+			let back = ClipboardPayload.rows(fromTSV: tsv)
+			let flat = back.map { $0.joined(separator: ",") }.joined(separator: ";")
+			return join([tsv, flat])
+		},
+		KernelCorpusCase(name: "undo.stack") {
+			var stack = UndoStack<String>()
+			stack.push("a")
+			stack.push("b")
+			stack.push("c")
+			let u1 = stack.undo() ?? "nil"
+			let u2 = stack.undo() ?? "nil"
+			let r1 = stack.redo() ?? "nil"
+			stack.push("d")
+			let u3 = stack.undo() ?? "nil"
+			let u4 = stack.undo() ?? "nil"
+			let u5 = stack.undo() ?? "nil"
+			return join(["\(stack.undoCount)|\(stack.redoCount)", u1, u2, r1, u3, u4, u5])
+		},
 	]
 }
