@@ -67,6 +67,65 @@ func feedSliceHTML(from start: Int, count: Int) -> String {
 
 func gridCellText(_ r: Int, _ c: Int) -> String { "r\(r)c\(c)" }
 
+// MARK: - engine-local windowed feed (t3.3, lane E's engine windowing)
+
+/// one feed row, keyed by its global index (the Viewport's keyed identity).
+struct BenchFeedItem: Sendable, Hashable {
+	let index: Int
+	let title: String
+}
+
+/// renders lane D's `Viewport` component server-side (full-list degrade) and
+/// serves the engine's `data-webui-lease="viewport"` DOM contract on the list
+/// root so E's `createWindowManager` windows it client-side — the server
+/// adapter declares the lease (e-to-d.md wave 3; the d-to-e.md-sanctioned
+/// "server adapter emits a data-webui-lease attribute" path).
+func renderViewportEnginePage(state: BenchState, router: EventRouter, items: Int) -> String {
+	let ctx = RenderContext(router: router)
+	state.withLock { $0.feedCount = max($0.feedCount, items) }
+	let rows = (0..<items).map { BenchFeedItem(index: $0, title: "item \($0)") }
+	let viewport = Viewport(
+		id: "feed-list",
+		items: rows,
+		keyedBy: { $0.index },
+		rowHeightPx: ViewportDefaults.designedRowHeightPx,
+		keyString: { "row-\($0)" },
+		row: { item, index in
+			[Span { Text("item \(index)") }, Span(class: "list__sub") { Text("row \(index)") }]
+		}
+	)
+	let body = ctx.withValueBody {
+		Div(class: "bench") {
+			Heading("Feed bench — engine-local windowed", level: .h1)
+			Div(class: "bench__toolbar") {
+				Text("Viewport (t3.3) · \(items) rows · engine-windowed")
+			}
+			Raw(viewportHTML(viewport))
+		}
+	}
+	let html = benchDocument(
+		title: "Feed bench — engine-local windowed",
+		body: body,
+		extraRawStyles: [
+			// the engine's absolutely-positioned rows anchor to this container.
+			"#feed-list { position: relative; }",
+			".list--virtual { position: relative; }",
+		]
+	)
+	return html
+}
+
+/// the Viewport's degrade render (the full list) with the engine's lease
+/// attribute on the root container — the attribute (`data-webui-lease=
+/// "viewport"`) is the served wire the engine's window manager discovers.
+func viewportHTML(_ viewport: Viewport<Int, BenchFeedItem>) -> String {
+	var html = viewport.render()
+	html = html.replacingOccurrences(
+		of: "<ul id=\"feed-list\" class=\"list list--virtual\"",
+		with: "<ul id=\"feed-list\" class=\"list list--virtual\" data-webui-lease=\"viewport\"")
+	return html
+}
+
 // MARK: - page assembly
 //
 // every page body renders under `RenderContext(router:)` so
@@ -75,7 +134,14 @@ func gridCellText(_ r: Int, _ c: Int) -> String { "r\(r)c\(c)" }
 // same stable ids without re-registering (the documented contract), so
 // routing survives every interaction.
 
-func benchDocument(title: String, body: String) -> String {
+// MARK: - benchDocument (page assembly)
+//
+// every page body renders under `RenderContext(router:)` so
+// `controlAttributes`-wired controls register into the one router the socket
+// dispatches against. fragment re-renders from inside a handler re-emit the
+// same stable ids without re-registering (the documented contract), so
+// routing survives every interaction.
+func benchDocument(title: String, body: String, extraRawStyles: [String] = []) -> String {
 	// the engine auto-boot needs the config meta and the engine script; the
 	// sheet links content-addressed, cached a year.
 	WebUIDocument(
@@ -88,7 +154,7 @@ func benchDocument(title: String, body: String) -> String {
 			".feed-item { display: flex; justify-content: space-between; padding: var(--space-3); border-bottom: 1px solid var(--color-border); }",
 			".dash-wall { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: var(--space-4); }",
 			".echo-out { margin-top: var(--space-2); padding: var(--space-3); background: var(--color-surface-2); }",
-		]
+		] + extraRawStyles
 	).render()
 }
 
@@ -608,12 +674,22 @@ struct WebUIBench {
 				} else if path == "/bench/feed" {
 					let items = Int(query["items"] ?? "0") ?? 0
 					let windowed = query["windowed"] == "1"
+					let engine = query["windowed"] == "engine"
 					let ops = query["ops"] == "1"
-					if windowed {
+					if windowed || engine {
 						state.withLock { $0.windowStart = 0 }
 					}
-					let page = renderFeedPage(state: state, router: router, items: items, windowed: windowed, opsVariant: ops)
-					try await respond(channel: channel.channel, body: page, contentType: "text/html; charset=utf-8")
+					if engine {
+						// the engine-local windowed variant: lane D's Viewport
+						// rendered server-side (full-list degrade), lease-marked so
+						// E's engine windows it client-side. no page-side scroll
+						// observer — the engine owns scroll delivery.
+						let page = renderViewportEnginePage(state: state, router: router, items: items)
+						try await respond(channel: channel.channel, body: page, contentType: "text/html; charset=utf-8")
+					} else {
+						let page = renderFeedPage(state: state, router: router, items: items, windowed: windowed, opsVariant: ops)
+						try await respond(channel: channel.channel, body: page, contentType: "text/html; charset=utf-8")
+					}
 				} else if path == "/bench/grid" {
 					let rows = Int(query["rows"] ?? "0") ?? 0
 					let cols = Int(query["cols"] ?? "0") ?? 0
