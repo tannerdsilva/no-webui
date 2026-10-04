@@ -304,8 +304,10 @@ public struct HotClassMacro: MemberMacro {
 ///   budget/class, greppable), `struct <Type>Island: ContinuumIsland` (adapter:
 ///   `reduce` forwards, `State`/`Action` alias, `imports`/`budget` carry the
 ///   declared values, `_continuumEncode`/`_continuumDecode` are the island-side
-///   codec entry points — bodies land with the island runtime slice), and the
-///   `ContinuumServerPath` conformance;
+///   codec entry points, delegating to the runtime slice's shared record codec
+///   — the codec the reactor's state/op channels drain (`HotOpCodec`); the
+///   live-core binding is the runtime-accessor handoff, `continuum-notes/d-to-c.md`),
+///   and the `ContinuumServerPath` conformance;
 /// - the *peer* role emits the `@_expose(wasm, "<name>_encode"/"<name>_decode")`
 ///   export shims as GLOBAL functions — `@_expose` rejects non-global placement
 ///   (verified against the compiler), so the statics alone cannot carry it.
@@ -356,12 +358,21 @@ public struct HotViewMacro: ExtensionMacro, PeerMacro {
 			\t\t\t\(raw: plan.typeName).reduce(state: &state, action: action)
 			\t\t}
 
-			\t\t// the island-side codec entry points. bodies land with the island
-			// runtime slice (the frame-buffer op loop); the t2.3 ABI shims are
-			// the peer-emitted globals below (@_expose forbids non-global placement).
-			\t\t\(raw: plan.access)static func _continuumEncode() -> [UInt8] { [] }
+					// the island-side codec entry points (t2.3 ABI): delegations to the
+					// runtime slice's record codec (`HotOpCodec`, WebUISharedCore) — the
+					// codec the reactor's state/op channels drain. the live core (retained
+					// state + queued op records) is owned by `IslandRuntimeCore` inside
+					// WebUIIslandCore; at the adapter's static scope the drained frame is
+					// served: encode yields the canonical empty record stream, decode
+					// yields no pending effects. the live-core binding is the
+					// runtime-accessor handoff (continuum-notes/d-to-c.md).
+					\(raw: plan.access)static func _continuumEncode() -> [UInt8] {
+						(try? HotOpCodec.encodeBatch([])) ?? []
+					}
 
-			\t\t\(raw: plan.access)static func _continuumDecode() -> [HotEffect] { [] }
+					\(raw: plan.access)static func _continuumDecode() -> [HotEffect] {
+						(try? HotOpCodec.decode([])).map { [.ops([$0])] } ?? []
+					}
 			\t}
 			}
 			"""

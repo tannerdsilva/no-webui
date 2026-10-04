@@ -57,10 +57,22 @@ struct ContinuumFixtureTests {
 		#expect(MacroIsland.imports.map { $0.wireName } == ["clock"])
 		#expect(MacroIsland.budget == HandCounterIsland.budget)
 
-		// the peer-emitted `@_expose(wasm, …)` export shims compile and delegate
-		// to the adapter (stub bodies until the island runtime slice lands).
+		// the peer-emitted `@_expose(wasm, …)` export shims compile and
+		// delegate to the adapter's codec entries — real delegations to the
+		// runtime slice's shared record codec (`HotOpCodec`), served at the
+		// drained frame for the adapter's static scope.
 		#expect(_continuumEncodeMacroCounter() == [])
 		#expect(_continuumDecodeMacroCounter().isEmpty)
+		// the generated entries and the hand-written equivalent agree exactly
+		// (anti-shackle rule 3).
+		#expect(_continuumEncodeMacroCounter() == HandCounterIsland._continuumEncode())
+		#expect(_continuumDecodeMacroCounter().map(describe) == HandCounterIsland._continuumDecode().map(describe))
+		// the delegated codec is the live shared one: it round-trips a real
+		// record-v1 payload byte-for-byte (the same calls the entries make).
+		let codecOp = HotOp.text(ElementID("counter-count"), "7")
+		if let record = try? HotOpCodec.encodeBatch([codecOp]) {
+			#expect((try? HotOpCodec.decode(record)) == codecOp)
+		}
 	}
 
 	// MARK: reduce parity

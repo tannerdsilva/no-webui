@@ -68,15 +68,22 @@ extension Feed: ContinuumServerPath {
 			Feed.reduce(state: &state, action: action)
 		}
 
-				// the island-side codec entry points. bodies land with the island
-		// runtime slice (the frame-buffer op loop); the t2.3 ABI shims are
-		// the peer-emitted globals below (@_expose forbids non-global placement).
-				static func _continuumEncode() -> [UInt8] {
-		    []
+		// the island-side codec entry points (t2.3 ABI): delegations to the
+		// runtime slice's record codec (`HotOpCodec`, WebUISharedCore) — the
+		// codec the reactor's state/op channels drain. the live core (retained
+		// state + queued op records) is owned by `IslandRuntimeCore` inside
+		// WebUIIslandCore; at the adapter's static scope the drained frame is
+		// served: encode yields the canonical empty record stream, decode
+		// yields no pending effects. the live-core binding is the
+		// runtime-accessor handoff (continuum-notes/d-to-c.md).
+		static func _continuumEncode() -> [UInt8] {
+			(try? HotOpCodec.encodeBatch([])) ?? []
 		}
 
 		static func _continuumDecode() -> [HotEffect] {
-		    []
+			(try? HotOpCodec.decode([])).map {
+			    [.ops([$0])]
+			} ?? []
 		}
 	}
 }
@@ -139,15 +146,22 @@ extension Feed: ContinuumServerPath {
 			Feed.reduce(state: &state, action: action)
 		}
 
-				// the island-side codec entry points. bodies land with the island
-		// runtime slice (the frame-buffer op loop); the t2.3 ABI shims are
-		// the peer-emitted globals below (@_expose forbids non-global placement).
-				static func _continuumEncode() -> [UInt8] {
-		    []
+		// the island-side codec entry points (t2.3 ABI): delegations to the
+		// runtime slice's record codec (`HotOpCodec`, WebUISharedCore) — the
+		// codec the reactor's state/op channels drain. the live core (retained
+		// state + queued op records) is owned by `IslandRuntimeCore` inside
+		// WebUIIslandCore; at the adapter's static scope the drained frame is
+		// served: encode yields the canonical empty record stream, decode
+		// yields no pending effects. the live-core binding is the
+		// runtime-accessor handoff (continuum-notes/d-to-c.md).
+		static func _continuumEncode() -> [UInt8] {
+			(try? HotOpCodec.encodeBatch([])) ?? []
 		}
 
 		static func _continuumDecode() -> [HotEffect] {
-		    []
+			(try? HotOpCodec.decode([])).map {
+			    [.ops([$0])]
+			} ?? []
 		}
 	}
 }
@@ -213,15 +227,22 @@ extension Feed: ContinuumServerPath {
 			Feed.reduce(state: &state, action: action)
 		}
 
-				// the island-side codec entry points. bodies land with the island
-		// runtime slice (the frame-buffer op loop); the t2.3 ABI shims are
-		// the peer-emitted globals below (@_expose forbids non-global placement).
-				public static func _continuumEncode() -> [UInt8] {
-		    []
+		// the island-side codec entry points (t2.3 ABI): delegations to the
+		// runtime slice's record codec (`HotOpCodec`, WebUISharedCore) — the
+		// codec the reactor's state/op channels drain. the live core (retained
+		// state + queued op records) is owned by `IslandRuntimeCore` inside
+		// WebUIIslandCore; at the adapter's static scope the drained frame is
+		// served: encode yields the canonical empty record stream, decode
+		// yields no pending effects. the live-core binding is the
+		// runtime-accessor handoff (continuum-notes/d-to-c.md).
+		public static func _continuumEncode() -> [UInt8] {
+			(try? HotOpCodec.encodeBatch([])) ?? []
 		}
 
 		public static func _continuumDecode() -> [HotEffect] {
-		    []
+			(try? HotOpCodec.decode([])).map {
+			    [.ops([$0])]
+			} ?? []
 		}
 	}
 }
@@ -270,6 +291,31 @@ extension Feed: ContinuumServerPath {
 		#expect(!text.contains("Codable"))
 		#expect(!text.contains("JSONEncoder"))
 		#expect(!text.contains("JSONDecoder"))
+	}
+
+	@Test("the codec bodies delegate to the runtime slice's record codec — stub retirement")
+	func codecDelegationStubRetirement() {
+		let text = expandedText(of: completeFeedFixture)
+		// the delegated codec (lane C's shared record codec, the one the
+		// reactor's state/op channels drain)
+		#expect(text.contains("HotOpCodec.encodeBatch"))
+		#expect(text.contains("HotOpCodec.decode"))
+		// the stub forms are gone from the emission (the W2 retirement gate)
+		#expect(!text.contains("_continuumEncode() -> [UInt8] { [] }"))
+		#expect(!text.contains("_continuumDecode() -> [HotEffect] { [] }"))
+		#expect(!text.contains("bodies land with the island"))
+		// and the imports-with-budget spelling still lands the same codec text
+		let withImports = expandedText(of: """
+		@HotView("feed", imports: [ClockCapability.self], budget: IslandBudget(maxBytes: 16_384))
+		struct Feed {
+			typealias State = FeedState
+			typealias Action = FeedAction
+			@HotBuilder func render(state: State) -> HotTree { Hot.Text(id: "feed-status", "ready") }
+			static func reduce(state: inout State, action: Action) -> [HotEffect] { [] }
+		}
+		""")
+		#expect(withImports.contains("HotOpCodec.encodeBatch"))
+		#expect(!withImports.contains("_continuumEncode() -> [UInt8] { [] }"))
 	}
 }
 

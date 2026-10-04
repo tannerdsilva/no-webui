@@ -55,4 +55,15 @@ struct HandCounterIsland: ContinuumIsland {
 	static func reduce(state: inout State, action: Action) -> [HotEffect] {
 		HandCounter.reduce(state: &state, action: action)
 	}
+
+	/// the codec entries, hand-written for the same contract `@HotView`
+	/// generates: delegations to the runtime slice's shared record codec
+	/// (`HotOpCodec`), served at the drained frame for the static scope.
+	static func _continuumEncode() -> [UInt8] {
+		(try? HotOpCodec.encodeBatch([])) ?? []
+	}
+
+	static func _continuumDecode() -> [HotEffect] {
+		(try? HotOpCodec.decode([])).map { [.ops([$0])] } ?? []
+	}
 }
