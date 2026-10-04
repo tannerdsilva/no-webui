@@ -125,6 +125,17 @@ func webuiTakeOps() -> UInt32 {
 	UInt32(opStream.takeBatch())
 }
 
+@_expose(wasm, "webui_run_corpus")
+func webuiRunCorpus() -> Int {
+	// t4.2: the parity suite's island side. the SAME Swift that runs natively
+	// (KernelParity results → FNV-1a hashes) executes here in wasm and
+	// serializes to the frame buffer; designer/probes/c-parity.mjs compares
+	// this JSON's hashes against the native artifact's hashes — equal hashes
+	// are the gate.
+	writeFrame(KernelParity.resultsJSON())
+	return Int(bitPattern: FrameBuffer.buffer)
+}
+
 @_expose(wasm, "webui_state_save")
 func webuiStateSave() -> Int {
 	let json = ProbeIsland
