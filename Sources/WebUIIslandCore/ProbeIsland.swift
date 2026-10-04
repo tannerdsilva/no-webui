@@ -62,6 +62,35 @@ public enum ProbeIslandIDs {
 	public static let counter = "probe-counter"
 	public static let list = "probe-list"
 	public static func item(_ key: String) -> String { "probe-item-\(key)" }
+
+	/// the prefix `item(_:)` derives ids from — the keyed-row id family
+	/// ("probe-item-k0", "probe-item-k1", …).
+	public static let itemPrefix = "probe-item-"
+
+	/// DX-9: is `id` one this island's ops may legally target? the literal ids
+	/// plus the keyed-row family — the hand-written fallback the W3
+	/// macro-emitted `elementIDs` mirror is diffed against (d-docs §DX-9).
+	public static func isKnown(_ id: ElementID) -> Bool {
+		let scalars = id.raw.unicodeScalars
+		if scalars.elementsEqual(counter.unicodeScalars) { return true }
+		if scalars.elementsEqual(list.unicodeScalars) { return true }
+		return hasScalarPrefix(scalars, itemPrefix)
+	}
+
+	/// scalar-clean prefix compare — canonical-equivalence-normalization tables
+	/// are never required (the same discipline as every embedded-compiled
+	/// literal match).
+	private static func hasScalarPrefix(_ scalars: String.UnicodeScalarView, _ prefix: String) -> Bool {
+		let prefixScalars = prefix.unicodeScalars
+		var i = scalars.startIndex
+		var j = prefixScalars.startIndex
+		while j < prefixScalars.endIndex {
+			guard i < scalars.endIndex, scalars[i] == prefixScalars[j] else { return false }
+			i = scalars.index(after: i)
+			j = prefixScalars.index(after: j)
+		}
+		return true
+	}
 }
 
 /// the typed probe island — a hand-written `ContinuumIsland` (the "one
@@ -267,3 +296,16 @@ public enum ProbeIsland: ContinuumIsland {
 extension ProbeState: IslandEmptyState {}
 
 extension ProbeIsland: IslandRuntimeSurface {}
+
+#if CONTINUUM_ID_CHECK
+// DX-9 dev-check vocabulary (check builds only — the production artifact
+// carries no trace of it). `ProbeIslandIDs` above stays the always-compiled
+// hand-written fallback, tested natively either way.
+extension ProbeIsland {
+	public static var elementIDs: Set<ElementID> {
+		[ElementID(ProbeIslandIDs.counter), ElementID(ProbeIslandIDs.list)]
+	}
+
+	public static func isKnownElementID(_ id: ElementID) -> Bool { ProbeIslandIDs.isKnown(id) }
+}
+#endif

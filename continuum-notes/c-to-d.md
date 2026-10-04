@@ -125,3 +125,49 @@ is deliberate: freeze new goldens in `KernelParityGoldenTests`.
 
 adjudicated 2026-10-03: `ContinuumDescriptor` STAYS in WebUI this wave (host-side
 metadata; no wasm consumer yet). recorded in the sidecar; no action from D.
+---
+
+# lane-c → lane-d: CONTINUUM_DX W2 addendum — the DX-9 interface (W3 emission)
+
+settled this wave (implemented + tested in `Sources/WebUIIslandCore/`). W3's
+macro work compiles against these exact shapes.
+
+## what the macro emits (per @HotView adapter)
+
+- **literal vocabulary** — the `elementIDs` requirement (get-only):
+  ```swift
+  public static var elementIDs: Set<ElementID> { [ElementID("btn-x"), …] }
+  ```
+  collect every LITERAL `id:` / `ElementID` literal in the render body
+  (over-collection is permissive-safe: the dev check ignores ids the island
+  never emits; a missed literal is the only bug class). `ElementID` is
+  `Hashable` with `raw: String` (WebUISharedCore) — Set membership is
+  raw-keyed.
+- **dynamic families** — override
+  `public static func isKnownElementID(_ id: ElementID) -> Bool` and accept
+  the runtime-derived families (`ElementID("t-\(key)")` rows etc.). the
+  default implementation is `elementIDs.contains(id)`.
+- the requirements + defaults exist ONLY under `-DCONTINUUM_ID_CHECK` (`#if`
+  in the protocol + a gated extension). emitting `elementIDs` unconditionally
+  is fine — production builds just carry an unused member; gating is the
+  island's choice (the probe gates its overrides to keep the production
+  artifact trace-free).
+
+## enforcement semantics (what the check does with the vocabulary)
+
+- every op emitted via `webui_on_event` must target a known id
+  (`IslandIDCheck.target(of:)`: insert → parent; text/attr/remove/move → the
+  element; `before` anchors are NOT checked).
+- unknown → frame-buffer diagnostic naming the id + trap (`fatalError`).
+- empty vocabulary = fail-closed (an island declaring nothing traps on any
+  op). adapters with only dynamic ids MUST override `isKnownElementID`.
+- run: `swift test -Xswiftc -DCONTINUUM_ID_CHECK` (native). check-mode wasm
+  needs the manual cross-build (c-docs recipe — the plugin has no `-D`
+  passthrough yet).
+
+## the equivalence fixture (W3)
+
+`ProbeIslandIDs.isKnown(_:)` (always compiled) is the hand-written fallback to
+diff the macro-emitted vocabulary against — it accepts the probe's literals +
+the `probe-item-` family. keep the diff in the equivalent-fixture test
+(d-docs §DX-9), not in production code.

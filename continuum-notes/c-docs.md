@@ -385,3 +385,87 @@ returns 0 without touching the frame. the mount path renders
   from the DX-1 slice; both ship with the probe byte-identity as the
   regression backstop.
 
+---
+
+# lane-c docs fragment — CONTINUUM_DX WAVE 2 (DX-9: the runtime id dev check)
+
+for orchestrator folding into `Documentation/CONTINUUM.md` + `CHANGELOG.md` at
+i2. sources of truth: `Sources/WebUIIslandCore/IslandRuntime.swift` (the §DX-9
+section at the file tail), `Sources/WebUIIslandCore/ProbeIsland.swift`,
+`Tests/WebUIIslandCoreTests/IslandIDCheckTests.swift`.
+
+## what landed (dx-9 runtime half)
+
+- **the build-flag-gated id dev check.** `-DCONTINUUM_ID_CHECK` (or
+  `.define("CONTINUUM_ID_CHECK")` in a consumer package) compiles the check
+  into the runtime slice: every op an island emits through `webui_on_event`
+  must target a known element id. unknown → the diagnostic
+  `CONTINUUM_ID_CHECK: op targets unknown element id '<id>' — …` is written
+  into the frame buffer (readable from a harness after the trap) and the
+  runtime TRAPS — a dev-time failure naming the id, never a silent engine
+  drop. production builds compile the check AND its vocabulary surface out;
+  verified: no `CONTINUUM_ID_CHECK`/`elementIDs`/`IslandIDCheck` string exists
+  in the production artifact, and the probe stays at its 233,952 B anchor.
+- **the vocabulary interface (settled for W3's macro).** `IslandRuntimeSurface`
+  gains two gated requirements: `static var elementIDs: Set<ElementID>` (the
+  literal targets; the `@HotView` macro will emit this mirror) and
+  `static func isKnownElementID(_ id: ElementID) -> Bool` (runtime-derived
+  families the literal set cannot carry; the default consults `elementIDs`).
+  an island that declares nothing fails loudly on any emitted op (fail-closed
+  — a silently-skipped island would hollow the check out); validate emits no
+  ops, so its check is vacuous. `ProbeIsland` overrides both (gated):
+  literals {probe-counter, probe-list} + the `probe-item-` keyed-row family.
+- **`ProbeIslandIDs` stays the hand-written fallback, always compiled and
+  tested.** the enum gains `itemPrefix` + `isKnown(_:)` (scalar-clean prefix
+  compare — no normalization tables); the gated conformance is a two-line
+  adapter over it, and W3 diffs the macro-emitted vocabulary against it.
+- **native coverage, both modes.** `swift test` (no flag): the pure detector
+  + fallback-vocabulary suite (6 tests). `swift test -Xswiftc
+  -DCONTINUUM_ID_CHECK`: the full suite with enforcement live — every script
+  test would trap on any unknown target. the check is a dev-time assertion,
+  NOT a type guarantee (derived ids only validate against the island's own
+  family predicate).
+- **check-mode wasm proven end-to-end.** a manual cross-build (`swift build
+  --swift-sdk swift-6.4.0-RELEASE_wasm-embedded -Xswiftc -Osize -Xswiftc
+  -DCONTINUUM_ID_CHECK` + the plugin's unicode-table link args) compiles and
+  links; `c-ops.mjs` 15/15 + `c-parity.mjs` 4/4 pass against the check build
+  in node — the check ran on every event of the script without a trap.
+
+## the byte-identity forensics (the wave's load-bearing measurement)
+
+the probe artifact's "byte-identity" anchor is the SIZE (233,952 B). the
+content-level forensics this wave ran (deterministic builds, sha256):
+
+- adding ANY new source file to `WebUIIslandCore` (even comment-only) shifts
+  the stripped artifact's link layout: −229 B measured (233,723). → the check
+  lives in `IslandRuntime.swift` — no new compilation unit (the in-file
+  comment records why).
+- with the fix: probe 233,952 B, validate 176,669 B — both back at their
+  anchors, all section sizes identical to base.
+- at equal size, 64 bytes in an opaque data-section tail table differ from
+  base. the same table re-rolls on any module edit: **DX-2's accepted, merged
+  probe-neutral commit shows the same phenomenon (368 bytes, same offsets)
+  between DX-1 (`6a49700`) and its merged head (`95ba7b7`)**. recorded so no
+  future wave mistakes it for a regression.
+- DX-9 strings: zero occurrences in the production artifact (compile-out
+  genuinely verified, not assumed — binary grep).
+
+## decisions recorded (conservative choices on ambiguity)
+
+1. the check lives in `IslandRuntime.swift` (byte-identity, above).
+2. empty vocabulary = fail-closed.
+3. `before` anchors are not checked (references, not targets).
+4. probe vocabulary overrides are flag-gated (production carries no trace);
+   the fallback predicate they adapt is always compiled + tested.
+5. flag spelling: `CONTINUUM_ID_CHECK` (the brief's `-D` example).
+
+## handoffs
+
+- **to D (W3):** emit, per @HotView adapter,
+  `public static var elementIDs: Set<ElementID> { [ … ] }` (whole-body literal
+  collection; over-collection is permissive-safe) and OVERRIDE
+  `isKnownElementID(_:)` for dynamic families. exact shapes in c-to-d.md.
+- **to E:** no ABI change; `_start`, the eight exports, the drain contract are
+  untouched — c-ops 15/15 + c-parity 4/4 re-verified.
+- **to B (W3, optional):** the wasm-island plugin has no `-D` passthrough; the
+  manual cross-build recipe above is the current way to check-build an island.

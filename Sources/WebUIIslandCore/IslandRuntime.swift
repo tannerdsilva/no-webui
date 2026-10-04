@@ -58,6 +58,22 @@ public protocol IslandRuntimeSurface: ContinuumIsland where State: IslandEmptySt
 	// envelope (its region is retained-state-only) — the hook is strictly
 	// additive and the default keeps every existing conformance unchanged.
 	static func consumeMountEnvelope(_ envelopeJSON: String, state: inout State)
+
+	// DX-9 (CONTINUUM_ID_CHECK builds only): the island's element-id vocabulary
+	// — the surface the runtime's op dev check validates against. production
+	// builds compile it out entirely (zero runtime tax, I4); W3's @HotView
+	// macro emits the `elementIDs` mirror (d-docs §DX-9).
+	#if CONTINUUM_ID_CHECK
+	/// the literal element ids this island's ops may target. over-collection
+	/// is permissive-safe (the check ignores ids the island never emits); a
+	/// missed literal is the only bug class.
+	static var elementIDs: Set<ElementID> { get }
+
+	/// ids derived at runtime that the literal set cannot carry (keyed rows:
+	/// `probe-item-k<n>`). consulted after `elementIDs`; the default below
+	/// consults `elementIDs` only.
+	static func isKnownElementID(_ id: ElementID) -> Bool
+	#endif
 }
 
 /// the mount-envelope default: not consumed (the probe renders retained state
@@ -69,6 +85,19 @@ public extension IslandRuntimeSurface {
 		_ = state
 	}
 }
+
+#if CONTINUUM_ID_CHECK
+public extension IslandRuntimeSurface {
+	/// the empty-vocabulary default: an island that declares nothing fails
+	/// loudly on any emitted op — declaration is the point of the check, and a
+	/// silently-skipped island would hollow it out (d-docs §DX-9).
+	static var elementIDs: Set<ElementID> { [] }
+
+	/// the literal-set default; islands with runtime-derived id families
+	/// override this (probe: the `probe-item-k<n>` rows).
+	static func isKnownElementID(_ id: ElementID) -> Bool { elementIDs.contains(id) }
+}
+#endif
 
 // MARK: - the reactor core (buffer-free, native-testable)
 
@@ -132,6 +161,13 @@ public struct IslandRuntimeCore<I: IslandRuntimeSurface> {
 			if case .ops(let batch) = effect { ops.append(contentsOf: batch) }
 		}
 		probe = state
+		#if CONTINUUM_ID_CHECK
+		// DX-9 dev assertion (build-flag gated; compiled out in production):
+		// every op this event emitted must target a known element id — an
+		// unknown one is a dev-time failure naming the id (frame diagnostic +
+		// trap), never a silent engine drop.
+		IslandIDCheck.enforce(ops, isKnown: I.isKnownElementID)
+		#endif
 		// an encode failure is unreachable for probe-produced ops (ids/values
 		// are small and well-formed); a dropped record is safer than a torn frame.
 		if !ops.isEmpty, let record = try? HotOpCodec.encodeBatch(ops) {
@@ -454,5 +490,104 @@ func webuiStateSave() -> Int {
 func webuiStateRestore(_ ptr: UnsafeRawPointer?, _ len: Int) -> Int {
 	ensureBound()
 	return islandHandler?.stateRestore(ptr, len) ?? 0
+}
+#endif
+
+// MARK: - DX-9 — the runtime-side element-id dev check (CONTINUUM_DX §2.9)
+//
+// every op an island emits must target an element id its render/reduce pair
+// actually knows: a drifted id (a typo like `probe-coutner`) is silently
+// dropped by the engine at runtime, which is exactly the bug class this check
+// catches at dev time, on the island side.
+//
+// the check is a dev-time assertion, NOT a type guarantee (d-docs §DX-9): an
+// op's target is only knowable against the island's declared id vocabulary
+// (`IslandRuntimeSurface.elementIDs` + the `isKnownElementID` dynamic-family
+// override; W3: the @HotView macro emits `elementIDs`), and interpolated ids
+// (`probe-item-k<n>`) can only be validated by the island's own family
+// predicate — never at compile time.
+//
+// ENFORCEMENT IS BUILD-FLAG GATED: `-DCONTINUUM_ID_CHECK` (or
+// `.define("CONTINUUM_ID_CHECK")` in a consumer manifest / package) compiles
+// the assertion AND the vocabulary surface into the build; production builds
+// omit them entirely (zero runtime tax, I4). the pure detection logic below
+// compiles either way, so the native suite covers the same code the gated
+// builds execute (d-docs §DX-9: "the check is a dev-time assertion").
+//
+// failure mode in a check build: the diagnostic (naming the id) is written
+// into the wasm frame buffer — readable from a harness after the trap — then
+// the runtime traps. a loud dev-time failure, never a silent drop.
+//
+// WHY IN THIS FILE: the probe artifact is byte-anchored (the DX-1/DX-2
+// regression anchor, 233,952 B) and the island objlib's link layout is
+// sensitive to its compilation-unit set — adding a new source file (even a
+// comment-only one) shifts the stripped artifact (measured: -229 B). this
+// check therefore lives in the runtime slice's own unit; the always-compiled
+// members below are dead-stripped from production builds unchanged.
+
+public enum IslandIDCheck {
+	/// the diagnostic prefix — grep-able in a dev harness's output.
+	public static let diagnosticPrefix = "CONTINUUM_ID_CHECK"
+
+	/// whether this build has the check compiled in. the enforcement entry
+	/// (`enforce`/`fail`) only exists in check builds; this constant reflects
+	/// the gating for dev tooling and the native suite.
+	#if CONTINUUM_ID_CHECK
+	public static let enforced = true
+	#else
+	public static let enforced = false
+	#endif
+
+	/// the element id an op operates on. insert targets its parent (the v1
+	/// record's id slot carries the parent; the new element's id is
+	/// engine-allocated on apply), text/attr/remove/move target the element.
+	///
+	/// `before` anchors are references, not targets, and are deliberately NOT
+	/// checked — an over-eager check would false-positive on legitimate order
+	/// anchors (conservative; the emitted-op contract is target-based).
+	public static func target(of op: HotOp) -> ElementID {
+		switch op {
+		case .text(let id, _): return id
+		case .attr(let id, _, _): return id
+		case .insert(let parent, _, _): return parent
+		case .remove(let id): return id
+		case .move(let id, _): return id
+		}
+	}
+
+	/// the first op whose target is not a known id, as a diagnostic naming the
+	/// id — or nil when every target is known. pure (no side effects), so the
+	/// native suite drives exactly this function.
+	public static func firstViolation(ops: [HotOp], isKnown: (ElementID) -> Bool) -> String? {
+		for op in ops {
+			let id = target(of: op)
+			if !isKnown(id) {
+				return "\(diagnosticPrefix): op targets unknown element id '\(id.raw)' — not in the island's id vocabulary (elementIDs + isKnownElementID families). fix the id or declare it (dev-time check; compiled out in production)."
+			}
+		}
+		return nil
+	}
+}
+
+#if CONTINUUM_ID_CHECK
+public extension IslandIDCheck {
+	/// the gated enforcement entry: traps on the first unknown op target. the
+	/// runtime calls this after `reduce` collects an event's ops; any future
+	/// mount-op path must route through it too.
+	static func enforce(_ ops: [HotOp], isKnown: (ElementID) -> Bool) {
+		if let violation = firstViolation(ops: ops, isKnown: isKnown) {
+			fail(violation)
+		}
+	}
+
+	/// the dev-time failure: write the diagnostic into the frame buffer so a
+	/// harness can read it after the trap, then trap. (`fatalError` prints on
+	/// a native check build and is a plain trap inside wasm.)
+	static func fail(_ message: String) -> Never {
+		#if os(WASI)
+		IslandRuntimeBuffers.writeText(message)
+		#endif
+		fatalError(message)
+	}
 }
 #endif
