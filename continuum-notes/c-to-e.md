@@ -120,3 +120,19 @@ delta targets.
 `WebUIProbeIsland.wasm` 173,846 B stripped / 80,620 B gzip —
 `IslandBudget(maxBytes: 200_000, maxGzipBytes: 90_000)` declared on
 `ProbeIsland` (kB tier, comparable to validate's 164,670).
+
+## WAVE 3 — `webui_run_corpus() -> i32` (the parity export, ADDITIVE)
+
+a new probe export (the t4.2 parity suite). the ABI surface is otherwise
+unchanged — c-ops regression stays 15/15.
+
+- **call:** `webui_run_corpus()` — no args. returns the frame pointer
+  (`webui_frame_ptr`, same as the other exports); the payload is in the frame
+  buffer (`webui_frame_len` bytes).
+- **payload:** `KernelParity.resultsJSON()` — `{"format":"kernel-corpus",
+  "count":N,"cases":[{"name":...,"hash":...},…]}` — an ORDERED array (order is
+  part of the contract), each hash a 16-hex FNV-1a (lowercase). the corpus is
+  compile-time-frozen in WebUISharedCore; the island never receives inputs.
+- **the engine does not need this export** — it is for the lane-C probe
+  (`designer/probes/c-parity.mjs` loads the wasm directly and compares with
+  the native artifact). treat it as read-only diagnostics.

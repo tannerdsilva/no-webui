@@ -75,8 +75,10 @@ public enum ProbeIsland: ContinuumIsland {
 		[InputSubscription.self, StatePersistence.self]
 	}
 	public static var budget: IslandBudget {
-		// tightened in wave 2 to the measured artifact (see c-docs.md).
-		IslandBudget(maxBytes: 200_000, maxGzipBytes: 90_000)
+		// wave-3 (t4.2): the parity corpus + webui_run_corpus export grew the
+		// artifact to 218,611 B raw / 95,215 B gzip — the deliberate re-pin
+		// (was 200,000/90,000 at i2). numbers + reasoning in c-docs.md.
+		IslandBudget(maxBytes: 240_000, maxGzipBytes: 105_000)
 	}
 
 	// MARK: pure reduce
