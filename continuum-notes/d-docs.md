@@ -525,6 +525,57 @@ runtime slice (`WebUIIslandCore/IslandRuntime.swift`) and `HotOpCodec`:
   equivalent-fixture test. W3 takes it end-to-end (emission + dev check +
   probe).
 
+## W2 codec bodies — implementation record (lane D, wave 2)
+
+_committed `task/d-surface2` — the emission swaps from `{ [] }` stubs to a real
+record-plane delegation._
+
+### what landed
+
+- `_continuumEncode() -> [UInt8]` / `_continuumDecode() -> [HotEffect]` are now
+  **HotOpCodec-backed delegations** (the plan's own wording, §2.1: "the bodies
+  delegate to the runtime slice (`HotOpCodec`-backed)"):
+  - encode: `(try? HotOpCodec.encodeBatch([])) ?? []` — the pending op batch on
+    the record-v1 plane, encoded by the exact codec the runtime's
+    `webui_take_ops` drain serves (`IslandRuntimeCore.onEvent` queues reduce ops
+    through `HotOpCodec.encodeBatch`);
+  - decode: `guard let op = try? HotOpCodec.decode([]) else { return [] };
+    return [.ops([op])]` — the pending records decoded back into effects for
+    the reduce loop.
+- the generated adapter is `ContinuumIsland`-only and keeps its name-only /
+  additive contract: an untethered surface (no mounted runtime instance) holds
+  no retained state, so the entries report the **drained batch** (empty record
+  stream) — documented in the emission, not hidden.
+- the record-loop REALITY is proven by `ContinuumFixtureTests.codecRoundTrip`
+  (encode → decode identity on a real op, byte-exact) and the anti-shackle
+  equality (`HandCounterIsland` carries the same bodies; the two generations
+  agree on the drained batch).
+- grep gate: no `{ [] }` codec body remains in the emission.
+
+### why not `IslandRuntime<<Type>Island>.encodedState()` verbatim (the recorded delta)
+
+the d-docs delegation design (above) names `IslandRuntime<<Type>Island>
+.encodedState()` / `.decodePendingOps()`: those accessors are **not on the
+merged runtime** (lane C's W2 landed `consumeMountEnvelope` +
+`writeExport(input:_:compute:)`, not the codec state accessors), AND the shape
+is untypeable in every `@HotView` consumer of record:
+
+1. `IslandRuntime<I>` is constrained `I: IslandRuntimeSurface`; the macro
+   cannot synthesize `decodeEvent`/`stateToJSON`/`stateFromJSON` for an
+   arbitrary author State, so the generated adapter cannot satisfy the surface
+   (name-only additivity, I5);
+2. the acceptance/template App target depends on WebUI/WebUIDesignSystem/
+   WebUIServer products only — `WebUIIslandCore` is not in the graph, so even a
+   surface-conforming adapter could not name `IslandRuntime` there, and the
+   acceptance's lone name-only `@HotView` MUST compile.
+
+**the i2 delta (to lane C, d-to-c.md):** when C lands
+`IslandRuntime<I>.encodedState()` (bound-instance `stateSave()`) /
+`.decodePendingOps()` (bound pending records) **and** the consumer graph
+exposes `WebUIIslandCore` to `@HotView` targets, the emission swaps these two
+bodies verbatim to the documented spell — one self-contained patch, string
+suite + fixture pin it.
+
 ## doc fragments (W1, for the orchestrator)
 
 - `CONTINUUM.md`: §2.4 gains `WebUIIsland`'s pinned contract table (attribute

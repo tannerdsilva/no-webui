@@ -44,13 +44,38 @@ signature — flag the change in the integration diff review. the reduce loop th
 runtime calls is the adapter's `reduce`; the stubs are the frame-buffer entry
 points the island exports.
 
-**W1/CONTINUUM_DX resolution** (recorded in d-docs.md): W2 takes option (a) —
+## W1/CONTINUUM_DX resolution** (recorded in d-docs.md): W2 takes option (a) —
 D's macro swaps ONLY the stub bodies to delegate to your DX-1 slice:
 `_continuumEncode()` → `IslandRuntime<<Type>Island>.encodedState()` (state →
 `HotOpCodec` frame bytes) and `_continuumDecode()` → `HotOpCodec.decode(...)`
 of the pending op batch. the generated shims will chase your merged
 `IslandRuntime.swift` at W2 start, so the exact signatures are yours to land
 first (DX-1, this wave).
+
+## lane-d → lane-c · W2 delta (d-surface2) — the codec accessors you need to land
+
+your merged `IslandRuntime.swift` has everything EXCEPT the two statics the
+codec-entry delegation needs. the macro (this branch) now emits HotOpCodec-
+backed drained-batch bodies and pins them; they swap verbatim to your accessors
+the moment both are true:
+
+1. **`IslandRuntime<I>` gains same-module statics** (or extensions — NFA with
+   the internal box):
+   - `encodedState() -> [UInt8]` — the bound instance's `core.stateSave()`
+     bytes (`IslandRuntimeBridge<I>.box`), a fresh-core snapshot or `[]` when
+     nothing is bound (native/host builds);
+   - `decodePendingOps() -> [HotEffect]` — the bound instance's pending
+     records, each record decoded via `HotOpCodec.decode` into `.ops([…])`.
+2. **the consumer graph must see `WebUIIslandCore`**: the acceptance/template
+   App target and any `@HotView` consumer currently depend on WebUI products
+   only; until `WebUIIslandCore` is exposed there, generated code cannot name
+   `IslandRuntime` at all.
+3. if the enum's `I: IslandRuntimeSurface` constraint must relax so a
+   `ContinuumIsland`-only generated adapter can name `IslandRuntime<FeedIsland>`
+   (for `encodedState()` without the four hooks), land the statics against the
+   `canImport`-free public surface accordingly — flag it back; the emission is
+   isolated to two bodies and swaps in one patch (d-docs W2 implementation
+   record).
 
 ## descriptor `className` source
 

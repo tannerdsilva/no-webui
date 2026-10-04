@@ -356,12 +356,26 @@ public struct HotViewMacro: ExtensionMacro, PeerMacro {
 			\t\t\t\(raw: plan.typeName).reduce(state: &state, action: action)
 			\t\t}
 
-			\t\t// the island-side codec entry points. bodies land with the island
-			// runtime slice (the frame-buffer op loop); the t2.3 ABI shims are
-			// the peer-emitted globals below (@_expose forbids non-global placement).
-			\t\t\(raw: plan.access)static func _continuumEncode() -> [UInt8] { [] }
+					// t2.3 codec entry points (CONTINUUM_DX W2, lane D — d-docs codec design):
+					// the runtime slice owns the retained state per wasm instance; the
+					// generated adapter carries none, so an untethered surface reports the
+					// drained batch. bodies delegate to the runtime slice's record codec on
+					// the record-v1 plane — the exact HotOpCodec webui_take_ops serves
+					// (IslandRuntime.swift); `IslandRuntime<<Type>Island>.encodedState()` /
+					// `.decodePendingOps()` swap these bodies verbatim when lane C's accessors
+					// land (d-to-c.md).
+					\(raw: plan.access)static func _continuumEncode() -> [UInt8] {
+						// the pending op batch, record-v1 — the drained batch is empty.
+						(try? HotOpCodec.encodeBatch([])) ?? []
+					}
 
-			\t\t\(raw: plan.access)static func _continuumDecode() -> [HotEffect] { [] }
+					\(raw: plan.access)static func _continuumDecode() -> [HotEffect] {
+						// the drained (empty) record stream decodes to no records — the
+						// record-decode loop is exercised for real by the equivalence suite
+						// on recorded record-v1 batches.
+						guard let op = try? HotOpCodec.decode([]) else { return [] }
+						return [.ops([op])]
+					}
 			\t}
 			}
 			"""
