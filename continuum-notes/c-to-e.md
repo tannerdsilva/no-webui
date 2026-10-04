@@ -136,3 +136,20 @@ unchanged — c-ops regression stays 15/15.
 - **the engine does not need this export** — it is for the lane-C probe
   (`designer/probes/c-parity.mjs` loads the wasm directly and compares with
   the native artifact). treat it as read-only diagnostics.
+
+## CONTINUUM_DX W1 — runtime-slice conversion (ABI-neutral)
+
+lane C converted the probe's wasm main to the `IslandRuntime` slice
+(`WebUIIslandCore/IslandRuntime.swift`) + the slim main. the engine-facing
+ABI is UNCHANGED for E:
+
+- the same eight exports with the same signatures and return conventions;
+  `webui_run_corpus` still additive. `_start` still exported (the engine's
+  `_start()` try/catch at webui-engine.js:1704 stays a benign no-op — the
+  embedded runtime never runs Swift entry code, which is measured and
+  documented; the probe island binds lazily on the first stateful export call).
+- `webui_on_event` still queues, never serves; the engine's take_ops drain
+  loop (drain until 0, whole records) is unchanged. mount produces no ops.
+- verified: node drives the converted wasm exactly as before (same input
+  writing, same drain), c-ops 15/15 (state channel, remount, byte-exact
+  records) and c-parity 25/25 (corpus hashes).

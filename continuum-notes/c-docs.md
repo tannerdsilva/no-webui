@@ -227,3 +227,88 @@ for orchestrator folding at i3. sources of truth:
 - **to D:** the t3.4 shapes + the parity gate recipe are in `c-to-d.md`.
 - **to E:** `webui_run_corpus` is a NEW probe export (additive — the ABI is
   unchanged; c-ops regression 15/15) — updated contract in `c-to-e.md`.
+
+---
+
+# lane-c docs fragment — CONTINUUM_DX WAVE 1 (DX-1: the island runtime slice)
+
+for orchestrator folding into `Documentation/CONTINUUM.md` + `CHANGELOG.md` at
+i1. sources of truth: `Sources/WebUIIslandCore/IslandRuntime.swift` (this
+wave's commit), `Sources/WebUIProbeIsland/main.swift` (the slim form),
+`Tests/WebUIIslandCoreTests/IslandRuntimeTests.swift`,
+`designer/probes/c-ops.mjs` (fixtures reused verbatim, 15/15),
+`designer/probes/c-parity.mjs` (25/25).
+
+## what landed (dx-1, wave-1 slice)
+
+- **the island runtime slice.** `WebUIIslandCore/IslandRuntime.swift` — a
+  generic runtime parameterized by a `ContinuumIsland`-typed island
+  (`IslandRuntimeSurface`: the four runtime hooks `decodeEvent` / `regionHTML` /
+  `stateToJSON` / `stateFromJSON`, plus the `IslandEmptyState` init refinement)
+  that owns the ENTIRE wasm export surface (`webui_input_ptr` ·
+  `webui_frame_ptr` · `webui_frame_len` · `webui_render_region` ·
+  `webui_on_event` · `webui_take_ops` · `webui_state_save` ·
+  `webui_state_restore`). absorbs the probe's hand-carried plumbing
+  (`utf8Decode`, `writeFrame`/`writeFrameBytes`, the frame-buffer discipline) —
+  all scalar-clean.
+- **slim form + the extra-exports hook.** `WebUIProbeIsland/main.swift` goes
+  231 lines → ~20: a `webui_island_bind` shim naming the concrete island
+  (`IslandRuntime<ProbeIsland>.run()`) plus the `webui_run_corpus` EXTRA export
+  as a one-line global shim calling `IslandRuntime.writeExport(...)`. the
+  runtime's export surface is open — extras survive by construction.
+- **behavior-equivalence proven twice.** (1) the native suite
+  `Tests/WebUIIslandCoreTests/IslandRuntimeTests.swift` drives the SAME
+  c-ops.mjs script through `IslandRuntimeCore<ProbeIsland>` — the exact code
+  the wasm exports execute — asserting the same byte-exact record-v1
+  batches/frames, incl. a byte-identity check of the runtime's `I.reduce`
+  dispatch against the hand-written `reduceOps` path; (2) `c-ops.mjs` 15/15 +
+  `c-parity.mjs` 25/25 stay green on the converted wasm artifact (fixtures
+  reused, assertions unchanged).
+
+## decisions recorded (conservative choices on ambiguity)
+
+1. **`@_expose(wasm:)` accepts ONLY global functions on this toolchain**
+   (measured: static methods rejected in the swift-6.4 wasm-embedded compiler).
+   the export surface therefore lives as global trampolines; the concrete
+   island is bound through `webui_island_bind` — a `@_silgen_name` symbol the
+   island's main defines (link-resolved, one per wasm image).
+2. **the embedded wasip1 `_start` never executes Swift entry code** (measured:
+   a non-empty `@main` main / top-level code leaves no observable effect when
+   `_start()` is invoked). so the runtime binds LAZILY — the first stateful
+   export call triggers the island's bind shim — and does not depend on the
+   engine's `_start()` call (which stays a benign no-op, webui-engine.js:1704).
+3. **`IslandRuntimeCore` is buffer-free**: methods return exact frame-payload
+   bytes; the wasm bridge copies them into the physical frame buffer. one code
+   path is therefore native-testable and wasm-exact.
+4. **`reduce` is the runtime's op source** (the frozen `ContinuumIsland`
+   requirement): `onEvent` collects every `.ops` effect from `I.reduce`.
+   `.save`/`.log` effects are ignored until d5's backend lands (probe emits
+   ops only; behavior-identical to the hand-written `reduceOps` path).
+5. **`webui_frame_len` after a `webui_on_event`** keeps the stale previous
+   length (the probe wrote nothing on events; the frame is only touched by the
+   drain/state/render paths) — parity preserved.
+
+## handoffs
+
+- **to lane E:** the export ABI is UNCHANGED — same eight exports, same
+  `_start` (now a benign stub the engine's try/catch already tolerates);
+  `webui_run_corpus` still additive. the engine's existing mount/drain
+  contract (`loadIsland` → `_start()` → exports) works as-is; no E change
+  required for W1.
+- **to lane B/orchestrator:** the declared `IslandBudget` pin (240,000/105,000)
+  holds; measured artifact after the conversion: **233,952 B raw / 100,469 B
+  gzip** (was 231,984 / 99,360 — the runtime slice + existential bridge added
+  ~2.0 KB raw, ~1.1 KB gz; within the ~3.4% headroom). the budget-enforcement
+  gap noted in the W3 fragment (probe pin not in the manifest) is unchanged.
+- **to lane D (W2):** `IslandRuntimeSurface` is the shape `@HotView`
+  adapters must satisfy (the macro's `_continuumEncode`/`_continuumDecode`
+  stubs can delegate to `IslandRuntimeCore` on emission); the slim main pattern
+  (`webui_island_bind` shim + extra-export shims) is the generated shape.
+
+## next-slice queue (lane c)
+
+- convert `ValidateIsland` to the runtime (`IslandRuntimeSurface` conformance +
+  slim main) — needs a `State`/`Action`-shaped surface for the validator (its
+  current static funcs are rule-eval, not a reducer); runtime-side dev check
+  (DX-9) behind the build flag; auto-declared budgets for both islands (W2
+  lane-C scope, CONTINUUM_DX §4.5).
