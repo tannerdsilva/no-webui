@@ -65,12 +65,12 @@ public struct CivilDate: Sendable, Equatable, Hashable, Comparable {
 
 	/// long form: "October 3, 2026".
 	public func longForm() -> String {
-		"\(monthName) \(NumberFormat.integer(day)), \(NumberFormat.integer(year))"
+		"\(monthName) \(NumberFormat.integer(Int64(day))), \(NumberFormat.integer(Int64(year)))"
 	}
 
 	/// "Sat, Oct 3, 2026" — the compact row form.
 	public func shortForm() -> String {
-		"\(Self.weekdayShortNames[weekdayIndex]), \(Self.monthShortNames[month - 1]) \(NumberFormat.integer(day)), \(NumberFormat.integer(year))"
+		"\(Self.weekdayShortNames[weekdayIndex]), \(Self.monthShortNames[month - 1]) \(NumberFormat.integer(Int64(day))), \(NumberFormat.integer(Int64(year)))"
 	}
 
 	public static func < (lhs: CivilDate, rhs: CivilDate) -> Bool {
@@ -80,7 +80,7 @@ public struct CivilDate: Sendable, Equatable, Hashable, Comparable {
 	/// zero-pad a non-negative field to `width` digits ("7" → "007").
 	/// scalar-clean: builds through `unicodeScalars`, no Character math.
 	private static func padField(_ value: Int, width: Int) -> String {
-		let digits = NumberFormat.integer(value)
+		let digits = NumberFormat.integer(Int64(value))
 		if digits.unicodeScalars.count >= width { return digits }
 		var out = ""
 		out.reserveCapacity(width)

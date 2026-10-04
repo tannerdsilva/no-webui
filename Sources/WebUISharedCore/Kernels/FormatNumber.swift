@@ -55,9 +55,13 @@ public enum NumberFormat {
 	}
 
 	/// plain base-10 rendering of an integer: "0", "-12345",
-	/// "-9223372036854775808".
-	public static func integer(_ value: Int) -> String {
-		decimalString(Int64(value))
+	/// "-9223372036854775808". takes `Int64` so the digits are identical on
+	/// EVERY placement — `Int` is 32-bit on wasm32, so an `Int`-typed entry
+	/// point would format Int.min/Int.max differently in the island (this was
+	/// the t4.2 parity probe's first catch). call sites pass `Int` freely
+	/// (implicit widening).
+	public static func integer(_ value: Int64) -> String {
+		decimalString(value)
 	}
 
 	/// thousands-grouped integer: "1,234,567", "-1,234,567". grouping is from
@@ -65,8 +69,9 @@ public enum NumberFormat {
 	/// defaults to the ASCII comma. scalar-clean: everything below operates
 	/// on `unicodeScalars` (the embedded runtime omits grapheme-break tables,
 	/// so Character-view APIs like `String.dropFirst`/`.hasPrefix` are out).
-	public static func grouped(_ value: Int, separator: Unicode.Scalar = ",") -> String {
-		let body = decimalString(Int64(value))
+	/// `Int64` for the same placement-stability reason as `integer`.
+	public static func grouped(_ value: Int64, separator: Unicode.Scalar = ",") -> String {
+		let body = decimalString(value)
 		let scalars = body.unicodeScalars
 		let negative = scalars.first?.value == 0x2D
 		let digitScalars = scalars.dropFirst(negative ? 1 : 0)

@@ -184,8 +184,8 @@ struct FormatNumberSuite {
 		#expect(NumberFormat.integer(0) == "0")
 		#expect(NumberFormat.integer(12345) == "12345")
 		#expect(NumberFormat.integer(-42) == "-42")
-		#expect(NumberFormat.integer(Int.min) == "-9223372036854775808")
-		#expect(NumberFormat.integer(Int.max) == "9223372036854775807")
+		#expect(NumberFormat.integer(Int64.min) == "-9223372036854775808")
+		#expect(NumberFormat.integer(Int64.max) == "9223372036854775807")
 	}
 
 	@Test("grouped inserts every three digits from the right")
