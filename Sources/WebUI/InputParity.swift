@@ -4,8 +4,8 @@ import WebUICore
 //
 // the parent plan splits t3.4 three ways: the *types* (wasm-visible — lane C
 // owns `KeyEvent`/`Selection`/`ClipboardPayload`/`UndoStack` in
-// `WebUISharedCore`, landing this wave), the *engine* (composition
-// forwarding — lane E), and the *delivery/modifiers* in `WebUI` — this file.
+// `WebUISharedCore`), the *engine* (composition forwarding — lane E), and the
+// *delivery/modifiers* in `WebUI` — this file.
 //
 // what this file delivers:
 //
@@ -19,10 +19,13 @@ import WebUICore
 //   `data-webui-composition=""` on an input tells the engine to forward
 //   `compositionstart/update/end` as typed `{type, key: "composition", data}`
 //   events so candidate text never fights the server's value.
-// - `ParityKeyEvent` — the author-facing typed key grammar (host side). lane
-//   C's `KeyEvent` is the island transport twin; the hook-up at i3 is one
-//   typealias + a re-pointed handler signature (recorded in `d-docs.md`) if
-//   C's shapes differ from these.
+// - `onKeyEvent(_:)` — the author-facing typed key handler, carrying lane C's
+//   REAL `KeyEvent` grammar (the wasm-visible type the island transport
+//   shares). the twins (`ParityKeyEvent`/`ParityModifiers` — wave-3 delivery
+//   stand-ins) were removed at polish; the surface now IS `KeyEvent`/
+//   `ModifierSet`/`Key`. the transport mapping (KeyEvent → E's
+//   `{type,key,data}` v1) rides `Key.identifier` / `Key(identifier:)` — see
+//   `islandPayloadV1` below + the mapping table in `continuum-notes/d-docs.md`.
 //
 // grey line kept deliberately: `UndoStack`/`Selection`/`ClipboardPayload`
 // grammars are lane C's (pure, testable natively + islands); this file only
@@ -34,7 +37,7 @@ import WebUICore
 /// entry names ONE engine-forwarded channel; a region declares the channels
 /// it can answer. the engine's JS twin forwards per this list and no other.
 public enum InputParity {
-	/// key events (`keydown`/`keyup`, typed per `ParityKeyEvent`).
+	/// key events (`keydown`/`keyup`, typed per `KeyEvent`).
 	case key
 	/// selection changes (anchor/focus index paths — the `Selection` grammar).
 	case selection
@@ -142,54 +145,19 @@ public struct CompositionForwardModifier: ViewModifier {
 	}
 }
 
-// MARK: - the typed key grammar (author-facing)
-
-/// the typed key a parity key event carries — the host-side closed set. the
-/// keyboard strings the engine reports map onto these; `composition` is the
-/// ime placeholder (its payload rides the composition channel, not the key
-/// channel). lane C's island transport `Key` is the wasm twin (i3 hook-up).
-public enum ParityKey: Sendable, Equatable, Hashable {
-	/// a printable character (the engine's `key` string, single scalar).
-	case character(String)
-	case enter, tab, escape, backspace, delete
-	case arrowUp, arrowDown, arrowLeft, arrowRight
-	case home, end, pageUp, pageDown
-	/// the ime marker — candidate text, never a finish.
-	case composition
-}
-
-/// the modifier keys held during a parity key event — an OptionSet on its own
-/// type so the wasm transport can mirror it without shadowing `Swift.Modifier`.
-public struct ParityModifiers: OptionSet, Sendable {
-	public let rawValue: Int
-	public init(rawValue: Int) { self.rawValue = rawValue }
-
-	public static let shift = ParityModifiers(rawValue: 1 << 0)
-	public static let control = ParityModifiers(rawValue: 1 << 1)
-	public static let option = ParityModifiers(rawValue: 1 << 2)
-	public static let command = ParityModifiers(rawValue: 1 << 3)
-}
-
-/// one typed key event, the delivery-side shape the plan's `KeyEvent`
-/// generalizes. `modifiers` is an OptionSet so the common "shift + arrow"
-/// spell reads the same way it does in the transport.
-public struct ParityKeyEvent: Sendable, Equatable {
-	public let key: ParityKey
-	public let modifiers: ParityModifiers
-
-	public init(key: ParityKey, modifiers: ParityModifiers = []) {
-		self.key = key
-		self.modifiers = modifiers
-	}
-}
+// MARK: - the typed key delivery (lane C's REAL grammar)
 
 /// the delivery carrier for a typed key-event subscription: emits the `key`
 /// channel descriptor at render and carries the author's typed handler in the
 /// type, where the continuum scan lifts it (the `.lease` pattern).
+///
+/// the handler's event is lane C's `KeyEvent` (`key: Key`,
+/// `modifiers: ModifierSet`, `isRepeat: Bool`) — the SAME wasm-visible shape
+/// the island transport decodes, so a handler can be forwarded verbatim.
 public struct KeyEventDeliveryModifier: ViewModifier {
-	public let handler: @Sendable (ParityKeyEvent) -> Void
+	public let handler: @Sendable (KeyEvent) -> Void
 
-	public init(_ handler: @escaping @Sendable (ParityKeyEvent) -> Void) {
+	public init(_ handler: @escaping @Sendable (KeyEvent) -> Void) {
 		self.handler = handler
 	}
 
@@ -208,9 +176,13 @@ public struct KeyEventDeliveryModifier: ViewModifier {
 extension View {
 	/// subscribe this region to typed key events. the region renders with the
 	/// `key` parity channel open, and the handler is carried in the type for
-	/// the precompile scan — the hot grammar, `ParityKeyEvent`, matches lane
-	/// C's transport `KeyEvent` once it merges (i3 hook-up, `d-docs.md`).
-	public func onKeyEvent(_ handler: @escaping @Sendable (ParityKeyEvent) -> Void) -> ModifiedView<Self, KeyEventDeliveryModifier> {
+	/// the precompile scan.
+	///
+	/// the handler receives lane C's `KeyEvent`; the engine delivers it as the
+	/// v1 island payload `{"type":"key","key":<Key.identifier>}` (see
+	/// `islandPayloadV1`), whose `key` string the island's `Key(identifier:)`
+	/// parses back to the same `Key`.
+	public func onKeyEvent(_ handler: @escaping @Sendable (KeyEvent) -> Void) -> ModifiedView<Self, KeyEventDeliveryModifier> {
 		ModifiedView(content: self, modifier: KeyEventDeliveryModifier(handler))
 	}
 }

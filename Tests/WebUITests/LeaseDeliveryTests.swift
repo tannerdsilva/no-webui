@@ -75,10 +75,11 @@ struct LeaseDeliveryTests {
 		// the handler is carried in the type (the .lease pattern) — the scan
 		// reads it; here we prove it round-trips the modifier's type.
 		#expect(view is ModifiedView<Div, KeyEventDeliveryModifier>)
-		// the typed grammar is closed + equatable, and composes with parity
-		let event = ParityKeyEvent(key: .arrowUp, modifiers: [.shift, .option])
+		// the typed grammar is closed + equatable, and composes with parity —
+		// now lane C's REAL KeyEvent/ModifierSet/Key (twins removed at polish)
+		let event = KeyEvent(key: .arrowUp, modifiers: [.shift, .option])
 		#expect(event.modifiers.contains(.shift))
 		#expect(event.modifiers.contains(.option))
-		#expect(event == ParityKeyEvent(key: .arrowUp, modifiers: [.shift, .option]))
+		#expect(event == KeyEvent(key: .arrowUp, modifiers: [.shift, .option]))
 	}
 }
