@@ -72,6 +72,26 @@ struct WebUIFullstackSmokePlugin: CommandPlugin {
 
         if driver.terminationStatus != 0 {
             Diagnostics.error("full-stack smoke gate failed (exit \(driver.terminationStatus))")
+        } else {
+            // lane-B fold-in (b-docs §5, polish): the canonical fullstack gate
+            // adds b-windowed-smoke (naive + ops window advance) on a lane
+            // port. the fold script self-spawns the WebUIBench host on
+            // 9210–9219 (the smoke-test host this gate owns stays untouched)
+            // and tears it down.
+            let fold = context.package.directoryURL
+                .appendingPathComponent("designer/gates/b-probe-fold.mjs")
+            let probe = Process()
+            probe.executableURL = URL(fileURLWithPath: "/usr/bin/env")
+            probe.arguments = ["node", fold.path, "--windowed"]
+            probe.standardOutput = FileHandle.standardOutput
+            probe.standardError = FileHandle.standardError
+            try probe.run()
+            probe.waitUntilExit()
+            if probe.terminationStatus != 0 {
+                Diagnostics.error("lane-B windowed fold-in failed (exit \(probe.terminationStatus))")
+            } else {
+                print("FULLSTACK + LANE-B FOLD PASS")
+            }
         }
     }
 
