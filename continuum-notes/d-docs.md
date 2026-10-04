@@ -292,3 +292,123 @@ top edge; re-window when the anchor leaves the visible band.
   engine DOM contract + server-degrade pagination; t3.4 input-parity
   delivery (data-webui-echo emission, data-webui-input descriptor,
   composition forwarding, ParityKeyEvent); Hot.KeyedList + Hot.AttrWrapper".
+
+---
+
+# lane d — polish (the i3 hook-up closed, on `dev-continuum` d5cb0c4)
+
+branch `task/d-surface`; merged `origin/dev-continuum` @ `d5cb0c4` (i3) first
+— lane C's REAL t3.4 types (`Sources/WebUISharedCore/{KeyEvent,Selection,
+ClipboardPayload,UndoStack}.swift`) are on the tree. three green units pushed:
+`7d5aa80` (re-point), `d14bbb3` (transport mapping + probe).
+
+## wave-3 assumption 2/3: CLOSED — the delivery twins are gone
+
+wave-3 note 2 (D-side payloads wear `Parity*` names) and note 3's i3 deferral
+are the polish this closes. the delivery surface now IS lane C's real
+grammar — `ParityKey`/`ParityModifiers`/`ParityKeyEvent` are DELETED from the
+public surface (the sanctioned substitution, recorded here so the reconciler
+treats it as a re-point, not a removal of capability):
+
+- `ParityKey` → `Key`. `character(String)` → `printable(String)` (single
+  scalar — the same thing, spelled C's way). `composition` had NO `Key`
+  counterpart and is dropped: its payload rides the composition channel
+  (`compositionForwarded()` → `{type, key: "composition", data}`), never the
+  key channel — the wave-3 file comment already said so. `Key` ADDS
+  `space`/`function(Int)`/`unknown` (C's superset; the engine cannot deliver
+  `.space` from the DOM — see the space friction below).
+- `ParityModifiers` → `ModifierSet`. bit positions 1<<0…1<<3 for
+  shift/control/option/command are IDENTICAL (the twins mirrored C's
+  layout); `ModifierSet` adds capsLock/function/numLock. rawValue widens
+  `Int` → `UInt16`.
+- `ParityKeyEvent` → `KeyEvent`. `key`/`modifiers` unchanged;
+  `modifiers:` is now REQUIRED at the call site (C's init has no default —
+  the twin did); `isRepeat` is new (`false` default). stricter surface,
+  same reading.
+
+behavior is byte-identical: the `data-webui-input` descriptor, the `key`
+channel emission (`data-webui-input='["key"]'`), `compositionForwarded()`
+(→ `data-webui-composition=""`), and `InputParityModifier` canonical order
+are untouched.
+
+## the island transport mapping (next-slice #3, now landed)
+
+`KeyEvent → {type, key, data}` v1, exactly as frozen in c-to-e.md and proven
+by E's real-island handshake (e-island-e2e-real.mjs):
+
+| KeyEvent | island payload (v1) |
+|---|---|
+| `key: Key` | `{"type":"key","key":"<Key.identifier>"}` — data OMITTED |
+| `key = .function(n)` | `{"type":"key","key":"F<n>"}` |
+| `key = .printable(s)` | `{"type":"key","key":"<s>"}` (single scalar) |
+| `modifiers` / `isRepeat` | NO v1 wire field (boundary — see below) |
+
+concretely: `KeyEvent.islandPayloadV1` (in `InputParity.swift`) returns
+`["type": "key", "key": key.identifier]`; the engine's real
+`deliverIslandEvent` forwards `type:"key"`, `key` = `String(event.key)` (the
+DOM `KeyboardEvent.key` string), and the island's `decodeEvent` parses it
+back via `Key(identifier:)` (never traps; unmatched → `.unknown` → island
+`.noop`). the bridge is C's `Key.identifier` / `Key(identifier:)` —
+round-trip pinned natively in WebUISharedCoreTests + the parity corpus.
+
+**v1 boundaries (recorded — the consumer must not assume more):**
+1. `modifiers`/`isRepeat` are NOT on the wire at v1. the engine's current
+   artifact additionally forwards `ctrlKey`/`shiftKey`/`altKey`/`metaKey`
+   (boolean-as-string) inside `data` — INFORMATIONAL only; the island's
+   `decodeEvent` keys on `key` alone. a v2 modifier field is the open
+   extension (would need c-to-e + island-side decode changes).
+2. `type:"key"` carries the key identity; `type:"click"`/`type:"input"`
+   carry the ELEMENT id as `key` (the real handshake: `probe-inc`, …).
+3. **the space friction:** the DOM spacebar's `event.key` is a single space
+   scalar `" "`, which `Key(identifier:)` parses to `.printable(" ")`, NOT
+   `.space` (whose canonical wire id is the author-side `"Space"`). authors
+   that want the physical spacebar should match `.printable(" ")` or the
+   identifier `" "` on the wire; `.space`/`"Space"` will not fire from a
+   real browser today. recorded; a v2 engine normalization
+   (`" "` → `"Space"`) is the candidate fix.
+
+## tests / probes
+
+- `LeaseDeliveryTests.keyEventDelivery` — the twins' only pin SUBSTITUTED to
+  `KeyEvent` (same assertions). APISurfaceTests + ViewportTests: NO twin
+  references, additive pins untouched (verified in wave-3 form).
+- NEW `LeaseDeliveryTests.islandPayloadV1` — additive pin: the exact payload,
+  the omit-`data` boundary (`count == 2`, no modifiers/isRepeat keys), the
+  printable/function wire strings, and the `Key(identifier:)` round-trip +
+  never-trapping `unknown`.
+- NEW `designer/probes/d-transport.mjs` — pure Node (no port): parses the
+  REAL `KeyEvent.swift` identifier table off disk (a C-side table drift fails
+  here), asserts the round-trip rule, the F1…F24 range (`F0`/`F25`/`F100`/
+  `Fabc` → unknown — mirrors the digit-scan-then-range Swift), single-scalar
+  printables, `Unknown` self-round-trip, the exact `{type,key}` shape, the
+  element-id rule for click/input, and the space friction. 15 checks.
+
+## gates run (polish)
+
+- `swift build` — green after each unit.
+- `swift test --filter LeaseDeliveryTests` / `--filter APISurfaceTests` —
+  green (9 / 14).
+- `node designer/probes/d-transport.mjs` — 15 PASS, 0 FAIL.
+- final full `swift build` + `swift test` + `node designer/probes/d-viewport.mjs`
+  — see the lane report.
+
+## doc fragments (polish, for the orchestrator)
+
+- `CONTINUUM.md` (t3.4 section): replace the `ParityKeyEvent` grammar + "i3
+  hook-up" with the real `KeyEvent`/`ModifierSet`/`Key` surface, the
+  `islandPayloadV1` mapping table, and the v1 boundaries listed above.
+- `CHANGELOG.md` (unreleased): amend the t3.4 line — "input-parity delivery
+  re-pointed onto lane C's KeyEvent/ModifierSet/Key (twins removed);
+  KeyEvent → island {type,key} v1 transport mapping + d-transport probe".
+
+## handoffs
+
+- to E: the engine's t3.4 forwarding still keys off `data-webui-island-events`
+  today; D's `data-webui-input` descriptor is its declared sibling (one
+  parser). wiring `data-webui-input` into `islandRegionSubscribed`/
+  `deliverIslandEvent` is E's next-slice (recorded in d-to-e). the modifier
+  booleans E already forwards in `data` are informational at v1 — keep them,
+  they pre-seed v2.
+- to B: the twins' removal is a genuine public-surface deletion (approved
+  polish) — coordinate the CHANGELOG/CONTINUUM fold.
+
