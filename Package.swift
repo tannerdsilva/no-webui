@@ -51,6 +51,13 @@ let package = Package(
             name: "WebUIIslandPlugin",
             targets: ["WebUIIslandPlugin"]
         ),
+        // dx-5: the autobuild plugin a consumer attaches to its own target —
+        // a plain `swift build` then cross-builds the real island graph via
+        // direct swiftc (no nested SwiftPM). see Plugins/WebUIAutobuildPlugin.
+        .plugin(
+            name: "WebUIAutobuildPlugin",
+            targets: ["WebUIAutobuildPlugin"]
+        ),
         // a consumer attaches this plugin and ships an `Assets/webui-assets.json`; the
         // plugin runs the framework's tool over it on every build.
         .plugin(
@@ -60,6 +67,12 @@ let package = Package(
         .library(
             name: "WebUIIslandCore",
             targets: ["WebUIIslandCore"]
+        ),
+        // the zero-dep leaf, exposed for consumer islands that import it
+        // directly alongside WebUIIslandCore (dx-5 consumer island mains).
+        .library(
+            name: "WebUISharedCore",
+            targets: ["WebUISharedCore"]
         ),
         .executable(
             name: "WebUIExample",
@@ -482,6 +495,18 @@ let package = Package(
             ),
             dependencies: [
                 .target(name: "WebUIWasmTool"),
+            ]
+        ),
+        // dx-5 build-tool plugin: the cross-build runs INSIDE a plain
+        // `swift build` (the developer's default command, no flags) via the
+        // framework's WebUIContinuumTool `wasm-cross` verb. the command
+        // declares the island sources as inputs and the artifact as output,
+        // so warm builds are llbuild-skipped and a source edit invalidates.
+        .plugin(
+            name: "WebUIAutobuildPlugin",
+            capability: .buildTool(),
+            dependencies: [
+                .target(name: "WebUIContinuumTool"),
             ]
         ),
         .plugin(

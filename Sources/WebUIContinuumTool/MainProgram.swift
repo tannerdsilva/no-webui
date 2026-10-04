@@ -532,6 +532,7 @@ enum WebUIContinuumTool {
 			switch verb {
 			case "generate": try Run.generate(rest)
 			case "lint": try Run.lint(rest)
+			case "wasm-cross": try Run.wasmCross(rest)
 			case "self", "--self", "-h", "--help", "help": printSelf()
 			default:
 				writeError("unknown verb '\(verb)'")
@@ -544,7 +545,7 @@ enum WebUIContinuumTool {
 		}
 	}
 
-	private static func writeError(_ message: String) {
+	static func writeError(_ message: String) {
 		let bytes = [UInt8]((message + "\n").utf8)
 		bytes.withUnsafeBytes { buffer in
 #if os(Linux)
@@ -572,6 +573,13 @@ enum WebUIContinuumTool {
 		                 capability-import mismatches against the host grants
 		                 --sources <dir> [--inventory <path>]
 		                 [--grants a,b,c] [--hotview-sources <dir>]...
+		  wasm-cross     DX-5 autobuild: direct two-stage swiftc cross-compile of
+		                 the island graph (island main -> WebUIIslandCore ->
+		                 WebUISharedCore) for wasm32 with the embedded wasm sdk.
+		                 emitted by WebUIAutobuildPlugin; no nested SwiftPM.
+		                 --graph <pkg root> --product <Island> --obj <dir>
+		                 --out <artifact.wasm> [--sdk <id>] [--swiftc <path>]
+		                 [--mod-cache <dir>] [--no-strip]
 		""")
 	}
 
