@@ -183,6 +183,31 @@ public enum HotOpCodec {
 	/// decodes exactly one record; a non-empty remainder is `trailingBytes`.
 	public static func decode(_ bytes: [UInt8]) throws -> HotOp {
 		var reader = HotOpReader(bytes: bytes)
+		let op = try decodeRecord(from: &reader)
+		guard reader.isAtEnd else { throw HotOpCodecError.trailingBytes }
+		return op
+	}
+
+	/// decodes a back-to-back record stream (the exact inverse of
+	/// `encodeBatch`) into its constituent ops — the native side of the drain
+	/// walk `webui_take_ops()` serves and the shape lane D's generated
+	/// `decodePendingOps()` delegation decodes (W3, d-to-c.md). one malformed
+	/// record aborts the whole stream (the same strict contract as `decode`: a
+	/// frame never silently truncates).
+	public static func decodeBatch(_ bytes: [UInt8]) throws -> [HotOp] {
+		var reader = HotOpReader(bytes: bytes)
+		var ops: [HotOp] = []
+		while !reader.isAtEnd {
+			ops.append(try decodeRecord(from: &reader))
+		}
+		return ops
+	}
+
+	/// parses one record from a reader positioned at a record start — the
+	/// shared decode core for `decode` (strict single-record) and `decodeBatch`
+	/// (whole-stream). behavior-identical to the original inline `decode`
+	/// body (the trailing-bytes guard stays in `decode`).
+	private static func decodeRecord(from reader: inout HotOpReader) throws -> HotOp {
 		let version = try reader.readUInt8()
 		guard version == Self.formatVersion else { throw HotOpCodecError.unsupportedVersion(version) }
 		let opcode = try reader.readUInt8()
@@ -207,7 +232,6 @@ public enum HotOpCodec {
 		default:
 			throw HotOpCodecError.unknownOpcode(opcode)
 		}
-		guard reader.isAtEnd else { throw HotOpCodecError.trailingBytes }
 		return op
 	}
 

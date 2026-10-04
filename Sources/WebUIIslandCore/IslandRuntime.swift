@@ -218,6 +218,24 @@ public struct IslandRuntimeCore<I: IslandRuntimeSurface> {
 		}
 		return Array("{\"ok\":true,\"restored\":\(input.count)}".utf8)
 	}
+
+	// MARK: W3 codec-state accessors (CONTINUUM_DX W3 · d-to-c.md W2 delta) —
+	// the decode half, native-testable.
+	//
+	// the bound instance's currently-pending op records decoded back into
+	// leaf effects — the shape lane D's generated `_continuumDecode` body
+	// delegates to (`IslandRuntime<<Type>Island>.decodePendingOps()`, d-to-c.md).
+	// READS, never drains: `webui_take_ops` stays the only queue consumer, so
+	// a read can never double-apply (decision recorded in c-docs).
+	public func decodePendingOps() -> [HotEffect] {
+		var effects: [HotEffect] = []
+		for record in pendingRecords {
+			if let ops = try? HotOpCodec.decodeBatch(record) {
+				effects.append(.ops(ops))
+			}
+		}
+		return effects
+	}
 }
 
 // MARK: - scalar-clean primitives (absorbed from the probe/validate mains)
@@ -398,6 +416,48 @@ public enum IslandRuntime<I: IslandRuntimeSurface> {
 			islandHandler = IslandRuntimeBridge<I>()
 		}
 		#endif
+	}
+
+	// MARK: W3 codec-state accessors (CONTINUUM_DX W3 · d-to-c.md W2 delta) —
+	// the two statics lane D's generated `_continuumEncode`/`_continuumDecode`
+	// bodies swap to verbatim (`IslandRuntime<<Type>Island>.encodedState()` /
+	// `.decodePendingOps()`, d-to-c.md / d-docs §W2).
+	//
+	// both read the BOUND runtime instance — the exact payloads the standard
+	// exports serve (`webui_state_save` for the state snapshot; the decode of
+	// the op stream `webui_take_ops` drains). `[]`/empty when nothing is
+	// bound: host/native builds bind no runtime, and an island whose main
+	// never ran `run()` reports the drained surface (the recorded contract,
+	// d-docs "why not verbatim" §2).
+	//
+	// strictly additive: no existing export, hook, or conformance changes and
+	// nothing the probe artifact references is touched — the size-exact
+	// backstop holds (the statics are dead-stripped from production wasm
+	// until a consumer names them, the DX-9 discipline).
+
+	/// the bound instance's retained-state snapshot bytes — `core.stateSave()`,
+	/// the same payload `webui_state_save` serves (the engine's
+	/// `restoreIslandRegionState` path). `[]` when nothing is bound.
+	public static func encodedState() -> [UInt8] {
+		#if os(WASI)
+		if let bridge = islandHandler as? IslandRuntimeBridge<I> {
+			return bridge.box.core.stateSave()
+		}
+		#endif
+		return []
+	}
+
+	/// the bound instance's currently-pending op records decoded back into
+	/// leaf effects — each pending record via `HotOpCodec.decodeBatch` into
+	/// `.ops([…])`. empty when nothing is bound or nothing is pending.
+	/// reads the queue, never drains (a decode accessor cannot double-apply).
+	public static func decodePendingOps() -> [HotEffect] {
+		#if os(WASI)
+		if let bridge = islandHandler as? IslandRuntimeBridge<I> {
+			return bridge.box.core.decodePendingOps()
+		}
+		#endif
+		return []
 	}
 
 	/// the EXTRA-exports helper: writes `payload` to the frame buffer and
