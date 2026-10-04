@@ -182,7 +182,7 @@ token). The detailed table is in `Documentation/ARCHITECTURE.md`.
   server keeps serving the old page until restarted after a full `swift build`.
 - **`Logger` methods take `Logger.Message`**, not `String`; prefer unconditional
   `Logger.warning()` over `#if DEBUG` for security-relevant warnings.
-- **Smoke pins the interactive count** (24 `data-component-id` attributes on the
+- **Smoke pins the interactive count** (25 `data-component-id` attributes on the
   smoke page) — add/remove a component there and update `WebUISmokePlugin.swift`.
 - **A rendered artifact showing something the source lacks = stale artifact** —
   regenerate the showcase, don't hand-edit; don't treat it as a framework bug.
