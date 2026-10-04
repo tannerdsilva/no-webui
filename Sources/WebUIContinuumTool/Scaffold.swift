@@ -88,6 +88,10 @@ extension WebUIContinuumTool.Run {
 			let mainPath = (sourcesDir as NSString).appendingPathComponent("main.swift")
 			try main.write(toFile: mainPath, atomically: true, encoding: .utf8)
 			print("scaffold: wrote Sources/\(name)/main.swift (generated — do not edit)")
+			// DX-8: the one verb a getting-started path may name for island
+			// verification — optional belt-and-suspenders; a plain `swift
+			// build` already cross-builds + auto-pins (zero manual verbs).
+			print("scaffold: next — write the island logic, then a plain `swift build` cross-builds + auto-pins it. optional one-shot check: `webui-continuum verify --package-dir . --framework <no-webui path>` (build -> cross-build -> measure/pin -> budget row).")
 			return
 		}
 

@@ -270,3 +270,33 @@ all self-wire their controls as routed components and hand the handler an
 `ElementRef` + typed payload — no `targetId`/`targetClass` string matching
 anywhere. see `DESIGN_SYSTEM.md`, `CHARTS.md`, and `API.md` for the full
 before/after. the legacy container pattern remains available for all of them.
+
+## 8. Islands (the continuum)
+
+an island is a capability compiled to wasm — a `@HotView` declaration plus the
+runtime surface — cross-built by the wasm sdk and served by your page. getting an
+island live requires **zero manual verbs**:
+
+```bash
+swift build   # cross-builds your island (WebUIAutobuildPlugin) + auto-pins its budget (DX-3)
+swift run     # serves the page with the island
+```
+
+start from `templates/app/` (or `plugin scaffold --bootstrap` + `--add-island`)
+for the once-per-app block; write island logic in `Sources/<Name>/`; the
+generated `main.swift` names the macro-produced adapter `<Name>.<Name>Island`.
+
+when you want an explicit one-shot check of the whole path — build → wasm
+cross-build → measure/pin → the budget row — the **single** verb is `verify`:
+
+```bash
+# in the framework home:
+swift package --disable-sandbox plugin verify
+# on a consumer app (the tool surface):
+WebUIContinuumTool verify --package-dir . --framework <no-webui path>
+```
+
+`verify` prints a per-stage verdict and fails on any stage (a budget breach
+included). `wasm-island` remains an internal verb (unchanged; the in-repo
+ladder and the acceptance harness call it) — no getting-started path names it.
+architecture: `Documentation/CONTINUUM.md`.

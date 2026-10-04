@@ -49,6 +49,25 @@ swift test           # 903 tests
 swift run WebUIExample  # example server on :9090
 ```
 
+### Islands (the continuum)
+
+an island is a capability compiled to wasm and hosted by a page. the getting-started
+path is **zero manual verbs**: `swift build` cross-builds your island and auto-pins
+its budget (via `WebUIAutobuildPlugin`, attached by `plugin scaffold --bootstrap` /
+the app template), and `swift run` serves it. when you want an explicit one-shot
+check of the whole path, the **single** verb is `verify`:
+
+```bash
+swift package --disable-sandbox plugin verify   # in the framework home
+# on a consumer app (the tool surface, same as scaffold):
+<no-webui>/.build/…/WebUIContinuumTool verify --package-dir . --framework <no-webui path>
+```
+
+`verify` runs build → wasm cross-build → DX-3 measure/auto-pin → the budget row and
+prints a per-stage verdict. `wasm-island` is an internal verb (the in-repo ladder
+uses it); no getting-started path names it. see `Documentation/GETTING_STARTED.md`
+(§ Islands) and `Documentation/CONTINUUM.md` for the architecture.
+
 all project tooling is command plugins — no shell scripts. see
 `Documentation/ASSEMBLY.md` for the full stage map.
 
@@ -56,6 +75,7 @@ all project tooling is command plugins — no shell scripts. see
 swift package --disable-sandbox plugin serve    # host the smoke/demo server on :9123 (Ctrl+C stops)
 swift package --disable-sandbox plugin smoke    # self-contained smoke gate (server + checks + teardown)
 swift package --disable-sandbox plugin fullstack-smoke  # self-contained full-stack gate (live WS round-trips)
+swift package --disable-sandbox plugin verify   # one verb: the full island verification path (build → cross-build → measure/pin → budget row)
 node designer/browser-smoke.mjs                 # browser layout gate (playwright, self-contained)
 swift package plugin probe 9123                 # is a port in use?
 swift package plugin showcase --allow-writing-to-package-directory  # refresh designer/previews/showcase.html
@@ -77,11 +97,14 @@ no-webui/
 │   └── WebUISmokeTest/           # smoke/demo server (hosted by the plugins)
 ├── Plugins/
 │   ├── WebUIAssetPlugin/         # build tool plugin: embeds designer/assets at build time
+│   ├── WebUIAutobuildPlugin/     # build tool plugin: cross-builds + auto-pins your islands on every swift build
 │   ├── WebUIServePlugin/         # command plugin `serve`: hosts the server on :9123
 │   ├── WebUISmokePlugin/         # command plugin `smoke`: self-contained asset/page gate
 │   ├── WebUIFullstackSmokePlugin/# command plugin `fullstack-smoke`: live WS gate
 │   ├── WebUIProbePlugin/         # command plugin `probe`: port check
-│   └── WebUIShowcasePlugin/      # command plugin `showcase`: regenerates designer/previews/
+│   ├── WebUIShowcasePlugin/      # command plugin `showcase`: regenerates designer/previews/
+│   ├── WebUIVerifyPlugin/        # command plugin `verify`: the ONE island-verification verb (build → cross-build → measure/pin → budget row)
+│   └── WebUIIslandPlugin/        # command plugin `wasm-island`: INTERNAL cross-build verb (the in-repo ladder)
 ├── Tests/
 │   ├── WebUITests/               # web UI tests
 │   └── WebUIAuthTests/           # authentication + session tests
