@@ -32,6 +32,12 @@ public enum HotTree: HotPrimitive, Equatable, Sendable {
     case text(id: ElementID, content: String)
     /// an addressed element; renders `<tag id="…" class="…">children</tag>`.
     case container(id: ElementID, tag: String, className: String?, children: [HotTree])
+    /// an addressed element carrying extra attributes — the promotion path's
+    /// carrier: `data-key`, `data-*`, `aria-*` on a component's root (`Hot`
+    /// containers model only id + class; everything else rides `attended`).
+    /// the attributes laminate the element the content opens; content that
+    /// opens no element drops them (pinned). see `Hot.AttrWrapper`.
+    indirect case attended(attributes: [Hot.HotAttribute], content: HotTree)
     /// a layout-only, anonymous gap: no address, no ops.
     case spacer
 
@@ -42,6 +48,7 @@ public enum HotTree: HotPrimitive, Equatable, Sendable {
         switch self {
         case .text(let id, _): return id
         case .container(let id, _, _, _): return id
+        case .attended(_, let content): return content.elementID
         case .empty, .fragment, .spacer: return nil
         }
     }
@@ -58,6 +65,7 @@ public enum HotTree: HotPrimitive, Equatable, Sendable {
         case .fragment: return .fragment
         case .text: return .text
         case .container: return .container
+        case .attended(_, let content): return content.kind
         case .spacer: return .spacer
         }
     }
@@ -70,6 +78,7 @@ public enum HotTree: HotPrimitive, Equatable, Sendable {
         switch self {
         case .empty: return []
         case .fragment(let children): return children
+        case .attended(_, let content): return content.flattenedChildren
         default: return [self]
         }
     }
@@ -88,8 +97,32 @@ public enum HotTree: HotPrimitive, Equatable, Sendable {
             let classAttribute = className.map { " class=\"\(htmlEscape($0))\"" } ?? ""
             let inner = children.map { $0.render() }.joined()
             return "<\(tag) id=\"\(htmlEscape(id.raw))\"\(classAttribute)>\(inner)</\(tag)>"
+        case .attended(let attributes, let content):
+            return content.attributedRender(attributes)
         case .spacer:
             return "<div class=\"spacer\" style=\"flex:1\"></div>"
+        }
+    }
+
+    /// render with `attributes` laminated onto the element this tree opens.
+    /// delegates down through nested `attended` wrappers so promoted nodes
+    /// compose; content that opens no element (empty / anonymous fragment /
+    /// spacer) keeps its bytes and drops the attributes — there is no element
+    /// to carry them (pinned).
+    private func attributedRender(_ attributes: [Hot.HotAttribute]) -> String {
+        switch self {
+        case .attended(let inner, let content):
+            return content.attributedRender(attributes + inner)
+        case .container(let id, let tag, let className, let children):
+            let attrText = Hot.HotAttribute.attributeText(attributes)
+            let classAttribute = className.map { " class=\"\(htmlEscape($0))\"" } ?? ""
+            let inner = children.map { $0.render() }.joined()
+            return "<\(tag) id=\"\(htmlEscape(id.raw))\"\(classAttribute)\(attrText)>\(inner)</\(tag)>"
+        case .text(let id, let content):
+            let attrText = Hot.HotAttribute.attributeText(attributes)
+            return "<span id=\"\(htmlEscape(id.raw))\"\(attrText)>\(htmlEscape(content))</span>"
+        default:
+            return render()
         }
     }
 
@@ -128,6 +161,24 @@ public enum HotTree: HotPrimitive, Equatable, Sendable {
 
         case (.fragment(let previousChildren), .fragment(let children)):
             return HotTree.fragmentOps(previous: previousChildren, current: children)
+
+        case (.attended(_, let previousContent), .attended(_, let content)):
+            // attributes are stable per render by the promotion contract
+            // (data-key, data-*, aria-* — constant for an addressed node), so
+            // the delta is entirely the content's. an attribute-only change
+            // yields no ops (v1 boundary: the engine's attr op is the future
+            // channel for dynamic row state).
+            return content.hotOps(previous: previousContent)
+
+        case (_, .attended(_, let content)):
+            // a promotion laminated over a previously plain node: diff against
+            // the unwrapped previous.
+            return content.hotOps(previous: previous)
+
+        case (.attended(_, let previousContent), _):
+            // a promotion stripped from a previously wrapped node: diff the
+            // plain self against the unwrapped previous.
+            return hotOps(previous: previousContent)
 
         default:
             // kind or identity changed at this address: structural, owned by
@@ -306,6 +357,104 @@ extension Hot {
         public var hotTree: HotTree { .spacer }
         public func render() -> String { hotTree.render() }
         public func hotOps(previous: Spacer?) -> [HotOp] { [] }
+    }
+
+    /// one extra attribute an `AttrWrapper` laminates onto an addressed node.
+    /// both halves are escaped at render; the name is author-declared
+    /// vocabulary, never data.
+    public struct HotAttribute: Equatable, Sendable {
+        public let name: AttributeName
+        public let value: String
+
+        public init(_ name: AttributeName, _ value: String) {
+            self.name = name
+            self.value = value
+        }
+
+        public init(_ name: String, _ value: String) {
+            self.name = AttributeName(name)
+            self.value = value
+        }
+
+        /// the rendered `name="value"` text, both halves escaped.
+        static func attributeText(_ attributes: [HotAttribute]) -> String {
+            guard !attributes.isEmpty else { return "" }
+            return attributes.map { " \(htmlEscape($0.name.raw))=\"\(htmlEscape($0.value))\"" }.joined()
+        }
+    }
+
+    /// the component-promotion carrier: laminates extra attributes onto the
+    /// element an existing hot node opens, without forking its structure —
+    /// `Hot` containers model `id` + `class`; everything else (`data-key`,
+    /// `data-*`, `aria-*`) rides a promotion. attributes are constant per
+    /// render by contract; an attribute-only change is v1 out of diff scope.
+    public struct AttrWrapper: HotPrimitive {
+        public let attributes: [HotAttribute]
+        public let content: HotTree
+
+        public init(attributes: [HotAttribute], @HotBuilder content: () -> HotTree) {
+            self.attributes = attributes
+            self.content = content()
+        }
+
+        public var hotTree: HotTree { .attended(attributes: attributes, content: content) }
+        public func render() -> String { hotTree.render() }
+        public func hotOps(previous: AttrWrapper?) -> [HotOp] {
+            hotTree.hotOps(previous: previous?.hotTree)
+        }
+    }
+
+    /// keyed identity over a list body (t3.3's `KeyedList` semantics): rows
+    /// reconcile by KEY, never by position. each row's address derives from
+    /// its key (`<base>-k<key>`), so a reorder is a `move`, an insert a
+    /// same-key `insert`, a removal a `remove` — same-key rows keep their DOM
+    /// nodes, which is what lets a windowed patch (or a sorted feed) mutate
+    /// only the rows that genuinely changed. each row also carries
+    /// `data-key` (the engine's identity channel) via an `AttrWrapper`.
+    ///
+    ///     Hot.KeyedList(id: "feed", keys: ["a", "b", "c"]) { key in
+    ///         Hot.Container(id: "feed-row-\(key)") { Hot.Text(id: "t-\(key)", key) }
+    ///     }
+    public struct KeyedList<Key: Hashable & Sendable>: HotPrimitive {
+        /// the container address (its own element, anonymous children).
+        public let id: ElementID
+        public let tag: String
+        public let rowTag: String
+        public let rowClass: String?
+        /// the attended rows, in list order; each row is keyed by its derived
+        /// address `id-k<key>` — the identity map the diff keys on.
+        public let rows: [HotTree]
+
+        public init(
+            id: ElementID,
+            tag: String = "div",
+            rowTag: String = "div",
+            rowClass: String? = nil,
+            keys: [Key],
+            keyString: @escaping @Sendable (Key) -> String = { String(describing: $0) },
+            @HotBuilder row: @escaping @Sendable (Key) -> HotTree
+        ) {
+            self.id = id
+            self.tag = tag
+            self.rowTag = rowTag
+            self.rowClass = rowClass
+            self.rows = keys.map { key in
+                let keyText = keyString(key)
+                let rowID = ElementID("\(id.raw)-k\(keyText)")
+                return HotTree.attended(
+                    attributes: [HotAttribute("data-key", keyText)],
+                    content: .container(id: rowID, tag: rowTag, className: rowClass, children: [row(key)])
+                )
+            }
+        }
+
+        public var hotTree: HotTree { .container(id: id, tag: tag, className: nil, children: rows) }
+
+        public func render() -> String { hotTree.render() }
+
+        public func hotOps(previous: KeyedList?) -> [HotOp] {
+            hotTree.hotOps(previous: previous?.hotTree)
+        }
     }
 }
 
