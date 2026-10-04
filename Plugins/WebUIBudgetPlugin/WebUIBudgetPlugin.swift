@@ -182,29 +182,60 @@ struct WebUIBudgetPlugin: CommandPlugin {
             }
         }
 
-        // islands: report every artifact, enforce the per-file ceiling on each.
-        let islandDir = packageDir
+        // islands: report every artifact; enforce a per-island pin from the
+        // continuum manifest when one matches (t4.2 — never a second budget
+        // path: the pin the island declared rides the SAME plugin), else the
+        // .build/out global fallback. the manifest is the raw ContinuumManifest.json
+        // the continuum plugin emits (the budget plugin reads it directly; the
+        // served conformance is the engine's copy of the same payload).
+        let islandDir = (arguments.firstIndex(of: "--island-dir").flatMap { i in
+            guard i + 1 < arguments.count else { return nil }
+            let value = arguments[i + 1]
+            return value.hasPrefix("/")
+                ? URL(fileURLWithPath: value)
+                : packageDir.appendingPathComponent(value)
+        }) ?? packageDir
             .appendingPathComponent(".build")
             .appendingPathComponent("out")
             .appendingPathComponent("Products")
             .appendingPathComponent("Release-webassembly-wasm32")
-        var islandRows: [(String, Int, String)] = []
+        let islandPins = Self.islandPins(from: Self.islandManifestURL(packageDir: packageDir, arguments: arguments))
+        var islandRows: [(String, Int, String, String)] = []
         if let entries = try? FileManager.default.contentsOfDirectory(
             at: islandDir, includingPropertiesForKeys: [.fileSizeKey]
         ) {
             for entry in entries where entry.pathExtension == "wasm" {
                 let size = (try? entry.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
                 let name = entry.lastPathComponent
+                // match the wasm artifact to a manifest island by name
+                // (case-insensitive containment: WebUIProbeIsland.wasm <-> "probe").
+                let pin = islandPins.first { pin in
+                    name.lowercased().contains(pin.name.lowercased())
+                        || pin.name.lowercased().contains(name.lowercased())
+                }
+                let pinLabel: String
+                if let pin {
+                    pinLabel = "raw≤\(pin.maxBytes)" + (pin.maxGzipBytes.map { " gz≤\($0)" } ?? "")
+                } else {
+                    pinLabel = "raw≤\(Self.islandCeiling)"
+                }
                 let verdict: String
                 if Self.retiredArtifacts.contains(name) {
                     verdict = "stale"
-                } else if size <= Self.islandCeiling {
-                    verdict = "ok"
                 } else {
-                    verdict = "OVER"
-                    breaches.append("\(name): \(size) > \(Self.islandCeiling) pinned")
+                    let rawOk = size <= (pin?.maxBytes ?? Self.islandCeiling)
+                    if rawOk {
+                        verdict = "ok"
+                    } else {
+                        verdict = "OVER"
+                        if let pin {
+                            breaches.append("\(name): \(size) raw bytes > \(pin.maxBytes) pinned by island \(pin.name)")
+                        } else {
+                            breaches.append("\(name): \(size) > \(Self.islandCeiling) pinned")
+                        }
+                    }
                 }
-                islandRows.append((name, size, verdict))
+                islandRows.append((name, size, verdict, pinLabel))
             }
         }
 
@@ -232,9 +263,12 @@ struct WebUIBudgetPlugin: CommandPlugin {
         if islandRows.isEmpty {
             print("  islands: none built (opt-in — run `plugin wasm-island` to produce one)")
         } else {
-            for (name, size, verdict) in islandRows {
+            for (name, size, verdict, pinLabel) in islandRows {
                 print("  " + pad(name, 10) + padLeft(String(size), 10) + padLeft("—", 10)
-                      + "  " + pad(verdict, 12) + pad("", 18) + "per-file ≤ \(Self.islandCeiling)")
+                      + "  " + pad(verdict, 12) + pad("", 18) + pinLabel)
+            }
+            if !islandPins.isEmpty {
+                print("  per-island pins from ContinuumManifest.json (t4.2); unmatched islands ride the global ceiling")
             }
         }
         print("─────────────────────────────────────────────────────────────────")
@@ -255,7 +289,59 @@ struct WebUIBudgetPlugin: CommandPlugin {
         print("budget: PASS — every shipped surface is within its pinned ceiling.")
     }
 
-    // MARK: - the served manifest
+    // MARK: - per-island budget pins (t4.2)
+
+    /// locate the raw ContinuumManifest.json the continuum plugin emitted:
+    /// `--island-manifest <path>` overrides (probe/testing), else walked from
+    /// the plugin-outputs tree exactly like the served manifest.
+    private static func islandManifestURL(packageDir: URL, arguments: [String]) -> URL? {
+        if let i = arguments.firstIndex(of: "--island-manifest"), i + 1 < arguments.count {
+            let value = arguments[i + 1]
+            return value.hasPrefix("/")
+                ? URL(fileURLWithPath: value)
+                : packageDir.appendingPathComponent(value)
+        }
+        let outputs = packageDir
+            .appendingPathComponent(".build")
+            .appendingPathComponent("plugins")
+            .appendingPathComponent("outputs")
+        guard let packages = try? FileManager.default.contentsOfDirectory(
+            at: outputs, includingPropertiesForKeys: nil
+        ) else { return nil }
+        for package in packages {
+            guard let targets = try? FileManager.default.contentsOfDirectory(
+                at: package, includingPropertiesForKeys: nil
+            ) else { continue }
+            for target in targets {
+                let manifest = target
+                    .appendingPathComponent("destination")
+                    .appendingPathComponent("WebUIContinuumPlugin")
+                    .appendingPathComponent("ContinuumManifest.json")
+                if FileManager.default.fileExists(atPath: manifest.path) {
+                    return manifest
+                }
+            }
+        }
+        return nil
+    }
+
+    /// every island budget pin in the manifest, keyed by island name.
+    private static func islandPins(from url: URL?) -> [(name: String, maxBytes: Int, maxGzipBytes: Int?)] {
+        guard let url,
+              let data = FileManager.default.contents(atPath: url.path),
+              let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let islands = root["islands"] as? [[String: Any]]
+        else { return [] }
+        var pins: [(name: String, maxBytes: Int, maxGzipBytes: Int?)] = []
+        for island in islands {
+            guard let name = island["name"] as? String,
+                  let maxBytes = island["maxBytes"] as? Int
+            else { continue }
+            pins.append((name, maxBytes, island["maxGzipBytes"] as? Int))
+        }
+        return pins
+    }
+
 
     /// `WebUIAssetTool` writes the served byte counts next to the generated assets, which
     /// live in a plugin-work path whose hash SwiftPM owns. found by walking the known

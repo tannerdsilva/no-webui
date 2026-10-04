@@ -1,4 +1,5 @@
 import Foundation
+import WebUIBuild
 
 #if os(Linux)
 import Glibc
@@ -15,11 +16,20 @@ import Darwin
 // no inventory claims (WARN-ONLY in d1; the error level stays the landed
 // orphan ratchet, `HTMLClassValidator` + `orphan-class-baseline.txt`).
 //
+// wave 2 (d2 t2.6): the `lint` verb also checks the capability grants — it
+// reads `@HotView` descriptors for their `imports:` list, compares against
+// the host grant list (a `ContinuumGrants` constant in the scanned sources,
+// or `--grants`, or the framework default), and a mismatch is a BUILD ERROR
+// with the parent plan's exact message shape:
+//   island "feed" imports "surface_acquire" — not granted by the host
+//   manifest (add it to ContinuumGrants or drop the import)
+//
 // verbs (mirroring `WebUIIconTool`'s verb dispatch and `WebUIAssetTool`'s
 // output style):
 //   generate    -- sources -> Continuum+Generated.swift
 //   lint        -- re-scan sources; warn on literals the generated inventory
-//                  does not claim; exit 0 (warn-only in d1)
+//                  does not claim (warn-only in d1) AND fail the build on a
+//                  capability-import mismatch against the host grants
 //   self/help
 //
 // the scanner reads sources as text on purpose (the plan's marker forms are
@@ -225,6 +235,233 @@ func appendHot(classes: [String], to result: inout ScanResult, component: String
 	}
 }
 
+// MARK: - capability grants (d2 t2.6)
+
+/// one `@HotView` declaration as the capability lint reads it: the island name
+/// and its declared `imports:` list (normalized to wire names).
+struct HotViewMarker: Equatable {
+	let name: String
+	let imports: [String]
+	/// the declared `budget: IslandBudget(...)` pin, if any (t4.2).
+	let pin: IslandPin?
+}
+
+/// a per-island budget pin declared by a `@HotView(..., budget: IslandBudget(...))`
+/// marker (parent §1.3.5 `IslandBudget`, §t4.2). the plugin enforces these
+/// against the built `.wasm`; islands without a pin ride the global ceiling.
+struct IslandPin: Equatable {
+	let name: String
+	let maxBytes: Int
+	let maxGzipBytes: Int?
+}
+
+/// the canonical capability table (parent §1.3.4): type name -> wire name.
+/// the scanner accepts capability *types* (`SurfaceAcquisition.self`), dot
+/// cases (`.surface_acquire`) and bare wire-name strings; every form is
+/// normalized to the wire name the host manifest grants by.
+let capabilityWireNames: [(type: String, wire: String)] = [
+	("FrameSchedule", "frame_schedule"),
+	("InputSubscription", "input_subscribe"),
+	("SurfaceAcquisition", "surface_acquire"),
+	("StatePersistence", "state_persist"),
+	("ClockCapability", "clock"),
+	("LogCapability", "log"),
+]
+
+/// the framework's default host grant list, parent §1.3.4: every capability
+/// the engine implements today is granted by default. an app narrows the set
+/// with a `ContinuumGrants` constant or `--grants`.
+let defaultHostGrants: [String] = [
+	"frame_schedule", "input_subscribe", "surface_acquire",
+	"state_persist", "clock", "log",
+]
+
+/// strip the casing/noise from a capability token to its wire name:
+/// `SurfaceAcquisition.self` -> `surface_acquire`, `.surface_acquire` ->
+/// `surface_acquire`, `"surface_acquire"` -> `surface_acquire`, `clock` ->
+/// `clock`. an unrecognized token is kept verbatim (the caller decides
+/// whether that is a grantable name).
+func normalizeCapabilityToken(_ raw: String) -> String {
+	var t = raw.trimmingCharacters(in: .whitespaces)
+	t = t.trimmingCharacters(in: CharacterSet(charactersIn: "\"'"))
+	if t.hasPrefix(".") { t = String(t.dropFirst()) }
+	if t.hasSuffix(".self") { t = String(t.dropLast(".self".count)) }
+	if let cap = capabilityWireNames.first(where: { $0.type == t }) { return cap.wire }
+	return t
+}
+
+/// find every `@HotView(...)` marker in `source`. the body is scanned with a
+/// balanced-paren walk so a `budget: IslandBudget(...)` nested call does not
+/// truncate the marker. the marker form is the plan's contract (§1.4): a name
+/// plus optional `imports:`/`budget:` labeled arguments.
+func hotViewMarkers(in source: String) -> [HotViewMarker] {
+	var markers: [HotViewMarker] = []
+	var index = source.startIndex
+	while index < source.endIndex {
+		guard let markerStart = source[index...].range(of: "@HotView") else { break }
+		let afterAttr = markerStart.upperBound
+		guard let open = source[afterAttr...].firstIndex(of: "(") else {
+			index = afterAttr
+			continue
+		}
+		// balanced paren scan from `open` to its matching close.
+		var depth = 0
+		var cursor = open
+		var close: String.Index? = nil
+		while cursor < source.endIndex {
+			let c = source[cursor]
+			if c == "(" { depth += 1 }
+			else if c == ")" {
+				depth -= 1
+				if depth == 0 { close = cursor; break }
+			}
+			cursor = source.index(after: cursor)
+		}
+		guard let close else {
+			index = afterAttr
+			continue
+		}
+		let body = String(source[source.index(after: open)..<close])
+		if let marker = parseHotViewBody(body) {
+			markers.append(marker)
+		}
+		index = source.index(close, offsetBy: 1)
+	}
+	return markers
+}
+
+/// parse one `@HotView` body into a marker. the body is split into top-level
+/// comma-separated arguments at paren/bracket depth 0; the quoted name is the
+/// first argument, and the `imports:` argument's tokens become the import
+/// list (any list bracketed in `[...]` is expanded).
+func parseHotViewBody(_ body: String) -> HotViewMarker? {
+	let args = topLevelCommaSplit(body)
+	guard let first = args.first else { return nil }
+	// the island name is the first double-quoted string literal.
+	guard let nameMatch = first.firstMatch(of: /"((?:[^"\\]|\\.)*)"/) else { return nil }
+	let name = String(nameMatch.1)
+
+	var imports: [String] = []
+	var pin: IslandPin? = nil
+	for arg in args.dropFirst() {
+		let trimmed = arg.trimmingCharacters(in: .whitespaces)
+		guard let label = trimmed.firstMatch(of: /^([A-Za-z_][A-Za-z0-9_]*)\s*:/) else { continue }
+		let labelName = String(label.1)
+		var value = String(trimmed[label.range.upperBound...]).trimmingCharacters(in: .whitespaces)
+		if labelName == "imports" {
+			if value.hasPrefix("[") {
+				value.removeFirst()
+				if value.hasSuffix("]") { value.removeLast() }
+			}
+			for token in topLevelCommaSplit(value) {
+				let wire = normalizeCapabilityToken(token)
+				guard !wire.isEmpty else { continue }
+				if !imports.contains(wire) { imports.append(wire) }
+			}
+		} else if labelName == "budget" {
+			pin = islandBudget(from: value, islandName: name)
+		}
+	}
+	imports.sort()
+	return HotViewMarker(name: name, imports: imports, pin: pin)
+}
+
+/// parse an `IslandBudget(...)` expression into a pin (t4.2): required
+/// `maxBytes:` and optional `maxGzipBytes:` (default nil).
+func islandBudget(from value: String, islandName: String) -> IslandPin? {
+	guard let maxMatch = value.firstMatch(of: /maxBytes\s*:\s*(\d+)/) else { return nil }
+	let maxBytes = Int(maxMatch.1) ?? 0
+	let gz: Int?
+	if let gzMatch = value.firstMatch(of: /maxGzipBytes\s*:\s*(\d+)/) {
+		gz = Int(gzMatch.1)
+	} else {
+		gz = nil
+	}
+	return IslandPin(name: islandName, maxBytes: maxBytes, maxGzipBytes: gz)
+}
+
+/// every distinct island pin across the marker-bearing source dirs.
+func islandPins(in sourceDirs: [String]) -> [IslandPin] {
+	var pins: [IslandPin] = []
+	for dir in sourceDirs {
+		guard let files = try? FileManager.default.contentsOfDirectory(atPath: dir) else { continue }
+		for file in files where file.hasSuffix(".swift") {
+			let path = (dir as NSString).appendingPathComponent(file)
+			guard let source = try? String(contentsOfFile: path, encoding: .utf8) else { continue }
+			for marker in hotViewMarkers(in: source) {
+				guard let pin = marker.pin else { continue }
+				if !pins.contains(where: { $0.name == pin.name }) { pins.append(pin) }
+			}
+		}
+	}
+	return pins.sorted { $0.name < $1.name }
+}
+
+/// split `text` on commas at paren/bracket/quote depth 0.
+func topLevelCommaSplit(_ text: String) -> [String] {
+	var parts: [String] = []
+	var depth = 0
+	var current = ""
+	var quote: Character? = nil
+	var escaped = false
+	for c in text {
+		if let q = quote {
+			current.append(c)
+			if escaped { escaped = false }
+			else if c == "\\" { escaped = true }
+			else if c == q { quote = nil }
+		} else if c == "\"" || c == "'" {
+			quote = c
+			current.append(c)
+		} else if c == "(" || c == "[" {
+			depth += 1
+			current.append(c)
+		} else if c == ")" || c == "]" {
+			depth -= 1
+			current.append(c)
+		} else if c == "," && depth == 0 {
+			parts.append(current)
+			current = ""
+		} else {
+			current.append(c)
+		}
+	}
+	parts.append(current)
+	return parts
+}
+
+/// the host grant list for a lint run: `--grants` wins; else a known
+/// `ContinuumGrants` constant declaration in the scanned sources; else the
+/// framework default (every engine capability).
+func hostGrants(cli: String?, sourceDirs: [String]) -> [String] {
+	if let cli {
+		return cli.split(separator: ",").map(String.init).map(normalizeCapabilityToken)
+			.filter { !$0.isEmpty }
+	}
+	for dir in sourceDirs {
+		guard let files = try? FileManager.default.contentsOfDirectory(atPath: dir) else { continue }
+		for file in files where file.hasSuffix(".swift") {
+			let path = (dir as NSString).appendingPathComponent(file)
+			guard let source = try? String(contentsOfFile: path, encoding: .utf8) else { continue }
+			// a `ContinuumGrants` constant: `ContinuumGrants = [...]` or a
+			// `static let granted: [String] = [...]` inside a ContinuumGrants
+			// enum/struct — grab the bracketed string literals.
+			let marker = /ContinuumGrants[^\n]*\[\s*([^\]]*)\]/
+			guard let m = source.firstMatch(of: marker) else { continue }
+			let body = String(m.1)
+			let token = /"((?:[^"\\]|\\.)*)"/
+			var grants: [String] = []
+			for t in body.matches(of: token) {
+				let name = normalizeCapabilityToken(String(t.1))
+				if !name.isEmpty, !grants.contains(name) { grants.append(name) }
+			}
+			if !grants.isEmpty { return grants.sorted() }
+			break // a ContinuumGrants declaration was found; one per run
+		}
+	}
+	return defaultHostGrants
+}
+
 // MARK: - emission
 
 /// the generated file: a self-describing value the WebUI target compiles.
@@ -327,9 +564,14 @@ enum WebUIContinuumTool {
 		verbs:
 		  generate       scan design-system core -> Continuum+Generated.swift
 		                 --sources <dir> --output <path>
+		                 [--engine-manifest <path>]  served content-addressed slice
+		                 [--manifest <json>]         raw manifest (budget plugin)
+		                 [--hotview-sources <dir>]   marker dirs for pins
 		  lint           re-scan sources; warn on class literals the generated
-		                 inventory does not claim (warn-only in d1)
+		                 inventory does not claim (warn-only in d1) AND fail on
+		                 capability-import mismatches against the host grants
 		                 --sources <dir> [--inventory <path>]
+		                 [--grants a,b,c] [--hotview-sources <dir>]...
 		""")
 	}
 
@@ -350,6 +592,83 @@ enum WebUIContinuumTool {
 			let k = scan.unclaimed.count
 			// the build line the plugin reports.
 			print("[WebUIContinuumPlugin] inventory: \(n) components, \(m) classes, \(k) unclaimed (warn)")
+
+			// per-island budget pins ride the same scan (t4.2): `@HotView(..., budget:
+			// IslandBudget(...))` markers anywhere in the marker-bearing sources.
+			var sourceDirs = [sources]
+			if let extra = Args.option(argv, "--hotview-sources") {
+				sourceDirs += extra.split(separator: ",").map(String.init)
+			}
+			let pins = islandPins(in: sourceDirs)
+
+			// the raw manifest: the same payload the served slice embeds, written
+			// as plain json so the budget plugin reads the pins without decoding
+			// the generated conformance.
+			if let manifestPath = Args.option(argv, "--manifest") {
+				let payload = manifestJSON(scan, pins: pins)
+				try payload.write(toFile: manifestPath, atomically: true, encoding: .utf8)
+			}
+
+			// d2 §1.5: the engine-facing slice. the engine cannot read swift —
+			// it receives its attr allowlist (and the class inventory) as a
+			// served, content-addressed manifest, emitted through the same
+			// WebUIAssetBuilder machinery as the css/js: one stamp (sha256
+			// prefix), one gzip variant, one WebUIShippedAsset conformance the
+			// host registers at a content-addressed url. this closes lane E's
+			// wave-1 static-allowlist seed handoff (reconcile wires the fetch
+			// at i2; the engine stays conservative until then).
+			if let manifestPath = Args.option(argv, "--engine-manifest") {
+				let payload = engineSliceJSON(scan, pins: pins)
+				let receipt = try WebUIAssetBuilder.emit(
+					shipped: payload,
+					typeName: "ContinuumEngineManifest",
+					options: WebUIAssetBuilder.Options(
+						prose: .off,
+						contentType: "application/json; charset=utf-8"
+					),
+					to: URL(fileURLWithPath: manifestPath)
+				)
+				print("[WebUIContinuumPlugin] engine slice: \(receipt.bytes) bytes, sha \(receipt.stamp), served at /ui/continuum-manifest.json?v=\(receipt.stamp)")
+			}
+		}
+
+		/// the engine-facing manifest payload (parent §1.5): the attr allowlist
+		/// the engine enforces on `attr` ops, the class inventory, and the
+		/// per-island budget pins (t4.2). flat and self-describing so the
+		/// reconciler wires the fetch without negotiation.
+		static func engineSliceJSON(_ scan: ScanResult, pins: [IslandPin]) -> String {
+			let components = scan.components
+				.sorted { $0.name < $1.name }
+				.map { c in
+					"\"\(c.name)\":"
+						+ "[\n"
+						+ c.allClasses.map { "\t\t\t\"\($0)\"" }.joined(separator: ",\n")
+						+ "\n\t\t]"
+				}
+				.joined(separator: ",\n")
+			let union = scan.union.map { "\"\($0)\"" }.joined(separator: ",")
+			let allowlist = ["\"class\"", "\"aria-*\"", "\"data-*\""].joined(separator: ",")
+			let islands = pins.map { p in
+				"{\"name\":\"\(p.name)\",\"maxBytes\":\(p.maxBytes)\(p.maxGzipBytes.map { ",\"maxGzipBytes\":\($0)" } ?? "")}"
+			}.joined(separator: ",")
+			return """
+			{
+			  "kind": "continuum-engine-slice",
+			  "version": 1,
+			  "attributeAllowlist": [\(allowlist)],
+			  "components": {
+			\(components)
+			  },
+			  "union": [\(union)],
+			  "islands": [\(islands)]
+			}
+			"""
+		}
+
+		/// the same payload as the served slice, as plain json (the budget
+		/// plugin reads this file — no conformance decoding needed).
+		static func manifestJSON(_ scan: ScanResult, pins: [IslandPin]) -> String {
+			engineSliceJSON(scan, pins: pins)
 		}
 
 		static func lint(_ argv: [String]) throws {
@@ -372,8 +691,45 @@ enum WebUIContinuumTool {
 			let n = scan.components.count
 			let m = scan.union.count
 			print("[WebUIContinuumPlugin] inventory: \(n) components, \(m) classes, \(warns.count) unclaimed (warn)")
-			// warn-only in d1: lint always exits 0 (the orphan ratchet owns the
-			// error level).
+
+			// d2 t2.6: the capability-grants check. each `@HotView` marker's
+			// `imports:` is compared against the host grant list; a mismatch is
+			// a BUILD ERROR with the parent plan's exact message shape.
+			var sourceDirs = [sources]
+			if let extra = Args.option(argv, "--hotview-sources") {
+				sourceDirs += extra.split(separator: ",").map(String.init)
+			}
+			let grants = Set(hostGrants(cli: Args.option(argv, "--grants"), sourceDirs: sourceDirs))
+			var violations: [String] = []
+			for dir in sourceDirs {
+				guard let files = try? FileManager.default.contentsOfDirectory(atPath: dir) else { continue }
+				for file in files where file.hasSuffix(".swift") {
+					let path = (dir as NSString).appendingPathComponent(file)
+					guard let source = try? String(contentsOfFile: path, encoding: .utf8) else { continue }
+					for marker in hotViewMarkers(in: source) {
+						for importName in marker.imports where !grants.contains(importName) {
+							violations.append("island \"\(marker.name)\" imports \"\(importName)\" — not granted by the host manifest (add it to ContinuumGrants or drop the import)")
+						}
+					}
+				}
+			}
+			for violation in violations.sorted() {
+				writeError(violation)
+			}
+			if !violations.isEmpty {
+				writeError("WebUIContinuumTool: \(violations.count) capability-import violation(s) against the host grants (add the capabilities to ContinuumGrants or drop the imports)")
+				exit(1)
+			}
+			// the build-tool plugin declares a cache stamp; only a clean scan
+			// writes it, so a clean result is cached and a violation fails the
+			// build (the stamp never lands). optional — direct `lint` runs
+			// without the plugin skip the touch.
+			if let touch = Args.option(argv, "--touch") {
+				FileManager.default.createFile(atPath: touch, contents: Data("ok\n".utf8))
+			}
+			// warn-only in d1: class lint always exits 0 (the orphan ratchet
+			// owns the class-error level); the capability check above is the
+			// error level t2.6 adds.
 		}
 
 		/// the class tokens a generated inventory's `union` array owns.

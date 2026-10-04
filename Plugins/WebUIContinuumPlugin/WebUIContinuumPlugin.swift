@@ -28,6 +28,17 @@ struct WebUIContinuumPlugin: BuildToolPlugin {
 
         let outputURL = context.pluginWorkDirectoryURL
             .appendingPathComponent("Continuum+Generated.swift")
+        // d2 §1.5: the engine-facing served slice — a content-addressed
+        // WebUIShippedAsset conformance (the same emission machinery as the
+        // css/js), compiled into the WebUI target so a host registers it like
+        // any other shipped asset and the engine fetches it at its
+        // content-addressed url.
+        let engineSliceURL = context.pluginWorkDirectoryURL
+            .appendingPathComponent("ContinuumEngineManifest+Generated.swift")
+        // the raw manifest the budget plugin reads for per-island pins: the
+        // same payload the served slice embeds, as plain json.
+        let rawManifestURL = context.pluginWorkDirectoryURL
+            .appendingPathComponent("ContinuumManifest.json")
 
         let tool = try context.tool(named: "WebUIContinuumTool")
         let inputFiles = try FileManager.default.contentsOfDirectory(
@@ -35,6 +46,23 @@ struct WebUIContinuumPlugin: BuildToolPlugin {
         )
         .filter { $0.hasSuffix(".swift") }
         .map { coreDir.appendingPathComponent($0) }
+
+        // the WebUI target is where the consumer surface (@HotView / @HotClass
+        // markers) lands; the capability lint scans it alongside the core.
+        let webUIDir = context.package.directoryURL
+            .appendingPathComponent("Sources")
+            .appendingPathComponent("WebUI")
+        let webUIInputs: [URL] = (try? FileManager.default.contentsOfDirectory(
+            atPath: webUIDir.path
+        )
+        .filter { $0.hasSuffix(".swift") }
+        .map { webUIDir.appendingPathComponent($0) }) ?? []
+
+        // the capability gate's cache stamp: the lint itself writes this after
+        // a clean scan, so a deliberate violation stops the build with the
+        // t2.6 message instead of being cached away.
+        let lintOutput = context.pluginWorkDirectoryURL
+            .appendingPathComponent("Capabilities.ok")
 
         return [
             .buildCommand(
@@ -44,10 +72,29 @@ struct WebUIContinuumPlugin: BuildToolPlugin {
                     "generate",
                     "--sources", coreDir.path,
                     "--output", outputURL.path,
+                    "--engine-manifest", engineSliceURL.path,
+                    "--manifest", rawManifestURL.path,
+                    "--hotview-sources", webUIDir.path,
                 ],
                 inputFiles: inputFiles,
-                outputFiles: [outputURL]
-            )
+                outputFiles: [outputURL, engineSliceURL, rawManifestURL]
+            ),
+            // d2 t2.6: the capability-grants gate. runs on every build over the
+            // marker-bearing sources; a mismatch (`@HotView` imports something
+            // the host manifest does not grant) fails the build with the parent
+            // plan's exact message.
+            .buildCommand(
+                displayName: "Checking continuum capability grants against the host manifest (@HotView imports:)",
+                executable: tool.url,
+                arguments: [
+                    "lint",
+                    "--sources", coreDir.path,
+                    "--hotview-sources", webUIDir.path,
+                    "--touch", lintOutput.path,
+                ],
+                inputFiles: inputFiles + webUIInputs,
+                outputFiles: [lintOutput]
+            ),
         ]
     }
 }
