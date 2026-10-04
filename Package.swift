@@ -605,7 +605,12 @@ let package = Package(
                 .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
                 .product(name: "Logging", package: "swift-log"),
             ],
-            resources: [.copy("orphan-class-baseline.txt")]
+            resources: [
+                .copy("orphan-class-baseline.txt"),
+                // the W0-captured smoke island regions — the byte-identity
+                // target of WebUIIslandTests (CONTINUUM_DX DX-4a).
+                .copy("Fixtures/dx-w0-island-regions.html"),
+            ]
         ),
         .testTarget(
             name: "WebUIWasmToolTests",

@@ -44,6 +44,14 @@ signature — flag the change in the integration diff review. the reduce loop th
 runtime calls is the adapter's `reduce`; the stubs are the frame-buffer entry
 points the island exports.
 
+**W1/CONTINUUM_DX resolution** (recorded in d-docs.md): W2 takes option (a) —
+D's macro swaps ONLY the stub bodies to delegate to your DX-1 slice:
+`_continuumEncode()` → `IslandRuntime<<Type>Island>.encodedState()` (state →
+`HotOpCodec` frame bytes) and `_continuumDecode()` → `HotOpCodec.decode(...)`
+of the pending op batch. the generated shims will chase your merged
+`IslandRuntime.swift` at W2 start, so the exact signatures are yours to land
+first (DX-1, this wave).
+
 ## descriptor `className` source
 
 `@HotView` reads a sibling `@HotClass(...)` attribute on the same declaration and

@@ -44,6 +44,14 @@ cross-checks source ⇄ sheet ⇄ this note.
 ### what the engine must find
 
 - **discovery**: `[data-webui-viewport]` — one `<ul id="<id>" class="list list--virtual">` perimeter per windowed region.
+- **the lease (W1, DX-7d)**: the component now ALSO emits the engine's
+  windowing lease `data-webui-lease="viewport"` on that same container (right
+  after `data-webui-viewport`), so your pooler's
+  `LSEL = '[data-webui-lease="viewport"]'` selects D-rendered regions with no
+  host bridge. this wave the component emits BOTH name sets — `data-webui-lease`
+  (yours) and `data-viewport-*`/`data-webui-viewport` (styling/numeric) — so
+  the engine may read either; the bench's string-replace server-adapter lease
+  becomes a no-op duplicate and can retire at integration (tell B).
 - **numeric inputs** (the engine's window math reads these, not guesses):
   `data-viewport-total="<N>"` · `data-viewport-rowsize="<px>"` (52 default =
   the sheet's `.list--virtual` 3.25rem) · `data-viewport-overscan="2"`.
