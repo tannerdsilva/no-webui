@@ -259,15 +259,24 @@ protocol IslandExportHandler {
 	func stateRestore(_ ptr: UnsafeRawPointer?, _ len: Int) -> Int
 }
 
+/// reference box for the reactor core: the handler methods mutate it from a
+/// non-mutating existential call (embedded Swift forbids mutating `self`
+/// through `any P`, and a value copy would leak cross-call state).
+final class IslandRuntimeCoreBox<I: IslandRuntimeSurface> {
+	var core: IslandRuntimeCore<I>
+	init() { core = IslandRuntimeCore<I>() }
+}
+
 /// the per-island bridge: holds the reactor core and copies payloads into the
-/// physical frame buffer. a stateless value type whose `core` is its only
-/// stored state (cross-call persistence via the global handler existential).
+/// physical frame buffer.
 struct IslandRuntimeBridge<I: IslandRuntimeSurface>: IslandExportHandler {
-	var core = IslandRuntimeCore<I>()
+	let box: IslandRuntimeCoreBox<I>
+
+	init() { box = IslandRuntimeCoreBox() }
 
 	func renderRegion(_ ptr: UnsafeRawPointer?, _ len: Int) -> Int {
 		guard let ptr, len > 0 else { return 0 }
-		if let payload = core.renderRegion(input: Self.copyBytes(ptr: ptr, len: len)) {
+		if let payload = box.core.renderRegion(input: Self.copyBytes(ptr: ptr, len: len)) {
 			IslandRuntimeBuffers.writeBytes(payload)
 		}
 		return Int(bitPattern: IslandRuntimeBuffers.frame)
@@ -275,24 +284,24 @@ struct IslandRuntimeBridge<I: IslandRuntimeSurface>: IslandExportHandler {
 
 	func onEvent(_ ptr: UnsafeRawPointer?, _ len: Int) -> Int {
 		guard let ptr, len > 0 else { return 0 }
-		_ = core.onEvent(input: Self.copyBytes(ptr: ptr, len: len))
+		_ = box.core.onEvent(input: Self.copyBytes(ptr: ptr, len: len))
 		return Int(bitPattern: IslandRuntimeBuffers.frame)
 	}
 
 	func takeOps() -> UInt32 {
-		guard let batch = core.takeOps() else { return 0 }
+		guard let batch = box.core.takeOps() else { return 0 }
 		IslandRuntimeBuffers.writeBytes(batch)
 		return UInt32(batch.count)
 	}
 
 	func stateSave() -> Int {
-		IslandRuntimeBuffers.writeBytes(core.stateSave())
+		IslandRuntimeBuffers.writeBytes(box.core.stateSave())
 		return Int(bitPattern: IslandRuntimeBuffers.frame)
 	}
 
 	func stateRestore(_ ptr: UnsafeRawPointer?, _ len: Int) -> Int {
 		guard let ptr, len > 0 else { return 0 }
-		if let payload = core.stateRestore(input: Self.copyBytes(ptr: ptr, len: len)) {
+		if let payload = box.core.stateRestore(input: Self.copyBytes(ptr: ptr, len: len)) {
 			IslandRuntimeBuffers.writeBytes(payload)
 		}
 		return Int(bitPattern: IslandRuntimeBuffers.frame)
