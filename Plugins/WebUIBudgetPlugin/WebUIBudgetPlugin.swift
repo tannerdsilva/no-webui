@@ -62,7 +62,10 @@ struct WebUIBudgetPlugin: CommandPlugin {
         // re-pinned i2 (2026-10-03): third trip — the island-seam engine half
         // (typed imports, events-in, drain loop, state channel) merged at
         // 68,188 raw / 16,185 gz. deliberate re-pin, ~5% headroom.
-        Ceiling(surface: "engine", label: "webui-engine.js", raw: 72_000, gz: 17_000),
+        // re-pinned i3 (2026-10-03): fourth trip — the wave-3 engine work
+        // (real-island reconciliations, engine-local windowing, served
+        // allowlist slice) merged at 73,134 raw / 17,612 gz.
+        Ceiling(surface: "engine", label: "webui-engine.js", raw: 77_000, gz: 18_500),
         Ceiling(surface: "sheet", label: "design-system.css", raw: 335_000, gz: 49_500),
         Ceiling(surface: "shell", label: "webui-shell.js", raw: 1_700, gz: 650),
     ]
@@ -78,7 +81,13 @@ struct WebUIBudgetPlugin: CommandPlugin {
     /// embedded compile therefore failed. the plugin defaults to
     /// `swift-6.4.0-RELEASE_wasm-embedded` now and the leaf is scalar-clean again; keep
     /// island-bound code free of the APIs named in `WebUIIslandPlugin`'s doc comment.
-    private static let islandCeiling = 200_000
+    ///
+    /// re-pinned i3 (2026-10-03): 200,000 -> 240,000. the probe fixture grew with the
+    /// kernel-parity work (`webui_run_corpus` — ~218,600 stripped): a dev fixture, not a
+    /// shipped surface, but it rides this global cap until a per-island
+    /// `@HotView(budget:)` marker covers it. a real shipping island should carry its own
+    /// declared pin; this global stays the generous-but-finite backstop.
+    private static let islandCeiling = 240_000
 
     /// artifacts the architecture has retired. if one is still on disk it is a stale
     /// build product, not a shipped surface — reported so nobody ships it by accident,
