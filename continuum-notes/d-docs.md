@@ -761,17 +761,41 @@ decisions / boundaries (conservative):
   flag; C's IslandIDCheck + the probe's hand-written vocabulary are C's half
   and stayed green here.
 
-## the codec swap-in — status at push time
+## the codec swap-in — DONE (unit 3, `9d298fa` after the i2 head `8e79172`)
 
-`origin/task/c-islands` was still `3381e89` (= the merge base) when both W3
-units pushed: lane C's `encodedState()` / `decodePendingOps()` statics AND the
-`WebUIIslandCore` consumer-graph exposure (d-to-c.md items 1+2) are NOT on the
-tree. the swap stays the two emitted bodies, isolated and pinned (the d-docs
-W2 delta): `_continuumEncode()` -> `IslandRuntime<<Type>Island>.encodedState()`,
-`_continuumDecode()` -> `IslandRuntime<<Type>Island>.decodePendingOps()`, re-
-asserted by the expansion suite + compiled fixture; the HotOpCodec record-v1
-plane stays the compiled-fixture proof until then. re-fetch + merge the moment
-`task/c-islands` advances.
+the swap landed the moment lane C's accessors merged: `git fetch
+/tmp/continuum-fleet/integration dev-continuum` → fast-forward `task/d-surface2`
+to `8e79172` (C's `0bd15f1` encodedState/decodePendingOps + `8ef9289` DX-9
+runtime half + `582775e` c-to-d W3 addendum) → the emission swapped verbatim.
+the generated `_continuumEncode()` / `_continuumDecode()` bodies are now the
+**literal runtime spell** — `IslandRuntime<<Type>Island>.encodedState()` (the
+exact `webui_state_save` payload) / `.decodePendingOps()` (the pending
+records, decode-only — never drains; `webui_take_ops` stays the only queue
+consumer). on host builds nothing is ever bound, so both statics report the
+drained contract (`[]` / no effects) — the untethered-surface reading stays
+honest. the swap compiles against the three c-to-d W3 owed items, addressed:
+
+1. **elementIDs emission** — already on the tree (`4712ba9`); the string suite
+   pins the diff point (`elementIDVocabularyEquivalence`), C's runtime half
+   (`MacroVocabularyFixtureTests`) stays green under `-DCONTINUUM_ID_CHECK`.
+2. **consumer-graph exposure** — `WebUIContinuumMacroTests` gains
+   `WebUIIslandCore` (additive, Package.swift) so the swapped bodies can name
+   `IslandRuntime`. the acceptance template's App target exposure (the §0.3
+   lone-@HotView path) is E/B's package work — handed to E in d-to-e.md.
+3. **spelling reality** — `IslandRuntime` keeps `I: IslandRuntimeSurface` (C
+   judged the constraint byte-risky to relax); the swap therefore takes the
+   **surface-conforming path**: the compiled fixture + the hand-written
+   equivalent carry the AUTHOR-supplied `IslandRuntimeSurface` conformance
+   (the template-feed shape), proving the spell against a surface-conforming
+   island exactly as c-to-d W3 item 3 sanctions.
+
+the HotOpCodec record-v1 plane STAYS the compiled-fixture proof
+(`codecRoundTrip`: encode → decode byte-exact on a real op) and the swap
+asserts parity: `IslandRuntime<<Type>Island>.encodedState()` ==
+`(try? HotOpCodec.encodeBatch([])) ?? []` on the drained surface, the macro
+body == the accessor (both spellings agree), and the hand-written equivalent
+carries the SAME bodies (anti-shackle rule 3). grep gate: no `{ [] }` codec
+body remains in the emission.
 
 ## gates run (wave 3)
 
@@ -786,14 +810,20 @@ plane stays the compiled-fixture proof until then. re-fetch + merge the moment
   green (DX-9 flag build).
 - `node designer/probes/d-viewport.mjs` — all contract checks green.
 - `node designer/probes/d-transport.mjs` — 15 PASS, 0 FAIL.
+- unit 3 (the swap-in, `9d298fa`) re-asserted at HEAD after the `8e79172`
+  merge: macro suite 44 (now pinning the runtime-accessor emission), the
+  compiled fixture + hand-written equivalence + spell parity in
+  `ContinuumFixtureTests`, full `swift test` (all bundles), the
+  `-DCONTINUUM_ID_CHECK` filter, and both probes — all green.
 
 ## doc fragments (W3, for the orchestrator)
 
-- `CONTINUUM.md` §2.11: mark DX-11b shipped — the ComponentOps table (id
-  derivation, atomics, composed helpers), the ops-not-replace contract, the
-  aria-sort + structural boundaries, and the acceptance dogfood's helper half
-  (`ComponentOps` is the built-in factory the template's hand-written dogfood
-  ops can now adopt).
+- `CONTINUUM.md` §2.1: mark the codec swap-in shipped — the generated
+  `_continuumEncode`/`_continuumDecode` bodies ARE `IslandRuntime<<Type>Island>
+  .encodedState()` / `.decodePendingOps()` (d-to-c W3 / c-to-d W3), with the
+  author-supplied `IslandRuntimeSurface` conformance as the consumer's
+  surface-conforming path (template-feed shape). HotOpCodec stays the
+  record-v1 proof; the macro-test target gains WebUIIslandCore.
 - `CHANGELOG.md` (unreleased): "DX-11b op-emitting handlers (ComponentOps:
   table select/sort/expand, chart mark select, pagination page — attr/text ops
   on the DX-11a ids, never whole-region replaces); DX-9 @HotView emission: the
@@ -807,8 +837,17 @@ plane stays the compiled-fixture proof until then. re-fetch + merge the moment
   ComponentOps now owns). chart mark ids differ by render mode
   (`-mark-{i}` / `-mark-pt` / `-mark-{cat}-{series}`) — the helper takes the
   concrete id.
-- to C (also in d-to-c.md): the swap-in dependency stands; the moment the two
-  statics + the consumer-graph exposure land, the emission swaps verbatim.
+- to C (also in d-to-c.md): the swap-in LANDED — the moment the two statics
+  (`8e79172`) merged, the emission swapped verbatim (`9d298fa`); the
+  hand-written-equivalence + spell-parity suites prove the runtime-accessor
+  path. C's `CodecStateAccessorTests` + `MacroVocabularyFixtureTests` stay
+  green under the flag build.
+- to E (also in d-to-e.md): the acceptance template's App target needs
+  `WebUIIslandCore` exposure for the §0.3 lone-@HotView path — the swapped
+  emission names `IslandRuntime`, which the template compile can only resolve
+  once `WebUIIslandCore` product is in the App target (and the lone Feed needs
+  the author-supplied `IslandRuntimeSurface` conformance, c-to-d W3 item 3).
 - to B: no new byte exceptions beyond the DX-11a row-id one (components
   untouched); the DX-9 emission is macro-text only, nothing the content-pin
-  serves changed.
+  serves changed. the swap-in touches macro-emitted text + the macro-test
+  target's Package.swift deps — the served surface bytes are unchanged.
