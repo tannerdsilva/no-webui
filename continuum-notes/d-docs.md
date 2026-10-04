@@ -412,3 +412,134 @@ round-trip pinned natively in WebUISharedCoreTests + the parity corpus.
 - to B: the twins' removal is a genuine public-surface deletion (approved
   polish) — coordinate the CHANGELOG/CONTINUUM fold.
 
+---
+
+# lane d — CONTINUUM_DX wave 1 (DX-4a region view · DX-7d lease · W2 codec-prep design · DX-9 id-vocabulary design)
+
+branch `task/d-surface`; base `ec1bcbc` (= `origin/dev-continuum` tip,
+verified at dispatch). three green units pushed: `a8d0f86` (WebUIIsland),
+`a3e95b3` (Viewport lease), and this notes commit.
+
+## what landed (commits)
+
+- `a8d0f86` feat(webui): `WebUIIsland(id:name:args:)` region view + the
+  declaration-ordered `WebUIIslandArgs` serialization; byte-diff suite (13
+  tests) vs the committed W0 fixture
+  `Tests/WebUITests/Fixtures/dx-w0-island-regions.html`.
+- `a3e95b3` feat(design-system): the `Viewport` container emits the engine
+  lease `data-webui-lease="viewport"` (DX-7d) + `ViewportTests.leaseEmission`.
+
+## DX-4a decisions
+
+1. **the region `id` is explicit, with an `island-<name>` derived default** —
+   the byte capture proved no derivation rule reproduces both regions:
+   `name "validate"` → `id "island-validate"` (the derived form), but `name
+   "never-built"` → `id "island-never"` (a hand-chosen shorter id, no rule).
+   the convenience `WebUIIsland("feed", args:)` (the plan's spelling, and
+   appendix-A's template form) derives the id; the designated
+   `WebUIIsland(id:name:args:)` pins the full contract byte-for-byte.
+2. **the pinned serialization contract**: attributes in order `id` →
+   `data-webui-island` → `data-webui-args`; args single-quoted; a
+   declaration-ordered typed args payload. `args` defaults to `.empty`
+   (`{}`) — a lone `@HotView` region pre-emits the empty object.
+3. **the args type** (`WebUIIslandArgs` + `WebUIIslandArgsValue`): ordered
+   `[Pair]`, hand-rolled JSON (no `[String: Any]`/`JSONSerialization` —
+   per-process key order and the `4.0` Double bridge cannot match a pinned
+   capture). `int` renders `4`, never `4.0`; apostrophes/amps in values become
+   `&#39;`/`&amp;` so the single-quoted attribute round-trips through the
+   browser's entity decoding + the engine's `JSON.parse` (identity on every
+   captured byte).
+4. **byte-identity is proven twice**: against the committed fixture (byte-equal
+   whole-file compare, incl. a `count("\n")==2` shape check + per-line compares)
+   AND against spelling-out raw-string assertions of both captured lines (guards
+   the fixture against a transcription typo). W3's host migration additionally
+   asserts page bytes under §3.1's register.
+
+## DX-7d decision
+
+- the COMPONENT emits `data-webui-lease="viewport"` immediately after the
+  `data-webui-viewport` discovery marker; the MODIFIER (`.lease(.viewport)`)
+  stays inert and byte-identical — both its live pins untouched (the
+  red-team's finding: emission lives in the component, never the modifier).
+- both name sets are emitted this wave (`data-webui-lease` + `data-viewport-*`),
+  so E's engine and the bench bridge may read either; the bench's
+  string-replace server-adapter lease becomes a no-op duplicate → retire at
+  integration (handed to E via d-to-e.md; B is told at the report).
+- pinned by `ViewportTests.leaseEmission`: exact container prefix, exactly one
+  lease occurrence, rows/pads never carry it.
+
+## W2 codec bodies — the delegation design (no implementation this wave)
+
+**the emission point stays** (`WebUIContinuumMacro.swift:362/364`): the
+generated adapter's `_continuumEncode() -> [UInt8]` / `_continuumDecode() ->
+[HotEffect]` members, plus their `@_expose(wasm, "<name>_encode"/"<name>_decode")`
+peer globals. the ABI strings are frozen (c-to-d's recorded table); W2 swaps
+ONLY the bodies.
+
+**the delegated shape**: each body becomes a thin shim over lane C's DX-1
+runtime slice (`WebUIIslandCore/IslandRuntime.swift`) and `HotOpCodec`:
+
+- `_continuumEncode() -> [UInt8]` → `IslandRuntime<<Type>Island>.encodedState()`
+  — the runtime-held `State` serialized through `HotOpCodec` into the frame
+  bytes (`webui_state_save` / engine `restoreIslandRegionState` path);
+- `_continuumDecode() -> [HotEffect]` → `HotOpCodec.decode(...)` of the pending
+  op batch (the record-format-v1 frame records the runtime drains) into
+  `[HotEffect]` for the island's `reduce` loop.
+
+**seam rules**:
+1. generated code may reference only `WebUISharedCore` vocabulary +
+   `WebUIIslandCore`'s runtime + the author's members — no `Codable`, no
+   `JSONEncoder` (the embed-Codable gate, c-to-d).
+2. the exact `IslandRuntime`/`HotOpCodec` signatures are lane C's W1
+   deliverable (not on the tree at D-W1 time) — W2-D starts by chasing C's
+   merged `IslandRuntime.swift` and fitting the two shim bodies to the real
+   call surface, then re-asserting the expansion suite (string-level first,
+   then the compiled fixture, then the hand-written equivalence).
+3. stub-retirement gate (grep-asserted in W2): no `{ [] }` codec body remains
+   in the macro emission.
+4. anti-shackle: the delegation is a real runtime call — the hand-written
+   equivalent must produce identical op streams (the existing fixture).
+
+## DX-9 id-vocabulary design (no implementation this wave)
+
+- **compile-time vocabulary**: the `@HotView` macro (which already parses the
+  render body) walks the `@HotBuilder` body collecting LITERAL `id:` string
+  arguments (the spelled `ElementID` literals across `Hot.Text`/`AttrWrapper`/
+  `KeyedList` and the built-ins) and emits a generated static mirror of the
+  hand-kept `WebUIIslandCore.ProbeIslandIDs` pattern:
+  `static let elementIDs: Set<ElementID>` (spelling TBD against C's
+  `ElementID`; raw-value keyed for O(1) membership). over-collection is
+  permissive-safe (the dev check ignores ids the island never emits); a
+  missed literal is the only bug class.
+- **the literal-only boundary**: interpolated/dynamic ids
+  (`ElementID("t-\(key)")`, key-derived `-k<key>` list ids) are NOT statically
+  knowable — they defer to the runtime dev check, not compile time. the check
+  is a dev-time assertion, not a type guarantee.
+- **build-flag-gated dev check** (runtime side, lane C W2): a custom debug
+  flag (e.g. `-DCONTINUUM_ID_CHECK`) compiles in an assertion in the runtime
+  slice — every op the island emits on mount/first-event must target a known
+  id; unknown → dev-time failure naming the id. production builds compile it
+  out — zero runtime tax (I4).
+- **the hand-written pattern stays**: `ProbeIslandIDs` remains the fallback,
+  still tested; the macro-emitted vocabulary is diffed against it in the
+  equivalent-fixture test. W3 takes it end-to-end (emission + dev check +
+  probe).
+
+## doc fragments (W1, for the orchestrator)
+
+- `CONTINUUM.md`: §2.4 gains `WebUIIsland`'s pinned contract table (attribute
+  order, single-quote, declaration-ordered typed args, explicit-id +
+  derived-default), and §2.7's DX-7d line gains "shipped: the component emits
+  the lease; `.lease` stays inert".
+- `CHANGELOG.md` (unreleased): "WebUIIsland region view (DX-4a) byte-identical
+  to the hand-written smoke markup + the declaration-ordered args
+  serialization; Viewport emits `data-webui-lease="viewport"` (DX-7d)".
+
+## handoffs
+
+- to E (also in d-to-e.md): the container now emits `data-webui-lease="viewport"`;
+  the bench's adapter lease is a duplicate → retire at integration.
+- to C (also in d-to-c.md): W2 codec bodies delegate to `IslandRuntime`/
+  `HotOpCodec` per the design above — the generated shims chase C's real
+  signatures at W2 start.
+
