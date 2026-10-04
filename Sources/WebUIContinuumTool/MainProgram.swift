@@ -534,6 +534,7 @@ enum WebUIContinuumTool {
 			case "lint": try Run.lint(rest)
 			case "wasm-cross": try Run.wasmCross(rest)
 			case "measure": try Run.measure(rest)
+			case "verify": try Run.verify(rest)
 			case "scaffold": try Run.scaffold(rest)
 			case "self", "--self", "-h", "--help", "help": printSelf()
 			default:
@@ -601,6 +602,18 @@ enum WebUIContinuumTool {
 		                 dep + WebUIAutobuildPlugin on the app target).
 		                 --print previews without writing; --package overrides
 		                 the product-dep package name (default no-webui).
+		  verify        DX-8 verb consolidation — the ONE consumer-facing
+		                 island verification verb. runs the FULL path and
+		                 prints a per-stage verdict: host `swift build` →
+		                 wasm cross-build of every island (the SAME wasm-cross
+		                 the autobuild plugin emits) → DX-3 measure/auto-pin →
+		                 the WebUIBudgetPlugin budget row (one budget path).
+		                 belt-and-suspenders: a plain `swift build` already
+		                 cross-builds + auto-pins (zero manual verbs); verify
+		                 makes every stage explicit and deterministic.
+		                 --package-dir <app> --framework <no-webui path>
+		                 [--product <Island>]... [--swiftc <path>]
+		                 [--no-strip] [--skip-swift-build] [--work-dir <dir>]
 		""")
 	}
 

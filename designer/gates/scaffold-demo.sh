@@ -172,5 +172,24 @@ echo "== step 6: idempotent re-run (zero edits for the 2nd+ island) =="
 [ "$(grep -c '.executable(name: "Feed"' "$DEMO/Package.swift")" = "1" ] || fail "re-run duplicated the product entry"
 echo "idempotent: re-run appended nothing, regenerated the main"
 
+echo "== step 7: DX-8 verify — ONE verb, the FULL island verification path =="
+# the plain getting-started path is zero-manual-verbs (`swift build` in step 4
+# already cross-built + auto-pinned the island); `verify` is the ONE explicit
+# belt-and-suspenders verb, running build -> cross-build -> measure/pin -> the
+# budget row and printing a per-stage verdict over ITS OWN work dir. host build
+# was proven in step 4, so --skip-swift-build keeps the gate fast; the
+# cross-build + measure/pin + budget-row stages still run in full.
+"$TOOL" verify \
+  --package-dir "$DEMO" \
+  --framework "$FRAMEWORK" \
+  --skip-swift-build \
+  --work-dir "$DEMO/.build/continuum-verify" > /tmp/scaffold-verify.log 2>&1 \
+  || { tail -60 /tmp/scaffold-verify.log; fail "verify failed"; }
+grep -q "verify: PASS" /tmp/scaffold-verify.log || { tail -60 /tmp/scaffold-verify.log; fail "verify did not PASS"; }
+grep -q "\[verify\] 1/4 build: skipped" /tmp/scaffold-verify.log || fail "verify stage-1 marker missing"
+grep -q "Feed" /tmp/scaffold-verify.log || fail "verify cross-build did not name the Feed island"
+grep -q "budget: PASS" /tmp/scaffold-verify.log || fail "verify budget stage did not pass (WebUIBudgetPlugin must print budget: PASS over the measured pins)"
+echo "verify: build → cross-build → measure/pin → budget row OK (one verb, zero manual steps)"
+
 echo ""
-echo "SCAFFOLDDEMO PASS — scaffold bootstraps an existing app, adds an island with the 3-line runtime form, and the generated main compiles for BOTH host and wasm."
+echo "SCAFFOLDDEMO PASS — scaffold bootstraps an existing app, adds an island with the 3-line runtime form, the generated main compiles for BOTH host and wasm, and the DX-8 verify verb runs the full island verification path in one command."

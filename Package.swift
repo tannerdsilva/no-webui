@@ -534,6 +534,26 @@ let package = Package(
                 .target(name: "WebUIContinuumTool"),
             ]
         ),
+        // dx-8 verify command plugin: `swift package --disable-sandbox plugin
+        // verify` runs the FULL island verification path against this package —
+        // host build -> wasm cross-build -> DX-3 measure/pin -> the
+        // WebUIBudgetPlugin budget row (one budget path). the consolidated
+        // consumer-facing island-verification verb (`wasm-island` stays
+        // internal); the same surface is usable from a consumer app via the
+        // tool directly (`webui-continuum verify --package-dir <app>
+        // --framework <no-webui path>`).
+        .plugin(
+            name: "WebUIVerifyPlugin",
+            capability: .command(
+                intent: .custom(
+                    verb: "verify",
+                    description: "Run the full island verification path (host build -> wasm cross-build -> DX-3 measure/auto-pin -> the budget row) and print a per-stage verdict. Belt-and-suspenders: a plain `swift build` already cross-builds + auto-pins the islands (zero manual verbs)."
+                )
+            ),
+            dependencies: [
+                .target(name: "WebUIContinuumTool"),
+            ]
+        ),
         .plugin(
             name: "WebUIShowcasePlugin",
             capability: .command(
