@@ -606,6 +606,21 @@ await page.evaluate(() => { document.querySelectorAll('link[rel="stylesheet"]').
 await browser.close();
 server.kill();
 
+// lane-B aggregate gate fold-in (b-docs §5, polish): browser-smoke gains the
+// d3 gate as its aggregate gate, run on lane ports (9210/9211) AFTER the
+// smoke ladder. the d3 gate self-spawns its bench + probe servers on lane
+// ports and tears them down; it never touches :9123.
+{
+  console.log("\n=== lane-B d3 aggregate gate ===");
+  const d3 = await run(process.execPath, ["designer/d3-gate.mjs", "--bench-port", "9210", "--probe-port", "9211"]);
+  process.stdout.write(d3.out.slice(-1600));
+  if (d3.code !== 0) {
+    bad("d3-gate (lane-B agg) failed (exit " + d3.code + ")");
+  } else {
+    ok("d3-gate (lane-B agg) green");
+  }
+}
+
 console.log(`\n=== summary: ${pass} passed, ${fail} failed ===`);
 if (fail > 0) {
   console.log("BROWSER SMOKE FAIL");
