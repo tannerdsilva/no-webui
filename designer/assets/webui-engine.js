@@ -19,7 +19,7 @@ window.WebUIEngine = (function () {
   };
 
   var LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3, silent: 4 };
-  var EVENT_TYPES = ['click', 'input', 'change', 'submit', 'keydown', 'keyup', 'keypress', 'focus', 'blur', 'focusin', 'focusout', 'mouseover', 'mouseout', 'mousedown', 'mouseup'];
+  var EVENT_TYPES = ['click', 'input', 'change', 'submit', 'keydown', 'keyup', 'keypress', 'focus', 'blur', 'focusin', 'focusout', 'mouseover', 'mouseout', 'mousedown', 'mouseup', 'compositionstart', 'compositionupdate', 'compositionend'];
   var LOST_ANCHOR_WARNED = {};
   var LOST_OPEN_WARNED = {};
   var RETAINED_OPEN = {};
@@ -381,6 +381,10 @@ window.WebUIEngine = (function () {
       }
 
       var islRegion = event.target && event.target.closest ? event.target.closest('[data-webui-island]') : null;
+      if (event.type.indexOf('composition') === 0) {
+        if (islRegion && islRegion.getAttribute && islandRegionSubscribed(islRegion, event.type)) { deliverIslandEvent(islRegion, event); }
+        return;
+      }
       if (islRegion && islRegion.getAttribute && islandRegionSubscribed(islRegion, event.type)) {
         if (event.type === 'submit' && typeof event.preventDefault === 'function') { event.preventDefault(); }
         deliverIslandEvent(islRegion, event);
@@ -545,6 +549,11 @@ window.WebUIEngine = (function () {
             metaKey: String(event.metaKey),
           };
 
+        case 'compositionstart':
+        case 'compositionupdate':
+        case 'compositionend':
+          return { data: String(event.data || ''), isComposing: !!event.isComposing };
+
         case 'focus':
         case 'blur':
         case 'mouseover':
@@ -642,7 +651,10 @@ window.WebUIEngine = (function () {
       if (!mod || !mod.exports || typeof mod.exports.webui_on_event !== 'function') return;
       var evType = effectiveTypes(event)[0] || event.type;
       if (evType === 'keydown' || evType === 'keyup' || evType === 'keypress') { evType = 'key'; }
+      else if (evType === 'compositionstart' || evType === 'compositionupdate' || evType === 'compositionend') { evType = 'composition'; }
       var key = (event.key !== undefined && event.key !== null) ? String(event.key) : null;
+      if (evType === 'composition') { key = 'composition'; }
+      else if (key === ' ' || key === 'Spacebar') { key = ' '; }
       if (key === null) {
         var owner = event.target;
         while (owner && owner !== region && owner.nodeType === 1 && owner.id === '') { owner = owner.parentNode; }
@@ -1809,15 +1821,22 @@ window.WebUIEngine = (function () {
   }
   function islandRegionSubscribed(region, type) {
     var raw = region.getAttribute('data-webui-island-events');
-    if (!raw) { return false; }
     var list = null;
-    try { list = JSON.parse(raw); } catch (e) { return false; }
-    if (!Array.isArray(list)) { return false; }
-    if (list.indexOf(type) !== -1) { return true; }
-    if (type === 'focusin' && list.indexOf('focus') !== -1) { return true; }
-    if (type === 'focusout' && list.indexOf('blur') !== -1) { return true; }
-    return false;
+    if (raw) { try { list = JSON.parse(raw); } catch (e) { list = null; } }
+    if (list && Array.isArray(list)) {
+      if (list.indexOf(type) !== -1) { return true; }
+      if (type === 'focusin' && list.indexOf('focus') !== -1) { return true; }
+      if (type === 'focusout' && list.indexOf('blur') !== -1) { return true; }
+    }
+    var raw2 = region.getAttribute('data-webui-input');
+    if (!raw2) { return false; }
+    var list2 = null;
+    try { list2 = JSON.parse(raw2); } catch (e) { return false; }
+    if (!Array.isArray(list2)) { return false; }
+    var chan = INPUT_CHAN[type];
+    return chan !== undefined && list2.indexOf(chan) !== -1;
   }
+  var INPUT_CHAN = { keydown: 'key', compositionstart: 'composition', compositionupdate: 'composition', compositionend: 'composition', select: 'selection', copy: 'clipboard', cut: 'clipboard', paste: 'clipboard', undo: 'undo', redo: 'undo' };
   function saveIslandRegionState(el) {
     if (!el || !el.getAttribute) { return; }
     var name = el.getAttribute('data-webui-island');
