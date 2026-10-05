@@ -255,16 +255,24 @@ async function run() {
   }
   await new Promise((r) => setTimeout(r, 150));
 
-  // --- the RegionInvalidations control (W1: renders; i1: registry push) ---
+  // --- the RegionInvalidations control: i2 asserts the REGISTRY PUSH (DX-13) ---
+  // at i0 the invalidate provider was a no-op, so this click yielded silence; at i1
+  // lane R attached `regions:`, so the declared invalidation reaches the registry and
+  // the registry pushes. with the seam REVERTED (hostile mode) the provider is a no-op
+  // again, so the same click must yield silence — the assertion is mode-dependent.
   if (ids.includes("g-region-nudge")) {
-    // at i0 the invalidate provider is a no-op, so resolve carries no fragments
-    // and the server sends no frame at all (`guard !updates.isEmpty`).
     const frames = await expectSilence(1500);
-    if (frames.length === 0) {
-      ok(`g-region-nudge click -> silence in the i0 no-op window (resolve carried no fragments; registry push asserted at i1)`);
+    const updates = frames.filter((f) => f.type === "update");
+    if (MODE === "hostile") {
+      if (frames.length === 0) ok(`g-region-nudge -> silence with the seam reverted (the invalidate never reaches the registry)`);
+      else bad(`g-region-nudge -> ${frames.length} frame(s) with the seam reverted (expected none)`);
     } else {
-      bad(`g-region-nudge click -> ${frames.length} frame(s) arrived  (at i0 resolve must carry none)`);
-      console.log(`    frames: ${JSON.stringify(frames).slice(0, 200)}`);
+      const frags = updates.flatMap((f) => f.fragments ?? []);
+      if (updates.length === 1 && frags.length === 1 && frags[0].id === "g-region-a") {
+        ok(`g-region-nudge -> exactly one update carrying g-region-a (the registry push, DX-13 end-to-end)`);
+      } else {
+        bad(`g-region-nudge -> expected exactly one update carrying g-region-a, got ${JSON.stringify(updates.map((u) => u.fragments))}`);
+      }
     }
   }
 }
