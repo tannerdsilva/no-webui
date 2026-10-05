@@ -658,7 +658,7 @@ final class Runner: Sendable {
 			switch msg {
 			case .event(let component, let event, let data, _):
 				let eventData = EventData(component: ComponentID(component), event: event, data: data)
-				let updates = await self.router.handle(eventData)
+				let updates = await dispatchOutcome(eventData, router: self.router)
 				guard !updates.isEmpty else { return }
 				try await writeJSON(WSOutgoing.update(fragments: updates), outbound: outbound)
 			case .ping:
@@ -1062,6 +1062,34 @@ private func hexValue(_ byte: UInt8) -> UInt8? {
 	case 0x41...0x46: return byte - 0x41 + 10            // A-F
 	case 0x61...0x66: return byte - 0x61 + 10            // a-f
 	default: return nil
+	}
+}
+
+// MARK: - the dispatch seam (DX-12 + DX-14)
+
+/// run `eventData` through `router` with both dispatch-scoped contexts established:
+/// `RenderContext.current` (so a control first rendered *inside* the handler
+/// self-registers — DX-12, overwrite-wins) and `OutcomeContext.current` (so an
+/// erased `EventOutcome` adapter reads the firing component and the invalidate
+/// half — DX-14).
+///
+/// `internal`, not `private`, so in-process tests exercise the real seam instead of
+/// a re-implementation. `invalidate` is a no-op at i0; the live region registry
+/// supplies its closure once `regions:` is attached.
+///
+/// ordering (d-k): the caller writes the returned fragments to the socket **before**
+/// any region worker woken by `invalidate` pushes, so a dispatch frame and the
+/// region push it triggers arrive in a deterministic order.
+func dispatchOutcome(
+	_ eventData: EventData,
+	router: EventRouter,
+	invalidate: @escaping @Sendable ([String]) -> Void = { _ in }
+) async -> [FragmentUpdate] {
+	let context = OutcomeContext(component: eventData.component, invalidate: invalidate)
+	return await RenderContext.withCurrent(router: router) {
+		await OutcomeContext.$current.withValue(context) {
+			await router.handle(eventData)
+		}
 	}
 }
 
