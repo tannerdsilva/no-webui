@@ -72,6 +72,15 @@ let package = Package(
             name: "WebUIScaffoldPlugin",
             targets: ["WebUIScaffoldPlugin"]
         ),
+        // dx-15a: the theme-emission build-tool plugin a consumer attaches to
+        // the app target that declares a ThemeCatalog; the plugin drives
+        // WebUIThemeTool (a direct swiftc over the consumer's theme sources)
+        // and the emitted WebUIShippedAsset conformance is compiled into the
+        // consumer target. see the lane T spike verdict.
+        .plugin(
+            name: "WebUIThemePlugin",
+            targets: ["WebUIThemePlugin"]
+        ),
         // a consumer attaches this plugin and ships an `Assets/webui-assets.json`; the
         // plugin runs the framework's tool over it on every build.
         .plugin(
@@ -511,6 +520,18 @@ let package = Package(
             capability: .buildTool(),
             dependencies: [
                 .target(name: "WebUIContinuumTool"),
+            ]
+        ),
+        // dx-15a: the theme-emission plugin (mechanism (a)) — the tool it runs
+        // is a target dependency, the established pattern (WebUIAssetPlugin →
+        // WebUIAssetTool above). its tool depends on WebUIDesignSystem, so
+        // building the tool builds the macro dylib first (the f2 ordering
+        // guarantee; see the spike verdict).
+        .plugin(
+            name: "WebUIThemePlugin",
+            capability: .buildTool(),
+            dependencies: [
+                .target(name: "WebUIThemeTool"),
             ]
         ),
         // the file half of the asset toolkit: a target shipping `Assets/webui-assets.json`
