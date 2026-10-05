@@ -326,14 +326,41 @@ struct LiveRegionRegistryTests {
 		}
 		let harness = await RegistryHarness([region])
 
-		await settle(240)
-		let frames = harness.recorder.count
+		// wait for at least two pushes with a bounded DEADLINE rather than a fixed
+		// window: a 240 ms window is a wall-clock guess, and this host coalesces
+		// timers under an idle process, so the same code passed or failed depending
+		// on machine state (see the i1 record). the deadline bounds the wait; the
+		// upper bound below is then computed from the window actually measured.
+		let clock = ContinuousClock()
+		let start = clock.now
+		var frames = harness.recorder.count
+		while frames < 2 {
+			if clock.now - start > .milliseconds(2_000) { break }
+			try? await Task.sleep(for: .milliseconds(10))
+			frames = harness.recorder.count
+		}
 		#expect(frames >= 2, "the cadence re-renders and pushes changes")
-		#expect(frames <= 9, "late ticks are skipped, not stacked (bounded a-priori)")
 
+		// NEVER STACKED, a-priori from the measured window: n ms of a 25 ms cadence
+		// can produce at most n/25 + 1 pushes. a pump that queued late ticks would
+		// exceed it; a pump that drops them cannot. timing-free where `<= 9` was a
+		// hardcoded guess.
+		let windowMs = Int((clock.now - start).components.seconds) * 1_000
+			+ Int((clock.now - start).components.attoseconds / 1_000_000_000_000_000)
+		let allowed = windowMs / 25 + 1
+		#expect(frames <= allowed, "late ticks are skipped, not stacked (<= \(windowMs)/25 + 1 = \(allowed), measured \(frames))")
+
+		// every push carries a fresh render — a repeated value would be a stacked or
+		// stale tick re-pushing.
+		let htmls = harness.recorder.fragments.map(\.html)
+		#expect(Set(htmls).count == htmls.count, "each push is a fresh render (no repeats)")
+
+		// stop() joins every worker, so the honest baseline is the count taken AFTER
+		// it returns: any frame beyond that is a post-stop push (semantics 4).
 		await harness.stop()
+		let afterStop = harness.recorder.count
 		await settle(180)
-		#expect(harness.recorder.count == frames, "zero frames after stop")
+		#expect(harness.recorder.count == afterStop, "zero frames after stop")
 	}
 
 	@Test("bounded coalescing: M=200 mutations → last frame == render(final); 1 ≤ R ≤ N, silence after")
