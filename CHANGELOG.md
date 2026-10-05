@@ -4,6 +4,44 @@ all notable changes to this project are documented here.
 
 ## [unreleased]
 
+### substitution — conform and wrap (live_dx: DX-12 · DX-13 · DX-14 · DX-15 · DX-16)
+
+- **the event architecture (DX-12 + DX-14).** `RenderContext.withCurrent(router:)`
+  establishes the render context on both the page-render and the dispatch path, so a
+  control first rendered *inside* a handler self-registers (overwrite-wins for stable
+  ids — `controlAttributes` bytes unchanged). `EventOutcome` states what a handler
+  yields, with six default conformances (`FragmentUpdate`, `[FragmentUpdate]`,
+  `ViewOutcome` — replaces `#<component-id>`, requiring the replaceable root to carry
+  that DOM id — `RegionInvalidations`, `NoOutcome`, `CombinedOutcome`);
+  `control(_:event:handler:)` is the generic entry point; `OutcomeContext` (incl. the
+  dispatch-scoped `$current`) carries the firing component and the dispatch-threaded
+  invalidate half. the pre-existing `EventHandler` path is untouched.
+- **the live-data architecture (DX-13 + DX-16).** the `LiveRegion` protocol
+  (`id` = DOM id + fragment id, `cadence`, `source` — defaulted nil, the registry's
+  subscription hook, `render() -> String?`), `ClosureLiveRegion`, the state-bound
+  `StateLiveRegion`, and the `WebUILiveRegions` registry (`invalidate` /
+  `invalidateAll` / `currentHTML`); the state binding `LiveState` + `LiveBox` +
+  `LiveNotifier` + `LiveSubscription`. both `WebUIServer` inits take
+  `regions: WebUILiveRegions? = nil` (nil = zero new work); baselines render eagerly
+  and push **nothing**; an unchanged render pushes **zero** frames; a change pushes
+  **≤ its rendered html + 512 B**; pushes ride the existing `update` frame + `replace`
+  op (no new wire type); a dispatch's invalidations keep the two-push order (dispatch
+  frame first); `stop()` cancels subscriptions and silences the pumps.
+- **the theme pipeline (DX-15a + DX-15b).** `WebUIThemeBuild.emit` renders a consumer
+  `ThemeCatalog` to a stamped, gzipped `WebUIShippedAsset` conformance through the
+  `WebUIBuild` emitter; `WebUIThemePlugin` attaches to the catalog's own target with
+  **no consumer tool target** (mechanism (a), spike-verified: macro dylib load +
+  `.build` consumption both proven); the `WebUIContinuumTool shadow` verb adds the
+  anti-shadow policy with the selector-extraction leg (demo tree: 0 collisions).
+- **the substitution law, documented.** `Documentation/SUBSTITUTION.md` — the
+  consumer guide to the four axes (events · live data · themes · components):
+  protocol / framework default / injection position + a minimal conforming example
+  per axis, the biting semantics (baseline silence, byte minimality, overwrite-wins,
+  `currentHTML` best-effort, `source` subscription + stop-cancel, `ViewOutcome`'s
+  DOM-id requirement), and the `WebUITheme` / `WebUIThemeBuild` / `WebUIBuild`
+  disambiguation. the reference demo (`WebUIExample`) is the conform-only surface the
+  no-layer audit validates.
+
 ### continuum — the engine ⇄ dom ⇄ wasm seam (desktop-grade d0–d4)
 
 - **the fragment seam.** `FragmentOp` grows `remove`/`attr`/`move` (additive;
