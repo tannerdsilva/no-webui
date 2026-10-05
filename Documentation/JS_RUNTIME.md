@@ -12,6 +12,10 @@ vanilla JavaScript module that runs in the browser. It has no dependencies —
 no React, no jQuery, no build step. It ships embedded in every rendered page
 and auto-initializes on load.
 
+**unchanged by the live-data work (DX-13/DX-16):** region pushes ride the existing
+`update` frame + `replace` op, so nothing in this document changes — there is no
+new message type and no new client behavior to learn.
+
 ## Module: createLogger
 
 Creates a logger with configurable log levels.

@@ -66,6 +66,23 @@ the frozen surface is:
 - the theming surface: `WebUITheme`, `ThemeMode`, `ThemePalette`, `ThemeScope`,
   `TokenAlias`, `WebUIThemeProvider`, `ThemeCatalog` / `ThemeEntry`, the `@Theme`
   macro, and the generated `DesignToken` vocabulary.
+- the live-data surface (live_dx — additive): `LiveRegion` (incl. its one
+  defaulted member, `source`), `ClosureLiveRegion`, `StateLiveRegion`,
+  `WebUILiveRegions`, `LiveState`, `LiveBox`, `LiveNotifier`, `LiveSubscription`,
+  and the `regions: WebUILiveRegions? = nil` parameter on both `WebUIServer`
+  inits (`nil` = zero new work) — pinned by `Tests/WebUITests/LiveRegionsTests.swift`
+  and the `livedataSurfacePins` row of `APISurfaceTests`.
+- the event-outcome surface (live_dx — additive): `EventOutcome` with its six
+  default conformances (`FragmentUpdate`, `[FragmentUpdate]`, `ViewOutcome`,
+  `RegionInvalidations`, `NoOutcome`, `CombinedOutcome`), `OutcomeContext`
+  (including the `$current` TaskLocal), the `control(_:event:handler:)` entry
+  point, and `RenderContext.withCurrent(router:_:)` — pinned by
+  `Tests/WebUITests/SubstitutionTests.swift`. the pre-existing `EventHandler` /
+  `controlAttributes(id:)` contract and emitted bytes are unchanged (I5).
+- the theme-pipeline surface (live_dx — additive): `WebUIThemeBuild.emit`, the
+  `WebUIThemePlugin` build-tool attach, and the framework `WebUIThemeTool` the
+  plugin runs — pinned by the theme-pipeline probes
+  (`designer/probes/t-emission.mjs`, `t-shadow.mjs`).
 - the `WebUIAuth` surface: `SessionToken`, `CSRFProtection`,
   `PasswordVerifier` / `Argon2Parameters` / `PasswordRecord`, `LoginThrottle`,
   `SingleUseTokenStore`, `AsyncSemaphore`, `CookieParser` / `HTTPCookie`,
