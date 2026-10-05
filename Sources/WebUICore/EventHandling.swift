@@ -157,6 +157,26 @@ public struct RenderContext: Sendable {
     @TaskLocal public static var current: RenderContext?
 }
 
+// MARK: - DX-12 — the render-context seam
+
+extension RenderContext {
+    /// run `body` with the render context established for this router. the page
+    /// render and the dispatch path both enter here, so a control first rendered
+    /// *inside* a handler self-registers (overwrite-wins for a given stable id) —
+    /// before this seam existed only the page render established the context and
+    /// a handler-introduced control was dead.
+    public static func withCurrent<T>(router: EventRouter, _ body: () async throws -> T) async rethrows -> T {
+        try await RenderContext.$current.withValue(RenderContext(router: router)) {
+            try await body()
+        }
+    }
+
+    /// the synchronous sibling — for render-time wiring inside a non-async body.
+    public static func withCurrent<T>(router: EventRouter, _ body: () throws -> T) rethrows -> T {
+        try RenderContext.$current.withValue(RenderContext(router: router), operation: body)
+    }
+}
+
 // MARK: - Stable-ID Control Wiring
 
 /// Wire a caller-stable interactive control: register `handler` under the
