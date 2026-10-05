@@ -160,7 +160,7 @@ state), `LiveSubscription` (`:25`, idempotent `cancel()`). the registry handle i
 
 **injection position.** the `regions:` parameter on **both** `WebUIServer` inits
 (`WebUIServer.swift:306`, `:323`), defaulted `nil` — `nil` means zero new work: no subscriptions, no
-baselines, no pumps, and the dispatch seam keeps its no-op invalidate provider (`:338–340`).
+baselines, no pumps, and the dispatch seam keeps its no-op invalidate provider (`:335–338`).
 
 **a minimal conforming example — the attach** (shape fixed by `dx2-notes/r-to-g.md`; the region id is
 the one the served demo already declares — its nudge control targets `g-region-a`,

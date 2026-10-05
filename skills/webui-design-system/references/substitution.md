@@ -11,8 +11,7 @@ The one model behind the framework's extensibility:
 
 This is the packaged companion to `Documentation/SUBSTITUTION.md` in the no-webui checkout; the
 same rules, condensed for use while building. The reference implementations it quotes live in
-`Sources/WebUIExample/main.swift` (the demo), `Sources/WebUIExample`'s supporting suites and
-`Tests/WebUITests/` in the package.
+`Sources/WebUIExample/main.swift` (the demo) and `Tests/WebUITests/` in the package.
 
 ## The four axes at a glance
 
