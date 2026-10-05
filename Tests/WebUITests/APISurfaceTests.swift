@@ -958,3 +958,48 @@ func substitutionSurfacePins() async {
 	// the stable-id sibling stays byte-unchanged by the addition (I5).
 	#expect(controlAttributes(id: "pinned-ctl", event: .click, handler: nil) == "")
 }
+
+// MARK: - lane R — the live-data surface (DX-13 + DX-16)
+
+@Test("lane R — the live-data surface pins its contract (DX-13 + DX-16)")
+func livedataSurfacePins() async {
+	// DX-13: the protocol, its ONE defaulted member (`source` → nil), and the
+	// two default conformances.
+	let box = LiveBox(0)
+	let closure = ClosureLiveRegion(id: "c") { () async -> String? in
+		"<span id=\"c\">0</span>"
+	}
+	#expect(closure.source == nil, "the defaulted source is nil")
+	#expect(closure.cadence == nil, "a closure region carries no cadence by default")
+
+	let stateRegion = StateLiveRegion(id: "s", state: box) { box in
+		"<span id=\"s\">\(box.value)</span>"
+	}
+	#expect(stateRegion.source != nil, "a state region exposes its state as the source")
+	#expect(await stateRegion.render() == "<span id=\"s\">0</span>")
+
+	// the registry handle: the EventRouter-shaped public surface.
+	let regions = WebUILiveRegions([closure, stateRegion])
+	regions.invalidate("c")                 // before start: a no-op
+	regions.invalidateAll()
+	#expect(regions.currentHTML("c") == nil, "best-effort baseline is nil before start")
+
+	// DX-16: the state binding.
+	let state: any LiveState = box
+	let subscription = state.subscribe { }
+	subscription.cancel()
+	subscription.cancel()                   // idempotent
+	let notifier = LiveNotifier()
+	_ = notifier.add { }
+	#expect(notifier.subscriberCount == 1)
+
+	// the server wiring: BOTH inits accept `regions:` (defaulted nil = zero work).
+	_ = WebUIServer(
+		render: { "" }, router: EventRouter(),
+		config: WebUIServerConfig(host: "127.0.0.1", port: 1), regions: regions
+	)
+	_ = WebUIServer(
+		requestRender: { _ in "" }, router: EventRouter(),
+		config: WebUIServerConfig(host: "127.0.0.1", port: 1), regions: nil
+	)
+}
