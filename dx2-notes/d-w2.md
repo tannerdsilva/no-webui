@@ -142,3 +142,40 @@ grep -n "public enum WebUIAssetBuilder" Sources/WebUIBuild/Emit.swift           
    surprised.
 4. `Documentation/README.md` (the folder's legacy overview) is untouched — out of
    the lane's owned set; the root README's docs index now carries the pointer.
+---
+
+## sidecar §3.8 report (as returned)
+
+```
+lane: D · branch head sha: dd67cb3 · base sha: c24857a
+tasks:
+  Documentation/SUBSTITUTION.md (new)                     done (da22eec)
+  Documentation/API.md (live_dx symbols + WebUIExample)   done (3df7168)
+  Documentation/JS_RUNTIME.md (one note)                  done (90fb99e)
+  Documentation/STABILITY.md (additive I5 entries)        done (90fb99e)
+  CHANGELOG.md + README.md                                done (c2ed151)
+  skills/webui-design-system/** (2 refs + SKILL pointer)  done (d198701)
+  dx2-notes/d-w2.md (lane record)                         done (103d197)
+  AGENTS.md (drift fold)                                  BLOCKED (environment guard; proposal in this file)
+  citation polish                                         done (dd67cb3)
+green:
+  python3 /tmp/continuum-fleet/symbol_gate_added.py   -> branch-diff added text: 129 symbols, 0 unresolved
+  python3 /tmp/continuum-fleet/verify_cites.py Documentation/SUBSTITUTION.md lane-d2 -> all swift citations resolved
+  python3 /tmp/continuum-fleet/verify_cites.py Documentation/API.md lane-d2 -> all swift citations resolved
+  grep -n "public protocol LiveRegion" Sources/WebUIServer/LiveRegions.swift -> :19
+  grep -n "public protocol EventOutcome" Sources/WebUICore/EventHandling.swift -> :47
+  grep -n "public func control<O: EventOutcome>" Sources/WebUICore/EventHandling.swift -> :307
+  grep -n "regions: WebUILiveRegions? = nil" Sources/WebUIServer/WebUIServer.swift -> :306, :323
+  grep -n "public enum WebUIThemeBuild" Sources/WebUIThemeBuild/WebUIThemeBuild.swift -> :21
+  grep -n "struct WebUIThemePlugin" Plugins/WebUIThemePlugin/WebUIThemePlugin.swift -> :28
+  git diff --name-only c24857a..HEAD | grep -E "^(Sources|Tests|designer|Package.swift)" -> empty (no forbidden paths)
+assumptions:
+  1) the demo's live-data drivers + theme catalog land in parallel lane G2 (w2-G2-attempt2),
+     so the live-data/themes examples are the handoff-fixed driver shapes (r-to-g/t-to-g)
+     mirroring the committed twins/fixture; events/components examples are demo-verbatim.
+  2) WebUITheme is documented as the runtime VALUE and WebUIThemeProvider as the runtime
+     PROTOCOL (the brief's "WebUITheme (runtime protocol)" shorthand resolves to that pair).
+  3) AGENTS.md is blocked by the protected-agent-instruction guard; fold ready to apply.
+next-slice: apply the AGENTS.md fold (or accept); at i2 verify the guide's live/theme examples
+  against the merged G2 demo (ids: g-region-a; catalog name) and adjust captions if G2 differs.
+```
