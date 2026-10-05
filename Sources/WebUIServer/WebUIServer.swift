@@ -302,13 +302,15 @@ public actor WebUIServer {
 		render: @escaping Render,
 		router: EventRouter,
 		config: WebUIServerConfig = WebUIServerConfig(),
-		logger: Logger = Logger(label: "webui.server")
+		logger: Logger = Logger(label: "webui.server"),
+		regions: WebUILiveRegions? = nil
 	) {
 		self.config = config
 		self.logger = logger
 		self.lifecycle = nil
 		self.router = router
 		self.render = { _ in render() }
+		self.regions = regions
 	}
 
 	/// render from the request: path-dependent pages and `?s=<id>` deep links.
@@ -317,17 +319,23 @@ public actor WebUIServer {
 		requestRender: @escaping RequestRender,
 		router: EventRouter,
 		config: WebUIServerConfig = WebUIServerConfig(),
-		logger: Logger = Logger(label: "webui.server")
+		logger: Logger = Logger(label: "webui.server"),
+		regions: WebUILiveRegions? = nil
 	) {
 		self.config = config
 		self.logger = logger
 		self.lifecycle = nil
 		self.router = router
 		self.render = requestRender
+		self.regions = regions
 	}
 
 	private let router: EventRouter
 	private let render: RequestRender
+	/// the live-region registry this host attached, if any. `nil` = zero new work:
+	/// no subscriptions, no baselines, no pumps, and the dispatch seam keeps its
+	/// no-op invalidate provider (d-b).
+	private let regions: WebUILiveRegions?
 	/// the connected pages a push reaches. created at init, so a broadcast
 	/// issued before `start()` is a no-op rather than a crash.
 	private let sinks = ConnectionSinks()
@@ -336,7 +344,10 @@ public actor WebUIServer {
 	public func start() async throws {
 		DesignSystemAssets.prewarm()
 		let cfg = config
-		let runner = Runner(render: render, router: router, config: cfg, logger: logger, sinks: sinks)
+		let runner = Runner(
+			render: render, router: router, config: cfg, logger: logger,
+			sinks: sinks, regions: regions
+		)
 		let group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
 		let bootstrap = ServerBootstrap(group: group)
 			.serverChannelOption(ChannelOptions.backlog, value: 128)
@@ -404,6 +415,18 @@ public actor WebUIServer {
 			"WebUIServer serving \(config.pagePath) on http://\(config.host):\(config.port) (ws://\(config.host):\(config.port)/ws)"
 		)
 
+		// the live regions, when attached: subscribe sources → render baselines
+		// eagerly (before the accept loop) → hand the worker closures to the
+		// task group below. `nil` yields an empty list — zero new work (d-b).
+		let regionWork: [@Sendable () async -> Void]
+		if let regions {
+			regionWork = await regions.start(router: router, push: { [sinks] updates in
+				await sinks.broadcast(WSOutgoing.update(fragments: updates).jsonBytes)
+			})
+		} else {
+			regionWork = []
+		}
+
 		// the accept loop owns the loop group's lifetime: the connections
 		// already accepted drain first, and only then does the group stop.
 		// shutting the group down from `stop()` instead races a handler that
@@ -412,6 +435,11 @@ public actor WebUIServer {
 		// race to a forced crash in a later release.
 		do {
 			try await withThrowingDiscardingTaskGroup { group in
+				// the region pumps are children of this group: on stop the pumps
+				// finish and the workers exit, so `shutdownGracefully` can join them.
+				for work in regionWork {
+					group.addTask { await work() }
+				}
 				try await channel.executeThenClose { inbound in
 					for try await negotiationFuture in inbound {
 						group.addTask {
@@ -433,6 +461,9 @@ public actor WebUIServer {
 	public func stop() async {
 		guard let lifecycle else { return }
 		self.lifecycle = nil
+		// the per-start stop flag is set (and the pumps finished) BEFORE the
+		// listener closes, so the discarding group can join the region workers.
+		regions?.stop()
 		try? await lifecycle.channel.channel.close().get()
 	}
 
@@ -539,6 +570,9 @@ final class Runner: Sendable {
 	let gate: ConnectionGate
 	/// the push targets this connection joins for its lifetime.
 	let sinks: ConnectionSinks
+	/// the live-region registry, when the host attached one. the dispatch path
+	/// threads its invalidate closure through the seam (DX-13/DX-16).
+	private let regions: WebUILiveRegions?
 
 	/// host assets, pre-encoded: path → body + content type + cache policy.
 	/// fixed for the life of the process, so each body is built exactly once
@@ -565,7 +599,8 @@ final class Runner: Sendable {
 		router: EventRouter,
 		config: WebUIServerConfig,
 		logger: Logger,
-		sinks: ConnectionSinks
+		sinks: ConnectionSinks,
+		regions: WebUILiveRegions?
 	) {
 		self.render = render
 		self.router = router
@@ -573,6 +608,7 @@ final class Runner: Sendable {
 		self.logger = logger
 		self.gate = ConnectionGate(maximum: config.maxConnections)
 		self.sinks = sinks
+		self.regions = regions
 		var encoded: [String: HostAsset] = [:]
 		encoded.reserveCapacity(config.assets.count)
 		for asset in config.assets {
@@ -658,9 +694,24 @@ final class Runner: Sendable {
 			switch msg {
 			case .event(let component, let event, let data, _):
 				let eventData = EventData(component: ComponentID(component), event: event, data: data)
-				let updates = await dispatchOutcome(eventData, router: self.router)
-				guard !updates.isEmpty else { return }
-				try await writeJSON(WSOutgoing.update(fragments: updates), outbound: outbound)
+				// the invalidate provider: when a registry is attached, an
+				// `EventOutcome`'s `RegionInvalidations` marks those regions dirty
+				// here. the wake is deferred to `wakePending()` below, AFTER the
+				// handler frame is on the wire — two-push ordering (A.5/d-k).
+				let updates: [FragmentUpdate]
+				if let regions {
+					updates = await dispatchOutcome(
+						eventData, router: self.router,
+						invalidate: { regions.markDirty($0) }
+					)
+				} else {
+					updates = await dispatchOutcome(eventData, router: self.router)
+				}
+				if !updates.isEmpty {
+					try await writeJSON(WSOutgoing.update(fragments: updates), outbound: outbound)
+				}
+				// only now may a region worker woken by this dispatch push.
+				regions?.wakePending()
 			case .ping:
 				try await writeJSON(WSOutgoing.pong, outbound: outbound)
 			case .navigate:
