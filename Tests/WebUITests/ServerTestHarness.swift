@@ -4,6 +4,8 @@ import Foundation
 // separate module; without this the test target does not compile on linux.
 import FoundationNetworking
 #endif
+import Logging
+import Synchronization
 import Testing
 import WebUI
 import WebUIDesignSystem
@@ -71,6 +73,7 @@ func withServer(
 	router: EventRouter,
 	assets: [WebUIServerAsset],
 	themeSheet: ThemeSheet? = nil,
+	regions: WebUILiveRegions? = nil,
 	portBase: Int = 21000,
 	_ body: (Int) async throws -> Void
 ) async throws {
@@ -80,7 +83,8 @@ func withServer(
 		router: router,
 		config: WebUIServerConfig(
 			host: "127.0.0.1", port: port, themeSheet: themeSheet, assets: assets
-		)
+		),
+		regions: regions
 	)
 	let task = Task { try await server.start() }
 	_ = try await waitForServe(port: port)
@@ -155,3 +159,114 @@ enum SeamTestError: Error {
 	case notReady
 	case stillServing
 }
+
+// MARK: - live-region harness helpers (lane R, DX-13/DX-16)
+//
+// four helpers shared by the LiveRegions sockets tests: `regions:` on
+// `withServer` (above), await-next-frame-with-timeout, zero-frames-in-window
+// (both on `HarnessSocket`), and the byte counter (I8).
+
+/// a thread-safe byte accumulator for received frame payloads. the I8 check
+/// (a region push ≤ its rendered html + 512 B) reads `total`.
+final class ByteCounter: Sendable {
+	private let state = Mutex<Int>(0)
+
+	func add(_ text: String) { state.withLock { $0 += text.utf8.count } }
+	func add(_ data: Data) { state.withLock { $0 += data.count } }
+
+	var total: Int { state.withLock { $0 } }
+}
+
+#if !os(Linux)
+/// a thread-safe frame buffer. a reference type, so the socket's reader task can
+/// capture it (a `Mutex` is noncopyable and cannot be captured).
+final class FrameBuffer: Sendable {
+	private let frames = Mutex<[String]>([])
+
+	func append(_ text: String) {
+		frames.withLock { buffer in
+			if buffer.count < 4096 { buffer.append(text) }
+		}
+	}
+
+	func takeFirst() -> String? {
+		frames.withLock { $0.isEmpty ? nil : $0.removeFirst() }
+	}
+
+	func drain() -> [String] {
+		frames.withLock { buffer in
+			let all = buffer
+			buffer.removeAll()
+			return all
+		}
+	}
+
+	var count: Int { frames.withLock { $0.count } }
+}
+
+/// an apple-only websocket test socket whose frames are drained by ONE reader
+/// task into a locked buffer. awaiting a frame with a timeout therefore never
+/// cancels an in-flight `receive()` (which would poison the next one) and never
+/// loses a buffered frame to the timeout race.
+final class HarnessSocket: Sendable {
+	let task: URLSessionWebSocketTask
+	private let buffer: FrameBuffer
+	private let reader: Task<Void, Never>
+
+	init(url: URL) {
+		let socket = URLSession(configuration: .ephemeral).webSocketTask(with: url)
+		let buffer = FrameBuffer()
+		self.task = socket
+		self.buffer = buffer
+		socket.resume()
+		// capture the buffer (not `self`) so the reader task can be built before
+		// all members are initialized.
+		self.reader = Task {
+			while !Task.isCancelled {
+				do {
+					let message = try await socket.receive()
+					let text: String
+					switch message {
+					case .string(let value): text = value
+					case .data(let data): text = String(decoding: data, as: UTF8.self)
+					@unknown default: continue
+					}
+					buffer.append(text)
+				} catch {
+					return
+				}
+			}
+		}
+	}
+
+	func send(_ text: String) async throws {
+		try await task.send(.string(text))
+	}
+
+	/// the next frame within `timeout`, or `nil` on timeout. polls the buffer, so
+	/// a frame that arrived at the boundary is never lost.
+	func nextFrame(timeout: Duration) async -> String? {
+		let clock = ContinuousClock()
+		let deadline = clock.now + timeout
+		while clock.now < deadline {
+			if let frame = buffer.takeFirst() { return frame }
+			try? await Task.sleep(for: .milliseconds(5))
+		}
+		return buffer.takeFirst()
+	}
+
+	/// every frame arriving within `window`, draining the buffer. empty = silence.
+	func framesWithin(_ window: Duration) async -> [String] {
+		try? await Task.sleep(for: window)
+		return buffer.drain()
+	}
+
+	/// frames buffered but not yet read.
+	var pendingFrames: Int { buffer.count }
+
+	func close() {
+		reader.cancel()
+		task.cancel(with: .normalClosure, reason: nil)
+	}
+}
+#endif
