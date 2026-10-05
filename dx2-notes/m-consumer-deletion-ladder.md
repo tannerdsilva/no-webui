@@ -16,18 +16,25 @@ shrink" and measured 19%)._
 |---|---|---|---|---|
 | **1 · wiring** (DX-12/14) | **128** `wire(router, id:events:)` registration sites; a hand **4-line** `btn()` helper (`Helpers.swift:74`); one control's id is hand-stated in **4 markup sites + 1 registration** | the demo's **10** `control(_:event:handler:)` call sites — the routing attributes are *emitted*, never hand-written | the registration scaffold goes to **0**; the handler *logic* stays (it is the consumer's code either way) | **5 → 1** (id stated once, at the call site) |
 | **2 · response shape** (DX-14) | **56** hand-assembled `FragmentUpdate(` sites across **6** files | intent as a type: `ViewOutcome` · `RegionInvalidations` · `NoOutcome` · `CombinedOutcome` (the demo uses them at 5/6/6/2 sites); **7** `FragmentUpdate` sites remain — deliberately, to show the union | ids + html are no longer hand-paired with their targets; the one-update shape survives as a first-class outcome | — |
-| **3 · the push layer** (DX-13/16) | `PushDeduper` (**12** lines) + `IntervalService` (**47** lines) + the poll vocabulary it serves (**34** `Task.sleep` sites, 4 `IntervalService` mentions); one nav click cost **136,195 B** in a single whole-`#app` `replace` (the audit's measurement, cited) | the four-driver surface: **268 lines** total (closure default · custom `LiveRegion` struct · `StateLiveRegion<LiveBox>` · custom `LiveState` actor, plus its controls); one region push measures **139 B** (frame ≤ html 74 B + 512, asserted live by `g-regions.mjs`) | **bytes collapse (~979×; 136,195 B → 139 B)**; **lines GROW** — see "what did not shrink" | — |
+| **3 · the push layer** (DX-13/16) | `PushDeduper` (**12** lines) + `IntervalService` (**47** lines) + the poll vocabulary it serves (**34** `Task.sleep` sites, 4 `IntervalService` mentions); one nav click cost **136,195 B** in a single whole-`#app` `replace` (the audit's measurement, cited) | the framework's **machinery is zero** — no dedupe, no timers, no fragment sets. the demo's *declaration* surface for **four** mechanisms + five controls + the registry is **89 code lines** (112 with its commentary); a minimal consumer of **two** regions — registry and attach included — is **8 lines** | **bytes collapse (~979×; 136,195 B → 139 B)**; machinery lines **59 → 0**; what replaces them is declarations, and the per-region floor is ~3 lines | — |
 | **4 · theme tooling** (DX-15a) | `ArcAssetTool/main.swift` (**43** lines) + the plugin (**38** lines) + **4** manifest mentions = the plan's 81-line block | **1** manifest line (`plugins: [.plugin(name: "WebUIThemePlugin")]`) + a **47-line** `DemoTheme.swift` — which is the consumer's *content* (palettes + provider), not tooling | **81 lines of tooling → 0**; the consumer keeps only its content | — |
 | **5 · styling** (DX-15b) | `ChromeSheet.swift`: **2,810 lines**, **1,028** rule blocks, re-skinning **9 of 9** probed DS classes (chip 3 · kv 5 · toast 3 · modal-overlay 1 · log-line 8 · md 18 · swatch 2 · inline-edit 2 · tool-btn 4) | tokens + typed `@Theme(rules:)`; the one shadow-check implementation reports **0 collisions** on the demo tree | collisions **9 → 0**; the 2,810-line *conversion* is a **follow-on** (d-w), measured here, not promised | — |
 
 ## what did NOT shrink (and why)
 
-1. **Seam 3's lines GROW — the surface moves, it does not vanish.** arc's push layer is 59 lines of
-   *machinery* (dedupe + interval) plus its call sites; the framework's substituted surface is 268 lines of
-   *region definitions*. The consumer stops writing machinery and starts writing declarations — and, unlike
-   arc's 59 lines, the declarations are what the consumer was trying to say. **The win here is bytes
-   (~979×) and correctness (no client-side dedupe to get wrong), not line count.** This is the honest form
-   of the claim the plan warned against over-projecting.
+1. **Seam 3's machinery goes to zero — but the declarations are new lines, and the first revision of this
+   row mis-measured them.** the measured facts: arc writes **59 lines of machinery** (`PushDeduper` +
+   `IntervalService`) plus its call sites; the framework writes **zero** machinery. what the consumer writes
+   instead is *declarations* — **89 code lines** in this demo for **four** mechanisms + five controls + the
+   registry (112 with its commentary), or **8 lines** for a minimal two-region consumer including the
+   registry and the attach. the honest trade: **machinery 59 → 0, ~3 lines of declaration per region**,
+   plus a **~979×** byte reduction and the removal of a class of client-side dedupe bugs.
+   **correction recorded, not quietly edited:** an earlier revision of this row said the substituted surface
+   was "268 lines" and framed the seam as "lines GROW". that number was measured from the MARK to EOF and
+   silently swallowed the page assembly, the theme helper and the server boot — three declarations that are
+   not the live-data surface. it was also apples-to-oranges: arc's *machinery-only* lines set against the
+   demo's *declarations + controls + commentary*, on a page that deliberately exercises the union of four
+   mechanisms. the corrected figures above are the ones to cite.
 2. **Seam 1's handler bodies stay.** 128 registrations go away, but the logic inside them is the
    consumer's own work. What is deleted is the *scaffold*: the registration call, the id being restated in
    markup, and the hand-built attribute string. The measured touchpoint count (5 → 1) is the real metric,
