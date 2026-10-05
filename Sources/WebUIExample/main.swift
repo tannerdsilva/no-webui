@@ -104,25 +104,144 @@ func outcomeCellHTML() -> String {
 	"""
 }
 
-/// RegionInvalidations (3) — the handler declares the CHANGE (`g-region-a`);
-/// `OutcomeContext.invalidate` reaches the live registry. at i0 the provider is
-/// a no-op (no registry yet), so `resolve` carries no fragments; the end-to-end
-/// registry push is asserted at i1 once lane R attaches `regions:`.
-func regionNudgeHTML() -> String {
-	let wire = demoControl("nudge g-region-a", id: "g-region-nudge") { (event: EventData) -> RegionInvalidations in
-		RegionInvalidations(["g-region-a"])
+// MARK: - the four live-region drivers (DX-13 regions + DX-16 state)
+//
+// every driver below is a conforming type passed in — the substitution law
+// applied to live data. the registry owns rendering, change detection, cadence
+// and pump lifetime; the demo owns only the region definitions.
+
+/// a monotonic render counter for the closure default: each render is a NEW
+/// value, so an invalidate produces a frame. the other three drivers render
+/// state, so an unchanged render pushes nothing — that silence is what the
+/// demo's I7 probe asserts against them.
+final class RegionTick: Sendable {
+	private let state = Mutex(0)
+	func next() -> Int { state.withLock { $0 += 1; return $0 } }
+}
+
+/// (2) a custom `LiveRegion` STRUCT the framework has never seen, over a
+/// `LiveBox`. it publishes the box as its `source`, so a write wakes it through
+/// the registry's subscribe hook with no consumer wiring.
+struct DemoStructRegion: LiveRegion {
+	let id: String
+	let box: LiveBox<Int>
+
+	/// invalidation-driven: no cadence, and the box is the subscription hook.
+	var cadence: Duration? { nil }
+	var source: (any LiveState)? { box }
+
+	func render() async -> String? {
+		let value = box.value
+		return DemoRegions.html(id: id, label: "custom LiveRegion struct", value: value)
 	}
-	return """
-	<div class="demo-cell">
-	  <p class="demo-note">region nudge — i0: the invalidate provider is a no-op, so resolve carries no fragments. i1 asserts the registry push.</p>
-	  \(wire)
-	</div>
-	"""
+}
+
+/// (4) a custom `LiveState` ACTOR the framework has never seen. its `subscribe`
+/// witness is `nonisolated` (d-x7): the actor forwards to an embedded
+/// `LiveNotifier`, so the registry's synchronous subscribe never hops onto the
+/// actor and cannot block `start()`.
+actor DemoFeedState: LiveState {
+	private let notifier = LiveNotifier()
+	private var value = 0
+
+	nonisolated func subscribe(_ onChange: @escaping @Sendable () -> Void) -> LiveSubscription {
+		notifier.add(onChange)
+	}
+
+	func bump() {
+		value += 1
+		notifier.notify()
+	}
+
+	func snapshot() -> Int { value }
+}
+
+/// the demo's live-data surface: four drivers — one per mechanism — and the
+/// states their controls mutate.
+struct DemoRegions: Sendable {
+	let tick = RegionTick()
+	let structBox = LiveBox(0)
+	let stateBox = LiveBox(0)
+	let feed = DemoFeedState()
+
+	static func html(id: String, label: String, value: Int) -> String {
+		"<div id=\"\(id)\" class=\"demo-region\">\(label) — value \(value)</div>"
+	}
+
+	/// protocol values in, framework machinery out: the closure default, the
+	/// custom struct, the state-bound default over a `LiveBox`, and the custom
+	/// `LiveState` actor.
+	var registry: WebUILiveRegions {
+		let tick = self.tick
+		let structBox = self.structBox
+		let stateBox = self.stateBox
+		let feed = self.feed
+		return WebUILiveRegions([
+			ClosureLiveRegion(id: "g-region-a") { () async -> String? in
+				DemoRegions.html(id: "g-region-a", label: "closure default", value: tick.next())
+			},
+			DemoStructRegion(id: "g-region-b", box: structBox),
+			StateLiveRegion(id: "g-region-c", state: stateBox) { box in
+				let value = box.value          // one snapshot, before any await
+				return DemoRegions.html(id: "g-region-c", label: "StateLiveRegion<LiveBox>", value: value)
+			},
+			StateLiveRegion(id: "g-region-d", state: feed) { state in
+				let value = await state.snapshot()
+				return DemoRegions.html(id: "g-region-d", label: "custom LiveState actor", value: value)
+			},
+		])
+	}
+
+	/// the regions' baseline markup, drawn into the page so the fragment ids
+	/// exist in the DOM before any push arrives. the registry pushes nothing at
+	/// start (baselines are internal), so the page owns this.
+	var baselineHTML: String {
+		DemoRegions.html(id: "g-region-a", label: "closure default", value: 0)
+			+ DemoRegions.html(id: "g-region-b", label: "custom LiveRegion struct", value: structBox.value)
+			+ DemoRegions.html(id: "g-region-c", label: "StateLiveRegion<LiveBox>", value: stateBox.value)
+			+ DemoRegions.html(id: "g-region-d", label: "custom LiveState actor", value: 0)
+	}
+
+	/// one control per driver. (a) is invalidate-driven — its handler declares the
+	/// change through `RegionInvalidations`, which reaches the registry through
+	/// the dispatch seam's `OutcomeContext.invalidate`; (b)–(d) mutate their own
+	/// state, so the registry's `source` subscription wakes them.
+	var controlsHTML: String {
+		let structBox = self.structBox
+		let stateBox = self.stateBox
+		let feed = self.feed
+		var html = demoControl("nudge g-region-a", id: "g-region-nudge") { (_: EventData) -> RegionInvalidations in
+			RegionInvalidations(["g-region-a"])
+		}
+		// the d-k ordering control: a COMBINED outcome — one update AND an
+		// invalidation. the registry defers the wake until the handler frame is on
+		// the wire, so the fragment must arrive BEFORE the region's push.
+		html += demoControl("fragment + invalidate", id: "g-region-combined") {
+			(_: EventData) -> CombinedOutcome<FragmentUpdate, RegionInvalidations> in
+			CombinedOutcome(
+				FragmentUpdate(id: "g-combined-out", html: "<span id=\"g-combined-out\">fragment written first</span>"),
+				RegionInvalidations(["g-region-a"])
+			)
+		}
+		html += demoControl("bump g-region-b", id: "g-region-b-bump") { (_: EventData) -> NoOutcome in
+			structBox.value += 1
+			return NoOutcome()
+		}
+		html += demoControl("bump g-region-c", id: "g-region-c-bump") { (_: EventData) -> NoOutcome in
+			stateBox.value += 1
+			return NoOutcome()
+		}
+		html += demoControl("bump g-region-d", id: "g-region-d-bump") { (_: EventData) -> NoOutcome in
+			await feed.bump()
+			return NoOutcome()
+		}
+		return html
+	}
 }
 
 // MARK: - Page assembly (renders interactive views, registers handlers)
 
-func renderExamplePage(state: ExampleState, router: EventRouter) -> String {
+func renderExamplePage(state: ExampleState, router: EventRouter, regions: DemoRegions) -> String {
 	// the seam (DX-12): the framework establishes the render context for the
 	// whole page build, exactly as it does for the dispatch path — the demo
 	// host must not re-implement what the framework now hosts.
@@ -166,8 +285,14 @@ func renderExamplePage(state: ExampleState, router: EventRouter) -> String {
 						Raw(swapStage1HTML())
 						Heading("(2) ViewOutcome — replace my tagged root with a View", level: .h4)
 						Raw(outcomeCellHTML())
-						Heading("(3) RegionInvalidations — declares the change; i1 asserts the push", level: .h4)
-						Raw(regionNudgeHTML())
+						Heading("(3) RegionInvalidations — the handler declares the change", level: .h4)
+						Div(class: "demo-cell") {
+							Raw(regions.controlsHTML)
+						}
+						Heading("(4) four live-region drivers — closure · struct · LiveBox · custom LiveState", level: .h4)
+						Div(class: "demo-cell") {
+							Raw(regions.baselineHTML)
+						}
 					}
 				}
 			}
@@ -191,7 +316,21 @@ func renderExamplePage(state: ExampleState, router: EventRouter) -> String {
 		".demo-cell--outcome { min-height: 72px; }",
 		".demo-note { color: var(--color-text-muted); font-size: var(--font-size-sm); margin-bottom: var(--space-2); }",
 		".demo-replaced { color: var(--color-accent-600); font-weight: 500; }",
-	]).render()
+		".demo-region { color: var(--color-text-muted); font-size: var(--font-size-sm); padding: var(--space-1) 0; }",
+	], themeStylesheetURL: demoThemeSheet().url).render()
+}
+
+/// the emitted sheet as a value: the document links `url`, the server serves those
+/// exact bytes at it, and the address is computed from the bytes — so the two
+/// cannot disagree (a mismatch would be a stylesheet 404, silent in the cascade).
+/// `DemoCatalogSheet` is generated from `DemoCatalog` by the framework's
+/// `WebUIThemePlugin` on every build: mechanism (a), where the whole consumer
+/// surface is one plugin line plus the catalog.
+func demoThemeSheet() -> ThemeSheet {
+	ThemeSheet(
+		css: String(decoding: DemoCatalogSheet.body, as: UTF8.self),
+		gzip: DemoCatalogSheet.gzip
+	)
 }
 
 // MARK: - HTTP / WebSocket server (WebUIServer)
@@ -201,17 +340,24 @@ struct WebUIExample {
 	static func main() async throws {
 		let state = ExampleState()
 		let router = EventRouter()
+		let regions = DemoRegions()
 		let server = WebUIServer(
-			render: { renderExamplePage(state: state, router: router) },
+			render: { renderExamplePage(state: state, router: router, regions: regions) },
 			router: router,
 			config: WebUIServerConfig(
 				port: intFlag(named: "--port", default: 9090),
+				// the emitted theme sheet, served at its content address (paired with
+				// the document's `themeStylesheetURL` above).
+				themeSheet: demoThemeSheet(),
 				// the generated engine slice (continuum §1.5): the engine fetches
 				// it at boot and swaps its conservative attr seed for it.
 				assets: [
 					WebUIAsset(ContinuumEngineManifest.self, path: "/ui/continuum-manifest.json").registration
 				]
-			)
+			),
+			// the live-region registry (DX-13): nil would mean zero new work, so the
+			// demo attaches it explicitly — the four drivers above.
+			regions: regions.registry
 		)
 		try await server.start()
 	}

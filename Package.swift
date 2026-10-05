@@ -393,9 +393,15 @@ let package = Package(
             name: "WebUIExample",
             dependencies: [
                 "WebUI",
+                "WebUICore",
                 "WebUIDesignSystem",
+                "WebUIDesignSystemCore",
                 "WebUIServer",
-            ]
+            ],
+            // dx-15a: the consumer attaches the framework's theme plugin. it discovers
+            // `DemoCatalog` in this target and emits `DemoCatalogSheet` as a compilable
+            // source on every build — mechanism (a), no consumer tool target, no shim.
+            plugins: [.plugin(name: "WebUIThemePlugin")]
         ),
         .executableTarget(
             name: "WebUIAuthExample",
