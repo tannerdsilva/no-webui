@@ -532,6 +532,7 @@ enum WebUIContinuumTool {
 			switch verb {
 			case "generate": try Run.generate(rest)
 			case "lint": try Run.lint(rest)
+			case "shadow": try Run.shadow(rest)
 			case "wasm-cross": try Run.wasmCross(rest)
 			case "measure": try Run.measure(rest)
 			case "verify": try Run.verify(rest)
@@ -576,6 +577,14 @@ enum WebUIContinuumTool {
 		                 capability-import mismatches against the host grants
 		                 --sources <dir> [--inventory <path>]
 		                 [--grants a,b,c] [--hotview-sources <dir>]...
+		  shadow         DX-15b anti-shadow policy: extract exact class tokens
+		                 from CONSUMER sources (string-literal CSS, CSSRule
+		                 args, class= literals), intersect with the DS class
+		                 union, warn naming the owning component. never runs
+		                 over DS sources. exit 1 with --fail on any collision.
+		                 --sources <consumer dir> [--ds-css <sheet>]
+		                 [--ds-sources <DS core>] [--inventory <generated>]
+		                 [--fail] [--demo]
 		  wasm-cross     DX-5 autobuild: direct two-stage swiftc cross-compile of
 		                 the island graph (island main -> WebUIIslandCore ->
 		                 WebUISharedCore) for wasm32 with the embedded wasm sdk.

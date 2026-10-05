@@ -43,6 +43,13 @@ let package = Package(
             name: "WebUIBuild",
             targets: ["WebUIBuild"]
         ),
+        // dx-15a: the theme-emission build library — a consumer's catalog to a
+        // stamped, gzipped asset, through the same emitter as the framework's
+        // own assets. host-only (see the DX-15a spike verdict).
+        .library(
+            name: "WebUIThemeBuild",
+            targets: ["WebUIThemeBuild"]
+        ),
         .library(
             name: "WebUIBlocks",
             targets: ["WebUIBlocks"]
@@ -64,6 +71,15 @@ let package = Package(
         .plugin(
             name: "WebUIScaffoldPlugin",
             targets: ["WebUIScaffoldPlugin"]
+        ),
+        // dx-15a: the theme-emission build-tool plugin a consumer attaches to
+        // the app target that declares a ThemeCatalog; the plugin drives
+        // WebUIThemeTool (a direct swiftc over the consumer's theme sources)
+        // and the emitted WebUIShippedAsset conformance is compiled into the
+        // consumer target. see the lane T spike verdict.
+        .plugin(
+            name: "WebUIThemePlugin",
+            targets: ["WebUIThemePlugin"]
         ),
         // a consumer attaches this plugin and ships an `Assets/webui-assets.json`; the
         // plugin runs the framework's tool over it on every build.
@@ -280,6 +296,20 @@ let package = Package(
             ]
         ),
 
+        // ── Theme Build Library (DX-15a) ─────────────────────────
+        // the theme-emission library: catalog → sheet → WebUIAssetBuilder.emit. it links
+        // the theme vocabulary (`WebUIDesignSystemCore` for ThemeCatalog/ThemeSheet) and
+        // the emitter (`WebUIBuild`), so a consumer import is host-only. the pipeline runs
+        // it either from a framework tool (mechanism (a), the spike verdict) or a ≤3-line
+        // consumer shim (fallback (b)).
+        .target(
+            name: "WebUIThemeBuild",
+            dependencies: [
+                .target(name: "WebUIDesignSystemCore"),
+                .target(name: "WebUIBuild"),
+            ]
+        ),
+
         // ── Asset Tool ───────────────────────────────────────────
         .executableTarget(
             name: "WebUIAssetTool",
@@ -324,6 +354,24 @@ let package = Package(
                 .product(name: "SwiftSyntax", package: "swift-syntax"),
                 .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
                 .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
+            ]
+        ),
+
+        // ── Theme Tool (DX-15a, mechanism (a)) ───────────────────
+        // the executable the WebUIThemePlugin build command runs: it spawns a
+        // DIRECT swiftc over the consumer's theme sources (the spike verdict).
+        // the tool's dependency closure is ALSO the build-ordering guarantee —
+        // `context.tool(named:)` builds its product first, and its deps pull in
+        // the macro dylib (WebUIDesignSystem → WebUIDesignSystemMacros), the
+        // theme vocabulary and the emitter, so every `.build` product the
+        // nested swiftc needs exists before the plugin command runs (f2's hard
+        // half). it links those modules because it is a host executable; its
+        // own code only drives the compiler.
+        .executableTarget(
+            name: "WebUIThemeTool",
+            dependencies: [
+                .target(name: "WebUIDesignSystem"),
+                .target(name: "WebUIThemeBuild"),
             ]
         ),
 
@@ -472,6 +520,18 @@ let package = Package(
             capability: .buildTool(),
             dependencies: [
                 .target(name: "WebUIContinuumTool"),
+            ]
+        ),
+        // dx-15a: the theme-emission plugin (mechanism (a)) — the tool it runs
+        // is a target dependency, the established pattern (WebUIAssetPlugin →
+        // WebUIAssetTool above). its tool depends on WebUIDesignSystem, so
+        // building the tool builds the macro dylib first (the f2 ordering
+        // guarantee; see the spike verdict).
+        .plugin(
+            name: "WebUIThemePlugin",
+            capability: .buildTool(),
+            dependencies: [
+                .target(name: "WebUIThemeTool"),
             ]
         ),
         // the file half of the asset toolkit: a target shipping `Assets/webui-assets.json`
