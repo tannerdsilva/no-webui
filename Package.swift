@@ -348,6 +348,24 @@ let package = Package(
             ]
         ),
 
+        // ── Theme Tool (DX-15a, mechanism (a)) ───────────────────
+        // the executable the WebUIThemePlugin build command runs: it spawns a
+        // DIRECT swiftc over the consumer's theme sources (the spike verdict).
+        // the tool's dependency closure is ALSO the build-ordering guarantee —
+        // `context.tool(named:)` builds its product first, and its deps pull in
+        // the macro dylib (WebUIDesignSystem → WebUIDesignSystemMacros), the
+        // theme vocabulary and the emitter, so every `.build` product the
+        // nested swiftc needs exists before the plugin command runs (f2's hard
+        // half). it links those modules because it is a host executable; its
+        // own code only drives the compiler.
+        .executableTarget(
+            name: "WebUIThemeTool",
+            dependencies: [
+                .target(name: "WebUIDesignSystem"),
+                .target(name: "WebUIThemeBuild"),
+            ]
+        ),
+
         // ── @HotView / @HotClass Macros (the continuum surface) ─
         // host-compiled compiler plugin (swift-syntax, already vendored above).
         // its declarations live inert in `WebUI`; the implementation must never
