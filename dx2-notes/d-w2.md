@@ -144,7 +144,7 @@ grep -n "public enum WebUIAssetBuilder" Sources/WebUIBuild/Emit.swift           
    the lane's owned set; the root README's docs index now carries the pointer.
 ---
 
-## sidecar §3.8 report (as returned)
+## sidecar §3.8 report (drafted at `dd67cb3`; the notes-append commit and later polish commits extend the branch — the returned message carries the final head sha)
 
 ```
 lane: D · branch head sha: dd67cb3 · base sha: c24857a
