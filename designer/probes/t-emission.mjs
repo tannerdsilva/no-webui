@@ -11,7 +11,12 @@
 //      hand-written twin with its overlaying token (the twin emits through the
 //      same path).
 //
-// requires `swift build` first (the tool binary must exist).
+// SELF-SUFFICIENT precondition: a plain `swift build` in THIS repo never
+// produces WebUIThemeTool — nothing in-repo attaches WebUIThemePlugin, so the
+// plugin's tool dependency only builds when a CONSUMER attaches it. when the
+// binary is missing this probe builds the target itself (`swift build --target
+// WebUIThemeTool`; its dependency closure also builds the macro product the
+// emission needs), re-checks, and only then proceeds.
 import { spawnSync, execFileSync } from "node:child_process";
 import { join, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -24,8 +29,17 @@ const CATALOG = join(dirname(fileURLToPath(import.meta.url)), "fixtures", "t-the
 const PRODUCTS = join(ROOT, ".build/out/Products/Debug");
 
 if (!existsSync(BIN)) {
-  console.error(`t-emission: WebUIThemeTool not built at ${BIN} — run swift build first`);
-  process.exit(1);
+  console.log("t-emission: WebUIThemeTool not built — building the target (`swift build --target WebUIThemeTool`)…");
+  try {
+    execFileSync("swift", ["build", "--target", "WebUIThemeTool"], { cwd: ROOT, stdio: "inherit" });
+  } catch {
+    // fall through to the re-check below, which prints the actionable message.
+  }
+  if (!existsSync(BIN)) {
+    console.error(`t-emission: WebUIThemeTool still missing at ${BIN} — run \`swift build --target WebUIThemeTool\` by hand and read its error`);
+    process.exit(1);
+  }
+  console.log("t-emission: precondition built — proceeding");
 }
 
 let failures = 0;
