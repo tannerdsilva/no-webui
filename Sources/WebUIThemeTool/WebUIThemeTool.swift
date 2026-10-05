@@ -134,6 +134,15 @@ enum WebUIThemeTool {
 		let modCache = (workDir as NSString).appendingPathComponent("ModuleCache")
 		var cmd = [
 			"/usr/bin/swiftc",
+			// the spike's f1 mechanism detail: the compiler wraps external macro
+			// plugin launches in its own sandbox-exec, and a nested sandbox
+			// cannot apply inside SwiftPM's plugin-command seatbelt
+			// (`sandbox_apply: Operation not permitted`). -disable-sandbox tells
+			// the frontend not to re-sandbox the plugin process; the plugin then
+			// runs under the command's own (allow process*) + (allow file-read*)
+			// geometry, which is all it needs. verified: the sandboxed and
+			// unsandboxed emissions are byte-identical.
+			"-Xfrontend", "-disable-sandbox",
 			"-load-plugin-executable", macroPlugin.path + "#WebUIDesignSystemMacros",
 			"-I", productsDir.path,
 			"-I", moduleMapsDir.path,
@@ -149,16 +158,37 @@ enum WebUIThemeTool {
 		cmd += sources
 		cmd += [driverPath]
 		cmd += ["-L", productsDir.path]
-		// the framework's own static archives (globbed — a new framework lib
-		// flows in without editing the tool).
-		let libs = (try? FileManager.default.contentsOfDirectory(atPath: productsDir.path))?
-			.filter { $0.hasPrefix("lib") && $0.hasSuffix(".a") }
-			.sorted() ?? []
-		for lib in libs {
-			let name = String(lib.dropFirst("lib".count).dropLast(".a".count))
-			cmd += ["-l\(name)"]
+		// the link closure the driver symbols need. two layout spellings are
+		// possible depending on how SwiftPM materialized the dependency: static
+		// archives (`lib<M>.a` → `-l<M>`) in the classic layout, or per-module
+		// whole objects (`<M>.o`, the new-build-system spelling a path
+		// dependency produces). each module is linked either way; a missing
+		// module is skipped so a framework dep that stops being needed never
+		// hard-breaks emission (the undefined symbols would, if it were).
+		//
+		// WebUIDesignSystem is deliberately ABSENT from the closure: the
+		// consumer theme source imports it (its `@Theme` attribute declaration
+		// and re-exports), but every symbol the expanded macro references lives
+		// in WebUIDesignSystemCore/WebUICore. linking the whole WebUIDesignSystem
+		// object drags WebUI + its embedded assets (HTMLDocument, WebUIAssets…)
+		// into the driver for zero reason.
+		let linkModules = [
+			"WebUIThemeBuild", "WebUIDesignSystemCore",
+			"WebUIBuild", "WebUICore", "WebUISharedCore",
+		]
+		for module in linkModules {
+			let archive = productsDir.appendingPathComponent("lib\(module).a")
+			let object = productsDir.appendingPathComponent("\(module).o")
+			if FileManager.default.fileExists(atPath: archive.path) {
+				cmd += ["-l\(module)"]
+			} else if FileManager.default.fileExists(atPath: object.path) {
+				cmd += [object.path]
+			} else {
+				print("[WebUIThemeTool] warning: link module \(module) not found in \(productsDir.path) — the driver will fail at link if it references it")
+			}
 		}
-		// loose object files SwiftPM does not archive (rawdog + Logging + CRAW shims).
+		// loose object files SwiftPM does not archive (rawdog + Logging + CRAW
+		// shims) — present in both layouts.
 		for obj in ["RAW.o", "RAW_sha256.o", "Logging.o", "CRAW.o", "__crawdog_sha256.o", "__crawdog_argon2.o", "__crawdog_blake2.o"] {
 			let p = productsDir.appendingPathComponent(obj)
 			if FileManager.default.fileExists(atPath: p.path) {

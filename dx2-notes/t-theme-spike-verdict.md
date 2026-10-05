@@ -52,12 +52,14 @@ compiles + links it with zero consumer tooling.
 
 ## cost / what remains consumer-side
 
-- **cost:** the pipeline ships a framework tool (~100–150 lines of CLI + driver
-  template + link-line globbing) and the plugin; the `.build` path layout
+- **cost:** the pipeline ships a framework tool (~130 lines of CLI + driver
+  template + link-line resolution) and the plugin; the `.build` path layout
   (`Products/Debug`, `Intermediates.noindex/GeneratedModuleMaps`) is a
   toolchain-version assumption (current-version validated by the spike), and the
-  link closure follows the products dir contents rather than hard-coded names, so a
-  new framework dependency flows in via the glob without editing the tool.
+  link closure follows the on-disk spelling (classic `lib<M>.a` archives OR the
+  new-build-system per-module `<M>.o` whole objects — both handled) rather than
+  hard-coded names, so a new framework dependency flows in without editing the
+  tool.
 - **consumer-side remaining (per the plan's own frame):** the consumer (1) declares
   a `ThemeCatalog` with `@Theme` — or a hand-written `WebUIThemeProvider` twin —
   (2) attaches `WebUIThemePlugin` to their app target (one `.plugin` line in their
@@ -67,4 +69,35 @@ compiles + links it with zero consumer tooling.
   consumer executable target, no consumer command line, nothing beyond the
   one-attach one-reference surface above.
 
-recorded 2026-10-04 by lane T before any lint work; §9 owner fold at i1.
+## two mechanism details discovered in the demo (f2/f1 sharpenings)
+
+the full consumer build (a path-dependency package attaching the plugin) surfaced
+two things the raw spike could not see, both now folded into the tool:
+
+1. **nested sandbox kills the macro dylib — `-Xfrontend -disable-sandbox` fixes
+   it.** a build-tool PLUGIN command runs under SwiftPM's `sandbox-exec`
+   `(allow process*) (allow file-read*)` seatbelt (target compiles do not; that is
+   why a plain consumer compiles `@Theme` fine). inside that seatbelt, swiftc's own
+   wrapper around external macro launches re-applies a sandbox, which the kernel
+   refuses (`sandbox_apply: Operation not permitted`) and the macro reports a
+   malformed response. `-Xfrontend -disable-sandbox` stops the frontend from
+   re-wrapping the plugin process; the dylib then runs under the command's own
+   `(allow process*)` geometry. verified: with the flag, the sandboxed emission is
+   **byte-identical** to the unsandboxed one (stamp `517f4b31b1f5`).
+2. **`WebUIDesignSystem` must NOT be in the driver's link closure.** the consumer
+   theme source imports it for the `@Theme` attribute declaration, but every symbol
+   the expanded macro references lives in `WebUIDesignSystemCore`/`WebUICore`;
+   linking the whole `WebUIDesignSystem` module drags `WebUI` + its embedded assets
+   (`HTMLDocument`, `WebUIAssets…`) into the driver for zero reason and fails the
+   link on the consumer-only build (no libWebUI.a variant present there).
+
+end-to-end proof (executed): a scratch consumer (path-dependency on the lane clone)
+with a 2-theme `@Theme` catalog attached the plugin; a plain `swift build` emitted
+`DemoCatalogSheet` (`WebUIShippedAsset` conformance, 523 B sheet + 141 B gzip,
+stamp `1a5e92bdf20c`) into the plugin work dir, SwiftPM compiled it into the
+consumer executable, and the binary printed its stamp/bytes/gzip at runtime.
+second run with the catalog touched emitted **byte-identical** output (sha256
+`cfe5cafcbdb62…` on both generated files) — stamp-stable.
+
+recorded 2026-10-04 by lane T · amended after the demo (same date) with the two
+mechanism details above.
