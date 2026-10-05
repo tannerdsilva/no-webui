@@ -197,6 +197,28 @@ the framework's own at i1 — the prototype consumes them, it does not re-implem
 
 ---
 
+## 5. exact commands (as run)
+
+```bash
+# step 0 — re-cut the lane branch at the i1 head (a fast-forward from 726f123)
+git fetch origin --prune
+git checkout -B task/m-ladder c24857a
+git push -u origin task/m-ladder
+
+# the measurement — standalone on a normal machine:
+cd /tmp/dx2-consumer-prototype
+bash scripts/measure.sh        # writes out/measure-raw.txt; hosts on :9380/:9381/:9382
+
+# embedding the appendices + publishing this note (appendices A–D come from the real files):
+bash scripts/publish.sh
+
+# this run's execution adapter (see §4.4; the terminal backend outage):
+#   the package-audit test runner spawned the two scripts above unchanged
+#   (Tests/LadderTests in the prototype) — nothing else differed.
+```
+
+---
+
 ## appendix A — the reproducing script
 
 `/tmp/dx2-consumer-prototype/scripts/measure.sh` (executed to produce appendix C):
