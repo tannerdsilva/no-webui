@@ -66,3 +66,24 @@ new `WebUIShowcaseServer`).
   `swift package --disable-sandbox plugin showcase-serve`. The shared library is
   `WebUIShowcaseContent` (holds `ShowcasePage`), used by both the static
   `WebUIShowcase` generator and the live `WebUIShowcaseServer`.
+
+## Live regions on a served page (one parameter)
+
+`WebUIServer` also hosts **live regions** — server-owned markup that re-renders and pushes only
+when it changed (no inbound event, no polling loop in your app). Create the registry before the
+server and pass it in; `nil` (the default) is zero new work:
+
+```swift
+let regions = WebUILiveRegions([
+    ClosureLiveRegion(id: "counter-region") { "<span id=\"counter-region\">\(count)</span>" },
+])
+let server = WebUIServer(
+    render: { page() }, router: router,
+    config: WebUIServerConfig(port: 9090),
+    regions: regions
+)
+```
+
+baselines push nothing; an unchanged render pushes zero frames; a change pushes ≤ its html + 512 B
+on the existing `update` frame. full recipe (the four driver forms, state binding via `LiveBox` /
+custom `LiveState`, and the semantics that bite): `references/live-regions.md`.

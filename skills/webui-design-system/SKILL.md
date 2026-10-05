@@ -1,7 +1,7 @@
 ---
 name: webui-design-system
 description: "Use when BUILDING a frontend in your own Swift project with the no-webui public API: add the dependency, author views/components in Swift, wire live server round-trips, apply design tokens/theming, and serve + verify the page. For any kind of app UI — a shell, a dashboard, a chat-style page, a tool — see the 'Build your UI in Swift' section and the references index. (Maintaining the no-webui package itself — its designer assets, icon pipeline, showcase generation, smoke gates — is repo work documented in the repo's README/AGENTS.md, not this skill.)"
-version: 1.15.0
+version: 1.16.0
 author: Hermes Agent
 license: MIT
 platforms: [macos]
@@ -267,6 +267,28 @@ The live layer: the runtime opens a WebSocket and forwards DOM events as
   `RuntimeConfig.renderToken` and have your server reject messages whose
   token doesn't match the session's current render set.
 
+## Substitution: conform, don't layer (events · live data · themes · components)
+
+the framework's customization model: **a customization is a conforming type passed in** — every
+seam ships a protocol, a default, an injection position, and a twin test. If you find yourself
+shadowing framework CSS, re-implementing a loop, or pre-registering a control the framework could
+route, the seam is missing — use the seam.
+
+- **events** — a handler may yield more than `[FragmentUpdate]`: `control(_:event:handler:)` takes
+  any `EventOutcome` (`ViewOutcome` replaces the control's element — its root must carry
+  `id == data-component-id`; `RegionInvalidations` declares a live region changed; `NoOutcome` /
+  `CombinedOutcome` compose). annotate the closure's return type.
+- **live data** — a `LiveRegion` (closure / custom struct / `LiveBox`- or custom-`LiveState`-bound)
+  is passed as `regions:` to `WebUIServer` and re-renders + pushes only when it changed. full
+  recipe: `references/live-regions.md`.
+- **themes** — `@Theme` / hand-written `WebUIThemeProvider` types in a `ThemeCatalog`; attach
+  `WebUIThemePlugin` to that target and reference the emitted sheet. `WebUITheme` (value) vs
+  `WebUIThemeProvider` (protocol) vs `WebUIThemeBuild` (build library) vs `WebUIBuild` (emitter).
+- **components** — compose; `.class("x")` replaces a component's classes, so wrap in `Div(class:)`
+  instead of re-skinning.
+
+full guide: `references/substitution.md`.
+
 ## Filling the space
 
 - Inside `VStack(.leading)` everything **shrink-wraps**. Add `align-self: stretch`
@@ -349,6 +371,8 @@ Serve the page and check it in a browser before shipping:
 | Area | Reference |
 |---|---|
 | Shell / app-frame components + composition recipe | `references/high-level-shell-components.md` |
+| Substitution — conforming types for events / live data / themes / components | `references/substitution.md` |
+| Live regions — server-owned updating regions (`regions:`, state binding, semantics) | `references/live-regions.md` |
 | CSS layout gotchas (shrink-to-content, stretch, center, full-height) | `references/css-layout-shrink-stretch.md` |
 | Serve your page live (shared library + NIO server + `/ws`) & the `*__body` convention | `references/live-server-and-showcase.md` |
 | Top-bar provider + thinking-effort (RuntimeSettings, `reasoning_effort`, `WebUISelect`) | `references/runtime-provider-effort-settings.md` |
