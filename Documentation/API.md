@@ -115,9 +115,13 @@ every attribute parameter (`id`, `class`, `name`, `for`, `data-status`,
 | Type | Description |
 |---|---|
 | `EventData` | `{ component: String, event: String, data: [String: String] }` — `click` data carries `targetId` and `targetClass` of the clicked element |
-| `EventHandler` | `@Sendable (EventData) async -> [FragmentUpdate]` |
+| `EventHandler` | `@Sendable (EventData) async -> [FragmentUpdate]` — the pre-DX-14 shape, unchanged |
+| `control(_:event:handler:)` | the generic entry point: the handler yields an `EventOutcome` instead of `[FragmentUpdate]`, and the framework adapts it to the wire. the closure's return type fixes `O` — annotate it at the call site (`control(_:)` unlabeled vs `controlAttributes(id:)` labeled — the first-arg label disambiguates) |
+| `EventOutcome` | protocol — `resolve(_ context: OutcomeContext) async -> [FragmentUpdate]`. six framework conformances: `FragmentUpdate` (one update), `[FragmentUpdate]` (several), `ViewOutcome<Content: View>` (render + replace `#<component id>` — the replaceable root MUST carry that DOM id; minted `cN` ids are out of contract and return fragments), `RegionInvalidations` (declares region changes; the live registry pushes), `NoOutcome` (nothing), `CombinedOutcome<A, B>` (both, in order). a custom struct conformance drives the same dispatch path |
+| `OutcomeContext` | the dispatch-scoped facts a `resolve` may use: `component: ComponentID` (the firing control — a routing id, not necessarily a DOM id) and `invalidate: @Sendable ([String]) -> Void` (reaches the live registry; a no-op provider without one). `OutcomeContext.current` is the `@TaskLocal` a handler reads — `nil` outside a dispatch |
 | `EventRouter` | routes events to registered handlers. `maxHandlers: Int` (default 10,000), `handlerCount: Int`. one router per render pass — call `reset()` before rendering a fresh page |
 | `RenderContext` | `@TaskLocal` context providing component ID generation, element ID minting, and handler registration |
+| `RenderContext.withCurrent(router:_:)` | the render-context seam (DX-12): run a body with the context established — the page render and every dispatch both enter here, so a control first rendered *inside* a handler self-registers. async + sync overloads; registration is overwrite-wins (last-render-wins) for a stable id |
 | `ComponentID` | hashable/codable string wrapper for component ids |
 | `ElementRef.stable(_:)` | framework-facing factory for a ref to an element with a caller-chosen stable id (minted by typed component handlers for their root). callers should keep receiving refs rather than fabricating them |
 | `ElementRef` | typed handle to a rendered element minted by the framework. `remove()` → empty-html fragment (the runtime removes the element), `replace(with:)` → outerHTML swap, `update(view)` → re-render from a `View`. no caller-supplied ids |
@@ -355,7 +359,8 @@ enum SchemeCatalog: ThemeCatalog {
 `.standard` contributes nothing: a page themed `.standard` renders byte-identical
 to an unthemed one. catalog integrity (unique ids, a default that is a member,
 every `base` resolving) and the emitted scope shape are pinned by the theme
-suites.
+suites. the build-side pipeline that turns this catalog into a shipped,
+content-addressed asset has its own section — `## WebUIThemeBuild`.
 
 ### Components
 
@@ -505,6 +510,32 @@ try await server.start()                       // serves until stop() / process 
   drains the connections already accepted and shuts the event loop group down
   itself, so a handler never schedules work on a stopped loop.
 
+### live regions (DX-13 + DX-16)
+
+both `WebUIServer` inits take `regions: WebUILiveRegions? = nil` — a server-owned piece of the
+page that re-renders and pushes only when it changed. `nil` (the default) is zero new work: no
+subscriptions, no baselines, no pumps, and the dispatch seam keeps its no-op invalidate provider.
+
+| Type | Description |
+|---|---|
+| `LiveRegion` | the protocol: `id` (the DOM id *and* the pushed fragment id), `cadence: Duration?` (`nil` = invalidation/state-driven only), `source: (any LiveState)?` (defaulted `nil` — the registry's subscription hook), `render() async -> String?` (`nil` = nothing to push) |
+| `ClosureLiveRegion` | the ergonomic default: `id` + `cadence` + `source` + a render closure |
+| `StateLiveRegion<State: LiveState>` | a state-bound region: the registry subscribes `state`; `render(state)` receives it |
+| `WebUILiveRegions` | the registry handle (created before the server, passed as `regions:`): `init([any LiveRegion])`, `invalidate(_:)`, `invalidateAll()`, `currentHTML(_:)` (last committed render at the instant of the call — a host-scoped best-effort baseline, **not** a per-client snapshot) |
+| `LiveState` | the change-notification source protocol: `subscribe(_:) -> LiveSubscription`. a custom actor's witness must be `nonisolated` |
+| `LiveBox<Value>` | the framework default `LiveState`: a `Mutex`-backed value; write notifies strictly after the lock is released; `mutate(_:)` writes under the lock, then notifies once |
+| `LiveNotifier` | the embeddable mixin for custom/actor state (`add(_:)` / `notify()` / `subscriberCount`) |
+| `LiveSubscription` | the cancellation handle: `cancel()` is idempotent and suppresses future delivery |
+
+semantics (pinned by `Tests/WebUITests/LiveRegionsTests.swift`): baselines render eagerly at
+`start()` and push **nothing**; an unchanged render pushes **zero** frames; a changed one pushes
+**≤ its rendered html + 512 B**; region updates ride the existing `update` frame + `replace` op
+(no new wire type); renders run inside the render context (a control they emit self-registers —
+stable ids only, the registry warns when a render grows the handler map); a dispatch's
+`RegionInvalidations` marks dirty inside the seam and wakes only after the handler frame is on the
+wire (two-push ordering); zero frames after `stop()`. see `Documentation/SUBSTITUTION.md` (axis —
+live data) for the consumer recipe.
+
 ### host assets
 
 `WebUIServerConfig.assets` serves files the framework does not ship — vendor
@@ -555,20 +586,28 @@ try await group.run()
 a bind failure propagates out of `run()`, so a server that cannot listen fails
 startup rather than reporting itself ready.
 
-see `Sources/WebUIExample/main.swift` — the reference server is now ~100
-lines of page + state, with the pipeline entirely inside `WebUIServer`.
+see `Sources/WebUIExample/main.swift` — the reference server is page + state only
+(no hand-rolled render context, no hand-registered controls), with the pipeline
+entirely inside `WebUIServer`.
 
 ## WebUIExample
 
-A SwiftNIO-based HTTP/WebSocket server that serves a live counter + echo page.
+the reference host: one `WebUIServer` serving a page whose pipeline is entirely the framework's,
+plus the live-substitution demo — the counter, the server-echo input, and the three DX-12/DX-14
+controls (SWAP, `ViewOutcome`, `RegionInvalidations`; `Sources/WebUIExample/main.swift:64–121`).
+the host never re-implements what the framework hosts: the page build runs inside
+`RenderContext.withCurrent(router:)` (`main.swift:129`), and every custom control is a
+`control(_:event:handler:)` conforming handler.
 
-**Endpoints:**
-- `GET /` — the page HTML
-- `GET /__assets/css` — design system css (source bytes)
-- `GET /__assets/js` — js runtime (source bytes)
-- `WebSocket /ws` — event handling endpoint
+**Endpoints** (the `WebUIServer` route set):
 
-**Port:** 9090 (configurable in source)
+- `GET /` (or `WebUIServerConfig.pagePath`) + `/index.html` — the page HTML, rendered per request (fresh CSP nonce)
+- `GET /__assets/css` + `/__assets/css.<sha256>` (immutable) — the design-system sheet
+- `GET /ui/webui-engine.js` + `/ui/webui-shell.js` — the client scripts
+- `GET /ui/continuum-manifest.json` — the generated engine manifest, registered by the demo as a host asset (`WebUIAsset(ContinuumEngineManifest.self, path: …).registration`, `main.swift:212`)
+- `WebSocket /ws` — event dispatch
+
+**Port:** `--port N` (default 9090; `main.swift:208` parses the flag)
 
 ## WebUIAuth
 
@@ -738,3 +777,42 @@ let receipts = try WebUIAssetBuilder.embed(
 - `WebUIEmbedPlugin` — the build-tool plugin: `<target>/Assets/webui-assets.json` in, one
   generated file out, every referenced file declared as an input. attach it and
   `exclude: ["Assets"]` the target so swiftpm stops warning about files it does not compile.
+
+## WebUIThemeBuild
+
+the **build-side** half of the theme architecture (DX-15a): a consumer's `ThemeCatalog` becomes a
+rendered, stamped, gzipped `WebUIShippedAsset` conformance through the same emitter the framework's
+own assets ride. host-only by construction (like `WebUIBuild`) — never shipped bytes.
+
+```swift
+@discardableResult
+public static func emit(
+    catalog: any ThemeCatalog.Type,
+    typeName: String,
+    options: WebUIAssetBuilder.Options,
+    to url: URL
+) throws -> WebUIBuild.Emitted
+```
+
+the consumer surface is an **attach and a reference**, nothing else: attach `WebUIThemePlugin`
+(`Plugins/WebUIThemePlugin/`) to the app target that declares the catalog —
+
+```swift
+plugins: [.plugin(name: "WebUIThemePlugin", package: "no-webui")]
+```
+
+— and the build runs the framework's `WebUIThemeTool` (a direct `swiftc` over your theme sources;
+spike-verified mechanism (a), `dx2-notes/t-theme-spike-verdict.md`), emitting `<CatalogTypeName>Sheet`
+into the plugin work dir, which SwiftPM compiles into your target. reference it in the server like
+any other asset: `WebUIAsset(MyCatalogSheet.self, path: "/ui/theme.css")`.
+
+- the emitted sheet is the catalog's scoped stylesheet (`ThemeCatalog.stylesheet()` — declarations
+  sorted, so the bytes — and the stamp — are stable across runs).
+- **no consumer tool target, no shim, no script**: the plugin product + tool target are the
+  framework's (the DX-15a `Package.swift` block).
+- the policy half (DX-15b): `WebUIContinuumTool shadow --sources <dir>` extracts exact class tokens
+  from consumer string-sheet CSS / `CSSRule("…")` args / `class="…"` literals and warns — naming
+  the owning component — when a consumer sheet shadows a design-system class. the demo target is 0.
+- for the runtime side of theming (the `WebUITheme` value, `WebUIThemeProvider`, `ThemeCatalog`),
+  see the `Theme` section under `## WebUIDesignSystem`; for the consumer recipe,
+  `Documentation/SUBSTITUTION.md` (axis — themes).
