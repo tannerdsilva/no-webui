@@ -326,14 +326,45 @@ struct LiveRegionRegistryTests {
 		}
 		let harness = await RegistryHarness([region])
 
-		await settle(240)
-		let frames = harness.recorder.count
-		#expect(frames >= 2, "the cadence re-renders and pushes changes")
-		#expect(frames <= 9, "late ticks are skipped, not stacked (bounded a-priori)")
+		// the cadence is a real timer, so how many ticks fit in a FIXED window depends
+		// on the host's scheduling (observed: a 240 ms window could carry as few as one
+		// push on a coalescing host). wait for the first two pushes under a bounded
+		// deadline instead, then bound the count by the window actually consumed.
+		let start = ContinuousClock.now
+		while harness.recorder.count < 2, ContinuousClock.now < start + .seconds(2) {
+			try? await Task.sleep(for: .milliseconds(20))
+		}
+		let elapsed = ContinuousClock.now - start
 
+		// ONE snapshot: the count and the values must come from the SAME read — the
+		// recorder keeps accepting pushes while this test reads it, so a tick landing
+		// between two reads would make the counts disagree by one.
+		let recorded = harness.recorder.fragments
+		#expect(recorded.count >= 2, "the cadence re-renders and pushes changes")
+
+		// "late ticks are skipped, never stacked" is a property of the SEQUENCE, not a
+		// magic count: every push must carry a fresh, ordered render (a stacked tick
+		// replays or duplicates a value), and the count cannot exceed what the cadence
+		// could have delivered inside the window that actually elapsed.
+		let prefix = "<span id=\"tick\">"
+		let values = recorded.compactMap { fragment -> Int? in
+			guard fragment.html.hasPrefix(prefix), fragment.html.hasSuffix("</span>") else { return nil }
+			return Int(fragment.html.dropFirst(prefix.count).dropLast("</span>".count))
+		}
+		#expect(values.count == recorded.count, "every recorded frame is a cadence render — recorded: \(recorded.map(\.html))")
+		#expect(values == values.sorted(), "renders arrive in order")
+		#expect(Set(values).count == values.count, "no value is replayed — late ticks are not stacked")
+
+		let seconds = Double(elapsed.components.seconds) + Double(elapsed.components.attoseconds) / 1e18
+		let allowed = Int(seconds * 1000 / 25) + 2       // the declared cadence over the elapsed window, +2 slack
+		#expect(recorded.count <= allowed, "no catch-up burst: at most one push per cadence interval")
+
+		// stop() joins the pumps, so a push landing after it returns is a genuine
+		// violation — sample only after the join, never before it.
 		await harness.stop()
+		let atStop = harness.recorder.count
 		await settle(180)
-		#expect(harness.recorder.count == frames, "zero frames after stop")
+		#expect(harness.recorder.count == atStop, "zero frames after stop")
 	}
 
 	@Test("bounded coalescing: M=200 mutations → last frame == render(final); 1 ≤ R ≤ N, silence after")
