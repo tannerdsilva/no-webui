@@ -827,7 +827,7 @@ final class Runner: Sendable {
 					// that wraps its own context still wins (the inner
 					// `withValue` takes precedence), so existing hosts are
 					// unaffected.
-					let body = await RenderContext.$current.withValue(RenderContext(router: router)) {
+					let body = await RenderContext.withCurrent(router: router) {
 						await render(request)
 					}
 					try await respond(
