@@ -84,15 +84,27 @@ struct WebUIThemePlugin: BuildToolPlugin {
 	/// protocols) or a `@Theme` usage; we take all qualifying files as inputs
 	/// and the FIRST catalog type as the emit target (a target with several
 	/// catalogs emits for the first — the demo/twin shape is one catalog).
+	///
+	/// the source walk reads the target's own directory rather than casting to
+	/// `SourceModuleTarget` — `directory` is on the base `Target` protocol (the
+	/// 6.0-era `Path` spelling; `directoryURL` needs package tools 6.1), so the
+	/// same scan works for every target shape SwiftPM presents, and it matches
+	/// the file-walk style of WebUIAutobuildPlugin.
 	static func discoverCatalog(in target: Target) throws -> Catalog? {
-		let sources = target.sourceFiles(withSuffix: "swift").map(\.url)
+		let root = URL(fileURLWithPath: target.directory.string)
 		var themeSources: [URL] = []
 		var typeName: String? = nil
-		for url in sources {
-			guard let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
+		guard let enumerator = FileManager.default.enumerator(
+			at: root, includingPropertiesForKeys: nil
+		) else { return nil }
+		while let item = enumerator.nextObject() as? URL {
+			guard item.pathExtension == "swift" else { continue }
+			let relative = item.path.replacingOccurrences(of: root.path, with: "")
+			if relative.contains("/.build/") || relative.contains("/.git/") { continue }
+			guard let text = try? String(contentsOf: item, encoding: .utf8) else { continue }
 			// a ThemeCatalog conformance or a @Theme use marks a theme source.
 			if text.contains("ThemeCatalog") || text.contains("@Theme") {
-				themeSources.append(url)
+				themeSources.append(item)
 				if typeName == nil, let name = Self.firstCatalogConformance(in: text) {
 					typeName = name
 				}
