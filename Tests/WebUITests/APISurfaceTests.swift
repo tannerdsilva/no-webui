@@ -923,3 +923,38 @@ func dx11aPaginationAndChartIDPins() {
 	#expect(chartHTML.contains("id=\"cm-mark-0\""))
 	#expect(chartHTML.contains("id=\"cm-mark-1\""))
 }
+
+@Test("i0 — the substitution surface pins its contract (DX-12 + DX-14)")
+func substitutionSurfacePins() async {
+	let router = EventRouter()
+
+	// DX-12: the seam helper, both overloads, additive to `$current.withValue`.
+	let syncSeam = RenderContext.withCurrent(router: router) {
+		RenderContext.current?.router === router
+	}
+	#expect(syncSeam)
+	let asyncSeam = await RenderContext.withCurrent(router: router) {
+		await Task.yield()
+		return RenderContext.current?.router === router
+	}
+	#expect(asyncSeam)
+
+	// DX-14: the protocol and its conformances, resolved against one context.
+	let context = OutcomeContext(component: "pinned", invalidate: { _ in })
+	let single = FragmentUpdate(id: "pinned", html: "<p>x</p>")
+	#expect(await single.resolve(context) == [single])
+	#expect(await [single].resolve(context) == [single])
+	#expect(await NoOutcome().resolve(context).isEmpty)
+	#expect(await RegionInvalidations(["a"]).resolve(context).isEmpty)
+	#expect(await CombinedOutcome(single, NoOutcome()).resolve(context) == [single])
+	#expect(await ViewOutcome(Text("v")).resolve(context) == [FragmentUpdate(id: "pinned", html: rendered(Text("v")))])
+
+	// the erased adapter in its public shape: the closure's return type fixes `O`.
+	let adapter = control("pinned-ctl", event: .click) { (_: EventData) async -> NoOutcome in
+		NoOutcome()
+	}
+	#expect(adapter == " data-component-id=\"pinned-ctl\" data-event=\"click\"")
+
+	// the stable-id sibling stays byte-unchanged by the addition (I5).
+	#expect(controlAttributes(id: "pinned-ctl", event: .click, handler: nil) == "")
+}
