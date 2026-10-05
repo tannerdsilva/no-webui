@@ -260,20 +260,31 @@ extension RenderContext {
 
 // MARK: - Stable-ID Control Wiring
 
-/// Wire a caller-stable interactive control: register `handler` under the
+/// wire a caller-stable interactive control: register `handler` under the
 /// stable component `id` when a `RenderContext` is present, and return the
 /// `data-component-id`/`data-event` attributes to emit on the control.
 ///
-/// When no `RenderContext` is present (a fragment re-render produced from
-/// inside a handler) the same stable attributes are emitted WITHOUT
-/// re-registering — the page-build registration persists in the router, so
-/// routing to the already-registered handler continues. This is what makes
-/// typed component handlers (`WebUITable.onSort`, chart mark selection, ...)
-/// survive fragment re-renders: the ids are a pure function of component
-/// state, so re-rendered HTML carries identical routing attributes.
+/// registration is **overwrite-wins (last-render-wins)** for a given stable id:
+/// re-rendering the control re-registers its current handler, so the router
+/// always holds the newest closure for that id. with the dispatch seam in place
+/// (`RenderContext.withCurrent`, entered by the server's dispatch path) a control
+/// first rendered *inside* a handler registers there and then; before the seam
+/// only the page render established the context, so a handler-introduced control
+/// was dead.
 ///
-/// Pass `nil` as `handler` to render the control statically (no routing
+/// when no `RenderContext` is present the stable attributes are still emitted —
+/// the ids are a pure function of component state, so a context-free fragment
+/// re-render carries identical routing attributes and routing continues to the
+/// registration that persists in the router. this is what makes typed component
+/// handlers (`WebUITable.onSort`, chart mark selection, ...) survive fragment
+/// re-renders.
+///
+/// pass `nil` as `handler` to render the control statically (no routing
 /// attributes emitted), e.g. when the component has no interactive audience.
+///
+/// the DX-14 sibling `control(_:event:handler:)` takes a handler that yields an
+/// `EventOutcome` instead of `[FragmentUpdate]`; this function's behavior and
+/// emitted bytes are unchanged by that addition.
 public func controlAttributes(
     id: String,
     event: HTMLEvent = .click,
