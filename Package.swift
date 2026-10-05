@@ -43,6 +43,13 @@ let package = Package(
             name: "WebUIBuild",
             targets: ["WebUIBuild"]
         ),
+        // dx-15a: the theme-emission build library — a consumer's catalog to a
+        // stamped, gzipped asset, through the same emitter as the framework's
+        // own assets. host-only (see the DX-15a spike verdict).
+        .library(
+            name: "WebUIThemeBuild",
+            targets: ["WebUIThemeBuild"]
+        ),
         .library(
             name: "WebUIBlocks",
             targets: ["WebUIBlocks"]
@@ -277,6 +284,20 @@ let package = Package(
                 // which is exactly why this library — not a plugin — is where a consumer's
                 // tool meets them).
                 .target(name: "WebUICore"),
+            ]
+        ),
+
+        // ── Theme Build Library (DX-15a) ─────────────────────────
+        // the theme-emission library: catalog → sheet → WebUIAssetBuilder.emit. it links
+        // the theme vocabulary (`WebUIDesignSystemCore` for ThemeCatalog/ThemeSheet) and
+        // the emitter (`WebUIBuild`), so a consumer import is host-only. the pipeline runs
+        // it either from a framework tool (mechanism (a), the spike verdict) or a ≤3-line
+        // consumer shim (fallback (b)).
+        .target(
+            name: "WebUIThemeBuild",
+            dependencies: [
+                .target(name: "WebUIDesignSystemCore"),
+                .target(name: "WebUIBuild"),
             ]
         ),
 
