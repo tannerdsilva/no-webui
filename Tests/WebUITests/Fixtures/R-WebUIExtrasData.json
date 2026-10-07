@@ -1,0 +1,86 @@
+[
+  [
+    "calendar",
+    "<div class=\"calendar\" data-component-id=\"cal\" data-event=\"click\"><div class=\"calendar__header\"><div class=\"calendar__month\">Oct 2026<\/div><div class=\"calendar__nav\"><button aria-label=\"Previous\">‹<\/button><button aria-label=\"Next\">›<\/button><button class=\"calendar__today\">Today<\/button><\/div><\/div><div class=\"calendar__grid\"><div class=\"calendar__weekday\">S<\/div><div class=\"calendar__weekday\">M<\/div><div class=\"calendar__weekday\">T<\/div><div class=\"calendar__weekday\">W<\/div><div class=\"calendar__weekday\">T<\/div><div class=\"calendar__weekday\">F<\/div><div class=\"calendar__weekday\">S<\/div><button class=\"calendar__day calendar__day--muted\" id=\"cal-day-0\">1<\/button><button class=\"calendar__day calendar__day--today\" id=\"cal-day-1\">2<\/button><button class=\"calendar__day calendar__day--selected\" id=\"cal-day-2\">3<\/button><button class=\"calendar__day calendar__day--range calendar__day--event\" id=\"cal-day-3\">4<span class=\"calendar__events\"><i class=\"calendar__event-dot\"><\/i><i class=\"calendar__event-dot\"><\/i><i class=\"calendar__event-dot\"><\/i><\/span><\/button><\/div><\/div>"
+  ],
+  [
+    "calendar\/static",
+    "<div class=\"calendar\"><div class=\"calendar__header\"><div class=\"calendar__month\">Oct<\/div><div class=\"calendar__nav\"><button aria-label=\"Previous\">‹<\/button><button aria-label=\"Next\">›<\/button><button class=\"calendar__today\">Today<\/button><\/div><\/div><div class=\"calendar__grid\"><div class=\"calendar__weekday\">S<\/div><div class=\"calendar__weekday\">M<\/div><div class=\"calendar__weekday\">T<\/div><div class=\"calendar__weekday\">W<\/div><div class=\"calendar__weekday\">T<\/div><div class=\"calendar__weekday\">F<\/div><div class=\"calendar__weekday\">S<\/div><button class=\"calendar__day calendar__day--event\">5<span class=\"calendar__events\"><i class=\"calendar__event-dot\"><\/i><\/span><\/button><\/div><\/div>"
+  ],
+  [
+    "datePicker",
+    "<div class=\"date-picker\" data-component-id=\"dp\" data-event=\"click\"><div class=\"date-picker__header\"><button class=\"date-picker__nav\" aria-label=\"Previous\">‹<\/button><div class=\"date-picker__month\">Nov<\/div><button class=\"date-picker__nav\" aria-label=\"Next\">›<\/button><\/div><div class=\"date-picker__grid\"><div class=\"date-picker__weekday\">S<\/div><div class=\"date-picker__weekday\">M<\/div><div class=\"date-picker__weekday\">T<\/div><div class=\"date-picker__weekday\">W<\/div><div class=\"date-picker__weekday\">T<\/div><div class=\"date-picker__weekday\">F<\/div><div class=\"date-picker__weekday\">S<\/div><button class=\"date-picker__day date-picker__day--disabled\" id=\"dp-day-0\" disabled>1<\/button><button class=\"date-picker__day date-picker__day--selected\" id=\"dp-day-1\">2<\/button><button class=\"date-picker__day date-picker__day--today date-picker__day--range-start\" id=\"dp-day-2\">3<\/button><button class=\"date-picker__day date-picker__day--range-end date-picker__day--in-range\" id=\"dp-day-3\">4<\/button><\/div><\/div>"
+  ],
+  [
+    "timeZonePicker",
+    "<div class=\"tz-picker\" data-component-id=\"tz\" data-event=\"click\"><div class=\"tz-picker__search\"><input type=\"search\" placeholder=\"Find a timezone…\"><\/div><div class=\"tz-picker__list\"><div class=\"tz tz--selected\" id=\"tz-tz-0\"><span class=\"tz__city\">New York<\/span><span class=\"tz__offset\">UTC-4<\/span><\/div><div class=\"tz\" id=\"tz-tz-1\"><span class=\"tz__city\">Tokyo<\/span><span class=\"tz__offset\">UTC+9<\/span><\/div><\/div><\/div>"
+  ],
+  [
+    "countryPicker",
+    "<div class=\"country-picker\" data-component-id=\"cp\" data-event=\"click\"><div class=\"country-picker__search\"><input type=\"search\" placeholder=\"Search countries…\"><\/div><div class=\"country-picker__list\"><div class=\"country-picker__row\" id=\"cp-row-0\"><span class=\"country-picker__flag\">🇺🇸<\/span><span class=\"country-picker__name\">United States<\/span><span class=\"country-picker__code\">US<\/span><span class=\"country-picker__offset\">+1<\/span><\/div><div class=\"country-picker__row\" id=\"cp-row-1\"><span class=\"country-picker__flag\">🇫🇷<\/span><span class=\"country-picker__name\">France<\/span><span class=\"country-picker__code\">FR<\/span><span class=\"country-picker__offset\">+33<\/span><\/div><\/div><\/div>"
+  ],
+  [
+    "gantt",
+    "<div class=\"gantt\"><div class=\"gantt__header\"><div class=\"gantt__label-col\">Tasks<\/div><div class=\"gantt__week\"><\/div><\/div><div class=\"gantt__row\"><div class=\"gantt__label-col gantt__label\">Build<\/div><div class=\"gantt__track\"><div class=\"gantt__bar \" style=\"margin-left:0%;width:100px\"><span class=\"gantt__bar-label\">Setup<\/span><\/div><div class=\"gantt__bar done\" style=\"margin-left:10%;width:50px\"><span class=\"gantt__bar-label\">Done<\/span><\/div><\/div><\/div><\/div>"
+  ],
+  [
+    "kanban",
+    "<div class=\"kanban\"><div class=\"kanban__column\"><div class=\"kanban__header\">To do<span class=\"kanban__count\">2<\/span><\/div><div class=\"kanban__body\"><div class=\"kanban__card kanban__card--wip\">Task A<div class=\"kanban__card-tags\"><span class=\"kanban__card-tag kanban__card-tag--blue\">bug<\/span><span class=\"kanban__card-tag kanban__card-tag--amber\">ui<\/span><\/div><div class=\"kanban__card-foot\"><span class=\"kanban__card-meta\">high<\/span><\/div><\/div><div class=\"kanban__card\">Task B<\/div><\/div><\/div><\/div>"
+  ],
+  [
+    "dataSheet",
+    "<div class=\"sheet\"><div class=\"sheet__formula\"><span class=\"sheet__cellref\">Fx<\/span><span class=\"sheet__formula-input\"><\/span><\/div><div class=\"sheet__grid\"><div class=\"sheet__row\"><span class=\"sheet__corner\"><\/span><span class=\"sheet__colhead\">A<\/span><span class=\"sheet__colhead\">B<\/span><span class=\"sheet__colhead\">C<\/span><span class=\"sheet__colhead\">D<\/span><span class=\"sheet__colhead\">E<\/span><\/div><div class=\"sheet__cell sheet__cell--num sheet__cell--selected\" data-ref=\"A1\">10<\/div><div class=\"sheet__cell\" data-ref=\"A2\">hello<\/div><\/div><\/div>"
+  ],
+  [
+    "jsonTree",
+    "<div class=\"json-tree\"><div class=\"json-tree__node json-tree__node--open\"><div class=\"json-tree__row\"><span class=\"json-tree__toggle\"><\/span><span class=\"json-tree__key\">user<\/span><span class=\"json-tree__punct\">: <\/span><\/div><div class=\"json-tree__children\"><div class=\"json-tree__node\"><div class=\"json-tree__row\"><span class=\"json-tree__key\">name<\/span><span class=\"json-tree__punct\">: <\/span><span class=\"json-tree__str\">ada<\/span><\/div><\/div><div class=\"json-tree__node json-tree__node--open\"><div class=\"json-tree__row\"><span class=\"json-tree__toggle\"><\/span><span class=\"json-tree__key\">tags<\/span><span class=\"json-tree__punct\">: <\/span><\/div><div class=\"json-tree__children\"><div class=\"json-tree__node\"><div class=\"json-tree__row\"><span class=\"json-tree__key\">0<\/span><span class=\"json-tree__punct\">: <\/span><span class=\"json-tree__str\">a<\/span><\/div><\/div><\/div><\/div><\/div><\/div><\/div>"
+  ],
+  [
+    "jsonTree\/leaf",
+    "<div class=\"json-tree\"><div class=\"json-tree__node\"><div class=\"json-tree__row\"><span class=\"json-tree__key\">k<\/span><span class=\"json-tree__punct\">: <\/span><span class=\"json-tree__str\">v<\/span><\/div><\/div><\/div>"
+  ],
+  [
+    "diff",
+    "<div class=\"diff\"><div class=\"diff__header\"><span class=\"diff__file\">a.swift<\/span><span class=\"diff__stats\">+2 −1<\/span><\/div><div class=\"diff__line diff__line--hunk\"><span class=\"diff__lineno\">1<\/span><span class=\"diff__content\">@@ -1,3 +1,4 @@<\/span><\/div><div class=\"diff__line diff__line--add\"><span class=\"diff__lineno\">2<\/span><span class=\"diff__content\">+let x = 1<\/span><\/div><div class=\"diff__line diff__line--del\"><span class=\"diff__lineno\">3<\/span><span class=\"diff__content\">-var y = 2<\/span><\/div><div class=\"diff__line diff__line--ctx\"><span class=\"diff__lineno\">4<\/span><span class=\"diff__content\">print(x)<\/span><\/div><\/div>"
+  ],
+  [
+    "terminal",
+    "<div class=\"terminal\"><div class=\"terminal__bar\"><span class=\"terminal__dot terminal__dot--r\"><\/span><span class=\"terminal__dot terminal__dot--y\"><\/span><span class=\"terminal__dot terminal__dot--g\"><\/span><span class=\"terminal__title\">build<\/span><\/div><div class=\"terminal__body\"><div class=\"terminal__line terminal__line--ok\">✅ done<\/div><div class=\"terminal__line terminal__line--warn\">warning<\/div><div class=\"terminal__line terminal__line--err\">error<\/div><div class=\"terminal__line\">plain<\/div><div class=\"terminal__line\"><span class=\"terminal__prompt\">$ <\/span><span class=\"terminal__cmd\"><\/span><\/div><\/div><\/div>"
+  ],
+  [
+    "codeBlock",
+    "<div class=\"codeblock\"><div class=\"codeblock__bar\"><span class=\"codeblock__lang\">swift<\/span><button class=\"code__copy\" aria-label=\"Copy\">copy<\/button><\/div><pre class=\"codeblock__code\"><code>let a = 1<\/code><\/pre><\/div>"
+  ],
+  [
+    "barChart",
+    "<div class=\"bar-chart\"><div class=\"bar-chart__col\"><div class=\"bar-chart__bar bar-chart__bar--accent\" style=\"height:100%\"><\/div><span class=\"bar-chart__label\">A<\/span><\/div><div class=\"bar-chart__col\"><div class=\"bar-chart__bar\" style=\"height:50%\"><\/div><span class=\"bar-chart__label\">B<\/span><\/div><\/div>"
+  ],
+  [
+    "lineChart",
+    "<div class=\"line-chart\"><svg viewBox=\"0 0 320 120\" role=\"img\" aria-hidden=\"true\"><polyline class=\"line-chart__line\" points=\"8,112 160,8 312,60\"><\/polyline><circle class=\"line-chart__dot\" cx=\"8\" cy=\"112\" r=\"3\"><\/circle><circle class=\"line-chart__dot\" cx=\"160\" cy=\"8\" r=\"3\"><\/circle><circle class=\"line-chart__dot\" cx=\"312\" cy=\"60\" r=\"3\"><\/circle><\/svg><\/div>"
+  ],
+  [
+    "lineChart\/empty",
+    "<div class=\"line-chart\"><svg viewBox=\"0 0 320 120\"><\/svg><\/div>"
+  ],
+  [
+    "donut",
+    "<div class=\"donut\" style=\"background:conic-gradient(#f00 0.0deg 240.0deg, #0f0 240.0deg 360.0deg)\"><div class=\"donut__center\"><div class=\"donut__center-value\">66%<\/div><div class=\"donut__center-label\">of total<\/div><\/div><\/div>"
+  ],
+  [
+    "masonry",
+    "<div class=\"masonry\"><div class=\"masonry__item masonry__item--accent\"><div class=\"masonry__title\">Card<\/div><div class=\"masonry__meta\">sub<\/div><\/div><div class=\"masonry__item\"><div class=\"masonry__title\">Two<\/div><\/div><\/div>"
+  ],
+  [
+    "map",
+    "<div class=\"map\"><div class=\"map__grid\"><\/div><div class=\"map__road map__road--h\" style=\"top:25%\"><\/div><div class=\"map__road map__road--h\" style=\"top:50%\"><\/div><div class=\"map__road map__road--h\" style=\"top:75%\"><\/div><div class=\"map__road map__road--v\" style=\"left:10%\"><\/div><div class=\"map__road map__road--v\" style=\"left:30%\"><\/div><div class=\"map__road map__road--v\" style=\"left:50%\"><\/div><div class=\"map__road map__road--v\" style=\"left:70%\"><\/div><div class=\"map__pin map__pin--active\" style=\"left:30%;top:40%\" aria-label=\"HQ\">H<\/div><div class=\"map__popup\" style=\"left:30%;top:40%\"><span class=\"map__popup-arrow\"><\/span>HQ<\/div><div class=\"map__pin\" style=\"left:70%;top:60%\" aria-label=\"Site\">S<\/div><div class=\"map__attribution\">map<\/div><\/div>"
+  ],
+  [
+    "qr",
+    "<div class=\"qr\"><div class=\"qr__code\"><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell qr__cell--on\"><\/span><\/div><div class=\"qr__label\">scan<\/div><\/div>"
+  ],
+  [
+    "payCard",
+    "<div class=\"paycard\"><div class=\"paycard__top\"><span class=\"paycard__brand\">MC<\/span><span class=\"paycard__chip\"><\/span><\/div><div class=\"paycard__number\">4242 4242 4242 4242<\/div><div class=\"paycard__row\"><div class=\"paycard__label\">Card holder<\/div><div class=\"paycard__value\">ADA L<\/div><\/div><\/div>"
+  ]
+]

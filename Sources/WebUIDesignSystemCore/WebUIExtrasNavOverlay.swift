@@ -59,37 +59,45 @@ public struct WebUINavbar: View {
         } else {
             attrs = ""
         }
-        var html = "<nav class=\"navbar\(sticky ? " navbar--sticky" : "")\"\(attrs)>"
+        var html = Tag.begin("nav", Tag.classes(["navbar", sticky ? " navbar--sticky" : ""]), attrs)
         if let brand {
-            html += "<a class=\"navbar__brand\" href=\"/\"><span class=\"navbar__brand-mark\"></span>\(htmlEscape(brand))</a>"
+            html += Tag.begin("a", Tag.classes(["navbar__brand"]), Tag.attr("href", "/"))
+            html += Tag.element("span", [Tag.classes(["navbar__brand-mark"])], "")
+            html += htmlEscape(brand)
+            html += Tag.end("a")
         }
         if let search {
-            html += "<label class=\"navbar__search\" role=\"search\">"
-            html += "<input type=\"search\""
-            if let sid = search.id { html += " id=\"\(htmlEscape(sid))\"" }
-            html += " placeholder=\"\(htmlEscape(search.placeholder))\" aria-label=\"\(htmlEscape(search.placeholder))\">"
-            if let shortcut = search.shortcut { html += "<kbd>\(htmlEscape(shortcut))</kbd>" }
-            html += "</label>"
+            html += Tag.begin("label", Tag.classes(["navbar__search"]), Tag.attr("role", "search"))
+            html += Tag.void(
+                "input", Tag.attr("type", "search"),
+                search.id.map { Tag.escAttr("id", $0) } ?? "",
+                Tag.escAttr("placeholder", search.placeholder),
+                Tag.escAttr("aria-label", search.placeholder))
+            if let shortcut = search.shortcut { html += Tag.element("kbd", [], htmlEscape(shortcut)) }
+            html += Tag.end("label")
         }
         if !links.isEmpty {
-            html += "<div class=\"navbar__links\">"
+            html += Tag.begin("div", Tag.classes(["navbar__links"]))
             for (index, link) in links.enumerated() {
-                let linkID = id.map { " id=\"\(htmlEscape("\($0)-link-\(index)"))\"" } ?? ""
-                html += "<a class=\"navbar__link\(link.active ? " navbar__link--active" : "")\"\(linkID) href=\"\(htmlEscape(link.href))\">\(htmlEscape(link.label))</a>"
+                let linkID = id.map { Tag.escAttr("id", "\($0)-link-\(index)") } ?? ""
+                html += Tag.element("a",
+                    [Tag.classes(["navbar__link", link.active ? " navbar__link--active" : ""]), linkID,
+                     Tag.escAttr("href", link.href)],
+                    htmlEscape(link.label))
             }
-            html += "</div>"
+            html += Tag.end("div")
         }
         if !actions.isEmpty {
-            html += "<div class=\"navbar__actions\">"
+            html += Tag.begin("div", Tag.classes(["navbar__actions"]))
             for a in actions { html += a.render() }
-            html += "</div>"
+            html += Tag.end("div")
         }
         if mobileMenu {
-            html += "<button class=\"navbar__hamburger\" type=\"button\" aria-label=\"\(htmlEscape(mobileMenuLabel))\">"
-            html += "<span></span><span></span><span></span>"
-            html += "</button>"
+            html += Tag.begin("button", Tag.classes(["navbar__hamburger"]), Tag.attr("type", "button"), Tag.escAttr("aria-label", mobileMenuLabel))
+            html += Tag.element("span", [], "") + Tag.element("span", [], "") + Tag.element("span", [], "")
+            html += Tag.end("button")
         }
-        html += "</nav>"
+        html += Tag.end("nav")
         return html
     }
 }
@@ -122,17 +130,18 @@ public struct WebUIBottomNav: View {
         } else {
             attrs = ""
         }
-        var html = "<nav class=\"bottom-nav\"\(attrs) aria-label=\"Primary\">"
+        var html = Tag.begin("nav", Tag.classes(["bottom-nav"]), attrs, Tag.attr("aria-label", "Primary"))
         for (index, item) in items.enumerated() {
-            let itemID = id.map { " id=\"\(htmlEscape("\($0)-item-\(index)"))\"" } ?? ""
-            html += "<a class=\"bottom-nav__item\(item.active ? " bottom-nav__item--active" : "")\"\(itemID) href=\"#\">"
-            html += "<span class=\"bottom-nav__icon\">\(WebUIIcon(item.icon, size: .medium).render())</span>"
+            let itemID = id.map { Tag.escAttr("id", "\($0)-item-\(index)") } ?? ""
+            html += Tag.begin("a", Tag.classes(["bottom-nav__item", item.active ? " bottom-nav__item--active" : ""]), itemID, Tag.attr("href", "#"))
+            html += Tag.element("span", [Tag.classes(["bottom-nav__icon"])], WebUIIcon(item.icon, size: .medium).render())
             if let badge = item.badge {
-                html += "<span class=\"bottom-nav__badge\">\(htmlEscape(badge))</span>"
+                html += Tag.element("span", [Tag.classes(["bottom-nav__badge"])], htmlEscape(badge))
             }
-            html += "<span class=\"bottom-nav__label\">\(htmlEscape(item.label))</span></a>"
+            html += Tag.element("span", [Tag.classes(["bottom-nav__label"])], htmlEscape(item.label))
+            html += Tag.end("a")
         }
-        html += "</nav>"
+        html += Tag.end("nav")
         return html
     }
 }
@@ -160,18 +169,18 @@ public struct WebUIFab: View {
     }
 
     public func render() -> String {
-        var classes = "fab\(variant.rawValue)\(size.rawValue)"
-        if extended { classes += " fab--extended" }
         let tapAttrs = id.map { controlAttributes(id: $0, event: .click, handler: onTap) } ?? ""
-        var html = "<button class=\"\(classes)\""
-        if let id { html += " id=\"\(htmlEscape(id))\"" }
-        html += "\(tapAttrs)"
-        html += " aria-label=\"\(htmlEscape(label ?? ""))\">"
-        html += "<span class=\"fab__icon\">\(WebUIIcon(icon, size: .medium).render())</span>"
+        var html = Tag.begin(
+            "button",
+            Tag.classes(["fab", variant.rawValue, size.rawValue, extended ? " fab--extended" : ""]),
+            id.map { Tag.escAttr("id", $0) } ?? "",
+            tapAttrs,
+            Tag.escAttr("aria-label", label ?? ""))
+        html += Tag.element("span", [Tag.classes(["fab__icon"])], WebUIIcon(icon, size: .medium).render())
         if let label {
-            html += "<span class=\"fab__label\">\(htmlEscape(label))</span>"
+            html += Tag.element("span", [Tag.classes(["fab__label"])], htmlEscape(label))
         }
-        html += "</button>"
+        html += Tag.end("button")
         return html
     }
 }
@@ -183,9 +192,9 @@ public struct WebUISpeedDial: View {
     public init(@ViewBuilder content: () -> [any View]) { self.children = content() }
 
     public func render() -> String {
-        var html = "<div class=\"fab-stage fab-stage--dial\">"
+        var html = Tag.begin("div", Tag.classes(["fab-stage fab-stage--dial"]))
         for c in children { html += c.render() }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 }
@@ -211,17 +220,17 @@ public struct WebUIWizard: View {
     public init(steps: [Step], vertical: Bool = false) { self.steps = steps; self.vertical = vertical }
 
     public func render() -> String {
-        var html = "<ol class=\"wizard\(vertical ? " wizard--vertical" : "")\">"
+        var html = Tag.begin("ol", Tag.classes(["wizard", vertical ? " wizard--vertical" : ""]))
         for step in steps {
-            html += "<li class=\"wizard__step\(step.status.rawValue)\">"
-            html += "<span class=\"wizard__dot\"></span>"
-            html += "<span class=\"wizard__label\">\(htmlEscape(step.label))</span>"
+            html += Tag.begin("li", Tag.classes(["wizard__step", step.status.rawValue]))
+            html += Tag.element("span", [Tag.classes(["wizard__dot"])], "")
+            html += Tag.element("span", [Tag.classes(["wizard__label"])], htmlEscape(step.label))
             if let desc = step.desc {
-                html += "<span class=\"wizard__desc\">\(htmlEscape(desc))</span>"
+                html += Tag.element("span", [Tag.classes(["wizard__desc"])], htmlEscape(desc))
             }
-            html += "</li>"
+            html += Tag.end("li")
         }
-        html += "</ol>"
+        html += Tag.end("ol")
         return html
     }
 }
@@ -245,21 +254,33 @@ public struct WebUITransfer: View {
     }
 
     public func render() -> String {
-        var html = "<div class=\"transfer\">"
-        html += "<div class=\"transfer__head\"><span class=\"transfer__title\">\(htmlEscape(title))</span><span class=\"transfer__count\">\(options.count)</span></div>"
-        html += "<div class=\"transfer__search\"><input type=\"search\" placeholder=\"\(htmlEscape(searchPlaceholder))\"></div>"
-        html += "<div class=\"transfer__list\">"
+        var html = Tag.begin("div", Tag.classes(["transfer"]))
+        html += Tag.begin("div", Tag.classes(["transfer__head"]))
+        html += Tag.element("span", [Tag.classes(["transfer__title"])], htmlEscape(title))
+        html += Tag.element("span", [Tag.classes(["transfer__count"])], "\(options.count)")
+        html += Tag.end("div")
+        html += Tag.begin("div", Tag.classes(["transfer__search"]))
+        html += Tag.void("input", Tag.attr("type", "search"), Tag.escAttr("placeholder", searchPlaceholder))
+        html += Tag.end("div")
+        html += Tag.begin("div", Tag.classes(["transfer__list"]))
         for option in options {
-            let cls = "transfer__item\(option.selected ? " transfer__item--selected" : "")\(option.moved ? " transfer__row--moved" : "")"
-            html += "<div class=\"\(cls)\"><span class=\"transfer__row-label\">\(htmlEscape(option.label))</span>"
+            html += Tag.begin("div", Tag.classes([
+                "transfer__item",
+                option.selected ? " transfer__item--selected" : "",
+                option.moved ? " transfer__row--moved" : "",
+            ]))
+            html += Tag.element("span", [Tag.classes(["transfer__row-label"])], htmlEscape(option.label))
             if option.moved {
-                html += "<button class=\"transfer__remove\" aria-label=\"Remove\">×</button>"
+                html += Tag.element("button", [Tag.classes(["transfer__remove"]), Tag.attr("aria-label", "Remove")], "×")
             }
-            html += "</div>"
+            html += Tag.end("div")
         }
-        html += "</div>"
-        html += "<div class=\"transfer__controls\"><button class=\"transfer__btn\" aria-label=\"Add\">→</button><button class=\"transfer__btn\" aria-label=\"Remove\">←</button></div>"
-        html += "</div>"
+        html += Tag.end("div")
+        html += Tag.begin("div", Tag.classes(["transfer__controls"]))
+        html += Tag.element("button", [Tag.classes(["transfer__btn"]), Tag.attr("aria-label", "Add")], "→")
+        html += Tag.element("button", [Tag.classes(["transfer__btn"]), Tag.attr("aria-label", "Remove")], "←")
+        html += Tag.end("div")
+        html += Tag.end("div")
         return html
     }
 }
@@ -271,9 +292,9 @@ public struct WebUIButtonGroup: View {
     public init(@ViewBuilder content: () -> [any View]) { self.children = content() }
 
     public func render() -> String {
-        var html = "<div class=\"button-group\" role=\"group\">"
+        var html = Tag.begin("div", Tag.classes(["button-group"]), Tag.attr("role", "group"))
         for c in children { html += c.render() }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 }
@@ -298,14 +319,14 @@ public struct WebUISplitButton: View {
         } else {
             attrs = ""
         }
-        var html = "<div class=\"split-button\"\(attrs)>"
-        let mainID = id.map { " id=\"\(htmlEscape("\($0)-main"))\"" } ?? ""
-        html += "<button class=\"button button--primary\"\(mainID)>\(htmlEscape(label))</button>"
+        var html = Tag.begin("div", Tag.classes(["split-button"]), attrs)
+        let mainID = id.map { Tag.escAttr("id", "\($0)-main") } ?? ""
+        html += Tag.element("button", [Tag.classes(["button button--primary"]), mainID], htmlEscape(label))
         if caret {
-            let caretID = id.map { " id=\"\(htmlEscape("\($0)-caret"))\"" } ?? ""
-            html += "<button class=\"button button--primary button--caret\"\(caretID) aria-label=\"Options\">▾</button>"
+            let caretID = id.map { Tag.escAttr("id", "\($0)-caret") } ?? ""
+            html += Tag.element("button", [Tag.classes(["button button--primary button--caret"]), caretID, Tag.attr("aria-label", "Options")], "▾")
         }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 }
@@ -327,15 +348,19 @@ public struct WebUIToc: View {
     public init(title: String = "On this page", entries: [Entry]) { self.title = title; self.entries = entries }
 
     public func render() -> String {
-        var html = "<nav class=\"toc-rail\" aria-label=\"Table of contents\">"
-        html += "<div class=\"toc-rail__title\">\(htmlEscape(title))</div>"
+        var html = Tag.begin("nav", Tag.classes(["toc-rail"]), Tag.attr("aria-label", "Table of contents"))
+        html += Tag.element("div", [Tag.classes(["toc-rail__title"])], htmlEscape(title))
         for entry in entries {
-            var cls = "toc-rail__item"
-            if entry.depth > 0 { cls += entry.depth > 1 ? " toc__link--nested-2" : " toc__link--nested" }
-            if entry.active { cls += " toc-rail__item--active" }
-            html += "<a class=\"\(cls)\" href=\"\(htmlEscape(entry.href))\">\(htmlEscape(entry.label))</a>"
+            html += Tag.element("a",
+                [Tag.classes([
+                    "toc-rail__item",
+                    entry.depth > 0 ? (entry.depth > 1 ? " toc__link--nested-2" : " toc__link--nested") : "",
+                    entry.active ? " toc-rail__item--active" : "",
+                ]),
+                 Tag.escAttr("href", entry.href)],
+                htmlEscape(entry.label))
         }
-        html += "</nav>"
+        html += Tag.end("nav")
         return html
     }
 }
@@ -374,15 +399,18 @@ public struct WebUIAccordion: View {
         } else {
             attrs = ""
         }
-        var html = "<div class=\"accordion\(variant.rawValue)\"\(attrs)>"
+        var html = Tag.begin("div", Tag.classes(["accordion", variant.rawValue]), attrs)
         for (index, item) in items.enumerated() {
-            html += "<div class=\"accordion__item\(item.open ? " accordion__item--open" : "")\">"
-            let headerID = id.map { " id=\"\(htmlEscape("\($0)-item-\(index)"))\"" } ?? ""
-            html += "<button class=\"accordion__header\"\(headerID) aria-expanded=\"\(item.open)\"><span class=\"accordion__chevron\"></span>\(htmlEscape(item.title))</button>"
-            html += "<div class=\"accordion__body\">\(item.children)</div>"
-            html += "</div>"
+            html += Tag.begin("div", Tag.classes(["accordion__item", item.open ? " accordion__item--open" : ""]))
+            let headerID = id.map { Tag.escAttr("id", "\($0)-item-\(index)") } ?? ""
+            html += Tag.begin("button", Tag.classes(["accordion__header"]), headerID, Tag.attr("aria-expanded", "\(item.open)"))
+            html += Tag.element("span", [Tag.classes(["accordion__chevron"])], "")
+            html += htmlEscape(item.title)
+            html += Tag.end("button")
+            html += Tag.element("div", [Tag.classes(["accordion__body"])], item.children)
+            html += Tag.end("div")
         }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 }
@@ -409,12 +437,18 @@ public struct WebUICollapse: View {
         } else {
             attrs = ""
         }
-        var html = "<div class=\"collapse\(open ? " collapse--open" : "")\"\(attrs)>"
-        let headerID = id.map { " id=\"\(htmlEscape($0))\"" } ?? ""
-        html += "<button class=\"collapse__header\"\(headerID) aria-expanded=\"\(open)\"><span class=\"collapse__chevron\"></span>\(htmlEscape(header))</button>"
-        html += "<div class=\"collapse__content\"><div class=\"collapse__inner\">"
+        var html = Tag.begin("div", Tag.classes(["collapse", open ? " collapse--open" : ""]), attrs)
+        let headerID = id.map { Tag.escAttr("id", $0) } ?? ""
+        html += Tag.begin("button", Tag.classes(["collapse__header"]), headerID, Tag.attr("aria-expanded", "\(open)"))
+        html += Tag.element("span", [Tag.classes(["collapse__chevron"])], "")
+        html += htmlEscape(header)
+        html += Tag.end("button")
+        html += Tag.begin("div", Tag.classes(["collapse__content"]))
+        html += Tag.begin("div", Tag.classes(["collapse__inner"]))
         for c in children { html += c.render() }
-        html += "</div></div></div>"
+        html += Tag.end("div")
+        html += Tag.end("div")
+        html += Tag.end("div")
         return html
     }
 }
@@ -448,18 +482,24 @@ public struct WebUIActionSheet: View {
         } else {
             attrs = ""
         }
-        var html = "<div class=\"action-sheet\"\(attrs) role=\"menu\">"
-        if let title { html += "<div class=\"action-sheet__header\"><div class=\"action-sheet__title\">\(htmlEscape(title))</div>" }
-        if let sub { html += "<div class=\"action-sheet__sub\">\(htmlEscape(sub))</div>" }
-        if title != nil { html += "</div>" }
-        for (index, action) in actions.enumerated() {
-            let itemID = id.map { " id=\"\(htmlEscape("\($0)-item-\(index)"))\"" } ?? ""
-            html += "<button class=\"action-sheet__item\(action.destructive ? " action-sheet__item--destructive" : "")\"\(itemID) role=\"menuitem\">\(htmlEscape(action.label))</button>"
+        var html = Tag.begin("div", Tag.classes(["action-sheet"]), attrs, Tag.attr("role", "menu"))
+        if let title {
+            html += Tag.begin("div", Tag.classes(["action-sheet__header"]))
+            html += Tag.element("div", [Tag.classes(["action-sheet__title"])], htmlEscape(title))
         }
-        html += "<div class=\"action-sheet__divider\"></div>"
-        let cancelID = id.map { " id=\"\(htmlEscape("\($0)-cancel"))\"" } ?? ""
-        html += "<button class=\"action-sheet__cancel\"\(cancelID)>\(htmlEscape(cancel))</button>"
-        html += "</div>"
+        if let sub { html += Tag.element("div", [Tag.classes(["action-sheet__sub"])], htmlEscape(sub)) }
+        if title != nil { html += Tag.end("div") }
+        for (index, action) in actions.enumerated() {
+            let itemID = id.map { Tag.escAttr("id", "\($0)-item-\(index)") } ?? ""
+            html += Tag.element("button",
+                [Tag.classes(["action-sheet__item", action.destructive ? " action-sheet__item--destructive" : ""]),
+                 itemID, Tag.attr("role", "menuitem")],
+                htmlEscape(action.label))
+        }
+        html += Tag.element("div", [Tag.classes(["action-sheet__divider"])], "")
+        let cancelID = id.map { Tag.escAttr("id", "\($0)-cancel") } ?? ""
+        html += Tag.element("button", [Tag.classes(["action-sheet__cancel"]), cancelID], htmlEscape(cancel))
+        html += Tag.end("div")
         return html
     }
 }
@@ -489,21 +529,24 @@ public struct WebUIBottomSheet: View {
         } else {
             attrs = ""
         }
-        var html = "<div class=\"bottom-sheet\(variant.rawValue)\"\(attrs) role=\"dialog\" aria-modal=\"true\">"
-        html += "<div class=\"bottom-sheet__handle\"></div>"
+        var html = Tag.begin("div", Tag.classes(["bottom-sheet", variant.rawValue]), attrs, Tag.attr("role", "dialog"), Tag.attr("aria-modal", "true"))
+        html += Tag.element("div", [Tag.classes(["bottom-sheet__handle"])], "")
         if let title {
-            let closeID = id.map { " id=\"\(htmlEscape("\($0)-close"))\"" } ?? ""
-            html += "<div class=\"bottom-sheet__header\"><div class=\"bottom-sheet__title\">\(htmlEscape(title))</div><button class=\"bottom-sheet__close\"\(closeID) aria-label=\"Close\">×</button></div>"
+            let closeID = id.map { Tag.escAttr("id", "\($0)-close") } ?? ""
+            html += Tag.begin("div", Tag.classes(["bottom-sheet__header"]))
+            html += Tag.element("div", [Tag.classes(["bottom-sheet__title"])], htmlEscape(title))
+            html += Tag.element("button", [Tag.classes(["bottom-sheet__close"]), closeID, Tag.attr("aria-label", "Close")], "×")
+            html += Tag.end("div")
         }
-        html += "<div class=\"bottom-sheet__body\">"
+        html += Tag.begin("div", Tag.classes(["bottom-sheet__body"]))
         for c in children { html += c.render() }
-        html += "</div>"
+        html += Tag.end("div")
         if !footer.isEmpty {
-            html += "<div class=\"bottom-sheet__footer\">"
+            html += Tag.begin("div", Tag.classes(["bottom-sheet__footer"]))
             for f in footer { html += f.render() }
-            html += "</div>"
+            html += Tag.end("div")
         }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 }
@@ -535,21 +578,25 @@ public struct WebUIDrawer: View {
         } else {
             attrs = ""
         }
-        var html = "<div class=\"drawer\(edge.rawValue)\(size.rawValue)\"\(attrs) role=\"dialog\" aria-modal=\"true\">"
-        html += "<div class=\"drawer__panel\">"
+        var html = Tag.begin("div", Tag.classes(["drawer", edge.rawValue, size.rawValue]), attrs, Tag.attr("role", "dialog"), Tag.attr("aria-modal", "true"))
+        html += Tag.begin("div", Tag.classes(["drawer__panel"]))
         if let title {
-            let closeID = id.map { " id=\"\(htmlEscape("\($0)-close"))\"" } ?? ""
-            html += "<div class=\"drawer__header\"><div class=\"drawer__title\">\(htmlEscape(title))</div><button class=\"drawer__close\"\(closeID) aria-label=\"Close\">×</button></div>"
+            let closeID = id.map { Tag.escAttr("id", "\($0)-close") } ?? ""
+            html += Tag.begin("div", Tag.classes(["drawer__header"]))
+            html += Tag.element("div", [Tag.classes(["drawer__title"])], htmlEscape(title))
+            html += Tag.element("button", [Tag.classes(["drawer__close"]), closeID, Tag.attr("aria-label", "Close")], "×")
+            html += Tag.end("div")
         }
-        html += "<div class=\"drawer__content\">"
+        html += Tag.begin("div", Tag.classes(["drawer__content"]))
         for c in children { html += c.render() }
-        html += "</div>"
+        html += Tag.end("div")
         if !footer.isEmpty {
-            html += "<div class=\"drawer__footer\">"
+            html += Tag.begin("div", Tag.classes(["drawer__footer"]))
             for f in footer { html += f.render() }
-            html += "</div>"
+            html += Tag.end("div")
         }
-        html += "</div></div>"
+        html += Tag.end("div")
+        html += Tag.end("div")
         return html
     }
 }
@@ -568,16 +615,16 @@ public struct WebUIPopover: View {
     }
 
     public func render() -> String {
-        var html = "<div class=\"popover\(side.rawValue)\">"
-        html += "<span class=\"popover__arrow\"></span>"
-        if let title { html += "<div class=\"popover__title\">\(htmlEscape(title))</div>" }
-        if let text { html += "<div class=\"popover__text\">\(htmlEscape(text))</div>" }
+        var html = Tag.begin("div", Tag.classes(["popover", side.rawValue]))
+        html += Tag.element("span", [Tag.classes(["popover__arrow"])], "")
+        if let title { html += Tag.element("div", [Tag.classes(["popover__title"])], htmlEscape(title)) }
+        if let text { html += Tag.element("div", [Tag.classes(["popover__text"])], htmlEscape(text)) }
         if !children.isEmpty {
-            html += "<div class=\"popover__actions\">"
+            html += Tag.begin("div", Tag.classes(["popover__actions"]))
             for c in children { html += c.render() }
-            html += "</div>"
+            html += Tag.end("div")
         }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 }
@@ -598,22 +645,32 @@ public struct WebUIHoverCard: View {
     }
 
     public func render() -> String {
-        var html = "<div class=\"hovercard\"><div class=\"hovercard__body\">"
-        html += "<div class=\"hovercard__name\">\(htmlEscape(name))</div>"
-        html += "<div class=\"hovercard__handle\">\(htmlEscape(handle))</div>"
-        if let bio { html += "<div class=\"hovercard__bio\">\(htmlEscape(bio))</div>" }
+        var html = Tag.begin("div", Tag.classes(["hovercard"]))
+        html += Tag.begin("div", Tag.classes(["hovercard__body"]))
+        html += Tag.element("div", [Tag.classes(["hovercard__name"])], htmlEscape(name))
+        html += Tag.element("div", [Tag.classes(["hovercard__handle"])], htmlEscape(handle))
+        if let bio { html += Tag.element("div", [Tag.classes(["hovercard__bio"])], htmlEscape(bio)) }
         if !meta.isEmpty {
-            html += "<div class=\"hovercard__meta\">"
-            for (k, v) in meta { html += "<span>\(htmlEscape(k)): <strong>\(htmlEscape(v))</strong></span>" }
-            html += "</div>"
+            html += Tag.begin("div", Tag.classes(["hovercard__meta"]))
+            for (k, v) in meta {
+                html += Tag.begin("span")
+                html += htmlEscape(k)
+                html += ": "
+                html += Tag.begin("strong")
+                html += htmlEscape(v)
+                html += Tag.end("strong")
+                html += Tag.end("span")
+            }
+            html += Tag.end("div")
         }
-        if !domain.isEmpty { html += "<div class=\"hovercard__domain\">\(htmlEscape(domain))</div>" }
+        if !domain.isEmpty { html += Tag.element("div", [Tag.classes(["hovercard__domain"])], htmlEscape(domain)) }
         if !children.isEmpty {
-            html += "<div class=\"hovercard__actions\">"
+            html += Tag.begin("div", Tag.classes(["hovercard__actions"]))
             for c in children { html += c.render() }
-            html += "</div>"
+            html += Tag.end("div")
         }
-        html += "</div></div>"
+        html += Tag.end("div")
+        html += Tag.end("div")
         return html
     }
 }
@@ -631,16 +688,21 @@ public struct WebUILinkPreview: View {
     }
 
     public func render() -> String {
-        var html = "<a class=\"link-preview\" href=\"\(htmlEscape(url))\" target=\"_blank\" rel=\"noopener noreferrer\">"
+        var html = Tag.begin("a",
+            Tag.classes(["link-preview"]),
+            Tag.escAttr("href", url),
+            Tag.attr("target", "_blank"),
+            Tag.attr("rel", "noopener noreferrer"))
         if let image = image {
-            html += "<img class=\"link-preview__img\" src=\"\(htmlEscape(image))\" alt=\"\" loading=\"lazy\">"
+            html += Tag.void("img", Tag.classes(["link-preview__img"]), Tag.escAttr("src", image), Tag.attr("alt", ""), Tag.attr("loading", "lazy"))
         }
-        html += "<div class=\"link-preview__body\">"
-        html += "<div class=\"link-preview__domain\">\(htmlEscape(domain))</div>"
-        if let title { html += "<div class=\"link-preview__title\">\(htmlEscape(title))</div>" }
-        if let desc { html += "<div class=\"link-preview__desc\">\(htmlEscape(desc))</div>" }
-        html += "<button class=\"link-preview__close\" aria-label=\"Close\">×</button>"
-        html += "</div></a>"
+        html += Tag.begin("div", Tag.classes(["link-preview__body"]))
+        html += Tag.element("div", [Tag.classes(["link-preview__domain"])], htmlEscape(domain))
+        if let title { html += Tag.element("div", [Tag.classes(["link-preview__title"])], htmlEscape(title)) }
+        if let desc { html += Tag.element("div", [Tag.classes(["link-preview__desc"])], htmlEscape(desc)) }
+        html += Tag.element("button", [Tag.classes(["link-preview__close"]), Tag.attr("aria-label", "Close")], "×")
+        html += Tag.end("div")
+        html += Tag.end("a")
         return html
     }
 }
@@ -668,19 +730,21 @@ public struct WebUILightbox: View {
         } else {
             attrs = ""
         }
-        var html = "<div class=\"lightbox\"\(attrs) role=\"dialog\" aria-modal=\"true\">"
-        html += "<div class=\"lightbox__stage\"><img class=\"lightbox__img\" src=\"\(htmlEscape(image))\" alt=\"\(htmlEscape(caption ?? ""))\"></div>"
-        html += "<div class=\"lightbox__toolbar\">"
-        if let count { html += "<div class=\"lightbox__counter\">\(htmlEscape(count))</div>" }
-        let prevID = id.map { " id=\"\(htmlEscape("\($0)-prev"))\"" } ?? ""
-        let nextID = id.map { " id=\"\(htmlEscape("\($0)-next"))\"" } ?? ""
-        let closeID = id.map { " id=\"\(htmlEscape("\($0)-close"))\"" } ?? ""
-        html += "<button class=\"lightbox__tool\"\(prevID) aria-label=\"Previous\">‹</button>"
-        html += "<button class=\"lightbox__tool\"\(nextID) aria-label=\"Next\">›</button>"
-        html += "<button class=\"lightbox__close\"\(closeID) aria-label=\"Close\">×</button>"
-        html += "</div>"
-        if let caption { html += "<div class=\"lightbox__caption\">\(htmlEscape(caption))</div>" }
-        html += "</div>"
+        var html = Tag.begin("div", Tag.classes(["lightbox"]), attrs, Tag.attr("role", "dialog"), Tag.attr("aria-modal", "true"))
+        html += Tag.begin("div", Tag.classes(["lightbox__stage"]))
+        html += Tag.void("img", Tag.classes(["lightbox__img"]), Tag.escAttr("src", image), Tag.escAttr("alt", caption ?? ""))
+        html += Tag.end("div")
+        html += Tag.begin("div", Tag.classes(["lightbox__toolbar"]))
+        if let count { html += Tag.element("div", [Tag.classes(["lightbox__counter"])], htmlEscape(count)) }
+        let prevID = id.map { Tag.escAttr("id", "\($0)-prev") } ?? ""
+        let nextID = id.map { Tag.escAttr("id", "\($0)-next") } ?? ""
+        let closeID = id.map { Tag.escAttr("id", "\($0)-close") } ?? ""
+        html += Tag.element("button", [Tag.classes(["lightbox__tool"]), prevID, Tag.attr("aria-label", "Previous")], "‹")
+        html += Tag.element("button", [Tag.classes(["lightbox__tool"]), nextID, Tag.attr("aria-label", "Next")], "›")
+        html += Tag.element("button", [Tag.classes(["lightbox__close"]), closeID, Tag.attr("aria-label", "Close")], "×")
+        html += Tag.end("div")
+        if let caption { html += Tag.element("div", [Tag.classes(["lightbox__caption"])], htmlEscape(caption)) }
+        html += Tag.end("div")
         return html
     }
 }
@@ -743,35 +807,42 @@ public struct WebUIMenu: View {
         } else {
             attrs = ""
         }
-        var html = "<div class=\"menu\(panel ? " menu__panel" : "")\""
-        if let id { html += " id=\"\(htmlEscape(id))\"" }
-        html += "\(attrs) role=\"menu\">"
-        if let header { html += "<div class=\"menu__header\">\(htmlEscape(header))</div>" }
+        var html = Tag.begin("div",
+            Tag.classes(["menu", panel ? " menu__panel" : ""]),
+            id.map { Tag.escAttr("id", $0) } ?? "",
+            attrs, Tag.attr("role", "menu"))
+        if let header { html += Tag.element("div", [Tag.classes(["menu__header"])], htmlEscape(header)) }
         if let search {
-            html += "<div class=\"menu__search\">"
-            html += "<input type=\"search\" placeholder=\"\(htmlEscape(search))\" aria-label=\"\(htmlEscape(search))\">"
-            html += "</div>"
+            html += Tag.begin("div", Tag.classes(["menu__search"]))
+            html += Tag.void("input", Tag.attr("type", "search"), Tag.escAttr("placeholder", search), Tag.escAttr("aria-label", search))
+            html += Tag.end("div")
         }
         for (index, item) in items.enumerated() {
-            if let section = item.section { html += "<span class=\"menu__section\">\(htmlEscape(section))</span>" }
-            if item.dividerBefore { html += "<div class=\"menu__divider\"></div>" }
-            var cls = "menu__item"
-            if item.destructive { cls += " menu__item--destructive" }
-            if item.danger { cls += " menu__item--danger" }
-            if item.active { cls += " menu__item--active" }
-            if item.submenu { cls += " menu__item--has-sub" }
-            let itemID = id.map { " id=\"\(htmlEscape("\($0)-item-\(index)"))\"" } ?? ""
-            html += "<button class=\"\(cls)\"\(itemID) role=\"menuitem\"\(item.disabled ? " disabled" : "")>"
+            if let section = item.section { html += Tag.element("span", [Tag.classes(["menu__section"])], htmlEscape(section)) }
+            if item.dividerBefore { html += Tag.element("div", [Tag.classes(["menu__divider"])], "") }
+            let itemID = id.map { Tag.escAttr("id", "\($0)-item-\(index)") } ?? ""
+            html += Tag.begin("button",
+                Tag.classes([
+                    "menu__item",
+                    item.destructive ? " menu__item--destructive" : "",
+                    item.danger ? " menu__item--danger" : "",
+                    item.active ? " menu__item--active" : "",
+                    item.submenu ? " menu__item--has-sub" : "",
+                ]),
+                itemID, Tag.attr("role", "menuitem"),
+                item.disabled ? Tag.flag("disabled") : "")
             if let avatar = item.avatar {
-                html += "<span class=\"menu__avatar\"><span class=\"avatar avatar--initials avatar--sm\">\(htmlEscape(avatar))</span></span>"
+                html += Tag.begin("span", Tag.classes(["menu__avatar"]))
+                html += Tag.element("span", [Tag.classes(["avatar avatar--initials avatar--sm"])], htmlEscape(avatar))
+                html += Tag.end("span")
             }
-            if let icon = item.icon { html += "<span class=\"menu__icon\">\(WebUIIcon(icon, size: .small).render())</span>" }
-            html += "<span class=\"menu__label\">\(htmlEscape(item.label))</span>"
-            if let hint = item.hint { html += "<span class=\"menu__hint\">\(htmlEscape(hint))</span>" }
-            if let shortcut = item.shortcut { html += "<span class=\"menu__shortcut\">\(htmlEscape(shortcut))</span>" }
-            html += "</button>"
+            if let icon = item.icon { html += Tag.element("span", [Tag.classes(["menu__icon"])], WebUIIcon(icon, size: .small).render()) }
+            html += Tag.element("span", [Tag.classes(["menu__label"])], htmlEscape(item.label))
+            if let hint = item.hint { html += Tag.element("span", [Tag.classes(["menu__hint"])], htmlEscape(hint)) }
+            if let shortcut = item.shortcut { html += Tag.element("span", [Tag.classes(["menu__shortcut"])], htmlEscape(shortcut)) }
+            html += Tag.end("button")
         }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 }
@@ -789,10 +860,10 @@ public struct WebUIContextMenu: View {
     }
 
     public func render() -> String {
-        var html = "<div class=\"context-menu\">"
+        var html = Tag.begin("div", Tag.classes(["context-menu"]))
         let menu = WebUIMenu(items: items, id: id, onSelect: onSelect).render()
         html += menu
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 }
@@ -818,12 +889,16 @@ public struct WebUIDropdown: View {
         } else {
             attrs = ""
         }
-        var html = "<div class=\"dropdown\"\(attrs)>"
-        let triggerID = id.map { " id=\"\(htmlEscape("\($0)-trigger"))\"" } ?? ""
-        html += "<button class=\"dropdown__trigger\"\(triggerID)>\(htmlEscape(trigger))<span class=\"dropdown__chevron\">▾</span></button>"
-        html += "<div class=\"dropdown__panel\">"
+        var html = Tag.begin("div", Tag.classes(["dropdown"]), attrs)
+        let triggerID = id.map { Tag.escAttr("id", "\($0)-trigger") } ?? ""
+        html += Tag.begin("button", Tag.classes(["dropdown__trigger"]), triggerID)
+        html += htmlEscape(trigger)
+        html += Tag.element("span", [Tag.classes(["dropdown__chevron"])], "▾")
+        html += Tag.end("button")
+        html += Tag.begin("div", Tag.classes(["dropdown__panel"]))
         for c in children { html += c.render() }
-        html += "</div></div>"
+        html += Tag.end("div")
+        html += Tag.end("div")
         return html
     }
 }
@@ -859,19 +934,24 @@ public struct WebUIComboBox: View {
         } else {
             attrs = ""
         }
-        var html = "<div class=\"combo\"\(attrs)>"
-        html += "<div class=\"combo__input\"><input type=\"text\" placeholder=\"\(htmlEscape(placeholder))\"><span class=\"dropdown__chevron\">▾</span></div>"
-        html += "<div class=\"combo__panel\">"
+        var html = Tag.begin("div", Tag.classes(["combo"]), attrs)
+        html += Tag.begin("div", Tag.classes(["combo__input"]))
+        html += Tag.void("input", Tag.attr("type", "text"), Tag.escAttr("placeholder", placeholder))
+        html += Tag.element("span", [Tag.classes(["dropdown__chevron"])], "▾")
+        html += Tag.end("div")
+        html += Tag.begin("div", Tag.classes(["combo__panel"]))
         if options.isEmpty {
-            html += "<div class=\"combo__empty\">\(htmlEscape(emptyMessage))</div>"
+            html += Tag.element("div", [Tag.classes(["combo__empty"])], htmlEscape(emptyMessage))
         }
         for (index, option) in options.enumerated() {
-            var cls = "combo__option"
-            if option.selected { cls += " combo__option--selected" }
-            let optID = id.map { " id=\"\(htmlEscape("\($0)-opt-\(index)"))\"" } ?? ""
-            html += "<div class=\"\(cls)\"\(optID) role=\"option\" aria-selected=\"\(option.selected)\">\(htmlEscape(option.label))</div>"
+            let optID = id.map { Tag.escAttr("id", "\($0)-opt-\(index)") } ?? ""
+            html += Tag.element("div",
+                [Tag.classes(["combo__option", option.selected ? " combo__option--selected" : ""]),
+                 optID, Tag.attr("role", "option"), Tag.attr("aria-selected", "\(option.selected)")],
+                htmlEscape(option.label))
         }
-        html += "</div></div>"
+        html += Tag.end("div")
+        html += Tag.end("div")
         return html
     }
 }
@@ -907,26 +987,29 @@ public struct WebUICommandPalette: View {
         } else {
             attrs = ""
         }
-        var html = "<div class=\"command-palette\"\(attrs) role=\"dialog\" aria-modal=\"true\">"
-        html += "<div class=\"command-palette__input\"><input type=\"text\" placeholder=\"\(htmlEscape(placeholder))\"></div>"
-        html += "<div class=\"command-palette__results\">"
+        var html = Tag.begin("div", Tag.classes(["command-palette"]), attrs, Tag.attr("role", "dialog"), Tag.attr("aria-modal", "true"))
+        html += Tag.begin("div", Tag.classes(["command-palette__input"]))
+        html += Tag.void("input", Tag.attr("type", "text"), Tag.escAttr("placeholder", placeholder))
+        html += Tag.end("div")
+        html += Tag.begin("div", Tag.classes(["command-palette__results"]))
         let groupsOrdered = commands.map(\.group).filter { !$0.isEmpty }.uniquePreservingOrder
         var cmdIndex = 0
         for group in groupsOrdered {
-            html += "<div class=\"command-palette__group\"><div class=\"command-palette__group-label\">\(htmlEscape(group))</div>"
+            html += Tag.begin("div", Tag.classes(["command-palette__group"]))
+            html += Tag.element("div", [Tag.classes(["command-palette__group-label"])], htmlEscape(group))
             for c in commands where c.group == group {
-                let cmdID = id.map { " id=\"\(htmlEscape("\($0)-cmd-\(cmdIndex)"))\"" } ?? ""
-                html += "<div class=\"command-palette__item\"\(cmdID)>"
-                html += "<span class=\"command-palette__item-label\">\(htmlEscape(c.label))</span>"
-                if let sc = c.shortcut { html += "<kbd>\(htmlEscape(sc))</kbd>" }
-                html += "</div>"
+                let cmdID = id.map { Tag.escAttr("id", "\($0)-cmd-\(cmdIndex)") } ?? ""
+                html += Tag.begin("div", Tag.classes(["command-palette__item"]), cmdID)
+                html += Tag.element("span", [Tag.classes(["command-palette__item-label"])], htmlEscape(c.label))
+                if let sc = c.shortcut { html += Tag.element("kbd", [], htmlEscape(sc)) }
+                html += Tag.end("div")
                 cmdIndex += 1
             }
-            html += "</div>"
+            html += Tag.end("div")
         }
-        html += "</div>"
-        if let footer { html += "<div class=\"command-palette__footer\">\(htmlEscape(footer))</div>" }
-        html += "</div>"
+        html += Tag.end("div")
+        if let footer { html += Tag.element("div", [Tag.classes(["command-palette__footer"])], htmlEscape(footer)) }
+        html += Tag.end("div")
         return html
     }
 }
@@ -968,16 +1051,19 @@ public struct WebUISeparator: View {
 
     public func render() -> String {
         if orientation == .vertical {
-            return "<div class=\"divider divider--vertical\" role=\"separator\" aria-orientation=\"vertical\"></div>"
+            return Tag.element("div", [Tag.classes(["divider divider--vertical"]), Tag.attr("role", "separator"), Tag.attr("aria-orientation", "vertical")], "")
         }
         if let icon {
             let glyph = WebUIIcon(icon, size: .slot).render()
-            return "<div class=\"divider divider--icon\(strong ? " divider--strong" : "")\" role=\"separator\"><span class=\"divider__label\">\(glyph)</span></div>"
+            var html = Tag.begin("div", Tag.classes(["divider divider--icon", strong ? " divider--strong" : ""]), Tag.attr("role", "separator"))
+            html += Tag.element("span", [Tag.classes(["divider__label"])], glyph)
+            html += Tag.end("div")
+            return html
         }
         if let label {
-            return "<div class=\"divider-divider\" role=\"separator\"><span class=\"divider-divider__label\">\(htmlEscape(label))</span></div>"
+            return Tag.element("div", [Tag.classes(["divider-divider"]), Tag.attr("role", "separator")], Tag.element("span", [Tag.classes(["divider-divider__label"])], htmlEscape(label)))
         }
-        return "<div class=\"divider\(strong ? " divider--strong" : "")\" role=\"separator\"></div>"
+        return Tag.element("div", [Tag.classes(["divider", strong ? " divider--strong" : ""]), Tag.attr("role", "separator")], "")
     }
 }
 
@@ -1011,19 +1097,19 @@ public struct WebUIKbd: View {
 
     private func keyHTML(_ key: String) -> String {
         let sizeClass = size.rawValue.isEmpty ? "" : " \(size.rawValue)"
-        return "<kbd class=\"kbd\(sizeClass)\">\(htmlEscape(key))</kbd>"
+        return Tag.element("kbd", [Tag.classes(["kbd", sizeClass])], htmlEscape(key))
     }
 
     public func render() -> String {
         guard keys.count > 1 else { return keyHTML(keys.first ?? "") }
-        var html = "<span class=\"kbd-combo\">"
+        var html = Tag.begin("span", Tag.classes(["kbd-combo"]))
         for (index, key) in keys.enumerated() {
             if index > 0, let separator, !separator.isEmpty {
-                html += "<span class=\"kbd-sep\">\(htmlEscape(separator))</span>"
+                html += Tag.element("span", [Tag.classes(["kbd-sep"])], htmlEscape(separator))
             }
             html += keyHTML(key)
         }
-        html += "</span>"
+        html += Tag.end("span")
         return html
     }
 }
@@ -1062,19 +1148,22 @@ public struct WebUIScrollTop: View {
         } else {
             attrs = ""
         }
-        var html = "<button class=\"scroll-top\(progress != nil ? " scroll-top--ring" : "")\" type=\"button\" aria-label=\"\(htmlEscape(label))\""
-        if let id { html += " id=\"\(htmlEscape(id))\"" }
-        html += attrs + ">"
+        var html = Tag.begin("button",
+            Tag.classes(["scroll-top", progress != nil ? " scroll-top--ring" : ""]),
+            Tag.attr("type", "button"),
+            Tag.escAttr("aria-label", label),
+            id.map { Tag.escAttr("id", $0) } ?? "",
+            attrs)
         if let progress {
             let clamped = progress < 0 ? 0 : (progress > 1 ? 1 : progress)
             let offset = webuiFixedPoint((1 - clamped) * 100, places: 1)
-            html += "<svg class=\"scroll-top__ring\" viewBox=\"0 0 36 36\" aria-hidden=\"true\">"
-            html += "<circle class=\"ring__track\" cx=\"18\" cy=\"18\" r=\"15.915\"/>"
-            html += "<circle class=\"ring__fill\" cx=\"18\" cy=\"18\" r=\"15.915\" stroke-dasharray=\"100\" stroke-dashoffset=\"\(offset)\"/>"
-            html += "</svg>"
+            html += Tag.begin("svg", Tag.classes(["scroll-top__ring"]), Tag.attr("viewBox", "0 0 36 36"), Tag.attr("aria-hidden", "true"))
+            html += Tag.selfClose("circle", Tag.classes(["ring__track"]), Tag.attr("cx", "18"), Tag.attr("cy", "18"), Tag.attr("r", "15.915"))
+            html += Tag.selfClose("circle", Tag.classes(["ring__fill"]), Tag.attr("cx", "18"), Tag.attr("cy", "18"), Tag.attr("r", "15.915"), Tag.attr("stroke-dasharray", "100"), Tag.attr("stroke-dashoffset", offset))
+            html += Tag.end("svg")
         }
-        html += "<span class=\"scroll-top__icon\">" + WebUIIcon(icon, size: .medium).render() + "</span>"
-        html += "</button>"
+        html += Tag.element("span", [Tag.classes(["scroll-top__icon"])], WebUIIcon(icon, size: .medium).render())
+        html += Tag.end("button")
         return html
     }
 }

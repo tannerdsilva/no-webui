@@ -34,30 +34,39 @@ public struct WebUICalendar: View {
 
     public func render() -> String {
         let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onChange) } ?? ""
-        var html = "<div class=\"calendar\"\(attrs)>"
-        html += "<div class=\"calendar__header\">"
-        html += "<div class=\"calendar__month\">\(htmlEscape(month))</div>"
-        html += "<div class=\"calendar__nav\"><button aria-label=\"Previous\">‹</button><button aria-label=\"Next\">›</button><button class=\"calendar__today\">Today</button></div>"
-        html += "</div>"
-        html += "<div class=\"calendar__grid\">"
-        for wd in weekdays { html += "<div class=\"calendar__weekday\">\(htmlEscape(wd))</div>" }
+        var html = Tag.begin("div", Tag.classes(["calendar"]), attrs)
+        html += Tag.begin("div", Tag.classes(["calendar__header"]))
+        html += Tag.element("div", [Tag.classes(["calendar__month"])], htmlEscape(month))
+        html += Tag.begin("div", Tag.classes(["calendar__nav"]))
+        html += Tag.element("button", [Tag.attr("aria-label", "Previous")], "‹")
+        html += Tag.element("button", [Tag.attr("aria-label", "Next")], "›")
+        html += Tag.element("button", [Tag.classes(["calendar__today"])], "Today")
+        html += Tag.end("div")
+        html += Tag.end("div")
+        html += Tag.begin("div", Tag.classes(["calendar__grid"]))
+        for wd in weekdays { html += Tag.element("div", [Tag.classes(["calendar__weekday"])], htmlEscape(wd)) }
         for (i, day) in days.enumerated() {
-            var cls = "calendar__day"
-            if day.muted { cls += " calendar__day--muted" }
-            if day.selected { cls += " calendar__day--selected" }
-            if day.today { cls += " calendar__day--today" }
-            if day.inRange { cls += " calendar__day--range" }
-            if day.events > 0 { cls += " calendar__day--event" }
-            let dayID = id.map { " id=\"\(htmlEscape($0))-day-\(i)\"" } ?? ""
-            html += "<button class=\"\(cls)\"\(dayID)>\(day.num)"
+            let dayID = id.map { Tag.escAttr("id", "\($0)-day-\(i)") } ?? ""
+            html += Tag.begin("button",
+                Tag.classes([
+                    "calendar__day",
+                    day.muted ? " calendar__day--muted" : "",
+                    day.selected ? " calendar__day--selected" : "",
+                    day.today ? " calendar__day--today" : "",
+                    day.inRange ? " calendar__day--range" : "",
+                    day.events > 0 ? " calendar__day--event" : "",
+                ]),
+                dayID)
+            html += "\(day.num)"
             if day.events > 0 {
-                html += "<span class=\"calendar__events\">"
-                for _ in 0..<min(day.events, 3) { html += "<i class=\"calendar__event-dot\"></i>" }
-                html += "</span>"
+                html += Tag.begin("span", Tag.classes(["calendar__events"]))
+                for _ in 0..<min(day.events, 3) { html += Tag.element("i", [Tag.classes(["calendar__event-dot"])], "") }
+                html += Tag.end("span")
             }
-            html += "</button>"
+            html += Tag.end("button")
         }
-        html += "</div></div>"
+        html += Tag.end("div")
+        html += Tag.end("div")
         return html
     }
 }
@@ -94,25 +103,33 @@ public struct WebUIDatePicker: View {
 
     public func render() -> String {
         let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onChange) } ?? ""
-        var html = "<div class=\"date-picker\"\(attrs)>"
-        html += "<div class=\"date-picker__header\"><button class=\"date-picker__nav\" aria-label=\"Previous\">‹</button>"
-        html += "<div class=\"date-picker__month\">\(htmlEscape(month))</div>"
-        html += "<button class=\"date-picker__nav\" aria-label=\"Next\">›</button></div>"
-        html += "<div class=\"date-picker__grid\">"
-        for wd in weekdays { html += "<div class=\"date-picker__weekday\">\(htmlEscape(wd))</div>" }
+        var html = Tag.begin("div", Tag.classes(["date-picker"]), attrs)
+        html += Tag.begin("div", Tag.classes(["date-picker__header"]))
+        html += Tag.element("button", [Tag.classes(["date-picker__nav"]), Tag.attr("aria-label", "Previous")], "‹")
+        html += Tag.element("div", [Tag.classes(["date-picker__month"])], htmlEscape(month))
+        html += Tag.element("button", [Tag.classes(["date-picker__nav"]), Tag.attr("aria-label", "Next")], "›")
+        html += Tag.end("div")
+        html += Tag.begin("div", Tag.classes(["date-picker__grid"]))
+        for wd in weekdays { html += Tag.element("div", [Tag.classes(["date-picker__weekday"])], htmlEscape(wd)) }
         for (i, day) in days.enumerated() {
-            var cls = "date-picker__day"
-            if day.muted { cls += " date-picker__day--muted" }
-            if day.disabled { cls += " date-picker__day--disabled" }
-            if day.selected { cls += " date-picker__day--selected" }
-            if day.today { cls += " date-picker__day--today" }
-            if day.rangeStart { cls += " date-picker__day--range-start" }
-            if day.rangeEnd { cls += " date-picker__day--range-end" }
-            if day.inRange { cls += " date-picker__day--in-range" }
-            let dayID = id.map { " id=\"\(htmlEscape($0))-day-\(i)\"" } ?? ""
-            html += "<button class=\"\(cls)\"\(dayID)\(day.disabled ? " disabled" : "")>\(day.num)</button>"
+            let dayID = id.map { Tag.escAttr("id", "\($0)-day-\(i)") } ?? ""
+            html += Tag.element("button",
+                [Tag.classes([
+                    "date-picker__day",
+                    day.muted ? " date-picker__day--muted" : "",
+                    day.disabled ? " date-picker__day--disabled" : "",
+                    day.selected ? " date-picker__day--selected" : "",
+                    day.today ? " date-picker__day--today" : "",
+                    day.rangeStart ? " date-picker__day--range-start" : "",
+                    day.rangeEnd ? " date-picker__day--range-end" : "",
+                    day.inRange ? " date-picker__day--in-range" : "",
+                ]),
+                 dayID,
+                 day.disabled ? Tag.flag("disabled") : ""],
+                "\(day.num)")
         }
-        html += "</div></div>"
+        html += Tag.end("div")
+        html += Tag.end("div")
         return html
     }
 }
@@ -132,14 +149,20 @@ public struct WebUITimeZonePicker: View {
 
     public func render() -> String {
         let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onSelect) } ?? ""
-        var html = "<div class=\"tz-picker\"\(attrs)>"
-        html += "<div class=\"tz-picker__search\"><input type=\"search\" placeholder=\"Find a timezone…\"></div>"
-        html += "<div class=\"tz-picker__list\">"
+        var html = Tag.begin("div", Tag.classes(["tz-picker"]), attrs)
+        html += Tag.begin("div", Tag.classes(["tz-picker__search"]))
+        html += Tag.void("input", Tag.attr("type", "search"), Tag.attr("placeholder", "Find a timezone…"))
+        html += Tag.end("div")
+        html += Tag.begin("div", Tag.classes(["tz-picker__list"]))
         for (i, e) in entries.enumerated() {
-            let entryID = id.map { " id=\"\(htmlEscape($0))-tz-\(i)\"" } ?? ""
-            html += "<div class=\"tz\(e.selected ? " tz--selected" : "")\"\(entryID)><span class=\"tz__city\">\(htmlEscape(e.city))</span><span class=\"tz__offset\">\(htmlEscape(e.offset))</span></div>"
+            let entryID = id.map { Tag.escAttr("id", "\($0)-tz-\(i)") } ?? ""
+            html += Tag.element("div",
+                [Tag.classes(["tz", e.selected ? " tz--selected" : ""]), entryID],
+                Tag.element("span", [Tag.classes(["tz__city"])], htmlEscape(e.city))
+                    + Tag.element("span", [Tag.classes(["tz__offset"])], htmlEscape(e.offset)))
         }
-        html += "</div></div>"
+        html += Tag.end("div")
+        html += Tag.end("div")
         return html
     }
 }
@@ -159,17 +182,22 @@ public struct WebUICountryPicker: View {
 
     public func render() -> String {
         let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onSelect) } ?? ""
-        var html = "<div class=\"country-picker\"\(attrs)>"
-        html += "<div class=\"country-picker__search\"><input type=\"search\" placeholder=\"Search countries…\"></div>"
-        html += "<div class=\"country-picker__list\">"
+        var html = Tag.begin("div", Tag.classes(["country-picker"]), attrs)
+        html += Tag.begin("div", Tag.classes(["country-picker__search"]))
+        html += Tag.void("input", Tag.attr("type", "search"), Tag.attr("placeholder", "Search countries…"))
+        html += Tag.end("div")
+        html += Tag.begin("div", Tag.classes(["country-picker__list"]))
         for (i, e) in entries.enumerated() {
-            let rowID = id.map { " id=\"\(htmlEscape($0))-row-\(i)\"" } ?? ""
-            html += "<div class=\"country-picker__row\"\(rowID)><span class=\"country-picker__flag\">\(htmlEscape(e.flag))</span>"
-            html += "<span class=\"country-picker__name\">\(htmlEscape(e.name))</span>"
-            html += "<span class=\"country-picker__code\">\(htmlEscape(e.code))</span>"
-            html += "<span class=\"country-picker__offset\">\(htmlEscape(e.offset))</span></div>"
+            let rowID = id.map { Tag.escAttr("id", "\($0)-row-\(i)") } ?? ""
+            html += Tag.begin("div", Tag.classes(["country-picker__row"]), rowID)
+            html += Tag.element("span", [Tag.classes(["country-picker__flag"])], htmlEscape(e.flag))
+            html += Tag.element("span", [Tag.classes(["country-picker__name"])], htmlEscape(e.name))
+            html += Tag.element("span", [Tag.classes(["country-picker__code"])], htmlEscape(e.code))
+            html += Tag.element("span", [Tag.classes(["country-picker__offset"])], htmlEscape(e.offset))
+            html += Tag.end("div")
         }
-        html += "</div></div>"
+        html += Tag.end("div")
+        html += Tag.end("div")
         return html
     }
 }
@@ -185,16 +213,26 @@ public struct WebUIGantt: View {
     public init(rows: [Row]) { self.rows = rows }
 
     public func render() -> String {
-        var html = "<div class=\"gantt\">"
-        html += "<div class=\"gantt__header\"><div class=\"gantt__label-col\">Tasks</div><div class=\"gantt__week\"></div></div>"
+        var html = Tag.begin("div", Tag.classes(["gantt"]))
+        html += Tag.begin("div", Tag.classes(["gantt__header"]))
+        html += Tag.element("div", [Tag.classes(["gantt__label-col"])], "Tasks")
+        html += Tag.element("div", [Tag.classes(["gantt__week"])], "")
+        html += Tag.end("div")
         for row in rows {
-            html += "<div class=\"gantt__row\"><div class=\"gantt__label-col gantt__label\">\(htmlEscape(row.label))</div><div class=\"gantt__track\">"
+            html += Tag.begin("div", Tag.classes(["gantt__row"]))
+            html += Tag.element("div", [Tag.classes(["gantt__label-col gantt__label"])], htmlEscape(row.label))
+            html += Tag.begin("div", Tag.classes(["gantt__track"]))
             for bar in row.bars {
-                html += "<div class=\"gantt__bar \(bar.state)\" style=\"margin-left:\(bar.start * 10)%;width:\(bar.span)px\"><span class=\"gantt__bar-label\">\(htmlEscape(bar.label))</span></div>"
+                // the empty state keeps its trailing space — byte-pinned by the base capture
+                html += Tag.element("div",
+                    [Tag.classes(["gantt__bar", " " + bar.state]),
+                     Tag.attr("style", "margin-left:\(bar.start * 10)%;width:\(bar.span)px")],
+                    Tag.element("span", [Tag.classes(["gantt__bar-label"])], htmlEscape(bar.label)))
             }
-            html += "</div></div>"
+            html += Tag.end("div")
+            html += Tag.end("div")
         }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 }
@@ -210,25 +248,36 @@ public struct WebUIKanban: View {
     public init(columns: [Column]) { self.columns = columns }
 
     public func render() -> String {
-        var html = "<div class=\"kanban\">"
+        var html = Tag.begin("div", Tag.classes(["kanban"]))
         for column in columns {
-            html += "<div class=\"kanban__column\"><div class=\"kanban__header\">\(htmlEscape(column.title))<span class=\"kanban__count\">\(column.cards.count)</span></div><div class=\"kanban__body\">"
+            html += Tag.begin("div", Tag.classes(["kanban__column"]))
+            html += Tag.begin("div", Tag.classes(["kanban__header"]))
+            html += htmlEscape(column.title)
+            html += Tag.element("span", [Tag.classes(["kanban__count"])], "\(column.cards.count)")
+            html += Tag.end("div")
+            html += Tag.begin("div", Tag.classes(["kanban__body"]))
             for card in column.cards {
-                html += "<div class=\"kanban__card\(card.wip ? " kanban__card--wip" : "")\">\(htmlEscape(card.title))"
+                html += Tag.begin("div", Tag.classes(["kanban__card", card.wip ? " kanban__card--wip" : ""]))
+                html += htmlEscape(card.title)
                 if !card.tags.isEmpty {
-                    html += "<div class=\"kanban__card-tags\">"
+                    html += Tag.begin("div", Tag.classes(["kanban__card-tags"]))
                     for (i, tag) in card.tags.enumerated() {
                         let variant = ["kanban__card-tag--blue", "kanban__card-tag--amber", "kanban__card-tag--violet"][i % 3]
-                        html += "<span class=\"kanban__card-tag \(variant)\">\(htmlEscape(tag))</span>"
+                        html += Tag.element("span", [Tag.classes(["kanban__card-tag", variant])], htmlEscape(tag))
                     }
-                    html += "</div>"
+                    html += Tag.end("div")
                 }
-                if !card.meta.isEmpty { html += "<div class=\"kanban__card-foot\"><span class=\"kanban__card-meta\">\(htmlEscape(card.meta))</span></div>" }
-                html += "</div>"
+                if !card.meta.isEmpty {
+                    html += Tag.begin("div", Tag.classes(["kanban__card-foot"]))
+                    html += Tag.element("span", [Tag.classes(["kanban__card-meta"])], htmlEscape(card.meta))
+                    html += Tag.end("div")
+                }
+                html += Tag.end("div")
             }
-            html += "</div></div>"
+            html += Tag.end("div")
+            html += Tag.end("div")
         }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 }
@@ -242,16 +291,26 @@ public struct WebUIDataSheet: View {
     public init(cells: [Cell]) { self.cells = cells }
 
     public func render() -> String {
-        var html = "<div class=\"sheet\">"
-        html += "<div class=\"sheet__formula\"><span class=\"sheet__cellref\">Fx</span><span class=\"sheet__formula-input\"></span></div>"
-        html += "<div class=\"sheet__grid\">"
-        html += "<div class=\"sheet__row\"><span class=\"sheet__corner\"></span>"
-        for col in ["A", "B", "C", "D", "E"] { html += "<span class=\"sheet__colhead\">\(col)</span>" }
-        html += "</div>"
+        var html = Tag.begin("div", Tag.classes(["sheet"]))
+        html += Tag.begin("div", Tag.classes(["sheet__formula"]))
+        html += Tag.element("span", [Tag.classes(["sheet__cellref"])], "Fx")
+        html += Tag.element("span", [Tag.classes(["sheet__formula-input"])], "")
+        html += Tag.end("div")
+        html += Tag.begin("div", Tag.classes(["sheet__grid"]))
+        html += Tag.begin("div", Tag.classes(["sheet__row"]))
+        html += Tag.element("span", [Tag.classes(["sheet__corner"])], "")
+        for col in ["A", "B", "C", "D", "E"] { html += Tag.element("span", [Tag.classes(["sheet__colhead"])], col) }
+        html += Tag.end("div")
         for cell in cells {
-            html += "<div class=\"sheet__cell\(cell.num ? " sheet__cell--num" : "")\(cell.selected ? " sheet__cell--selected" : "")\" data-ref=\"\(htmlEscape(cell.ref))\">\(htmlEscape(cell.value))</div>"
+            html += Tag.element("div",
+                [Tag.classes(["sheet__cell",
+                              cell.num ? " sheet__cell--num" : "",
+                              cell.selected ? " sheet__cell--selected" : ""]),
+                 Tag.escAttr("data-ref", cell.ref)],
+                htmlEscape(cell.value))
         }
-        html += "</div></div>"
+        html += Tag.end("div")
+        html += Tag.end("div")
         return html
     }
 }
@@ -265,28 +324,29 @@ public struct WebUIJsonTree: View {
     public init(nodes: [Node]) { self.nodes = nodes }
 
     public func render() -> String {
-        var html = "<div class=\"json-tree\">"
+        var html = Tag.begin("div", Tag.classes(["json-tree"]))
         for node in nodes { html += renderNode(node) }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 
     private func renderNode(_ node: Node) -> String {
         let openClass = node.open ? " json-tree__node--open" : ""
-        var html = "<div class=\"json-tree__node\(openClass)\">"
-        html += "<div class=\"json-tree__row\">"
-        if !node.children.isEmpty { html += "<span class=\"json-tree__toggle\"></span>" }
-        html += "<span class=\"json-tree__key\">\(htmlEscape(node.key))</span><span class=\"json-tree__punct\">: </span>"
+        var html = Tag.begin("div", Tag.classes(["json-tree__node", openClass]))
+        html += Tag.begin("div", Tag.classes(["json-tree__row"]))
+        if !node.children.isEmpty { html += Tag.element("span", [Tag.classes(["json-tree__toggle"])], "") }
+        html += Tag.element("span", [Tag.classes(["json-tree__key"])], htmlEscape(node.key))
+        html += Tag.element("span", [Tag.classes(["json-tree__punct"])], ": ")
         if node.children.isEmpty {
-            html += "<span class=\"json-tree__\(node.type)\">\(htmlEscape(node.value))</span>"
+            html += Tag.element("span", [Tag.classes(["json-tree__\(node.type)"])], htmlEscape(node.value))
         }
-        html += "</div>"
+        html += Tag.end("div")
         if !node.children.isEmpty {
-            html += "<div class=\"json-tree__children\">"
+            html += Tag.begin("div", Tag.classes(["json-tree__children"]))
             for child in node.children { html += renderNode(child) }
-            html += "</div>"
+            html += Tag.end("div")
         }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 }
@@ -302,21 +362,25 @@ public struct WebUIDiff: View {
     public init(file: String, stats: String = "", lines: [Line]) { self.file = file; self.stats = stats; self.lines = lines }
 
     public func render() -> String {
-        var html = "<div class=\"diff\">"
-        html += "<div class=\"diff__header\"><span class=\"diff__file\">\(htmlEscape(file))</span>"
-        if !stats.isEmpty { html += "<span class=\"diff__stats\">\(htmlEscape(stats))</span>" }
-        html += "</div>"
+        var html = Tag.begin("div", Tag.classes(["diff"]))
+        html += Tag.begin("div", Tag.classes(["diff__header"]))
+        html += Tag.element("span", [Tag.classes(["diff__file"])], htmlEscape(file))
+        if !stats.isEmpty { html += Tag.element("span", [Tag.classes(["diff__stats"])], htmlEscape(stats)) }
+        html += Tag.end("div")
         for line in lines {
-            var cls = "diff__line"
+            var mods = ""
             switch line.kind {
-            case "add": cls += " diff__line--add"
-            case "del": cls += " diff__line--del"
-            case "hunk": cls += " diff__line--hunk"
-            default: cls += " diff__line--ctx"
+            case "add": mods = " diff__line--add"
+            case "del": mods = " diff__line--del"
+            case "hunk": mods = " diff__line--hunk"
+            default: mods = " diff__line--ctx"
             }
-            html += "<div class=\"\(cls)\"><span class=\"diff__lineno\">\(line.num)</span><span class=\"diff__content\">\(htmlEscape(line.text))</span></div>"
+            html += Tag.begin("div", Tag.classes(["diff__line", mods]))
+            html += Tag.element("span", [Tag.classes(["diff__lineno"])], "\(line.num)")
+            html += Tag.element("span", [Tag.classes(["diff__content"])], htmlEscape(line.text))
+            html += Tag.end("div")
         }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 }
@@ -331,21 +395,30 @@ public struct WebUITerminal: View {
     public init(title: String = "terminal", lines: [Line]) { self.title = title; self.lines = lines }
 
     public func render() -> String {
-        var html = "<div class=\"terminal\">"
-        html += "<div class=\"terminal__bar\"><span class=\"terminal__dot terminal__dot--r\"></span><span class=\"terminal__dot terminal__dot--y\"></span><span class=\"terminal__dot terminal__dot--g\"></span><span class=\"terminal__title\">\(htmlEscape(title))</span></div>"
-        html += "<div class=\"terminal__body\">"
+        var html = Tag.begin("div", Tag.classes(["terminal"]))
+        html += Tag.begin("div", Tag.classes(["terminal__bar"]))
+        html += Tag.element("span", [Tag.classes(["terminal__dot terminal__dot--r"])], "")
+        html += Tag.element("span", [Tag.classes(["terminal__dot terminal__dot--y"])], "")
+        html += Tag.element("span", [Tag.classes(["terminal__dot terminal__dot--g"])], "")
+        html += Tag.element("span", [Tag.classes(["terminal__title"])], htmlEscape(title))
+        html += Tag.end("div")
+        html += Tag.begin("div", Tag.classes(["terminal__body"]))
         for line in lines {
-            var cls = "terminal__line"
+            var mods = ""
             switch line.kind {
-            case "ok": cls += " terminal__line--ok"
-            case "warn": cls += " terminal__line--warn"
-            case "err": cls += " terminal__line--err"
+            case "ok": mods = " terminal__line--ok"
+            case "warn": mods = " terminal__line--warn"
+            case "err": mods = " terminal__line--err"
             default: break
             }
-            html += "<div class=\"\(cls)\">\(htmlEscape(line.text))</div>"
+            html += Tag.element("div", [Tag.classes(["terminal__line", mods])], htmlEscape(line.text))
         }
-        html += "<div class=\"terminal__line\"><span class=\"terminal__prompt\">$ </span><span class=\"terminal__cmd\"></span></div>"
-        html += "</div></div>"
+        html += Tag.begin("div", Tag.classes(["terminal__line"]))
+        html += Tag.element("span", [Tag.classes(["terminal__prompt"])], "$ ")
+        html += Tag.element("span", [Tag.classes(["terminal__cmd"])], "")
+        html += Tag.end("div")
+        html += Tag.end("div")
+        html += Tag.end("div")
         return html
     }
 }
@@ -358,10 +431,15 @@ public struct WebUICodeBlock: View {
     public init(_ code: String, language: String = "swift") { self.code = code; self.language = language }
 
     public func render() -> String {
-        var html = "<div class=\"codeblock\">"
-        html += "<div class=\"codeblock__bar\"><span class=\"codeblock__lang\">\(htmlEscape(language))</span><button class=\"code__copy\" aria-label=\"Copy\">copy</button></div>"
-        html += "<pre class=\"codeblock__code\"><code>\(htmlEscape(code))</code></pre>"
-        html += "</div>"
+        var html = Tag.begin("div", Tag.classes(["codeblock"]))
+        html += Tag.begin("div", Tag.classes(["codeblock__bar"]))
+        html += Tag.element("span", [Tag.classes(["codeblock__lang"])], htmlEscape(language))
+        html += Tag.element("button", [Tag.classes(["code__copy"]), Tag.attr("aria-label", "Copy")], "copy")
+        html += Tag.end("div")
+        html += Tag.begin("pre", Tag.classes(["codeblock__code"]))
+        html += Tag.element("code", [], htmlEscape(code))
+        html += Tag.end("pre")
+        html += Tag.end("div")
         return html
     }
 }
@@ -376,12 +454,18 @@ public struct WebUIBarChart: View {
 
     public func render() -> String {
         let maxV = series.map(\.value).max() ?? 1
-        var html = "<div class=\"bar-chart\">"
+        var html = Tag.begin("div", Tag.classes(["bar-chart"]))
         for s in series {
             let h = Int((s.value / maxV) * 100.0)
-            html += "<div class=\"bar-chart__col\"><div class=\"bar-chart__bar\(s.accent ? " bar-chart__bar--accent" : "")\" style=\"height:\(h)%\"></div><span class=\"bar-chart__label\">\(htmlEscape(s.label))</span></div>"
+            html += Tag.begin("div", Tag.classes(["bar-chart__col"]))
+            html += Tag.element("div",
+                [Tag.classes(["bar-chart__bar", s.accent ? " bar-chart__bar--accent" : ""]),
+                 Tag.attr("style", "height:\(h)%")],
+                "")
+            html += Tag.element("span", [Tag.classes(["bar-chart__label"])], htmlEscape(s.label))
+            html += Tag.end("div")
         }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 }
@@ -397,7 +481,7 @@ public struct WebUILineChart: View {
     public func render() -> String {
         let w = 320.0, h = 120.0, pad = 8.0
         guard points.count > 1 else {
-            return "<div class=\"line-chart\"><svg viewBox=\"0 0 \(Int(w)) \(Int(h))\"></svg></div>"
+            return Tag.element("div", [Tag.classes(["line-chart"])], Tag.element("svg", [Tag.attr("viewBox", "0 0 \(Int(w)) \(Int(h))")], ""))
         }
         let xs = points.map(\.x); let ys = points.map(\.y)
         let minX = xs.min() ?? 0, maxX = xs.max() ?? 1
@@ -408,10 +492,17 @@ public struct WebUILineChart: View {
              h - pad - ((p.y - minY) / rangeY) * (h - 2 * pad))
         }
         let lineStr = coords.map { "\(Int($0.0)),\(Int($0.1))" }.joined(separator: " ")
-        var html = "<div class=\"line-chart\"><svg viewBox=\"0 0 \(Int(w)) \(Int(h))\" role=\"img\" aria-hidden=\"true\">"
-        html += "<polyline class=\"line-chart__line\" points=\"\(lineStr)\"></polyline>"
-        for c in coords { html += "<circle class=\"line-chart__dot\" cx=\"\(Int(c.0))\" cy=\"\(Int(c.1))\" r=\"3\"></circle>" }
-        html += "</svg></div>"
+        var html = Tag.begin("div", Tag.classes(["line-chart"]))
+        html += Tag.begin("svg", Tag.attr("viewBox", "0 0 \(Int(w)) \(Int(h))"), Tag.attr("role", "img"), Tag.attr("aria-hidden", "true"))
+        html += Tag.element("polyline", [Tag.classes(["line-chart__line"]), Tag.attr("points", lineStr)], "")
+        for c in coords {
+            html += Tag.element("circle",
+                [Tag.classes(["line-chart__dot"]),
+                 Tag.attr("cx", "\(Int(c.0))"), Tag.attr("cy", "\(Int(c.1))"), Tag.attr("r", "3")],
+                "")
+        }
+        html += Tag.end("svg")
+        html += Tag.end("div")
         return html
     }
 }
@@ -439,10 +530,12 @@ public struct WebUIDonut: View {
             acc += s.value
         }
         let conic = "conic-gradient(\(segments.joined(separator: ", ")))"
-        var html = "<div class=\"donut\" style=\"background:\(conic)\">"
-        html += "<div class=\"donut__center\"><div class=\"donut__center-value\">\(htmlEscape(centerValue))</div>"
-        if !centerLabel.isEmpty { html += "<div class=\"donut__center-label\">\(htmlEscape(centerLabel))</div>" }
-        html += "</div></div>"
+        var html = Tag.begin("div", Tag.classes(["donut"]), Tag.attr("style", "background:\(conic)"))
+        html += Tag.begin("div", Tag.classes(["donut__center"]))
+        html += Tag.element("div", [Tag.classes(["donut__center-value"])], htmlEscape(centerValue))
+        if !centerLabel.isEmpty { html += Tag.element("div", [Tag.classes(["donut__center-label"])], htmlEscape(centerLabel)) }
+        html += Tag.end("div")
+        html += Tag.end("div")
         return html
     }
 }
@@ -456,14 +549,14 @@ public struct WebUIMasonry: View {
     public init(items: [Item]) { self.items = items }
 
     public func render() -> String {
-        var html = "<div class=\"masonry\">"
+        var html = Tag.begin("div", Tag.classes(["masonry"]))
         for item in items {
-            html += "<div class=\"masonry__item\(item.accent ? " masonry__item--accent" : "")\">"
-            html += "<div class=\"masonry__title\">\(htmlEscape(item.title))</div>"
-            if !item.meta.isEmpty { html += "<div class=\"masonry__meta\">\(htmlEscape(item.meta))</div>" }
-            html += "</div>"
+            html += Tag.begin("div", Tag.classes(["masonry__item", item.accent ? " masonry__item--accent" : ""]))
+            html += Tag.element("div", [Tag.classes(["masonry__title"])], htmlEscape(item.title))
+            if !item.meta.isEmpty { html += Tag.element("div", [Tag.classes(["masonry__meta"])], htmlEscape(item.meta)) }
+            html += Tag.end("div")
         }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 }
@@ -477,18 +570,25 @@ public struct WebUIMap: View {
     public init(pins: [Pin]) { self.pins = pins }
 
     public func render() -> String {
-        var html = "<div class=\"map\">"
-        html += "<div class=\"map__grid\"></div>"
-        for i in 0..<3 { html += "<div class=\"map__road map__road--h\" style=\"top:\(25 + i * 25)%\"></div>" }
-        for i in 0..<4 { html += "<div class=\"map__road map__road--v\" style=\"left:\(10 + i * 20)%\"></div>" }
+        var html = Tag.begin("div", Tag.classes(["map"]))
+        html += Tag.element("div", [Tag.classes(["map__grid"])], "")
+        for i in 0..<3 { html += Tag.element("div", [Tag.classes(["map__road map__road--h"]), Tag.attr("style", "top:\(25 + i * 25)%")], "") }
+        for i in 0..<4 { html += Tag.element("div", [Tag.classes(["map__road map__road--v"]), Tag.attr("style", "left:\(10 + i * 20)%")], "") }
         for pin in pins {
-            html += "<div class=\"map__pin\(pin.active ? " map__pin--active" : "")\" style=\"left:\(Int(pin.x))%;top:\(Int(pin.y))%\" aria-label=\"\(htmlEscape(pin.label))\">\(htmlEscape(String(pin.label.prefix(1))))</div>"
+            html += Tag.element("div",
+                [Tag.classes(["map__pin", pin.active ? " map__pin--active" : ""]),
+                 Tag.attr("style", "left:\(Int(pin.x))%;top:\(Int(pin.y))%"),
+                 Tag.escAttr("aria-label", pin.label)],
+                htmlEscape(String(pin.label.prefix(1))))
             if pin.active {
-                html += "<div class=\"map__popup\" style=\"left:\(Int(pin.x))%;top:\(Int(pin.y))%\"><span class=\"map__popup-arrow\"></span>\(htmlEscape(pin.label))</div>"
+                html += Tag.begin("div", Tag.classes(["map__popup"]), Tag.attr("style", "left:\(Int(pin.x))%;top:\(Int(pin.y))%"))
+                html += Tag.element("span", [Tag.classes(["map__popup-arrow"])], "")
+                html += htmlEscape(pin.label)
+                html += Tag.end("div")
             }
         }
-        html += "<div class=\"map__attribution\">map</div>"
-        html += "</div>"
+        html += Tag.element("div", [Tag.classes(["map__attribution"])], "map")
+        html += Tag.end("div")
         return html
     }
 }
@@ -503,16 +603,17 @@ public struct WebUIQr: View {
     public func render() -> String {
         var seed = 0
         for b in data.utf8 { seed = seed &* 31 &+ Int(b) }
-        var html = "<div class=\"qr\"><div class=\"qr__code\">"
+        var html = Tag.begin("div", Tag.classes(["qr"]))
+        html += Tag.begin("div", Tag.classes(["qr__code"]))
         let size = 11
         var state = seed
         for _ in 0..<(size * size) {
             state = (state &* 1103515245 &+ 12345) & 0x7fffffff
-            html += "<span class=\"qr__cell\(state % 2 == 0 ? " qr__cell--on" : "")\"></span>"
+            html += Tag.element("span", [Tag.classes(["qr__cell", state % 2 == 0 ? " qr__cell--on" : ""])], "")
         }
-        html += "</div>"
-        if let label { html += "<div class=\"qr__label\">\(htmlEscape(label))</div>" }
-        html += "</div>"
+        html += Tag.end("div")
+        if let label { html += Tag.element("div", [Tag.classes(["qr__label"])], htmlEscape(label)) }
+        html += Tag.end("div")
         return html
     }
 }
@@ -527,11 +628,17 @@ public struct WebUIPayCard: View {
     public init(number: String, holder: String, brand: Brand = .visa) { self.number = number; self.holder = holder; self.brand = brand }
 
     public func render() -> String {
-        var html = "<div class=\"paycard\">"
-        html += "<div class=\"paycard__top\"><span class=\"paycard__brand\">\(htmlEscape(brand.rawValue.uppercased()))</span><span class=\"paycard__chip\"></span></div>"
-        html += "<div class=\"paycard__number\">\(htmlEscape(number))</div>"
-        html += "<div class=\"paycard__row\"><div class=\"paycard__label\">Card holder</div><div class=\"paycard__value\">\(htmlEscape(holder))</div></div>"
-        html += "</div>"
+        var html = Tag.begin("div", Tag.classes(["paycard"]))
+        html += Tag.begin("div", Tag.classes(["paycard__top"]))
+        html += Tag.element("span", [Tag.classes(["paycard__brand"])], htmlEscape(brand.rawValue.uppercased()))
+        html += Tag.element("span", [Tag.classes(["paycard__chip"])], "")
+        html += Tag.end("div")
+        html += Tag.element("div", [Tag.classes(["paycard__number"])], htmlEscape(number))
+        html += Tag.begin("div", Tag.classes(["paycard__row"]))
+        html += Tag.element("div", [Tag.classes(["paycard__label"])], "Card holder")
+        html += Tag.element("div", [Tag.classes(["paycard__value"])], htmlEscape(holder))
+        html += Tag.end("div")
+        html += Tag.end("div")
         return html
     }
 }

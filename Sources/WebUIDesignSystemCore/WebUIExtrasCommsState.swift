@@ -19,16 +19,18 @@ public struct WebUIMention: View {
 
     public func render() -> String {
         if options.isEmpty {
-            return "<span class=\"mention\">@\(htmlEscape(text))</span>"
+            return Tag.element("span", [Tag.classes(["mention"])], "@" + htmlEscape(text))
         }
         let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onSelect) } ?? ""
-        var html = "<div class=\"mention-dropdown\"\(attrs)>"
+        var html = Tag.begin("div", Tag.classes(["mention-dropdown"]), attrs)
         for (i, option) in options.enumerated() {
-            html += "<div class=\"mention-option\(option.active ? " mention-option--active" : "")\""
-            if let id { html += " id=\"\(htmlEscape(id))-option-\(i)\"" }
-            html += "><span class=\"mention-option__avatar\"></span><span class=\"mention-option__name\">\(htmlEscape(option.name))</span><span class=\"mention-option__handle\">\(htmlEscape(option.handle))</span></div>"
+            html += Tag.begin("div", Tag.classes(["mention-option", option.active ? " mention-option--active" : ""]), id.map { Tag.escAttr("id", "\($0)-option-\(i)") } ?? "")
+            html += Tag.element("span", [Tag.classes(["mention-option__avatar"])], "")
+            html += Tag.element("span", [Tag.classes(["mention-option__name"])], htmlEscape(option.name))
+            html += Tag.element("span", [Tag.classes(["mention-option__handle"])], htmlEscape(option.handle))
+            html += Tag.end("div")
         }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 }
@@ -47,14 +49,15 @@ public struct WebUIReactions: View {
 
     public func render() -> String {
         let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onChange) } ?? ""
-        var html = "<div class=\"reactions\"\(attrs)>"
+        var html = Tag.begin("div", Tag.classes(["reactions"]), attrs)
         for (i, r) in reactions.enumerated() {
-            html += "<button class=\"reactions__emoji\(r.active ? " reactions__emoji--active" : "")\""
-            if let id { html += " id=\"\(htmlEscape(id))-r-\(i)\"" }
-            html += "><span aria-hidden=\"true\">\(htmlEscape(r.emoji))</span><span class=\"reactions__count\">\(r.count)</span></button>"
+            html += Tag.begin("button", Tag.classes(["reactions__emoji", r.active ? " reactions__emoji--active" : ""]), id.map { Tag.escAttr("id", "\($0)-r-\(i)") } ?? "")
+            html += Tag.element("span", [Tag.attr("aria-hidden", "true")], htmlEscape(r.emoji))
+            html += Tag.element("span", [Tag.classes(["reactions__count"])], "\(r.count)")
+            html += Tag.end("button")
         }
-        html += "<button class=\"reactions__more\" aria-label=\"Add reaction\">＋</button>"
-        html += "</div>"
+        html += Tag.element("button", [Tag.classes(["reactions__more"]), Tag.attr("aria-label", "Add reaction")], "＋")
+        html += Tag.end("div")
         return html
     }
 }
@@ -66,9 +69,11 @@ public struct WebUITypingIndicator: View {
     public init(inline: Bool = false) { self.inline = inline }
 
     public func render() -> String {
-        var html = "<div class=\"typing\(inline ? " typing--inline" : "")\" role=\"status\" aria-label=\"Someone is typing\">"
-        html += "<span class=\"typing__dot\"></span><span class=\"typing__dot\"></span><span class=\"typing__dot\"></span>"
-        html += "</div>"
+        var html = Tag.begin("div", Tag.classes(["typing", inline ? " typing--inline" : ""]), Tag.attr("role", "status"), Tag.attr("aria-label", "Someone is typing"))
+        html += Tag.element("span", [Tag.classes(["typing__dot"])], "")
+        html += Tag.element("span", [Tag.classes(["typing__dot"])], "")
+        html += Tag.element("span", [Tag.classes(["typing__dot"])], "")
+        html += Tag.end("div")
         return html
     }
 }
@@ -90,14 +95,18 @@ public struct WebUINotification: View {
 
     public func render() -> String {
         let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onTap) } ?? ""
-        var html = "<div class=\"notification\(read ? " notification--read" : "")\"\(attrs)>"
-        if let icon { html += "<span class=\"notification__icon\">\(WebUIIcon(icon, size: .medium).render())</span>" }
-        else { html += "<span class=\"notification__icon\"><span class=\"notification__unread\"></span></span>" }
-        html += "<div class=\"notification__body\">"
-        if let title { html += "<div class=\"notification__title\">\(htmlEscape(title))</div>" }
-        html += "<div class=\"notification__text\">\(htmlEscape(text))</div>"
-        if !time.isEmpty { html += "<div class=\"notification__time\">\(htmlEscape(time))</div>" }
-        html += "</div></div>"
+        var html = Tag.begin("div", Tag.classes(["notification", read ? " notification--read" : ""]), attrs)
+        if let icon {
+            html += Tag.element("span", [Tag.classes(["notification__icon"])], WebUIIcon(icon, size: .medium).render())
+        } else {
+            html += Tag.element("span", [Tag.classes(["notification__icon"])], Tag.element("span", [Tag.classes(["notification__unread"])], ""))
+        }
+        html += Tag.begin("div", Tag.classes(["notification__body"]))
+        if let title { html += Tag.element("div", [Tag.classes(["notification__title"])], htmlEscape(title)) }
+        html += Tag.element("div", [Tag.classes(["notification__text"])], htmlEscape(text))
+        if !time.isEmpty { html += Tag.element("div", [Tag.classes(["notification__time"])], htmlEscape(time)) }
+        html += Tag.end("div")
+        html += Tag.end("div")
         return html
     }
 }
@@ -109,9 +118,9 @@ public struct WebUIToastStack: View {
     public init(@ViewBuilder content: () -> [any View]) { self.children = content() }
 
     public func render() -> String {
-        var html = "<div class=\"toast-stack\" aria-live=\"polite\">"
+        var html = Tag.begin("div", Tag.classes(["toast-stack"]), Tag.attr("aria-live", "polite"))
         for c in children { html += c.render() }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 }
@@ -129,10 +138,10 @@ public struct WebUIBell: View {
 
     public func render() -> String {
         let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onTap) } ?? ""
-        var html = "<button class=\"bell\"\(attrs) aria-label=\"Notifications\(count > 0 ? ", \(count) unread" : "")\">"
-        html += "<span class=\"bell__icon\">\(WebUIIcon(icon, size: .medium).render())</span>"
-        if count > 0 { html += "<span class=\"bell__badge\">\(count)</span>" }
-        html += "</button>"
+        var html = Tag.begin("button", Tag.classes(["bell"]), attrs, Tag.attr("aria-label", "Notifications\(count > 0 ? ", \(count) unread" : "")"))
+        html += Tag.element("span", [Tag.classes(["bell__icon"])], WebUIIcon(icon, size: .medium).render())
+        if count > 0 { html += Tag.element("span", [Tag.classes(["bell__badge"])], "\(count)") }
+        html += Tag.end("button")
         return html
     }
 }
@@ -154,14 +163,14 @@ public struct WebUIStatCard: View {
     }
 
     public func render() -> String {
-        var html = "<div class=\"stat-card\(accent ? " stat-card--accent" : "")\">"
-        html += "<div class=\"stat-card__label\">\(htmlEscape(label))</div>"
-        html += "<div class=\"stat-card__value\">\(htmlEscape(value))</div>"
+        var html = Tag.begin("div", Tag.classes(["stat-card", accent ? " stat-card--accent" : ""]))
+        html += Tag.element("div", [Tag.classes(["stat-card__label"])], htmlEscape(label))
+        html += Tag.element("div", [Tag.classes(["stat-card__value"])], htmlEscape(value))
         if let delta = delta {
             let up = (trend ?? "") != "down"
-            html += "<div class=\"stat-card__delta delta \(up ? "delta--up" : "delta--down")\">\(htmlEscape(delta))</div>"
+            html += Tag.element("div", [Tag.classes(["stat-card__delta delta", up ? "delta--up" : "delta--down"])], htmlEscape(delta))
         }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 }
@@ -175,7 +184,7 @@ public struct WebUIDelta: View {
     public init(_ text: String, direction: Direction = .up) { self.text = text; self.direction = direction }
 
     public func render() -> String {
-        return "<span class=\"delta\(direction.rawValue)\">\(direction == .up ? "▲" : "▼") \(htmlEscape(text))</span>"
+        return Tag.element("span", [Tag.classes(["delta", direction.rawValue])], (direction == .up ? "▲" : "▼") + " " + htmlEscape(text))
     }
 }
 
@@ -188,11 +197,11 @@ public struct WebUICelebrate: View {
     public init(emoji: String, title: String, text: String? = nil) { self.emoji = emoji; self.title = title; self.text = text }
 
     public func render() -> String {
-        var html = "<div class=\"celebrate\">"
-        html += "<div class=\"celebrate__emoji\">\(htmlEscape(emoji))</div>"
-        html += "<div class=\"celebrate__title\">\(htmlEscape(title))</div>"
-        if let text { html += "<div class=\"celebrate__text\">\(htmlEscape(text))</div>" }
-        html += "</div>"
+        var html = Tag.begin("div", Tag.classes(["celebrate"]))
+        html += Tag.element("div", [Tag.classes(["celebrate__emoji"])], htmlEscape(emoji))
+        html += Tag.element("div", [Tag.classes(["celebrate__title"])], htmlEscape(title))
+        if let text { html += Tag.element("div", [Tag.classes(["celebrate__text"])], htmlEscape(text)) }
+        html += Tag.end("div")
         return html
     }
 }
@@ -204,9 +213,11 @@ public struct WebUIConfetti: View {
     public init(round: Bool = true) { self.round = round }
 
     public func render() -> String {
-        var html = "<div class=\"confetti-stage\"><div class=\"confetti\(round ? " confetti--round" : "")\" aria-hidden=\"true\">"
-        for _ in 0..<24 { html += "<span class=\"confetti__piece\"></span>" }
-        html += "</div></div>"
+        var html = Tag.begin("div", Tag.classes(["confetti-stage"]))
+        html += Tag.begin("div", Tag.classes(["confetti", round ? " confetti--round" : ""]), Tag.attr("aria-hidden", "true"))
+        for _ in 0..<24 { html += Tag.element("span", [Tag.classes(["confetti__piece"])], "") }
+        html += Tag.end("div")
+        html += Tag.end("div")
         return html
     }
 }
@@ -222,13 +233,17 @@ public struct WebUICountdown: View {
     public init(label: String = "", units: [Unit], urgent: Bool = false) { self.label = label; self.units = units; self.urgent = urgent }
 
     public func render() -> String {
-        var html = "<div class=\"countdown\(urgent ? " countdown--urgent" : "")\">"
-        if !label.isEmpty { html += "<div class=\"countdown__label\">\(htmlEscape(label))</div>" }
-        html += "<div class=\"countdown__units\">"
+        var html = Tag.begin("div", Tag.classes(["countdown", urgent ? " countdown--urgent" : ""]))
+        if !label.isEmpty { html += Tag.element("div", [Tag.classes(["countdown__label"])], htmlEscape(label)) }
+        html += Tag.begin("div", Tag.classes(["countdown__units"]))
         for u in units {
-            html += "<div class=\"countdown__unit\"><span class=\"countdown__value\">\(webuiZeroPad(u.value, width: 2))</span><span class=\"countdown__unit-label\">\(htmlEscape(u.label))</span></div>"
+            html += Tag.begin("div", Tag.classes(["countdown__unit"]))
+            html += Tag.element("span", [Tag.classes(["countdown__value"])], webuiZeroPad(u.value, width: 2))
+            html += Tag.element("span", [Tag.classes(["countdown__unit-label"])], htmlEscape(u.label))
+            html += Tag.end("div")
         }
-        html += "</div></div>"
+        html += Tag.end("div")
+        html += Tag.end("div")
         return html
     }
 }
@@ -248,13 +263,15 @@ public struct WebUICookieConsent: View {
 
     public func render() -> String {
         let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onSelect) } ?? ""
-        var html = "<div class=\"cookie-consent\"\(attrs) role=\"dialog\" aria-modal=\"false\">"
-        html += "<div class=\"cookie-consent__body\">"
-        if let title { html += "<div class=\"cookie-consent__title\">\(htmlEscape(title))</div>" }
-        html += "<div class=\"cookie-consent__text\">\(htmlEscape(text))</div>"
-        html += "<div class=\"cookie-consent__actions\">"
+        var html = Tag.begin("div", Tag.classes(["cookie-consent"]), attrs, Tag.attr("role", "dialog"), Tag.attr("aria-modal", "false"))
+        html += Tag.begin("div", Tag.classes(["cookie-consent__body"]))
+        if let title { html += Tag.element("div", [Tag.classes(["cookie-consent__title"])], htmlEscape(title)) }
+        html += Tag.element("div", [Tag.classes(["cookie-consent__text"])], htmlEscape(text))
+        html += Tag.begin("div", Tag.classes(["cookie-consent__actions"]))
         for c in children { html += c.render() }
-        html += "</div></div></div>"
+        html += Tag.end("div")
+        html += Tag.end("div")
+        html += Tag.end("div")
         return html
     }
 }
@@ -273,10 +290,12 @@ public struct WebUIPullRefresh: View {
 
     public func render() -> String {
         let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onRefresh) } ?? ""
-        var html = "<div class=\"pull-refresh\(state.rawValue)\"\(attrs) role=\"status\">"
-        html += "<div class=\"pull-refresh__indicator\"><span class=\"pull-refresh__spinner\"></span>"
-        if let text { html += "<span class=\"pull-refresh__text\">\(htmlEscape(text))</span>" }
-        html += "</div></div>"
+        var html = Tag.begin("div", Tag.classes(["pull-refresh", state.rawValue]), attrs, Tag.attr("role", "status"))
+        html += Tag.begin("div", Tag.classes(["pull-refresh__indicator"]))
+        html += Tag.element("span", [Tag.classes(["pull-refresh__spinner"])], "")
+        if let text { html += Tag.element("span", [Tag.classes(["pull-refresh__text"])], htmlEscape(text)) }
+        html += Tag.end("div")
+        html += Tag.end("div")
         return html
     }
 }
@@ -288,11 +307,11 @@ public struct WebUISkeletonCard: View {
     public init(withMedia: Bool = true) { self.withMedia = withMedia }
 
     public func render() -> String {
-        var html = "<div class=\"skeleton-card\">"
-        if withMedia { html += "<div class=\"skeleton-card__media skeleton skeleton--rect\"></div>" }
-        html += "<div class=\"skeleton__text skeleton__text--w100 skeleton\"></div>"
-        html += "<div class=\"skeleton__text skeleton__text--w60 skeleton\"></div>"
-        html += "</div>"
+        var html = Tag.begin("div", Tag.classes(["skeleton-card"]))
+        if withMedia { html += Tag.element("div", [Tag.classes(["skeleton-card__media skeleton skeleton--rect"])], "") }
+        html += Tag.element("div", [Tag.classes(["skeleton__text skeleton__text--w100 skeleton"])], "")
+        html += Tag.element("div", [Tag.classes(["skeleton__text skeleton__text--w60 skeleton"])], "")
+        html += Tag.end("div")
         return html
     }
 }
@@ -305,7 +324,10 @@ public struct WebUIAppletCard: View {
     public init(title: String, value: String) { self.title = title; self.value = value }
 
     public func render() -> String {
-        let html = "<div class=\"applet-card\"><div class=\"applet-card__label\">\(htmlEscape(title))</div><div class=\"applet-card__value\">\(htmlEscape(value))</div></div>"
+        var html = Tag.begin("div", Tag.classes(["applet-card"]))
+        html += Tag.element("div", [Tag.classes(["applet-card__label"])], htmlEscape(title))
+        html += Tag.element("div", [Tag.classes(["applet-card__value"])], htmlEscape(value))
+        html += Tag.end("div")
         return html
     }
 }
@@ -318,12 +340,12 @@ public struct WebUIAvatarStack: View {
     public init(initials: [String], more: Int = 0) { self.initials = initials; self.more = more }
 
     public func render() -> String {
-        var html = "<div class=\"avatar-stack\">"
+        var html = Tag.begin("div", Tag.classes(["avatar-stack"]))
         for initi in initials {
-            html += "<span class=\"avatar avatar--md avatar--initials\">\(htmlEscape(initi))</span>"
+            html += Tag.element("span", [Tag.classes(["avatar avatar--md avatar--initials"])], htmlEscape(initi))
         }
-        if more > 0 { html += "<span class=\"avatar avatar--md avatar--more\">+\(more)</span>" }
-        html += "</div>"
+        if more > 0 { html += Tag.element("span", [Tag.classes(["avatar avatar--md avatar--more"])], "+\(more)") }
+        html += Tag.end("div")
         return html
     }
 }
@@ -338,7 +360,12 @@ public struct WebUIBadgeStatus: View {
     public init(_ label: String, status: Status = .online) { self.label = label; self.status = status }
 
     public func render() -> String {
-        return "<span class=\"badge-status\"><span class=\"badge-status__dot \(status.rawValue)\"></span>\(htmlEscape(label))</span>"
+        return Tag.begin("span", Tag.classes(["badge-status"]))
+            // the status rawValue's own leading space plus the template's
+            // literal space make a DOUBLE space — byte-pinned by the base capture
+            + Tag.element("span", [Tag.classes(["badge-status__dot", " " + status.rawValue])], "")
+            + htmlEscape(label)
+            + Tag.end("span")
     }
 }
 
@@ -350,10 +377,10 @@ public struct WebUIBadgeCount: View {
     public init(count: Int, icon: IconName) { self.count = count; self.icon = icon }
 
     public func render() -> String {
-        var html = "<span class=\"badge-count\">"
-        html += "<span class=\"badge-count__icon\">\(WebUIIcon(icon, size: .medium).render())</span>"
-        html += "<span class=\"badge-count__num\">\(count)</span>"
-        html += "</span>"
+        var html = Tag.begin("span", Tag.classes(["badge-count"]))
+        html += Tag.element("span", [Tag.classes(["badge-count__icon"])], WebUIIcon(icon, size: .medium).render())
+        html += Tag.element("span", [Tag.classes(["badge-count__num"])], "\(count)")
+        html += Tag.end("span")
         return html
     }
 }
@@ -369,15 +396,21 @@ public struct WebUIRadioGroup: View {
     public init(options: [Option], selected: String? = nil, inline: Bool = false) { self.options = options; self.selected = selected; self.inline = inline }
 
     public func render() -> String {
-        var html = "<div class=\"radio-group\(inline ? " radio-group--inline" : "")\" role=\"radiogroup\">"
+        var html = Tag.begin("div", Tag.classes(["radio-group", inline ? " radio-group--inline" : ""]), Tag.attr("role", "radiogroup"))
         for option in options {
             let checked = option.value == selected
-            html += "<label class=\"radio\">"
-            html += "<input type=\"radio\" name=\"radio-group\" value=\"\(htmlEscape(option.value))\"\(checked ? " checked" : "") class=\"radio__input\">"
-            html += "<span class=\"radio__circle\"></span><span class=\"radio__label\">\(htmlEscape(option.label))</span>"
-            html += "</label>"
+            html += Tag.begin("label", Tag.classes(["radio"]))
+            html += Tag.void("input",
+                Tag.attr("type", "radio"),
+                Tag.attr("name", "radio-group"),
+                Tag.escAttr("value", option.value),
+                checked ? Tag.flag("checked") : "",
+                Tag.classes(["radio__input"]))
+            html += Tag.element("span", [Tag.classes(["radio__circle"])], "")
+            html += Tag.element("span", [Tag.classes(["radio__label"])], htmlEscape(option.label))
+            html += Tag.end("label")
         }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 }
@@ -392,14 +425,18 @@ public struct WebUICheckboxGroup: View {
     public init(options: [Option], inline: Bool = false) { self.options = options; self.inline = inline }
 
     public func render() -> String {
-        var html = "<div class=\"checkbox-group\(inline ? " checkbox-group--inline" : "")\">"
+        var html = Tag.begin("div", Tag.classes(["checkbox-group", inline ? " checkbox-group--inline" : ""]))
         for option in options {
-            html += "<label class=\"checkbox\">"
-            html += "<input type=\"checkbox\" class=\"checkbox__input\"\(option.checked ? " checked" : "")>"
-            html += "<span class=\"checkbox__box\"></span><span class=\"checkbox__label\">\(htmlEscape(option.label))</span>"
-            html += "</label>"
+            html += Tag.begin("label", Tag.classes(["checkbox"]))
+            html += Tag.void("input",
+                Tag.attr("type", "checkbox"),
+                Tag.classes(["checkbox__input"]),
+                option.checked ? Tag.flag("checked") : "")
+            html += Tag.element("span", [Tag.classes(["checkbox__box"])], "")
+            html += Tag.element("span", [Tag.classes(["checkbox__label"])], htmlEscape(option.label))
+            html += Tag.end("label")
         }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 }
@@ -456,22 +493,22 @@ public struct WebUIBanner: View, Dismissible {
 
     public func render() -> String {
         let dismissal = makeDismissal(ariaLabel: "Dismiss")
-        var html = "<div class=\"banner \(variant.rawValue)\" role=\"status\""
+        var attrs = Tag.classes(["banner", variant.rawValue]) + Tag.attr("role", "status")
         if let elementID = dismissal.elementID ?? id {
-            html += " id=\"\(htmlEscape(elementID))\""
+            attrs += Tag.escAttr("id", elementID)
         }
-        html += ">"
-        html += "<div class=\"banner__icon fill-slot\">" + WebUIIcon(icon, size: .slot).render() + "</div>"
-        html += "<div class=\"banner__body\">"
+        var html = Tag.begin("div", attrs)
+        html += Tag.element("div", [Tag.classes(["banner__icon fill-slot"])], WebUIIcon(icon, size: .slot).render())
+        html += Tag.begin("div", Tag.classes(["banner__body"]))
         if let title {
-            html += "<span class=\"banner__title\">\(htmlEscape(title))</span>"
+            html += Tag.element("span", [Tag.classes(["banner__title"])], htmlEscape(title))
         }
-        html += "<div class=\"banner__text\">\(htmlEscape(message))</div>"
-        html += "</div>"
+        html += Tag.element("div", [Tag.classes(["banner__text"])], htmlEscape(message))
+        html += Tag.end("div")
         if dismissible || onDismiss != nil {
             html += dismissal.buttonHTML
         }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 }
@@ -508,20 +545,20 @@ public struct WebUIActivityFeed: View {
     }
 
     public func render() -> String {
-        var html = "<div class=\"activity\">"
+        var html = Tag.begin("div", Tag.classes(["activity"]))
         for group in groups {
-            html += "<div class=\"activity__group\">\(htmlEscape(group.title))</div>"
+            html += Tag.element("div", [Tag.classes(["activity__group"])], htmlEscape(group.title))
             for item in group.items {
-                html += "<div class=\"activity__item\">"
-                html += "<div class=\"activity__icon fill-slot\">" + WebUIIcon(item.icon, size: .slot).render() + "</div>"
-                html += "<div class=\"activity__text\">\(htmlEscape(item.text))</div>"
+                html += Tag.begin("div", Tag.classes(["activity__item"]))
+                html += Tag.element("div", [Tag.classes(["activity__icon fill-slot"])], WebUIIcon(item.icon, size: .slot).render())
+                html += Tag.element("div", [Tag.classes(["activity__text"])], htmlEscape(item.text))
                 if let time = item.time {
-                    html += "<span class=\"activity__time\">\(htmlEscape(time))</span>"
+                    html += Tag.element("span", [Tag.classes(["activity__time"])], htmlEscape(time))
                 }
-                html += "</div>"
+                html += Tag.end("div")
             }
         }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 }
@@ -558,17 +595,19 @@ public struct WebUIMessageScroller: View {
     }
 
     public func render() -> String {
-        var html = "<div class=\"scroll-area scroll-area--reverse"
-        if fade { html += " scroll-area--fade-y" }
-        html += "\""
-        if let id { html += " id=\"\(htmlEscape(id))\"" }
         let size = htmlEscape(height)
-        html += " style=\"height: \(size); max-height: \(size)\""
-        html += " role=\"log\" aria-live=\"polite\" aria-label=\"\(htmlEscape(ariaLabel))\" tabindex=\"0\">"
+        var html = Tag.begin("div",
+            Tag.classes(["scroll-area scroll-area--reverse", fade ? " scroll-area--fade-y" : ""]),
+            id.map { Tag.escAttr("id", $0) } ?? "",
+            Tag.attr("style", "height: \(size); max-height: \(size)"),
+            Tag.attr("role", "log"),
+            Tag.attr("aria-live", "polite"),
+            Tag.escAttr("aria-label", ariaLabel),
+            Tag.attr("tabindex", "0"))
         for child in children.reversed() {
             html += child.render()
         }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 }
@@ -591,14 +630,14 @@ public struct WebUIMarker: View {
     }
 
     public func render() -> String {
-        var html = "<div class=\"marker\(sticky ? " marker--sticky" : "")\" role=\"separator\">"
-        if spread { html += "<span class=\"marker__rule\"></span>" }
+        var html = Tag.begin("div", Tag.classes(["marker", sticky ? " marker--sticky" : ""]), Tag.attr("role", "separator"))
+        if spread { html += Tag.element("span", [Tag.classes(["marker__rule"])], "") }
         if let icon {
-            html += "<span class=\"marker__glyph\">" + WebUIIcon(icon, size: .slot).render() + "</span>"
+            html += Tag.element("span", [Tag.classes(["marker__glyph"])], WebUIIcon(icon, size: .slot).render())
         }
-        html += "<span class=\"marker__label\">\(htmlEscape(label))</span>"
-        if spread { html += "<span class=\"marker__rule\"></span>" }
-        html += "</div>"
+        html += Tag.element("span", [Tag.classes(["marker__label"])], htmlEscape(label))
+        if spread { html += Tag.element("span", [Tag.classes(["marker__rule"])], "") }
+        html += Tag.end("div")
         return html
     }
 }
@@ -646,24 +685,22 @@ public struct WebUIAttachment: View, Dismissible {
 
     public func render() -> String {
         let dismissal = makeDismissal(ariaLabel: "Remove attachment")
-        var html = "<div class=\"attachment"
-        if !state.rawValue.isEmpty { html += " \(state.rawValue)" }
-        html += "\""
+        var attrs = Tag.classes(["attachment", state.rawValue])
         if let elementID = dismissal.elementID ?? id {
-            html += " id=\"\(htmlEscape(elementID))\""
+            attrs += Tag.escAttr("id", elementID)
         }
-        html += ">"
-        html += "<span class=\"attachment__icon\">" + WebUIIcon(icon, size: .small).render() + "</span>"
-        html += "<span class=\"attachment__body\">"
-        html += "<span class=\"attachment__name\">\(htmlEscape(name))</span>"
+        var html = Tag.begin("div", attrs)
+        html += Tag.element("span", [Tag.classes(["attachment__icon"])], WebUIIcon(icon, size: .small).render())
+        html += Tag.begin("span", Tag.classes(["attachment__body"]))
+        html += Tag.element("span", [Tag.classes(["attachment__name"])], htmlEscape(name))
         if let meta {
-            html += "<span class=\"attachment__meta\">\(htmlEscape(meta))</span>"
+            html += Tag.element("span", [Tag.classes(["attachment__meta"])], htmlEscape(meta))
         }
-        html += "</span>"
+        html += Tag.end("span")
         if removable || onDismiss != nil {
             html += dismissal.buttonHTML
         }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 }
@@ -741,32 +778,31 @@ public struct WebUIChatBubble: View {
             label = "Read"
             extraClass = " chat__receipt--read"
         }
-        return "<span class=\"chat__receipt\(extraClass)\" role=\"img\" aria-label=\"\(label)\">"
-            + WebUIIcon(icon, size: .small).render() + "</span>"
+        return Tag.begin("span", Tag.classes(["chat__receipt", extraClass]), Tag.attr("role", "img"), Tag.escAttr("aria-label", label))
+            + WebUIIcon(icon, size: .small).render() + Tag.end("span")
     }
 
     public func render() -> String {
-        var html = "<div class=\"chat__bubble \(side.rawValue)\""
-        if let id { html += " id=\"\(htmlEscape(id))\"" }
-        html += ">"
+        var html = Tag.begin("div", Tag.classes(["chat__bubble", side.rawValue]), id.map { Tag.escAttr("id", $0) } ?? "")
         html += htmlEscape(text).replacingOccurrences(of: "\n", with: "<br>")
         if let time {
-            html += "<span class=\"chat__time\">\(htmlEscape(time))"
+            html += Tag.begin("span", Tag.classes(["chat__time"]))
+            html += htmlEscape(time)
             if let receipt, side == .sent {
                 html += receiptHTML(for: receipt)
             }
-            html += "</span>"
+            html += Tag.end("span")
         }
-        html += "</div>"
+        html += Tag.end("div")
         if !reactions.isEmpty {
-            var row = "<div class=\"chat__reactions\">"
+            var row = Tag.begin("div", Tag.classes(["chat__reactions"]))
             for reaction in reactions {
-                row += "<span class=\"chat__reaction\(reaction.active ? " chat__reaction--active" : "")\">"
-                row += "<span aria-hidden=\"true\">\(htmlEscape(reaction.label))</span>"
-                row += "<span>\(reaction.count)</span>"
-                row += "</span>"
+                row += Tag.begin("span", Tag.classes(["chat__reaction", reaction.active ? " chat__reaction--active" : ""]))
+                row += Tag.element("span", [Tag.attr("aria-hidden", "true")], htmlEscape(reaction.label))
+                row += Tag.element("span", [], "\(reaction.count)")
+                row += Tag.end("span")
             }
-            row += "</div>"
+            row += Tag.end("div")
             html += row
         }
         return html
@@ -800,25 +836,26 @@ public struct WebUIMessage: View {
     }
 
     public func render() -> String {
-        var html = "<div class=\"chat__thread\(own ? " chat__thread--own" : "")\">"
-        html += "<div class=\"chat__meta\"><span>\(htmlEscape(name))</span>"
-        if let time { html += "<span>\(htmlEscape(time))</span>" }
-        html += "</div>"
-        html += "<div class=\"chat__bubble\(own ? " chat__bubble--own" : "")\">"
+        var html = Tag.begin("div", Tag.classes(["chat__thread", own ? " chat__thread--own" : ""]))
+        html += Tag.begin("div", Tag.classes(["chat__meta"]))
+        html += Tag.element("span", [], htmlEscape(name))
+        if let time { html += Tag.element("span", [], htmlEscape(time)) }
+        html += Tag.end("div")
+        html += Tag.begin("div", Tag.classes(["chat__bubble", own ? " chat__bubble--own" : ""]))
         html += htmlEscape(text).replacingOccurrences(of: "\n", with: "<br>")
-        html += "</div>"
+        html += Tag.end("div")
         if !reactions.isEmpty {
-            var row = "<div class=\"chat__reactions\">"
+            var row = Tag.begin("div", Tag.classes(["chat__reactions"]))
             for reaction in reactions {
-                row += "<span class=\"chat__reaction\(reaction.active ? " chat__reaction--active" : "")\">"
-                row += "<span aria-hidden=\"true\">\(htmlEscape(reaction.label))</span>"
-                row += "<span>\(reaction.count)</span>"
-                row += "</span>"
+                row += Tag.begin("span", Tag.classes(["chat__reaction", reaction.active ? " chat__reaction--active" : ""]))
+                row += Tag.element("span", [Tag.attr("aria-hidden", "true")], htmlEscape(reaction.label))
+                row += Tag.element("span", [], "\(reaction.count)")
+                row += Tag.end("span")
             }
-            row += "</div>"
+            row += Tag.end("div")
             html += row
         }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 }

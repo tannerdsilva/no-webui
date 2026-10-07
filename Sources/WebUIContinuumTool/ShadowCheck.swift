@@ -166,12 +166,13 @@ extension WebUIContinuumTool.Run {
 				if depth == 0, let m = componentHeader(in: trimmed) {
 					pending = m
 				}
-				// class tokens on this line — all three extractions.
+				// class tokens on this line — all four extractions.
 				var tokens: [String] = []
 				tokens += classLiterals(in: line)
 				tokens += escapedClassLiterals(in: line)
 				tokens += cssRuleSelectors(in: line)
 				tokens += hotClassTokens(in: line)
+				tokens += tagEmissionTokens(in: line)
 				let owner = current ?? pending
 				if let owner {
 					for t in tokens where !claims[owner, default: []].contains(t) {
@@ -216,6 +217,23 @@ extension WebUIContinuumTool.Run {
 		guard let m = line.firstMatch(of: /@HotClass\s*\((.*?)\)/) else { return [] }
 		let stringLit = /"((?:[^"\\]|\\.)*)"/
 		return m.1.matches(of: stringLit).map { String($0.1) }
+	}
+
+	/// class tokens from the centralized `Tag` emission (feature G4): DS
+	/// components now name classes as `Tag.classes(["toast", " toast--info"])`
+	/// string literals instead of `class="…"` attribute spells. same
+	/// ownership claim, new leg — the escaped-literal leg above is what the
+	/// previous form fed, and the helper form is what lane R's rewrite left.
+	static func tagEmissionTokens(in line: String) -> [String] {
+		let call = /Tag\.classes\s*\(\s*\[(.*?)\]/
+		let stringLit = /"((?:[^"\\]|\\.)*)"/
+		var out: [String] = []
+		for m in line.matches(of: call) {
+			for s in m.1.matches(of: stringLit) {
+				out += String(s.1).split(separator: " ").map(String.init)
+			}
+		}
+		return out
 	}
 
 	// MARK: - the contract's built-in reference (9 shadowed classes)
