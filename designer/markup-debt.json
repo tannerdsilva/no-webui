@@ -48,7 +48,7 @@
     "Sources\/WebUIBench\/main.swift" : {
       "classLiterals" : 12,
       "inlineStyles" : 1,
-      "literalColors" : 2,
+      "literalColors" : 1,
       "rawTags" : 32,
       "varRefs" : 10
     },
@@ -85,13 +85,6 @@
       "inlineStyles" : 0,
       "literalColors" : 0,
       "rawTags" : 6,
-      "varRefs" : 0
-    },
-    "Sources\/WebUIContinuumTool\/ShadowCheck.swift" : {
-      "classLiterals" : 1,
-      "inlineStyles" : 0,
-      "literalColors" : 0,
-      "rawTags" : 0,
       "varRefs" : 0
     },
     "Sources\/WebUICore\/CSSRule.swift" : {
@@ -143,6 +136,13 @@
       "rawTags" : 33,
       "varRefs" : 0
     },
+    "Sources\/WebUIDesignSystemCore\/Markup.swift" : {
+      "classLiterals" : 1,
+      "inlineStyles" : 0,
+      "literalColors" : 0,
+      "rawTags" : 0,
+      "varRefs" : 0
+    },
     "Sources\/WebUIDesignSystemCore\/Viewport.swift" : {
       "classLiterals" : 6,
       "inlineStyles" : 1,
@@ -151,31 +151,24 @@
       "varRefs" : 0
     },
     "Sources\/WebUIDesignSystemCore\/WebUIComponents.swift" : {
-      "classLiterals" : 136,
-      "inlineStyles" : 3,
+      "classLiterals" : 0,
+      "inlineStyles" : 0,
       "literalColors" : 2,
-      "rawTags" : 252,
+      "rawTags" : 0,
       "varRefs" : 0
     },
     "Sources\/WebUIDesignSystemCore\/WebUIExtrasCommsState.swift" : {
-      "classLiterals" : 110,
-      "inlineStyles" : 1,
+      "classLiterals" : 0,
+      "inlineStyles" : 0,
       "literalColors" : 0,
-      "rawTags" : 234,
-      "varRefs" : 0
-    },
-    "Sources\/WebUIDesignSystemCore\/WebUIExtrasData.swift" : {
-      "classLiterals" : 127,
-      "inlineStyles" : 7,
-      "literalColors" : 0,
-      "rawTags" : 264,
+      "rawTags" : 2,
       "varRefs" : 0
     },
     "Sources\/WebUIDesignSystemCore\/WebUIExtrasForm.swift" : {
-      "classLiterals" : 108,
-      "inlineStyles" : 4,
+      "classLiterals" : 0,
+      "inlineStyles" : 0,
       "literalColors" : 0,
-      "rawTags" : 223,
+      "rawTags" : 0,
       "varRefs" : 1
     },
     "Sources\/WebUIDesignSystemCore\/WebUIExtrasLongTail.swift" : {
@@ -183,13 +176,6 @@
       "inlineStyles" : 0,
       "literalColors" : 0,
       "rawTags" : 22,
-      "varRefs" : 0
-    },
-    "Sources\/WebUIDesignSystemCore\/WebUIExtrasNavOverlay.swift" : {
-      "classLiterals" : 146,
-      "inlineStyles" : 0,
-      "literalColors" : 0,
-      "rawTags" : 299,
       "varRefs" : 0
     },
     "Sources\/WebUIDesignSystemCore\/WebUIShell.swift" : {
