@@ -16,6 +16,24 @@
 
 set -uo pipefail
 
+# count CODE lines between two literal markers in $1: non-blank, first
+# non-whitespace char not '/', span = from marker line (inclusive) up to but
+# excluding the to marker line. markers are LITERAL substrings (index(), not a
+# regex — parens in a marker must not be eaten by the awk pattern engine).
+code_lines_between() {
+	local file="$1" from="$2" to="$3"
+	awk -v from="$from" -v to="$to" '
+		!started && index($0, from) { started = 1 }
+		started && !done && index($0, to) { done = 1 }
+		started && !done {
+			s = $0
+			sub(/^[ 	]+/, "", s)
+			if (s != "" && substr(s, 1, 1) != "/") c++
+		}
+		END { print c + 0 }
+	' "$file"
+}
+
 ARC="${1:-$HOME/workspace/arc-agent}"
 WEBUI="${2:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
 DEMO="$WEBUI/Sources/WebUIExample"
@@ -70,9 +88,20 @@ grep -rho "Timer\.publish\|scheduledTimer\|DispatchSourceTimer\|Task\.sleep\|asy
 echo "arc: recorded wire cost of one nav click (whole-#app replace): 136195 B  (plan §1 item 3 — the audit's measurement)"
 echo -n "framework: a region push, measured live by g-regions.mjs: "
 grep -hoE "frame [0-9]+ B <= html [0-9]+ B" /tmp/i2-g-regions.log 2>/dev/null | head -1 || echo "<run g-regions.mjs first>"
-echo -n "framework: the demo's four-driver live-data block (the whole surface): "
+echo -n "framework: the demo's four-driver live-data block (raw MARK-to-EOF, the whole surface): "
 awk '/MARK: - the four live-region drivers/{f=1} f{print}' "$DEMO/main.swift" | grep -c "" | tr -d ' '
-echo "     lines (RegionTick + the custom struct region + the LiveState actor + DemoRegions + its 4 drivers + 2 html helpers)"
+echo "     lines (superseded by the corrected code-line counts below — see dx2-notes/m-consumer-deletion-ladder.md)"
+echo "framework: the live-data surface, measured per spelling (MACRO_DX lane W macro column, code lines"
+echo "     = non-blank lines whose first non-whitespace char is not '/'; spans are MARK-bounded):"
+HAND_CODELINES=$(code_lines_between "$DEMO/main.swift" 'MARK: - the four live-region drivers' 'MARK: - the macro twin (MACRO_DX lane D)')
+MACRO_CODELINES=$(code_lines_between "$DEMO/main.swift" 'MARK: - the macro twin (MACRO_DX lane D)' 'MARK: - Page assembly')
+REGIONLIST_CODELINES=$(code_lines_between "$DEMO/main.swift" 'var regionList' 'var controlsHTML')
+printf '     hand spelling (%s): %s code lines  (the recorded 89 + the %s-line lane-D regionList seam)\n' \
+	"DemoRegions + RegionTick + DemoStructRegion + DemoFeedState" \
+	"$HAND_CODELINES" "$REGIONLIST_CODELINES"
+printf '     macro spelling (MacroDemoRegions): %s code lines  (the four mechanisms + five controls + the generated registry)\n' "$MACRO_CODELINES"
+echo "     what did NOT shrink: the render() bodies · the states' own properties and mutators · the choice of"
+echo "     mechanisms and ids · the five controls' handler bodies (the macros generate the registry, not the handlers)"
 echo
 
 # ─────────────────────────────────────────────────────────────────────────────

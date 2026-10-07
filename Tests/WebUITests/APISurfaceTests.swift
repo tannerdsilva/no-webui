@@ -1003,3 +1003,74 @@ func livedataSurfacePins() async {
 		config: WebUIServerConfig(host: "127.0.0.1", port: 1), regions: nil
 	)
 }
+
+// MARK: - macro_dx — the live-data macros + the outcome helpers (additive; the pin row shape)
+
+// the compiled pin for the four declarations: using them here exercises the real
+// expander (the test target builds through the external plugin), so a generated
+// member that stops compiling fails this suite at build time.
+@LiveRegions
+private struct PinnedMacroRegions: Sendable {
+	@LiveRegion(id: "pin-a")
+	struct PinStruct {
+		@RegionState let box: LiveBox<Int>
+
+		func render() async -> String? {
+			let value = box.value
+			return "<span id=\"pin-a\">\(value)</span>"
+		}
+	}
+
+	@LiveState
+	actor PinActor {
+		private var value = 0
+		func bump() { value += 1; notify() }
+		func snapshot() -> Int { value }
+	}
+
+	let structRegion = PinStruct(box: LiveBox(0))
+	let actorRegion = StateLiveRegion(id: "pin-b", state: PinActor()) { state in
+		let value = await state.snapshot()
+		return "<span id=\"pin-b\">\(value)</span>"
+	}
+}
+
+@Test("macro_dx — the four live-data declarations are additive public surface (I5)")
+func macroSurfacePins() async {
+	// compile-time carets: the macro-generated members resolve (a generated
+	// member changing shape fails the build).
+	let group = PinnedMacroRegions()
+	let region: any LiveRegion = group.structRegion
+	#expect(region.id == "pin-a", "@LiveRegion's attribute is the id")
+	#expect(region.cadence == nil, "cadence omitted → nil, the protocol default")
+	#expect(region.source != nil, "@RegionState marks the box as the source")
+	let rendered = await region.render()
+	#expect(rendered == "<span id=\"pin-a\">0</span>", "emitted: \(rendered ?? "nil")")
+
+	// @LiveState on the actor: the generated conformance resolves.
+	let state: any LiveState = PinnedMacroRegions.PinActor()
+	#expect(state is PinnedMacroRegions.PinActor)
+
+	// @LiveRegions: the registry is generated from the property list, in order.
+	let registry: WebUILiveRegions = group.registry
+	#expect(registry.currentHTML("pin-a") == nil, "the registry is real; nothing is committed before start")
+
+	// the witnesses are computed: the memberwise initializer is unchanged.
+	_ = PinnedMacroRegions.PinStruct(box: LiveBox(0))
+	_ = state
+}
+
+@Test("macro_dx — the six per-shape outcome helpers are additive public surface (I5)")
+func outcomeHelperSurfacePins() {
+	// each helper resolves and emits the routed attributes of its control id —
+	// the same marker the event-outcome rows assert. the event defaults to .click.
+	#expect(noOutcome("h-noop") { _ in }.contains("data-component-id=\"h-noop\""))
+	#expect(noOutcome("h-noop") { _ in }.contains("data-event=\"click\""))
+	#expect(fragments("h-frag") { _ in [] }.contains("data-component-id=\"h-frag\""))
+	#expect(replaceFragment("h-rf") { _ in FragmentUpdate(id: "h-rf-out", html: "x") }
+		.contains("data-component-id=\"h-rf\""))
+	#expect(replaceView("h-rv") { _ in Text("v") }.contains("data-component-id=\"h-rv\""))
+	#expect(invalidate("h-inv", ids: ["pin-a"]).contains("data-component-id=\"h-inv\""))
+	#expect(updateThenInvalidate("h-uti", ids: ["pin-a"]) { _ in FragmentUpdate(id: "h-uti-out", html: "x") }
+		.contains("data-component-id=\"h-uti\""))
+}
