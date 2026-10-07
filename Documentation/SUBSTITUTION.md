@@ -302,7 +302,7 @@ struct DemoRegions {
 	struct Tick {
 		@RegionState let box: LiveBox<Int>
 		func render() async -> String? {
-			"<div id=\"g-region-b\">…\\(box.value)</div>"
+			"<div id=\"g-region-b\">…\(box.value)</div>"
 		}
 	}
 
