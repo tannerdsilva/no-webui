@@ -87,6 +87,13 @@
       "rawTags" : 6,
       "varRefs" : 0
     },
+    "Sources\/WebUIContinuumTool\/ShadowCheck.swift" : {
+      "classLiterals" : 1,
+      "inlineStyles" : 0,
+      "literalColors" : 0,
+      "rawTags" : 0,
+      "varRefs" : 0
+    },
     "Sources\/WebUICore\/CSSRule.swift" : {
       "classLiterals" : 2,
       "inlineStyles" : 1,
@@ -210,7 +217,7 @@
       "classLiterals" : 11,
       "inlineStyles" : 0,
       "literalColors" : 0,
-      "rawTags" : 26,
+      "rawTags" : 28,
       "varRefs" : 17
     },
     "Sources\/WebUIIconTool\/MainProgram.swift" : {
