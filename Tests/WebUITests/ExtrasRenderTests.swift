@@ -2,6 +2,7 @@ import Foundation
 import Testing
 import WebUI
 import WebUIDesignSystem
+import WebUIDesignSystemCore
 
 // MARK: - Render fixture battery (lane R)
 //
@@ -298,3 +299,34 @@ func renderCommsStateBytes() throws { try assertByteIdentity(file: "WebUIExtrasC
 
 @Test("R: WebUIExtrasForm renders byte-identical to the base capture")
 func renderFormBytes() throws { try assertByteIdentity(file: "WebUIExtrasForm") }
+
+// MARK: - the Tag helper's own contract
+
+@Test("Tag.classes joins with the smart single space")
+func tagClasses() {
+    #expect(Tag.classes(["calendar"]) == " class=\"calendar\"")
+    #expect(Tag.classes(["toggle", " slider--sm"]) == " class=\"toggle slider--sm\"")
+    #expect(Tag.classes(["banner", "banner--info"]) == " class=\"banner banner--info\"")
+    #expect(Tag.classes(["gantt__label-col gantt__label"]) == " class=\"gantt__label-col gantt__label\"")
+    #expect(Tag.classes(["gantt__bar", "done"]) == " class=\"gantt__bar done\"")
+    #expect(Tag.classes(["gantt__bar", " "]) == " class=\"gantt__bar \"")
+    #expect(Tag.classes(["toggle", ""]) == " class=\"toggle\"")
+    #expect(Tag.classes([]) == "")
+}
+
+@Test("Tag attribute emission escapes exactly where asked")
+func tagAttrs() {
+    #expect(Tag.attr("min", "0") == " min=\"0\"")
+    #expect(Tag.escAttr("aria-label", "a\"b<c>") == " aria-label=\"a&quot;b&lt;c&gt;\"")
+    #expect(Tag.flag("disabled") == " disabled")
+}
+
+@Test("Tag framing: begin, end, element, void, selfClose")
+func tagFraming() {
+    #expect(Tag.begin("div") == "<div>")
+    #expect(Tag.begin("button", Tag.classes(["b"]), Tag.flag("disabled"), "") == "<button class=\"b\" disabled>")
+    #expect(Tag.end("div") == "</div>")
+    #expect(Tag.element("span", [Tag.classes(["x"])], "hi") == "<span class=\"x\">hi</span>")
+    #expect(Tag.void("input", Tag.attr("type", "text")) == "<input type=\"text\">")
+    #expect(Tag.selfClose("circle", Tag.attr("r", "3")) == "<circle r=\"3\"/>")
+}
