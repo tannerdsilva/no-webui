@@ -33,17 +33,32 @@ public struct WebUISlider: View {
         let pct = Swift.min(Swift.max((self.max - self.min) / range * 100.0, 0), 100)
         let inputID = id.map { htmlEscape("\($0)-input") } ?? ""
         let inputAttrs = id.map { controlAttributes(id: "\($0)-input", event: .input, handler: onChange) } ?? ""
-        let idAttr = inputID.isEmpty ? "" : " id=\"\(inputID)\""
-        var html = "<div class=\"slider\(size.rawValue)\(vertical ? " slider--vertical" : "")\">"
-        html += "<input type=\"range\" class=\"slider__input\"\(idAttr) min=\"\(min)\" max=\"\(max)\" value=\"\(value)\" aria-valuenow=\"\(value)\"\(inputAttrs)>"
-        html += "<div class=\"slider__track\"><div class=\"slider__fill\" style=\"width:\(webuiFixedPoint(pct, places: 2))%\"></div><span class=\"slider__thumb\" style=\"left:\(webuiFixedPoint(pct, places: 2))%\"></span></div>"
-        html += "<div class=\"slider__ticks\">"
-        for _ in 0..<11 { html += "<span class=\"slider__tick\"></span>" }
-        html += "</div>"
+        let idAttr = inputID.isEmpty ? "" : Tag.attr("id", inputID)
+        var html = Tag.begin("div", Tag.classes(["slider", size.rawValue, vertical ? " slider--vertical" : ""]))
+        html += Tag.void(
+            "input",
+            Tag.attr("type", "range"),
+            Tag.classes(["slider__input"]),
+            idAttr,
+            Tag.attr("min", "\(min)"),
+            Tag.attr("max", "\(max)"),
+            Tag.attr("value", "\(value)"),
+            Tag.attr("aria-valuenow", "\(value)"),
+            inputAttrs)
+        html += Tag.begin("div", Tag.classes(["slider__track"]))
+        html += Tag.element("div", [Tag.classes(["slider__fill"]), Tag.attr("style", "width:\(webuiFixedPoint(pct, places: 2))%")], "")
+        html += Tag.element("span", [Tag.classes(["slider__thumb"]), Tag.attr("style", "left:\(webuiFixedPoint(pct, places: 2))%")], "")
+        html += Tag.end("div")
+        html += Tag.begin("div", Tag.classes(["slider__ticks"]))
+        for _ in 0..<11 { html += Tag.element("span", [Tag.classes(["slider__tick"])], "") }
+        html += Tag.end("div")
         if showLabels {
-            html += "<div class=\"slider__labels\"><span>\(htmlEscape(minLabel.isEmpty ? "\(min)" : minLabel))</span><span>\(htmlEscape(maxLabel.isEmpty ? "\(max)" : maxLabel))</span></div>"
+            html += Tag.begin("div", Tag.classes(["slider__labels"]))
+            html += Tag.element("span", [], htmlEscape(minLabel.isEmpty ? "\(min)" : minLabel))
+            html += Tag.element("span", [], htmlEscape(maxLabel.isEmpty ? "\(max)" : maxLabel))
+            html += Tag.end("div")
         }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 }
@@ -71,19 +86,28 @@ public struct WebUIToggle: View {
     }
 
     public func render() -> String {
-        var classes = "toggle\(size.rawValue)"
-        if labelLeft { classes += " toggle--label-left" }
-        if loading { classes += " toggle--loading" }
-        if disabled { classes += " toggle--disabled" }
+        var classes = ["toggle", size.rawValue]
+        if labelLeft { classes.append("toggle--label-left") }
+        if loading { classes.append("toggle--loading") }
+        if disabled { classes.append("toggle--disabled") }
         let inputID = id.map { htmlEscape("\($0)-input") } ?? ""
         let inputAttrs = id.map { controlAttributes(id: "\($0)-input", event: .change, handler: onChange) } ?? ""
-        let idAttr = inputID.isEmpty ? "" : " id=\"\(inputID)\""
-        var html = "<label class=\"\(classes)\">"
-        if labelLeft && !label.isEmpty { html += "<span class=\"toggle__label\">\(htmlEscape(label))</span>" }
-        html += "<input type=\"checkbox\" class=\"toggle__input\"\(idAttr)\(checked ? " checked" : "")\(disabled ? " disabled" : "")\(inputAttrs)>"
-        html += "<span class=\"toggle__track\"><span class=\"toggle__thumb\"></span></span>"
-        if !labelLeft && !label.isEmpty { html += "<span class=\"toggle__label\">\(htmlEscape(label))</span>" }
-        html += "</label>"
+        let idAttr = inputID.isEmpty ? "" : Tag.attr("id", inputID)
+        var html = Tag.begin("label", Tag.classes(classes))
+        if labelLeft && !label.isEmpty { html += Tag.element("span", [Tag.classes(["toggle__label"])], htmlEscape(label)) }
+        html += Tag.void(
+            "input",
+            Tag.attr("type", "checkbox"),
+            Tag.classes(["toggle__input"]),
+            idAttr,
+            checked ? Tag.flag("checked") : "",
+            disabled ? Tag.flag("disabled") : "",
+            inputAttrs)
+        html += Tag.begin("span", Tag.classes(["toggle__track"]))
+        html += Tag.element("span", [Tag.classes(["toggle__thumb"])], "")
+        html += Tag.end("span")
+        if !labelLeft && !label.isEmpty { html += Tag.element("span", [Tag.classes(["toggle__label"])], htmlEscape(label)) }
+        html += Tag.end("label")
         return html
     }
 }
@@ -109,13 +133,13 @@ public struct WebUIStepper: View {
         } else {
             attrs = ""
         }
-        let decID = id.map { " id=\"\(htmlEscape("\($0)-dec"))\"" } ?? ""
-        let incID = id.map { " id=\"\(htmlEscape("\($0)-inc"))\"" } ?? ""
-        var html = "<div class=\"stepper\(size.rawValue)\"\(attrs) role=\"group\" aria-label=\"Stepper\">"
-        html += "<button class=\"stepper__btn\"\(decID) aria-label=\"Decrease\">−</button>"
-        html += "<span class=\"stepper__value\">\(value)</span>"
-        html += "<button class=\"stepper__btn\"\(incID) aria-label=\"Increase\">+</button>"
-        html += "</div>"
+        let decID = id.map { Tag.escAttr("id", "\($0)-dec") } ?? ""
+        let incID = id.map { Tag.escAttr("id", "\($0)-inc") } ?? ""
+        var html = Tag.begin("div", Tag.classes(["stepper", size.rawValue]), attrs, Tag.attr("role", "group"), Tag.attr("aria-label", "Stepper"))
+        html += Tag.element("button", [Tag.classes(["stepper__btn"]), decID, Tag.attr("aria-label", "Decrease")], "−")
+        html += Tag.element("span", [Tag.classes(["stepper__value"])], "\(value)")
+        html += Tag.element("button", [Tag.classes(["stepper__btn"]), incID, Tag.attr("aria-label", "Increase")], "+")
+        html += Tag.end("div")
         return html
     }
 }
@@ -140,14 +164,23 @@ public struct WebUIOTP: View {
 
     public func render() -> String {
         let digits = value ?? []
-        var html = "<div class=\"otp\(size.rawValue)\(error ? " otp--error" : "")\" aria-label=\"One-time code\">"
+        var html = Tag.begin("div", Tag.classes(["otp", size.rawValue, error ? " otp--error" : ""]), Tag.attr("aria-label", "One-time code"))
         for i in 0..<length {
             let filled = i < digits.count
-            let cellID = id.map { " id=\"\(htmlEscape("\($0)-cell-\(i)"))\"" } ?? ""
+            let cellID = id.map { Tag.escAttr("id", "\($0)-cell-\(i)") } ?? ""
             let cellAttrs = id.map { controlAttributes(id: "\($0)-cell-\(i)", event: .input, handler: onChange) } ?? ""
-            html += "<input class=\"otp__cell\(filled ? " otp__cell--filled" : "")\(i == digits.count ? " otp__cell--active" : "")\"\(cellID) type=\"text\" inputmode=\"numeric\" maxlength=\"1\" value=\"\(filled ? "\(digits[i])" : "")\" aria-label=\"Digit \(i + 1)\"\(cellAttrs)>"
+            html += Tag.void(
+                "input",
+                Tag.classes(["otp__cell", filled ? " otp__cell--filled" : "", i == digits.count ? " otp__cell--active" : ""]),
+                cellID,
+                Tag.attr("type", "text"),
+                Tag.attr("inputmode", "numeric"),
+                Tag.attr("maxlength", "1"),
+                Tag.attr("value", filled ? "\(digits[i])" : ""),
+                Tag.attr("aria-label", "Digit \(i + 1)"),
+                cellAttrs)
         }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 }
@@ -161,22 +194,36 @@ public struct WebUIMFA: View {
     public init(recoveryCodes: [Recovery] = []) { self.recoveryCodes = recoveryCodes }
 
     public func render() -> String {
-        var html = "<div class=\"mfa\">"
-        html += "<div class=\"mfa__qr\"><div class=\"qr\"><div class=\"qr__code\">"
-        for _ in 0..<(11 * 11) { html += "<span class=\"qr__cell\"></span>" }
-        html += "</div></div></div>"
-        html += "<div class=\"mfa__steps\"><div class=\"mfa__step\"><span class=\"mfa__step-label\">Scan</span></div><div class=\"mfa__step mfa__step--current\"><span class=\"mfa__step-label\">Enter code</span></div><div class=\"mfa__step\"><span class=\"mfa__step-label\">Verify</span></div></div>"
-        html += "<div class=\"mfa__code\">"
+        var html = Tag.begin("div", Tag.classes(["mfa"]))
+        html += Tag.begin("div", Tag.classes(["mfa__qr"]))
+        html += Tag.begin("div", Tag.classes(["qr"]))
+        html += Tag.begin("div", Tag.classes(["qr__code"]))
+        for _ in 0..<(11 * 11) { html += Tag.element("span", [Tag.classes(["qr__cell"])], "") }
+        html += Tag.end("div")
+        html += Tag.end("div")
+        html += Tag.end("div")
+        html += Tag.begin("div", Tag.classes(["mfa__steps"]))
+        html += Tag.begin("div", Tag.classes(["mfa__step"]))
+        html += Tag.element("span", [Tag.classes(["mfa__step-label"])], "Scan")
+        html += Tag.end("div")
+        html += Tag.begin("div", Tag.classes(["mfa__step mfa__step--current"]))
+        html += Tag.element("span", [Tag.classes(["mfa__step-label"])], "Enter code")
+        html += Tag.end("div")
+        html += Tag.begin("div", Tag.classes(["mfa__step"]))
+        html += Tag.element("span", [Tag.classes(["mfa__step-label"])], "Verify")
+        html += Tag.end("div")
+        html += Tag.end("div")
+        html += Tag.begin("div", Tag.classes(["mfa__code"]))
         for i in 0..<6 {
-            html += "<span class=\"mfa__digit\">\(i < 2 ? "•" : "·")</span>"
+            html += Tag.element("span", [Tag.classes(["mfa__digit"])], i < 2 ? "•" : "·")
         }
-        html += "</div>"
+        html += Tag.end("div")
         if !recoveryCodes.isEmpty {
-            html += "<div class=\"mfa__recovery\">"
-            for r in recoveryCodes { html += "<div class=\"mfa__recovery-item\">\(htmlEscape(r.code))</div>" }
-            html += "</div>"
+            html += Tag.begin("div", Tag.classes(["mfa__recovery"]))
+            for r in recoveryCodes { html += Tag.element("div", [Tag.classes(["mfa__recovery-item"])], htmlEscape(r.code)) }
+            html += Tag.end("div")
         }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 }
@@ -201,19 +248,20 @@ public struct WebUIRecurrence: View {
 
     public func render() -> String {
         let rootAttrs = id.map { controlAttributes(id: $0, event: .click, handler: onChange) } ?? ""
-        var html = "<div class=\"recurrence\"\(rootAttrs)>"
-        html += "<div class=\"recurrence__options\">"
+        var html = Tag.begin("div", Tag.classes(["recurrence"]), rootAttrs)
+        html += Tag.begin("div", Tag.classes(["recurrence__options"]))
         for (i, opt) in options.enumerated() {
-            let chipID = id.map { " id=\"\(htmlEscape("\($0)-chip-\(i)"))\"" } ?? ""
-            html += "<button class=\"recurrence__chip\(opt.active ? " recurrence__chip--active" : "")\"\(chipID)>\(htmlEscape(opt.label))</button>"
+            let chipID = id.map { Tag.escAttr("id", "\($0)-chip-\(i)") } ?? ""
+            html += Tag.element("button", [Tag.classes(["recurrence__chip", opt.active ? " recurrence__chip--active" : ""]), chipID], htmlEscape(opt.label))
         }
-        html += "</div>"
-        html += "<div class=\"recurrence__days\">"
+        html += Tag.end("div")
+        html += Tag.begin("div", Tag.classes(["recurrence__days"]))
         for (i, d) in days.enumerated() {
-            let dayID = id.map { " id=\"\(htmlEscape("\($0)-day-\(i)"))\"" } ?? ""
-            html += "<button class=\"recurrence__day\(i < 5 ? " recurrence__day--active" : "")\"\(dayID)>\(htmlEscape(d))</button>"
+            let dayID = id.map { Tag.escAttr("id", "\($0)-day-\(i)") } ?? ""
+            html += Tag.element("button", [Tag.classes(["recurrence__day", i < 5 ? " recurrence__day--active" : ""]), dayID], htmlEscape(d))
         }
-        html += "</div></div>"
+        html += Tag.end("div")
+        html += Tag.end("div")
         return html
     }
 }
@@ -239,21 +287,26 @@ public struct WebUIMultiSelect: View {
     public func render() -> String {
         let sel = options.filter(\.selected)
         let rootAttrs = id.map { controlAttributes(id: $0, event: .click, handler: onChange) } ?? ""
-        var html = "<div class=\"multiselect\"\(rootAttrs)>"
-        html += "<button class=\"multiselect__trigger\">"
+        var html = Tag.begin("div", Tag.classes(["multiselect"]), rootAttrs)
+        html += Tag.begin("button", Tag.classes(["multiselect__trigger"]))
         if sel.isEmpty {
-            html += "<span class=\"multiselect__placeholder\">\(htmlEscape(placeholder))</span>"
+            html += Tag.element("span", [Tag.classes(["multiselect__placeholder"])], htmlEscape(placeholder))
         } else {
-            for s in sel { html += "<span class=\"chip chip--sm\">\(htmlEscape(s.label))</span>" }
-            if sel.count > 2 { html += "<span class=\"multiselect__more\">+\(sel.count - 2)</span>" }
+            for s in sel { html += Tag.element("span", [Tag.classes(["chip chip--sm"])], htmlEscape(s.label)) }
+            if sel.count > 2 { html += Tag.element("span", [Tag.classes(["multiselect__more"])], "+\(sel.count - 2)") }
         }
-        html += "<span class=\"multiselect__chevron\">▾</span></button>"
-        html += "<div class=\"multiselect__panel\"><div class=\"multiselect__search\"><input type=\"search\" placeholder=\"Filter…\"></div>"
+        html += Tag.element("span", [Tag.classes(["multiselect__chevron"])], "▾")
+        html += Tag.end("button")
+        html += Tag.begin("div", Tag.classes(["multiselect__panel"]))
+        html += Tag.begin("div", Tag.classes(["multiselect__search"]))
+        html += Tag.void("input", Tag.attr("type", "search"), Tag.attr("placeholder", "Filter…"))
+        html += Tag.end("div")
         for (i, option) in options.enumerated() {
-            let optID = id.map { " id=\"\(htmlEscape("\($0)-opt-\(i)"))\"" } ?? ""
-            html += "<div class=\"multiselect__option\(option.selected ? " multiselect__option--selected" : "")\"\(optID)>\(htmlEscape(option.label))</div>"
+            let optID = id.map { Tag.escAttr("id", "\($0)-opt-\(i)") } ?? ""
+            html += Tag.element("div", [Tag.classes(["multiselect__option", option.selected ? " multiselect__option--selected" : ""]), optID], htmlEscape(option.label))
         }
-        html += "</div></div>"
+        html += Tag.end("div")
+        html += Tag.end("div")
         return html
     }
 }
@@ -267,10 +320,10 @@ public struct WebUIValidation: View {
     public init(_ message: String, state: State = .error) { self.message = message; self.state = state }
 
     public func render() -> String {
-        var html = "<div class=\"validation\(state.rawValue)\" role=\"status\">"
-        html += "<span class=\"validation__icon\" aria-hidden=\"true\">\(state == .success ? "✓" : (state == .warning ? "!" : "✗"))</span>"
-        html += "<span class=\"validation__text\">\(htmlEscape(message))</span>"
-        html += "</div>"
+        var html = Tag.begin("div", Tag.classes(["validation", state.rawValue]), Tag.attr("role", "status"))
+        html += Tag.element("span", [Tag.classes(["validation__icon"]), Tag.attr("aria-hidden", "true")], state == .success ? "✓" : (state == .warning ? "!" : "✗"))
+        html += Tag.element("span", [Tag.classes(["validation__text"])], htmlEscape(message))
+        html += Tag.end("div")
         return html
     }
 }
@@ -284,12 +337,12 @@ public struct WebUIDropZone: View {
     public init(_ title: String, hint: String = "", hover: Bool = false) { self.title = title; self.hint = hint; self.hover = hover }
 
     public func render() -> String {
-        var html = "<div class=\"dropzone\(hover ? " dropzone--hover" : "")\" role=\"button\" tabindex=\"0\">"
-        html += "<div class=\"file-drop__icon\" aria-hidden=\"true\">⇪</div>"
-        html += "<div class=\"file-drop__title\">\(htmlEscape(title))</div>"
-        if !hint.isEmpty { html += "<div class=\"file-drop__hint\">\(htmlEscape(hint))</div>" }
-        html += "<input type=\"file\" style=\"display:none\">"
-        html += "</div>"
+        var html = Tag.begin("div", Tag.classes(["dropzone", hover ? " dropzone--hover" : ""]), Tag.attr("role", "button"), Tag.attr("tabindex", "0"))
+        html += Tag.element("div", [Tag.classes(["file-drop__icon"]), Tag.attr("aria-hidden", "true")], "⇪")
+        html += Tag.element("div", [Tag.classes(["file-drop__title"])], htmlEscape(title))
+        if !hint.isEmpty { html += Tag.element("div", [Tag.classes(["file-drop__hint"])], htmlEscape(hint)) }
+        html += Tag.void("input", Tag.attr("type", "file"), Tag.attr("style", "display:none"))
+        html += Tag.end("div")
         return html
     }
 }
@@ -301,10 +354,12 @@ public struct WebUISignature: View {
     public init(_ label: String = "Sign here") { self.label = label }
 
     public func render() -> String {
-        var html = "<div class=\"sigpad\">"
-        html += "<div class=\"sigpad__canvas\" role=\"img\" aria-label=\"\(htmlEscape(label))\"></div>"
-        html += "<div class=\"sigpad__tools\"><button class=\"button button--ghost button--sm\">Clear</button></div>"
-        html += "</div>"
+        var html = Tag.begin("div", Tag.classes(["sigpad"]))
+        html += Tag.element("div", [Tag.classes(["sigpad__canvas"]), Tag.attr("role", "img"), Tag.escAttr("aria-label", label)], "")
+        html += Tag.begin("div", Tag.classes(["sigpad__tools"]))
+        html += Tag.element("button", [Tag.classes(["button button--ghost button--sm"])], "Clear")
+        html += Tag.end("div")
+        html += Tag.end("div")
         return html
     }
 }
@@ -329,15 +384,25 @@ public struct WebUIInlineEdit: View {
 
     public func render() -> String {
         let rootAttrs = id.map { controlAttributes(id: $0, event: .click, handler: onSave) } ?? ""
-        let saveID = id.map { " id=\"\(htmlEscape("\($0)-save"))\"" } ?? ""
-        let cancelID = id.map { " id=\"\(htmlEscape("\($0)-cancel"))\"" } ?? ""
-        var html = "<div class=\"inline-edit\(state.rawValue)\(error ? " inline-edit--error" : "")\"\(rootAttrs)>"
-        html += "<div class=\"inline-edit__value\">\(htmlEscape(value))<span class=\"inline-edit__pencil\" aria-hidden=\"true\">✎</span></div>"
+        let saveID = id.map { Tag.escAttr("id", "\($0)-save") } ?? ""
+        let cancelID = id.map { Tag.escAttr("id", "\($0)-cancel") } ?? ""
+        var html = Tag.begin("div", Tag.classes(["inline-edit", state.rawValue, error ? " inline-edit--error" : ""]), rootAttrs)
+        html += Tag.begin("div", Tag.classes(["inline-edit__value"]))
+        html += htmlEscape(value)
+        html += Tag.element("span", [Tag.classes(["inline-edit__pencil"]), Tag.attr("aria-hidden", "true")], "✎")
+        html += Tag.end("div")
         if state == .editing {
-            html += "<div class=\"inline-edit__editing\"><input class=\"inline-edit__input\(error ? " inline-edit__input--error" : "")\" value=\"\(htmlEscape(value))\">"
-            html += "<div class=\"inline-edit__actions\"><button class=\"inline-edit__check\"\(saveID) aria-label=\"Save\">✓</button><button class=\"inline-edit__pencil\"\(cancelID) aria-label=\"Cancel\">✕</button></div></div>"
+            html += Tag.begin("div", Tag.classes(["inline-edit__editing"]))
+            html += Tag.void("input",
+                Tag.classes(["inline-edit__input", error ? " inline-edit__input--error" : ""]),
+                Tag.escAttr("value", value))
+            html += Tag.begin("div", Tag.classes(["inline-edit__actions"]))
+            html += Tag.element("button", [Tag.classes(["inline-edit__check"]), saveID, Tag.attr("aria-label", "Save")], "✓")
+            html += Tag.element("button", [Tag.classes(["inline-edit__pencil"]), cancelID, Tag.attr("aria-label", "Cancel")], "✕")
+            html += Tag.end("div")
+            html += Tag.end("div")
         }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 }
@@ -352,11 +417,11 @@ public struct WebUIMasked: View {
 
     public func render() -> String {
         let display = masked ? String(repeating: "•", count: value.count) : value
-        var html = "<div class=\"masked\">"
-        if let prefix { html += "<span class=\"masked__prefix\">\(htmlEscape(prefix))</span>" }
-        html += "<input type=\"text\" value=\"\(htmlEscape(display))\" aria-label=\"masked value\">"
-        html += "<span class=\"masked__caret\" aria-hidden=\"true\"></span>"
-        html += "</div>"
+        var html = Tag.begin("div", Tag.classes(["masked"]))
+        if let prefix { html += Tag.element("span", [Tag.classes(["masked__prefix"])], htmlEscape(prefix)) }
+        html += Tag.void("input", Tag.attr("type", "text"), Tag.escAttr("value", display), Tag.attr("aria-label", "masked value"))
+        html += Tag.element("span", [Tag.classes(["masked__caret"]), Tag.attr("aria-hidden", "true")], "")
+        html += Tag.end("div")
         return html
     }
 }
@@ -383,19 +448,19 @@ public struct WebUIRating: View {
 
     public func render() -> String {
         let full = Int(value)
-        var classes = "rating\(size.rawValue)"
-        if heart { classes += " rating--heart" }
-        if full > 0 { classes += " rating--filled" }
+        var classes = ["rating", size.rawValue]
+        if heart { classes.append("rating--heart") }
+        if full > 0 { classes.append("rating--filled") }
         let rootAttrs = id.map { controlAttributes(id: $0, event: .click, handler: onChange) } ?? ""
-        var html = "<div class=\"\(classes)\"\(rootAttrs) role=\"img\" aria-label=\"\(value) of \(max)\">"
+        var html = Tag.begin("div", Tag.classes(classes), rootAttrs, Tag.attr("role", "img"), Tag.attr("aria-label", "\(value) of \(max)"))
         for i in 1...max {
             let glyph = heart ? "♥" : "★"
             let filled = i <= full
-            let starID = id.map { " id=\"\(htmlEscape("\($0)-star-\(i)"))\"" } ?? ""
-            html += "<span class=\"rating__star\(filled ? " rating__star--filled" : "")\"\(starID) aria-hidden=\"true\">\(glyph)</span>"
+            let starID = id.map { Tag.escAttr("id", "\($0)-star-\(i)") } ?? ""
+            html += Tag.element("span", [Tag.classes(["rating__star", filled ? " rating__star--filled" : ""]), starID, Tag.attr("aria-hidden", "true")], glyph)
         }
-        if showValue { html += "<span class=\"rating__value\">\(value)</span>" }
-        html += "</div>"
+        if showValue { html += Tag.element("span", [Tag.classes(["rating__value"])], "\(value)") }
+        html += Tag.end("div")
         return html
     }
 }
@@ -425,16 +490,16 @@ public struct WebUITag: View {
     }
 
     public func render() -> String {
-        var classes = "tag\(variant.rawValue)"
-        if clickable { classes += " tag--clickable" }
+        var classes = ["tag", variant.rawValue]
+        if clickable { classes.append("tag--clickable") }
         let rootAttrs = id.map { controlAttributes(id: $0, event: .click, handler: onRemove) } ?? ""
-        let removeID = id.map { " id=\"\(htmlEscape("\($0)-remove"))\"" } ?? ""
-        var html = "<span class=\"\(classes)\"\(rootAttrs)>"
-        if let icon { html += "<span class=\"tag__icon\">\(WebUIIcon(icon, size: .small).render())</span>" }
-        html += "<span class=\"tag__label\">\(htmlEscape(label))</span>"
-        if let count { html += "<span class=\"tag__count\">\(count)</span>" }
-        if removable { html += "<button class=\"tag__remove\"\(removeID) aria-label=\"Remove \(htmlEscape(label))\">×</button>" }
-        html += "</span>"
+        let removeID = id.map { Tag.escAttr("id", "\($0)-remove") } ?? ""
+        var html = Tag.begin("span", Tag.classes(classes), rootAttrs)
+        if let icon { html += Tag.element("span", [Tag.classes(["tag__icon"])], WebUIIcon(icon, size: .small).render()) }
+        html += Tag.element("span", [Tag.classes(["tag__label"])], htmlEscape(label))
+        if let count { html += Tag.element("span", [Tag.classes(["tag__count"])], "\(count)") }
+        if removable { html += Tag.element("button", [Tag.classes(["tag__remove"]), removeID, Tag.escAttr("aria-label", "Remove \(htmlEscape(label))")], "×") }
+        html += Tag.end("span")
         return html
     }
 }
@@ -457,13 +522,16 @@ public struct WebUIChipInput: View {
 
     public func render() -> String {
         let rootAttrs = id.map { controlAttributes(id: $0, event: .click, handler: onChange) } ?? ""
-        var html = "<div class=\"chip-input\"\(rootAttrs)>"
+        var html = Tag.begin("div", Tag.classes(["chip-input"]), rootAttrs)
         for (i, chip) in chips.enumerated() {
-            let removeID = id.map { " id=\"\(htmlEscape("\($0)-chip-\(i)"))\"" } ?? ""
-            html += "<span class=\"chip chip--sm chip--primary\">\(htmlEscape(chip))<button class=\"chip__remove\"\(removeID) aria-label=\"Remove\">×</button></span>"
+            let removeID = id.map { Tag.escAttr("id", "\($0)-chip-\(i)") } ?? ""
+            html += Tag.begin("span", Tag.classes(["chip chip--sm chip--primary"]))
+            html += htmlEscape(chip)
+            html += Tag.element("button", [Tag.classes(["chip__remove"]), removeID, Tag.attr("aria-label", "Remove")], "×")
+            html += Tag.end("span")
         }
-        html += "<input type=\"text\" placeholder=\"\(htmlEscape(placeholder))\">"
-        html += "</div>"
+        html += Tag.void("input", Tag.attr("type", "text"), Tag.escAttr("placeholder", placeholder))
+        html += Tag.end("div")
         return html
     }
 }
@@ -478,13 +546,28 @@ public struct WebUICardInput: View {
     public init(number: String, holder: String, brand: Brand? = nil) { self.number = number; self.holder = holder; self.brand = brand }
 
     public func render() -> String {
-        var html = "<div class=\"card-input\">"
-        html += "<div class=\"card-input__row\"><div class=\"card-input__preview\"><span class=\"card-input__chip\"></span><span class=\"card-input__number\">\(htmlEscape(number))</span><span class=\"card-input__holder\">\(htmlEscape(holder))</span>"
-        if let brand { html += "<span class=\"card-input__brand-icon\(brand.rawValue)\"></span>" }
-        html += "</div></div>"
-        html += "<div class=\"card-input__row\"><div class=\"card-input__field\"><label>Card number</label><input class=\"input\" value=\"\(htmlEscape(number))\"></div></div>"
-        html += "<div class=\"card-input__row\"><div class=\"card-input__field\"><label>Card holder</label><input class=\"input\" value=\"\(htmlEscape(holder))\"></div></div>"
-        html += "</div>"
+        var html = Tag.begin("div", Tag.classes(["card-input"]))
+        html += Tag.begin("div", Tag.classes(["card-input__row"]))
+        html += Tag.begin("div", Tag.classes(["card-input__preview"]))
+        html += Tag.element("span", [Tag.classes(["card-input__chip"])], "")
+        html += Tag.element("span", [Tag.classes(["card-input__number"])], htmlEscape(number))
+        html += Tag.element("span", [Tag.classes(["card-input__holder"])], htmlEscape(holder))
+        if let brand { html += Tag.element("span", [Tag.classes(["card-input__brand-icon", brand.rawValue])], "") }
+        html += Tag.end("div")
+        html += Tag.end("div")
+        html += Tag.begin("div", Tag.classes(["card-input__row"]))
+        html += Tag.begin("div", Tag.classes(["card-input__field"]))
+        html += Tag.element("label", [], "Card number")
+        html += Tag.void("input", Tag.classes(["input"]), Tag.escAttr("value", number))
+        html += Tag.end("div")
+        html += Tag.end("div")
+        html += Tag.begin("div", Tag.classes(["card-input__row"]))
+        html += Tag.begin("div", Tag.classes(["card-input__field"]))
+        html += Tag.element("label", [], "Card holder")
+        html += Tag.void("input", Tag.classes(["input"]), Tag.escAttr("value", holder))
+        html += Tag.end("div")
+        html += Tag.end("div")
+        html += Tag.end("div")
         return html
     }
 }
@@ -535,28 +618,28 @@ public struct WebUIInputGroup: View {
     }
 
     public func render() -> String {
-        var html = "<div class=\"input input--with-affix"
-        if !state.rawValue.isEmpty { html += " \(state.rawValue)" }
-        html += "\">"
+        var affixClasses = ["input input--with-affix"]
+        if !state.rawValue.isEmpty { affixClasses.append(state.rawValue) }
+        var html = Tag.begin("div", Tag.classes(affixClasses))
         if let icon {
-            html += "<span class=\"input__affix input__affix--left\">" + WebUIIcon(icon, size: .small).render() + "</span>"
+            html += Tag.element("span", [Tag.classes(["input__affix input__affix--left"])], WebUIIcon(icon, size: .small).render())
         }
         if let prefix {
-            html += "<span class=\"input__prefix\">\(htmlEscape(prefix))</span>"
+            html += Tag.element("span", [Tag.classes(["input__prefix"])], htmlEscape(prefix))
         }
-        html += "<input class=\"input__el\" type=\"\(type.rawValue)\""
-        if let id { html += " id=\"\(htmlEscape(id))\"" }
-        if let name { html += " name=\"\(htmlEscape(name))\"" }
-        html += " placeholder=\"\(htmlEscape(placeholder))\""
-        if let value { html += " value=\"\(htmlEscape(value))\"" }
-        if state == .error { html += " aria-invalid=\"true\"" }
-        if disabled { html += " disabled" }
-        html += ">"
+        var inputAttrs = Tag.classes(["input__el"]) + Tag.attr("type", type.rawValue)
+        if let id { inputAttrs += Tag.escAttr("id", id) }
+        if let name { inputAttrs += Tag.escAttr("name", name) }
+        inputAttrs += Tag.escAttr("placeholder", placeholder)
+        if let value { inputAttrs += Tag.escAttr("value", value) }
+        if state == .error { inputAttrs += Tag.attr("aria-invalid", "true") }
+        if disabled { inputAttrs += Tag.flag("disabled") }
+        html += Tag.void("input", inputAttrs)
         if let suffix {
             let suffixClass = state == .error ? "input__suffix input__suffix--error" : "input__suffix"
-            html += "<span class=\"\(suffixClass)\">\(htmlEscape(suffix))</span>"
+            html += Tag.element("span", [Tag.classes([suffixClass])], htmlEscape(suffix))
         }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 }
@@ -610,27 +693,29 @@ public struct WebUIField: View {
     }
 
     public func render() -> String {
-        var html = "<div class=\"field\">"
+        var html = Tag.begin("div", Tag.classes(["field"]))
         if label != nil || note != nil || count != nil {
-            html += "<div class=\"field__row\">"
+            html += Tag.begin("div", Tag.classes(["field__row"]))
             if let label {
-                html += "<label class=\"field__label\(required ? " field__label--required" : "")\""
-                if let controlID { html += " for=\"\(htmlEscape(controlID))\"" }
-                html += ">\(htmlEscape(label))</label>"
+                html += Tag.begin("label", Tag.classes(["field__label", required ? " field__label--required" : ""]), controlID.map { Tag.escAttr("for", $0) } ?? "")
+                html += htmlEscape(label)
+                html += Tag.end("label")
             }
             if let note {
-                html += "<span class=\"field__hint\(noteKind.rawValue.isEmpty ? "" : " " + noteKind.rawValue)\">\(htmlEscape(note))</span>"
+                var hintClasses = ["field__hint"]
+                if !noteKind.rawValue.isEmpty { hintClasses.append(noteKind.rawValue) }
+                html += Tag.element("span", [Tag.classes(hintClasses)], htmlEscape(note))
             }
             if let count {
-                html += "<span class=\"field__count\">\(htmlEscape(count))</span>"
+                html += Tag.element("span", [Tag.classes(["field__count"])], htmlEscape(count))
             }
-            html += "</div>"
+            html += Tag.end("div")
         }
         for child in children { html += child.render() }
         if let helper {
-            html += "<span class=\"field__helper\(helperIsError ? " field__helper--error" : "")\">\(htmlEscape(helper))</span>"
+            html += Tag.element("span", [Tag.classes(["field__helper", helperIsError ? " field__helper--error" : ""])], htmlEscape(helper))
         }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 }
@@ -671,18 +756,22 @@ public struct WebUIToggleGroup: View {
         } else {
             attrs = ""
         }
-        var html = "<div style=\"display: flex; flex-wrap: wrap; gap: var(--space-2)\""
-        if let id { html += " id=\"\(htmlEscape(id))\"" }
-        html += " role=\"group\"\(attrs)>"
+        var rootAttrs = Tag.attr("style", "display: flex; flex-wrap: wrap; gap: var(--space-2)")
+        if let id { rootAttrs += Tag.escAttr("id", id) }
+        rootAttrs += Tag.attr("role", "group")
+        rootAttrs += attrs
+        var html = Tag.begin("div", rootAttrs)
         for (index, option) in options.enumerated() {
-            var cls = "chip chip--filter"
-            if option.selected { cls += " chip--filter-active" }
-            let chipID = id.map { " id=\"\(htmlEscape("\($0)-opt-\(index)"))\"" } ?? ""
-            html += "<button type=\"button\" class=\"\(cls)\"\(chipID)"
-            if option.selected { html += " aria-pressed=\"true\"" }
-            html += ">\(htmlEscape(option.label))</button>"
+            var cls = ["chip chip--filter"]
+            if option.selected { cls.append("chip--filter-active") }
+            let chipID = id.map { Tag.escAttr("id", "\($0)-opt-\(index)") } ?? ""
+            var chipAttrs = Tag.attr("type", "button") + Tag.classes(cls) + chipID
+            if option.selected { chipAttrs += Tag.attr("aria-pressed", "true") }
+            html += Tag.begin("button", chipAttrs)
+            html += htmlEscape(option.label)
+            html += Tag.end("button")
         }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 }
