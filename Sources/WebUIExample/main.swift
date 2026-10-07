@@ -202,6 +202,27 @@ struct DemoRegions: Sendable {
 			+ DemoRegions.html(id: "g-region-d", label: "custom LiveState actor", value: 0)
 	}
 
+	/// lane D additive: the four hand-written region definitions as an array, so
+	/// the server's ONE registry can carry the macro twin beside the control
+	/// group (WebUIServer takes a single `WebUILiveRegions`). `registry` above is
+	/// unchanged — the hand path keeps its exact spelling and byte behavior.
+	var regionList: [any LiveRegion] {
+		[
+			ClosureLiveRegion(id: "g-region-a") { () async -> String? in
+				DemoRegions.html(id: "g-region-a", label: "closure default", value: tick.next())
+			},
+			DemoStructRegion(id: "g-region-b", box: structBox),
+			StateLiveRegion(id: "g-region-c", state: stateBox) { box in
+				let value = box.value
+				return DemoRegions.html(id: "g-region-c", label: "StateLiveRegion<LiveBox>", value: value)
+			},
+			StateLiveRegion(id: "g-region-d", state: feed) { state in
+				let value = await state.snapshot()
+				return DemoRegions.html(id: "g-region-d", label: "custom LiveState actor", value: value)
+			},
+		]
+	}
+
 	/// one control per driver. (a) is invalidate-driven — its handler declares the
 	/// change through `RegionInvalidations`, which reaches the registry through
 	/// the dispatch seam's `OutcomeContext.invalidate`; (b)–(d) mutate their own
@@ -239,9 +260,135 @@ struct DemoRegions: Sendable {
 	}
 }
 
+// MARK: - the macro twin (MACRO_DX lane D) — the same four mechanisms, macro-spelled
+//
+// the substitution law's demonstration on the demo page: every mechanism the
+// hand path spells above has a macro-driven twin here, attached BESIDE it in the
+// server's one registry. the twins share the page and are driven in the same run
+// (g-regions.mjs's macro drivers) and are asserted byte-equal by MacroParityTests.
+// the hand-written control group is untouched; nothing here is required by the
+// framework — the macros are a veneer over the frozen protocols.
+
+/// the macro-driven variant of `DemoRegions`, declared with the four macros:
+/// `@LiveRegions` generates the assembly (`registry`), `@LiveRegion(id:) +
+/// @RegionState` generate the custom-struct conformance and its `source` hook,
+/// `@LiveState` generates the actor's nonisolated `subscribe`/`notify` plumbing.
+@LiveRegions
+struct MacroDemoRegions: Sendable {
+	/// the monotonic render counter for the closure twin — reached through the
+	/// type, because a stored property's initializer cannot reference a sibling
+	/// (i0 note), and a static is skipped by the assembly's classification.
+	static let tick = RegionTick()
+
+	/// (2) a custom `LiveRegion` STRUCT, macro-spelled: the conformance, `id`,
+	/// `cadence` and the `source` hook are generated; the marked property IS the
+	/// source — the same contract `DemoStructRegion` spells by hand.
+	@LiveRegion(id: "g-mreg-b")
+	struct MacroStructRegion {
+		@RegionState let box: LiveBox<Int>
+
+		func render() async -> String? {
+			let value = box.value
+			return MacroDemoRegions.html(id: "g-mreg-b", label: "custom LiveRegion struct", value: value)
+		}
+	}
+
+	/// (4) a custom `LiveState` ACTOR, macro-spelled: `subscribe` (nonisolated,
+	/// by construction) and `notify()` are generated — the same contract
+	/// `DemoFeedState` spells by hand.
+	@LiveState
+	actor MacroDemoFeed {
+		private var value = 0
+
+		func bump() {
+			value += 1
+			notify()
+		}
+
+		func snapshot() -> Int { value }
+	}
+
+	// (1) the closure default twin — invalidate-driven, a fresh value per render.
+	let clock = ClosureLiveRegion(id: "g-mreg-a") { () async -> String? in
+		MacroDemoRegions.html(id: "g-mreg-a", label: "closure default", value: MacroDemoRegions.tick.next())
+	}
+	// (2) the custom struct twin, state bound inline (a stored initializer cannot
+	// reference a sibling property — i0 note).
+	let structRegion = MacroStructRegion(box: LiveBox(0))
+	// (3) the `StateLiveRegion<LiveBox>` twin, state inline for the same reason.
+	let boxRegion = StateLiveRegion(id: "g-mreg-c", state: LiveBox(0)) { box in
+		let value = box.value
+		return MacroDemoRegions.html(id: "g-mreg-c", label: "StateLiveRegion<LiveBox>", value: value)
+	}
+	// (4) the `StateLiveRegion<LiveState>` twin over the generated actor.
+	let feedRegion = StateLiveRegion(id: "g-mreg-d", state: MacroDemoFeed()) { state in
+		let value = await state.snapshot()
+		return MacroDemoRegions.html(id: "g-mreg-d", label: "custom LiveState actor", value: value)
+	}
+
+	/// the macro regions' markup — the SAME template the hand path renders, so a
+	/// macro frame differs from its hand twin only in the id substring (the
+	/// page-level twin: byte-equal under the g-mreg-* ↔ g-region-* mapping).
+	static func html(id: String, label: String, value: Int) -> String {
+		DemoRegions.html(id: id, label: label, value: value)
+	}
+}
+
+// MARK: - the macro twin's page surface (rendering lives in an extension — the
+// `@LiveRegions` assembly inspects the group's stored properties only)
+
+extension MacroDemoRegions {
+	/// lane D additive: the four macro region instances, in the assembly's
+	/// declaration order — composed with the hand control group's `regionList`
+	/// into the server's ONE `WebUILiveRegions` (the same members the generated
+	/// `registry` classifies and assembles; listing them here only because the
+	/// frozen server takes a single registry).
+	var regionList: [any LiveRegion] {
+		[clock, structRegion, boxRegion, feedRegion]
+	}
+
+	/// the twin baselines, drawn beside the hand ones so the macro fragment ids
+	/// exist in the DOM before any push arrives.
+	var baselineHTML: String {
+		MacroDemoRegions.html(id: "g-mreg-a", label: "closure default", value: 0)
+			+ MacroDemoRegions.html(id: "g-mreg-b", label: "custom LiveRegion struct", value: structRegion.box.value)
+			+ MacroDemoRegions.html(id: "g-mreg-c", label: "StateLiveRegion<LiveBox>", value: boxRegion.state.value)
+			+ MacroDemoRegions.html(id: "g-mreg-d", label: "custom LiveState actor", value: 0)
+	}
+
+	/// one control per macro twin driver, ids read by g-regions.mjs's macro
+	/// siblings (same push/quiet contract as the hand controls: an unchanged
+	/// render pushes nothing, a change pushes exactly one update).
+	var controlsHTML: String {
+		var html = demoControl("nudge g-mreg-a", id: "g-mreg-nudge") { (_: EventData) -> RegionInvalidations in
+			RegionInvalidations(["g-mreg-a"])
+		}
+		html += demoControl("fragment + invalidate", id: "g-mreg-combined") {
+			(_: EventData) -> CombinedOutcome<FragmentUpdate, RegionInvalidations> in
+			CombinedOutcome(
+				FragmentUpdate(id: "g-mreg-combined-out", html: "<span id=\"g-mreg-combined-out\">macro fragment written first</span>"),
+				RegionInvalidations(["g-mreg-a"])
+			)
+		}
+		html += demoControl("bump g-mreg-b", id: "g-mreg-b-bump") { (_: EventData) -> NoOutcome in
+			self.structRegion.box.value += 1
+			return NoOutcome()
+		}
+		html += demoControl("bump g-mreg-c", id: "g-mreg-c-bump") { (_: EventData) -> NoOutcome in
+			self.boxRegion.state.value += 1
+			return NoOutcome()
+		}
+		html += demoControl("bump g-mreg-d", id: "g-mreg-d-bump") { (_: EventData) -> NoOutcome in
+			await self.feedRegion.state.bump()
+			return NoOutcome()
+		}
+		return html
+	}
+}
+
 // MARK: - Page assembly (renders interactive views, registers handlers)
 
-func renderExamplePage(state: ExampleState, router: EventRouter, regions: DemoRegions) -> String {
+func renderExamplePage(state: ExampleState, router: EventRouter, regions: DemoRegions, macroRegions: MacroDemoRegions) -> String {
 	// the seam (DX-12): the framework establishes the render context for the
 	// whole page build, exactly as it does for the dispatch path — the demo
 	// host must not re-implement what the framework now hosts.
@@ -293,6 +440,13 @@ func renderExamplePage(state: ExampleState, router: EventRouter, regions: DemoRe
 						Div(class: "demo-cell") {
 							Raw(regions.baselineHTML)
 						}
+						Heading("(5) the macro twin — the same four mechanisms, macro-spelled (@LiveRegions)", level: .h4)
+						Div(class: "demo-cell") {
+							Raw(macroRegions.controlsHTML)
+						}
+						Div(class: "demo-cell") {
+							Raw(macroRegions.baselineHTML)
+						}
 					}
 				}
 			}
@@ -341,8 +495,9 @@ struct WebUIExample {
 		let state = ExampleState()
 		let router = EventRouter()
 		let regions = DemoRegions()
+		let macroRegions = MacroDemoRegions()
 		let server = WebUIServer(
-			render: { renderExamplePage(state: state, router: router, regions: regions) },
+			render: { renderExamplePage(state: state, router: router, regions: regions, macroRegions: macroRegions) },
 			router: router,
 			config: WebUIServerConfig(
 				port: intFlag(named: "--port", default: 9090),
@@ -355,9 +510,12 @@ struct WebUIExample {
 					WebUIAsset(ContinuumEngineManifest.self, path: "/ui/continuum-manifest.json").registration
 				]
 			),
-			// the live-region registry (DX-13): nil would mean zero new work, so the
-			// demo attaches it explicitly — the four drivers above.
-			regions: regions.registry
+			// the live-region registry (DX-13 + MACRO_DX lane D): the hand-written
+			// control group (g-region-a..d) and the macro twin (g-mreg-a..d) ride
+			// the SAME server as one WebUILiveRegions — the substitution law's two
+			// spellings, driven in the same run. the hand path's `registry` above
+			// stays byte-identical; `regionList` is the additive composition seam.
+			regions: WebUILiveRegions(regions.regionList + macroRegions.regionList)
 		)
 		try await server.start()
 	}
