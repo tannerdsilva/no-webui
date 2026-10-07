@@ -281,6 +281,10 @@ route, the seam is missing — use the seam.
 - **live data** — a `LiveRegion` (closure / custom struct / `LiveBox`- or custom-`LiveState`-bound)
   is passed as `regions:` to `WebUIServer` and re-renders + pushes only when it changed. full
   recipe: `references/live-regions.md`.
+- **live data, macro-spelled** — `@LiveRegions`/`@LiveRegion`/`@RegionState`/`@LiveState` generate
+  the conformance and the registry for you; **optional** — the hand-written spelling keeps compiling
+  and stays byte-identical. when to reach for them, what they generate, what they cannot remove:
+  `references/live-data-declarations.md`.
 - **themes** — `@Theme` / hand-written `WebUIThemeProvider` types in a `ThemeCatalog`; attach
   `WebUIThemePlugin` to that target and reference the emitted sheet. `WebUITheme` (value) vs
   `WebUIThemeProvider` (protocol) vs `WebUIThemeBuild` (build library) vs `WebUIBuild` (emitter).
@@ -373,6 +377,7 @@ Serve the page and check it in a browser before shipping:
 | Shell / app-frame components + composition recipe | `references/high-level-shell-components.md` |
 | Substitution — conforming types for events / live data / themes / components | `references/substitution.md` |
 | Live regions — server-owned updating regions (`regions:`, state binding, semantics) | `references/live-regions.md` |
+| Live data, declared — the four optional macro spellings (`@LiveRegion` & co), when to hand-write | `references/live-data-declarations.md` |
 | CSS layout gotchas (shrink-to-content, stretch, center, full-height) | `references/css-layout-shrink-stretch.md` |
 | Serve your page live (shared library + NIO server + `/ws`) & the `*__body` convention | `references/live-server-and-showcase.md` |
 | Top-bar provider + thinking-effort (RuntimeSettings, `reasoning_effort`, `WebUISelect`) | `references/runtime-provider-effort-settings.md` |

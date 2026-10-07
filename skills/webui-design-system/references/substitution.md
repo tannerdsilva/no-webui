@@ -49,15 +49,25 @@ let wire = control("g-outcome", event: .click) { (event: EventData) -> ViewOutco
 // Dismissible/WebUIButton) are out of contract — return fragments for those instead.
 ```
 
-biting rules: the closure's return type fixes `O` — **annotate it**; a control first rendered
+biting rules: the closure's return type fixes `O` — **annotate it** (measured: already optional in
+every probed call shape on this toolchain, but annotate for readers); a control first rendered
 *inside* a handler self-registers (dispatch runs inside the render seam); a stable id re-registers
 per render (overwrite-wins) so re-emitted fragments keep routing. `RegionInvalidations([id])` is
 how a handler declares "a live region changed" (see `live-regions.md`).
 
+six per-shape helpers make the intent the entry point's name —
+`noOutcome(_:event:_:)` · `fragments(_:event:_:)` · `replaceFragment(_:event:_:)` ·
+`replaceView(_:event:_:)` · `invalidate(_:event:ids:)` · `updateThenInvalidate(_:ids:event:_:)`
+(`WebUICore/EventOutcomeBuilder.swift`). each body spells the conformance it adapts; the
+hand-written `control("id") { … }` spelling keeps compiling and keeps its lone-effect guard, and
+the protocol stays first-class — nothing is hidden, nothing is silent.
+
 ## Live data — regions that push on their own
 
 a region is a server-owned piece of the page that re-renders and pushes **only when it changed**.
-See `live-regions.md` for the full recipe. Minimum:
+See `live-regions.md` for the full recipe, and `live-data-declarations.md` for the **optional**
+macro spellings (`@LiveRegions`/`@LiveRegion`/`@RegionState`/`@LiveState`) that generate the
+conformance and the registry for you. Minimum:
 
 ```swift
 let regions = WebUILiveRegions([

@@ -64,6 +64,13 @@ actor FeedState: LiveState {
 }
 ```
 
+forms 2 and 4 are where the **optional** declaration macros help: `@LiveRegion(id:)` +
+`@RegionState` generate form 2's conformance, `id`, `cadence` and `source`; `@LiveState` generates
+form 4's notifier plumbing and its `nonisolated subscribe` (by construction — you cannot write the
+stall bug). `@LiveRegions` generates the `WebUILiveRegions` assembly from the group's properties.
+see `live-data-declarations.md`. the macros are never required: the hand spellings above keep
+compiling and stay byte-identical.
+
 ## How updates reach the wire
 
 - **state change** → `source` fires → dirty → wake → `render()` → byte-compare → push.
