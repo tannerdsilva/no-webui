@@ -142,9 +142,26 @@ public func generateAlignmentClasses(_ values: [String]) -> [CSSRule] {
 // MARK: - Default Layout Stylesheet
 
 extension LayoutStyles {
+    /// the spacing values that ship as `.spacing-N` rules in `complete`.
+    /// everything outside this scale has no shipping rule, so a stack that
+    /// requests it must carry the gap inline instead (MACRO_DX G1) — the
+    /// class-only emission for an off-scale value is silently gapless.
+    public static let spacingScale: [Int] = [0, 2, 4, 8, 12, 16, 20, 24, 32]
+
     public static let complete: [CSSRule] = {
-        let spacings = generateSpacingClasses([0, 2, 4, 8, 12, 16, 20, 24, 32])
+        let spacings = generateSpacingClasses(spacingScale)
         let aligns = generateAlignmentClasses(["flex-start", "center", "flex-end"])
         return all + spacings + aligns
     }()
+
+    /// the attribute text a stack (`VStack`/`HStack`) emits for its class and
+    /// gap. in-scale spacings keep the `spacing-N` utility class (byte-identical
+    /// to the pre-G1 emission); off-scale values drop the dead class and carry
+    /// `gap:Npx` inline — the same shape `Grid` already emits.
+    static func stackAttributes(baseClass: String, alignClass: String, spacing: Int) -> String {
+        if spacingScale.contains(spacing) {
+            return " class=\"\(baseClass) spacing-\(spacing) \(alignClass)\""
+        }
+        return " class=\"\(baseClass) \(alignClass)\" style=\"gap:\(spacing)px;\""
+    }
 }

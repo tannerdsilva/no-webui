@@ -19,7 +19,10 @@ public struct VStack: View {
 
     public func render(into buffer: inout HTMLBuffer) {
         let alignClass = "align-\(alignment.cssValue)"
-        buffer.beginElement("div", " class=\"vstack spacing-\(spacing) \(alignClass)\"")
+        buffer.beginElement(
+            "div",
+            LayoutStyles.stackAttributes(baseClass: "vstack", alignClass: alignClass, spacing: spacing)
+        )
         buffer.endOpenTag()
         buffer.append("\n")
         for child in children {
@@ -51,7 +54,10 @@ public struct HStack: View {
 
     public func render(into buffer: inout HTMLBuffer) {
         let alignClass = "align-\(alignment.cssValue)"
-        buffer.beginElement("div", " class=\"hstack spacing-\(spacing) \(alignClass)\"")
+        buffer.beginElement(
+            "div",
+            LayoutStyles.stackAttributes(baseClass: "hstack", alignClass: alignClass, spacing: spacing)
+        )
         buffer.endOpenTag()
         buffer.append("\n")
         for child in children {

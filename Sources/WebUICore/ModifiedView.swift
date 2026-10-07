@@ -68,6 +68,11 @@ public enum CSSProperty: Sendable, Hashable {
     case borderRadius
     case gap
     case alignItems
+    case justifyContent
+    case flexBasis
+    case alignSelf
+    case position
+    case zIndex
     case placeItems
     case overflow
     case gridTemplateColumns
@@ -93,6 +98,11 @@ public enum CSSProperty: Sendable, Hashable {
         case .borderRadius:       return "border-radius"
         case .gap:                return "gap"
         case .alignItems:         return "align-items"
+        case .justifyContent:     return "justify-content"
+        case .flexBasis:          return "flex-basis"
+        case .alignSelf:          return "align-self"
+        case .position:           return "position"
+        case .zIndex:             return "z-index"
         case .placeItems:         return "place-items"
         case .overflow:           return "overflow"
         case .gridTemplateColumns: return "grid-template-columns"

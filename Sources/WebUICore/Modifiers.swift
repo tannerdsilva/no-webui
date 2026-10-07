@@ -33,6 +33,66 @@ public enum TextAlignment: String, Sendable {
     case justify = "justify"
 }
 
+// MARK: - Typed Layout Values
+
+/// the main-axis distribution a flex container applies to its children
+/// (`justify-content`). closed to the css vocabulary the migration needs;
+/// `.custom` stays for anything the enum does not name.
+public enum JustifyContent: Sendable {
+    case flexStart
+    case flexEnd
+    case center
+    case spaceBetween
+    case spaceAround
+    case spaceEvenly
+    case custom(String)
+
+    public var rawValue: String {
+        switch self {
+        case .flexStart:    return "flex-start"
+        case .flexEnd:      return "flex-end"
+        case .center:       return "center"
+        case .spaceBetween: return "space-between"
+        case .spaceAround:  return "space-around"
+        case .spaceEvenly:  return "space-evenly"
+        case .custom(let v): return v
+        }
+    }
+}
+
+/// a flex/grid item's cross-axis alignment (`align-self`), the per-child
+/// override of the container's `align-items`.
+public enum AlignSelf: Sendable {
+    case auto
+    case flexStart
+    case flexEnd
+    case center
+    case baseline
+    case stretch
+    case custom(String)
+
+    public var rawValue: String {
+        switch self {
+        case .auto:        return "auto"
+        case .flexStart:   return "flex-start"
+        case .flexEnd:     return "flex-end"
+        case .center:      return "center"
+        case .baseline:    return "baseline"
+        case .stretch:     return "stretch"
+        case .custom(let v): return v
+        }
+    }
+}
+
+/// the css `position` vocabulary.
+public enum Position: String, Sendable {
+    case `static` = "static"
+    case relative = "relative"
+    case absolute = "absolute"
+    case fixed = "fixed"
+    case sticky = "sticky"
+}
+
 // MARK: - View Modifier Methods
 
 extension View {
@@ -109,6 +169,46 @@ extension View {
         ModifiedView(content: self, modifier: InlineStyle(.flex, flex))
     }
 
+    // MARK: - Filled Layout Gaps (MACRO_DX G2)
+    /// the five properties the consumer migration measured at zero-coverage —
+    /// `justify-content`, `flex-basis`, `align-self`, `position`, `z-index` —
+    /// now named modifiers instead of a `.style` escape hatch. token-typed
+    /// where a scale exists: `flexBasis` takes the `SpaceToken` scale; the
+    /// keyword properties are closed vocabularies.
+    public func justifyContent(_ value: JustifyContent) -> ModifiedView<Self, InlineStyle> {
+        ModifiedView(content: self, modifier: InlineStyle(.justifyContent, value.rawValue))
+    }
+    public func justifyContent(_ value: String) -> ModifiedView<Self, InlineStyle> {
+        ModifiedView(content: self, modifier: InlineStyle(.justifyContent, value))
+    }
+    /// the flex item's initial main-axis size (`flex-basis`), in points.
+    public func flexBasis(_ points: Int) -> ModifiedView<Self, InlineStyle> {
+        ModifiedView(content: self, modifier: InlineStyle(.flexBasis, "\(points)px"))
+    }
+    /// the flex item's initial main-axis size, token-typed to the space scale.
+    public func flexBasis(_ token: SpaceToken) -> ModifiedView<Self, InlineStyle> {
+        ModifiedView(content: self, modifier: InlineStyle(.flexBasis, "var(\(token.cssVariable))"))
+    }
+    /// this item's cross-axis alignment, overriding the container's
+    /// `align-items`.
+    public func alignSelf(_ value: AlignSelf) -> ModifiedView<Self, InlineStyle> {
+        ModifiedView(content: self, modifier: InlineStyle(.alignSelf, value.rawValue))
+    }
+    public func alignSelf(_ value: String) -> ModifiedView<Self, InlineStyle> {
+        ModifiedView(content: self, modifier: InlineStyle(.alignSelf, value))
+    }
+    public func position(_ value: Position) -> ModifiedView<Self, InlineStyle> {
+        ModifiedView(content: self, modifier: InlineStyle(.position, value.rawValue))
+    }
+    public func position(_ value: String) -> ModifiedView<Self, InlineStyle> {
+        ModifiedView(content: self, modifier: InlineStyle(.position, value))
+    }
+    /// the stacking order (`z-index`); no token scale exists for it, so the
+    /// value is a plain integer.
+    public func zIndex(_ value: Int) -> ModifiedView<Self, InlineStyle> {
+        ModifiedView(content: self, modifier: InlineStyle(.zIndex, "\(value)"))
+    }
+
     // MARK: - Fill
     /// make this view occupy all remaining space of a flex/grid parent: grow
     /// on the main axis, shrink below content size, stretch across the cross
@@ -123,7 +223,7 @@ extension View {
                 InlineStyle(.flex, "1 1 0%")
                     .andThen(InlineStyle(.custom("min-width"), "0"))
                     .andThen(InlineStyle(.custom("min-height"), "0"))
-                    .andThen(InlineStyle(.custom("align-self"), "stretch"))
+                    .andThen(InlineStyle(.alignSelf, "stretch"))
             )
         )
     }
@@ -135,7 +235,7 @@ extension View {
         ModifiedView(
             content: self,
             modifier: AnyViewModifier(
-                InlineStyle(.custom("align-self"), "stretch")
+                InlineStyle(.alignSelf, "stretch")
                     .andThen(InlineStyle(.custom("min-width"), "0"))
                     .andThen(InlineStyle(.custom("min-height"), "0"))
             )
