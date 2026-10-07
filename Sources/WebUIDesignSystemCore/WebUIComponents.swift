@@ -129,9 +129,9 @@ public struct WebUIButton: View {
     }
 
     public func render(into buffer: inout HTMLBuffer) {
-        var classes = "button \(variant.rawValue) \(size.rawValue)"
-        if fullWidth { classes += " button--full" }
-        if loading { classes += " button--loading" }
+        var classes = ["button", variant.rawValue, size.rawValue]
+        if fullWidth { classes.append("button--full") }
+        if loading { classes.append("button--loading") }
 
         // self-wiring: an onTap handler routes the tap under the stable id
         // (minting one from the render context when the caller left id nil),
@@ -151,18 +151,19 @@ public struct WebUIButton: View {
             }
         }
 
-        var attributeText = ""
-        if let id { attributeText += " id=\"\(htmlEscape(id))\"" }
-        attributeText += wireAttrs
-        attributeText += " class=\"\(classes)\""
-        if disabled { attributeText += " disabled" }
-        if loading { attributeText += " aria-busy=\"true\"" }
+        let attributeText = [
+            id.map { Tag.escAttr("id", $0) } ?? "",
+            wireAttrs,
+            Tag.classes(classes),
+            disabled ? Tag.flag("disabled") : "",
+            loading ? Tag.attr("aria-busy", "true") : "",
+        ].joined()
         buffer.beginElement("button", attributeText)
         buffer.endOpenTag()
         if loading {
-            buffer.append("<span class=\"button__spinner\"></span>")
+            buffer.append(Tag.element("span", [Tag.classes(["button__spinner"])], ""))
         }
-        buffer.append("<span class=\"button__label\">\(htmlEscape(label))</span>")
+        buffer.append(Tag.element("span", [Tag.classes(["button__label"])], htmlEscape(label)))
         buffer.endElement()
     }
 }
@@ -209,24 +210,27 @@ public struct WebUIInput: View {
     public func render(into buffer: inout HTMLBuffer) {
 
         if let label {
-            buffer.append("<label class=\"input__label\"")
-            if let id { buffer.append(" for=\"\(id)\"") }
-            buffer.append(">\(htmlEscape(label))</label>")
+            // the `for` value is emitted raw, matching the legacy spelling
+            buffer.append(Tag.begin("label", Tag.classes(["input__label"]), id.map { Tag.attr("for", $0) } ?? ""))
+            buffer.append(htmlEscape(label))
+            buffer.append(Tag.end("label"))
         }
 
-        buffer.append("<div class=\"input-wrapper\">")
-        buffer.append("<input")
-        if let id { buffer.append(" id=\"\(htmlEscape(id))\"") }
-        buffer.append(" type=\"\(type.rawValue)\"")
-        buffer.append(" class=\"input \(state.rawValue)\"")
-        buffer.append(" placeholder=\"\(htmlEscape(placeholder))\"")
-        if disabled { buffer.append(" disabled") }
-        buffer.append(">")
-        buffer.append("</div>")
+        buffer.append(Tag.begin("div", Tag.classes(["input-wrapper"])))
+        buffer.append(Tag.void(
+            "input",
+            id.map { Tag.escAttr("id", $0) } ?? "",
+            Tag.attr("type", type.rawValue),
+            // the normal state's empty rawValue keeps its trailing space —
+            // byte-pinned by the base capture
+            Tag.classes(["input", state.rawValue.isEmpty ? " " : state.rawValue]),
+            Tag.escAttr("placeholder", placeholder),
+            disabled ? Tag.flag("disabled") : ""))
+        buffer.append(Tag.end("div"))
 
         if let helpText {
             let helpClass = state == .error ? "input__help input__help--error" : "input__help"
-            buffer.append("<span class=\"\(helpClass)\">\(htmlEscape(helpText))</span>")
+            buffer.append(Tag.element("span", [Tag.classes([helpClass])], htmlEscape(helpText)))
         }
 
     }
@@ -311,44 +315,46 @@ public struct WebUICard: View {
     }
 
     public func render(into buffer: inout HTMLBuffer) {
-        var attributeText = " class=\"card \(variant.rawValue)\""
-        if let id { attributeText += " id=\"\(htmlEscape(id))\"" }
+        let attributeText = Tag.classes(["card", variant.rawValue]) + (id.map { Tag.escAttr("id", $0) } ?? "")
         buffer.beginElement("div", attributeText)
         buffer.endOpenTag()
         if let media {
-            buffer.append("<div class=\"card__media\">")
-            if let mediaBadge { buffer.append("<span class=\"card__media-badge\">\(htmlEscape(mediaBadge))</span>") }
+            buffer.append(Tag.begin("div", Tag.classes(["card__media"])))
+            if let mediaBadge { buffer.append(Tag.element("span", [Tag.classes(["card__media-badge"])], htmlEscape(mediaBadge))) }
             buffer.append(WebUIIcon(media, size: .extraLarge).render())
-            buffer.append("</div>")
+            buffer.append(Tag.end("div"))
         }
         if eyebrow != nil || title != nil || headerIcon != nil {
-            buffer.append("<div class=\"card__header\"><div>")
-            if let eyebrow { buffer.append("<span class=\"card__eyebrow\">\(htmlEscape(eyebrow))</span>") }
-            if let title { buffer.append("<div class=\"card__title\">\(htmlEscape(title))</div>") }
-            buffer.append("</div>")
+            buffer.append(Tag.begin("div", Tag.classes(["card__header"])))
+            buffer.append(Tag.begin("div"))
+            if let eyebrow { buffer.append(Tag.element("span", [Tag.classes(["card__eyebrow"])], htmlEscape(eyebrow))) }
+            if let title { buffer.append(Tag.element("div", [Tag.classes(["card__title"])], htmlEscape(title))) }
+            buffer.append(Tag.end("div"))
             if let headerIcon {
-                buffer.append("<span class=\"card__icon\">" + WebUIIcon(headerIcon, size: .medium).render() + "</span>")
+                buffer.append(Tag.element("span", [Tag.classes(["card__icon"])], WebUIIcon(headerIcon, size: .medium).render()))
             }
-            buffer.append("</div>")
+            buffer.append(Tag.end("div"))
         }
         // the padded interior: the design-system `.card__body` rule carries
         // the `--space-4` default, so a consumer can override the padding
         // through the normal cascade (modifier or page-scoped style)
         // without touching this component.
-        buffer.append("<div class=\"card__body\">")
-        if let description { buffer.append("<div class=\"card__desc\">\(htmlEscape(description))</div>") }
-        if let text { buffer.append("<div class=\"card__text\">\(htmlEscape(text))</div>") }
+        buffer.append(Tag.begin("div", Tag.classes(["card__body"])))
+        if let description { buffer.append(Tag.element("div", [Tag.classes(["card__desc"])], htmlEscape(description))) }
+        if let text { buffer.append(Tag.element("div", [Tag.classes(["card__text"])], htmlEscape(text))) }
         for child in children {
             child.render(into: &buffer)
         }
         if let footerMeta {
-            buffer.append("<div class=\"card__footer\"><span class=\"card__meta\">\(htmlEscape(footerMeta))</span></div>")
+            buffer.append(Tag.begin("div", Tag.classes(["card__footer"])))
+            buffer.append(Tag.element("span", [Tag.classes(["card__meta"])], htmlEscape(footerMeta)))
+            buffer.append(Tag.end("div"))
         }
-        buffer.append("</div>")
+        buffer.append(Tag.end("div"))
         if !actions.isEmpty {
-            buffer.append("<div class=\"card__actions\">")
+            buffer.append(Tag.begin("div", Tag.classes(["card__actions"])))
             for action in actions { action.render(into: &buffer) }
-            buffer.append("</div>")
+            buffer.append(Tag.end("div"))
         }
         buffer.endElement()
     }
@@ -394,16 +400,17 @@ public struct WebUIBadge: View {
     }
 
     public func render(into buffer: inout HTMLBuffer) {
-        var classes = "badge \(variant.rawValue) \(size.rawValue)"
-        if dot { classes += " badge--dot" }
+        var classes = ["badge", variant.rawValue, size.rawValue]
+        if dot { classes.append("badge--dot") }
 
-        let attributeText = " class=\"\(classes)\""
+        let attributeText = Tag.classes(classes)
         buffer.beginElement("span", attributeText)
         buffer.endOpenTag()
         if dot {
-            buffer.append("<span class=\"badge__dot\"></span> ")
+            buffer.append(Tag.element("span", [Tag.classes(["badge__dot"])], ""))
+            buffer.append(" ")
         }
-        buffer.append("\(htmlEscape(text))")
+        buffer.append(htmlEscape(text))
         buffer.endElement()
     }
 }
@@ -471,20 +478,20 @@ public struct WebUIAlert: View, Dismissible {
 
     public func render(into buffer: inout HTMLBuffer) {
         let dismissal = makeDismissal(ariaLabel: "Dismiss")
-        var attributeText = " class=\"alert \(variant.rawValue)\" role=\"alert\""
+        var attributeText = Tag.classes(["alert", variant.rawValue]) + Tag.attr("role", "alert")
         if let elementID = dismissal.elementID ?? id {
-            attributeText += " id=\"\(htmlEscape(elementID))\""
+            attributeText += Tag.escAttr("id", elementID)
         }
-        if dismissible || onDismiss != nil { attributeText += " data-dismissible" }
+        if dismissible || onDismiss != nil { attributeText += Tag.flag("data-dismissible") }
         buffer.beginElement("div", attributeText)
         buffer.endOpenTag()
-        buffer.append("<div class=\"alert__icon fill-slot\">" + WebUIIcon(icon, size: .slot).render() + "</div>")
-        buffer.append("<div class=\"alert__body\">")
+        buffer.append(Tag.element("div", [Tag.classes(["alert__icon fill-slot"])], WebUIIcon(icon, size: .slot).render()))
+        buffer.append(Tag.begin("div", Tag.classes(["alert__body"])))
         if let title {
-            buffer.append("<div class=\"alert__title\">\(htmlEscape(title))</div>")
+            buffer.append(Tag.element("div", [Tag.classes(["alert__title"])], htmlEscape(title)))
         }
-        buffer.append("<div class=\"alert__message\">\(htmlEscape(message))</div>")
-        buffer.append("</div>")
+        buffer.append(Tag.element("div", [Tag.classes(["alert__message"])], htmlEscape(message)))
+        buffer.append(Tag.end("div"))
         if dismissible || onDismiss != nil {
             buffer.append(dismissal.buttonHTML)
         }
@@ -528,9 +535,7 @@ public struct WebUITabs: View {
         let base = id
         let wired = onSelect != nil && base != nil
         let me = base.map { ElementRef.stable($0) } ?? ElementRef.stable("webui-tabs")
-        var html = "<nav class=\"tabs\""
-        if let id { html += " id=\"\(htmlEscape(id))\"" }
-        html += " role=\"tablist\">"
+        var html = Tag.begin("nav", Tag.classes(["tabs"]), id.map { Tag.escAttr("id", $0) } ?? "", Tag.attr("role", "tablist"))
         for tab in tabs {
             let active = tab.id == activeTab ? " tabs__tab--active" : ""
             var route = ""
@@ -539,10 +544,16 @@ public struct WebUITabs: View {
                 let tabID = tab.id
                 route = controlAttributes(id: "\(base)-\(tabID)", handler: { _ in await handler(me, tabID) })
             }
-            let idAttr = base.map { " id=\"\(htmlEscape($0))-\(htmlEscape(tab.id))\"" } ?? ""
-            html += "<button class=\"tabs__tab\(active)\" role=\"tab\" aria-selected=\"\(tab.id == activeTab ? "true" : "false")\" data-tab=\"\(htmlEscape(tab.id))\"\(idAttr)\(route)>\(htmlEscape(tab.label))</button>"
+            let idAttr = base.map { Tag.attr("id", "\(htmlEscape($0))-\(htmlEscape(tab.id))") } ?? ""
+            html += Tag.element("button",
+                [Tag.classes(["tabs__tab", active]),
+                 Tag.attr("role", "tab"),
+                 Tag.attr("aria-selected", tab.id == activeTab ? "true" : "false"),
+                 Tag.escAttr("data-tab", tab.id),
+                 idAttr, route],
+                htmlEscape(tab.label))
         }
-        html += "</nav>"
+        html += Tag.end("nav")
         return html
     }
 }
@@ -588,19 +599,16 @@ public struct WebUIAvatar: View {
     }
 
     public func render(into buffer: inout HTMLBuffer) {
-        var attributeText = " class=\"avatar \(size.rawValue)\""
-        if let status {
-            attributeText += " data-status=\"\(htmlEscape(status))\""
-        }
+        let attributeText = Tag.classes(["avatar", size.rawValue]) + (status.map { Tag.escAttr("data-status", $0) } ?? "")
         buffer.beginElement("div", attributeText)
         buffer.endOpenTag()
         if let src {
-            buffer.append("<img class=\"avatar__img\" src=\"\(htmlEscape(src))\" alt=\"\(htmlEscape(initials))\">")
+            buffer.append(Tag.void("img", Tag.classes(["avatar__img"]), Tag.escAttr("src", src), Tag.escAttr("alt", initials)))
         } else {
-            buffer.append("<span class=\"avatar__initials\">\(htmlEscape(initials))</span>")
+            buffer.append(Tag.element("span", [Tag.classes(["avatar__initials"])], htmlEscape(initials)))
         }
         if status != nil {
-            buffer.append("<span class=\"avatar__status\"></span>")
+            buffer.append(Tag.element("span", [Tag.classes(["avatar__status"])], ""))
         }
         buffer.endElement()
     }
@@ -643,16 +651,18 @@ public struct WebUIProgress: View {
     }
 
     public func render(into buffer: inout HTMLBuffer) {
-        let classes = "progress \(variant.rawValue) \(size.rawValue)"
-
-        let attributeText = " class=\"\(classes)\" role=\"progressbar\" aria-valuenow=\"\(Int(value * 100))\" aria-valuemin=\"0\" aria-valuemax=\"100\""
+        let attributeText = Tag.classes(["progress", variant.rawValue, size.rawValue])
+            + Tag.attr("role", "progressbar")
+            + Tag.attr("aria-valuenow", "\(Int(value * 100))")
+            + Tag.attr("aria-valuemin", "0")
+            + Tag.attr("aria-valuemax", "100")
         buffer.beginElement("div", attributeText)
         buffer.endOpenTag()
-        buffer.append("<div class=\"progress__bar\" style=\"width: \(Int(value * 100))%\">")
+        buffer.append(Tag.begin("div", Tag.classes(["progress__bar"]), Tag.attr("style", "width: \(Int(value * 100))%")))
         if showLabel {
-            buffer.append("<span class=\"progress__label\">\(Int(value * 100))%</span>")
+            buffer.append(Tag.element("span", [Tag.classes(["progress__label"])], "\(Int(value * 100))%"))
         }
-        buffer.append("</div>")
+        buffer.append(Tag.end("div"))
         buffer.endElement()
     }
 }
@@ -687,11 +697,13 @@ public struct WebUISkeleton: View {
     public func render() -> String {
         var result = ""
         for _ in 0..<count {
-            var html = "<div class=\"skeleton \(variant.rawValue)\""
-            if let width { html += " style=\"width:\(width)\"" }
-            if let height { html += " style=\"height:\(height)\"" }
-            html += " aria-hidden=\"true\"></div>"
-            result += html
+            // the custom variant's empty rawValue keeps its trailing space —
+            // byte-pinned by the base capture
+            var attrs = Tag.classes(["skeleton", variant.rawValue.isEmpty ? " " : variant.rawValue])
+            if let width { attrs += Tag.attr("style", "width:\(width)") }
+            if let height { attrs += Tag.attr("style", "height:\(height)") }
+            attrs += Tag.attr("aria-hidden", "true")
+            result += Tag.element("div", [attrs], "")
         }
         return result
     }
@@ -737,14 +749,14 @@ public struct WebUIToast: View, Dismissible {
 
     public func render(into buffer: inout HTMLBuffer) {
         let dismissal = makeDismissal(ariaLabel: "Dismiss")
-        var attributeText = " class=\"toast \(variant.rawValue)\" role=\"alert\""
+        var attributeText = Tag.classes(["toast", variant.rawValue]) + Tag.attr("role", "alert")
         if let elementID = dismissal.elementID ?? id {
-            attributeText += " id=\"\(htmlEscape(elementID))\""
+            attributeText += Tag.escAttr("id", elementID)
         }
         buffer.beginElement("div", attributeText)
         buffer.endOpenTag()
-        buffer.append("<span class=\"toast__icon\"></span>")
-        buffer.append("<span class=\"toast__message\">\(htmlEscape(message))</span>")
+        buffer.append(Tag.element("span", [Tag.classes(["toast__icon"])], ""))
+        buffer.append(Tag.element("span", [Tag.classes(["toast__message"])], htmlEscape(message)))
         if dismissible || onDismiss != nil {
             buffer.append(dismissal.buttonHTML)
         }
@@ -785,30 +797,34 @@ public struct WebUIModal: View, Dismissible {
 
     public func render(into buffer: inout HTMLBuffer) {
         let dismissal = makeDismissal(ariaLabel: "Close")
-        var attributeText = " class=\"modal-overlay\""
+        var attributeText = Tag.classes(["modal-overlay"])
         if let elementID = dismissal.elementID ?? id {
-            attributeText += " id=\"\(htmlEscape(elementID))\""
+            attributeText += Tag.escAttr("id", elementID)
         }
         buffer.beginElement("div", attributeText)
         buffer.endOpenTag()
-        buffer.append("<div class=\"modal\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"\(htmlEscape(id ?? ""))-title\">")
-        buffer.append("<div class=\"modal__header\">")
-        buffer.append("<h2 class=\"modal__title\" id=\"\(htmlEscape(id ?? ""))-title\">\(htmlEscape(title))</h2>")
+        buffer.append(Tag.begin("div",
+            Tag.classes(["modal"]),
+            Tag.attr("role", "dialog"),
+            Tag.attr("aria-modal", "true"),
+            Tag.escAttr("aria-labelledby", "\(id ?? "")-title")))
+        buffer.append(Tag.begin("div", Tag.classes(["modal__header"])))
+        buffer.append(Tag.element("h2", [Tag.classes(["modal__title"]), Tag.escAttr("id", "\(id ?? "")-title")], htmlEscape(title)))
         buffer.append(dismissal.buttonHTML)
-        buffer.append("</div>")
-        buffer.append("<div class=\"modal__body\">")
+        buffer.append(Tag.end("div"))
+        buffer.append(Tag.begin("div", Tag.classes(["modal__body"])))
         for child in children {
             child.render(into: &buffer)
         }
-        buffer.append("</div>")
+        buffer.append(Tag.end("div"))
         if let footer, !footer.isEmpty {
-            buffer.append("<div class=\"modal__footer\">")
+            buffer.append(Tag.begin("div", Tag.classes(["modal__footer"])))
             for item in footer {
                 item.render(into: &buffer)
             }
-            buffer.append("</div>")
+            buffer.append(Tag.end("div"))
         }
-        buffer.append("</div>")
+        buffer.append(Tag.end("div"))
         buffer.endElement()
     }
 }
@@ -956,11 +972,11 @@ public struct WebUITable: View {
     }
 
     public func render() -> String {
-        var classes = "table"
-        if striped { classes += " table--striped" }
-        if hoverable { classes += " table--hoverable" }
-        if compact { classes += " table--compact" }
-        if responsive { classes += " table--responsive" }
+        var classes = ["table"]
+        if striped { classes.append("table--striped") }
+        if hoverable { classes.append("table--hoverable") }
+        if compact { classes.append("table--compact") }
+        if responsive { classes.append("table--responsive") }
 
         // interactive geometry
         let base = id ?? "webui-table"
@@ -979,8 +995,22 @@ public struct WebUITable: View {
         let me = ElementRef.stable(base)
         let wired = interactiveWanted && id != nil
 
-        let sortArrow = "<svg class=\"sort__arrow\" viewBox=\"0 0 10 10\" width=\"10\" height=\"10\" fill=\"none\" aria-hidden=\"true\"><path d=\"M2 6.5L5 3.5l3 3\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\"/></svg>"
-        let expandIcon = "<svg class=\"table__expand-icon\" viewBox=\"0 0 10 10\" width=\"10\" height=\"10\" fill=\"none\" aria-hidden=\"true\"><path d=\"M3.5 2.5L6.5 5l-3 2.5\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\"/></svg>"
+        let sortArrow = Tag.element("svg",
+            [Tag.classes(["sort__arrow"]),
+             Tag.attr("viewBox", "0 0 10 10"), Tag.attr("width", "10"), Tag.attr("height", "10"),
+             Tag.attr("fill", "none"), Tag.attr("aria-hidden", "true")],
+            Tag.selfClose("path",
+                Tag.attr("d", "M2 6.5L5 3.5l3 3"),
+                Tag.attr("stroke", "currentColor"), Tag.attr("stroke-width", "1.5"),
+                Tag.attr("stroke-linecap", "butt"), Tag.attr("stroke-linejoin", "miter")))
+        let expandIcon = Tag.element("svg",
+            [Tag.classes(["table__expand-icon"]),
+             Tag.attr("viewBox", "0 0 10 10"), Tag.attr("width", "10"), Tag.attr("height", "10"),
+             Tag.attr("fill", "none"), Tag.attr("aria-hidden", "true")],
+            Tag.selfClose("path",
+                Tag.attr("d", "M3.5 2.5L6.5 5l-3 2.5"),
+                Tag.attr("stroke", "currentColor"), Tag.attr("stroke-width", "1.5"),
+                Tag.attr("stroke-linecap", "butt"), Tag.attr("stroke-linejoin", "miter")))
 
         func alignmentClass(_ index: Int) -> String? {
             guard index < alignments.count else { return nil }
@@ -991,13 +1021,12 @@ public struct WebUITable: View {
             }
         }
 
-        var tableOpen = "<table"
-        if let id { tableOpen += " id=\"\(htmlEscape(id))\"" }
-        tableOpen += " class=\"\(classes)\">"
+        var tableOpen = Tag.begin("table", id.map { Tag.escAttr("id", $0) } ?? "", Tag.classes(classes))
 
         var html = tableOpen
         if !headers.isEmpty {
-            html += "<thead><tr>"
+            html += Tag.begin("thead")
+            html += Tag.begin("tr")
             if hasSelect {
                 let state: String
                 if selectedRows.count == rowIds.count { state = "true" }
@@ -1011,10 +1040,18 @@ public struct WebUITable: View {
                 let selectAllAttrs = wired
                     ? controlAttributes(id: "\(base)-select-all", handler: selectAllHandler)
                     : ""
-                html += "<th class=\"table__select-col align-center\" scope=\"col\"><span class=\"table__select\" id=\"\(htmlEscape(base))-select-all\" role=\"checkbox\" aria-checked=\"\(state)\" aria-label=\"Select all rows\" tabindex=\"0\"\(selectAllAttrs)></span></th>"
+                html += Tag.element("th",
+                    [Tag.classes(["table__select-col align-center"]), Tag.attr("scope", "col")],
+                    Tag.element("span",
+                        [Tag.classes(["table__select"]),
+                         Tag.attr("id", "\(htmlEscape(base))-select-all"),
+                         Tag.attr("role", "checkbox"), Tag.attr("aria-checked", state),
+                         Tag.attr("aria-label", "Select all rows"), Tag.attr("tabindex", "0"),
+                         selectAllAttrs],
+                        ""))
             }
             if hasExpand {
-                html += "<th class=\"table__expand-col\" aria-hidden=\"true\"></th>"
+                html += Tag.element("th", [Tag.classes(["table__expand-col"]), Tag.attr("aria-hidden", "true")], "")
             }
             for (i, h) in headers.enumerated() where !hiddenColumns.contains(i) {
                 let align = alignmentClass(i)
@@ -1030,31 +1067,42 @@ public struct WebUITable: View {
                 if let sort, sort.column == i {
                     let aria = sort.direction == .ascending ? "ascending" : "descending"
                     let desc = sort.direction == .descending ? " sort--desc" : ""
-                    html += "<th class=\"\(sortPrefix)\" aria-sort=\"\(aria)\">"
-                    html += "<span class=\"sort sort--active\(desc)\" id=\"\(htmlEscape(base))-sort-\(i)\"\(sortAttrs)>\(htmlEscape(h))\(sortArrow)</span>"
-                    html += "</th>"
+                    html += Tag.begin("th", Tag.classes([sortPrefix]), Tag.attr("aria-sort", aria))
+                    html += Tag.element("span",
+                        [Tag.classes(["sort sort--active", desc]),
+                         Tag.attr("id", "\(htmlEscape(base))-sort-\(i)"),
+                         sortAttrs],
+                        htmlEscape(h) + sortArrow)
+                    html += Tag.end("th")
                 } else if sortableColumns.contains(i) {
-                    html += "<th class=\"\(sortPrefix)\">"
-                    html += "<span class=\"sort\" id=\"\(htmlEscape(base))-sort-\(i)\"\(sortAttrs)>\(htmlEscape(h))\(sortArrow)</span>"
-                    html += "</th>"
+                    html += Tag.begin("th", Tag.classes([sortPrefix]))
+                    html += Tag.element("span",
+                        [Tag.classes(["sort"]),
+                         Tag.attr("id", "\(htmlEscape(base))-sort-\(i)"),
+                         sortAttrs],
+                        htmlEscape(h) + sortArrow)
+                    html += Tag.end("th")
                 } else if let a = align {
-                    html += "<th class=\"\(a)\">\(htmlEscape(h))</th>"
+                    html += Tag.element("th", [Tag.classes([a])], htmlEscape(h))
                 } else {
-                    html += "<th>\(htmlEscape(h))</th>"
+                    html += Tag.element("th", [], htmlEscape(h))
                 }
             }
-            html += "</tr></thead>"
+            html += Tag.end("tr")
+            html += Tag.end("thead")
         }
-        html += "<tbody>"
+        html += Tag.begin("tbody")
         if rows.isEmpty, let empty = emptyState {
             let colspan = totalColumns > 0 ? totalColumns : 1
-            html += "<tr><td colspan=\"\(colspan)\" class=\"table__empty\">"
-            html += "<div class=\"table__empty-icon fill-slot\">" + WebUIIcon(empty.icon, size: .slot).render() + "</div>"
-            html += "<div class=\"table__empty-title\">\(htmlEscape(empty.title))</div>"
+            html += Tag.begin("tr")
+            html += Tag.begin("td", Tag.attr("colspan", "\(colspan)"), Tag.classes(["table__empty"]))
+            html += Tag.element("div", [Tag.classes(["table__empty-icon fill-slot"])], WebUIIcon(empty.icon, size: .slot).render())
+            html += Tag.element("div", [Tag.classes(["table__empty-title"])], htmlEscape(empty.title))
             if !empty.message.isEmpty {
-                html += "<div class=\"table__empty-message\">\(htmlEscape(empty.message))</div>"
+                html += Tag.element("div", [Tag.classes(["table__empty-message"])], htmlEscape(empty.message))
             }
-            html += "</td></tr>"
+            html += Tag.end("td")
+            html += Tag.end("tr")
         } else {
             for (rowIndex, row) in rows.enumerated() {
                 let rowId = rowIndex < rowIds.count ? rowIds[rowIndex] : "row-\(rowIndex)"
@@ -1064,7 +1112,7 @@ public struct WebUITable: View {
                     selected ? "tr--selected" : nil,
                     expanded ? "tr--expanded" : nil,
                 ].compactMap { $0 }.joined(separator: " ")
-                let trAttrs = trClass.isEmpty ? "" : " class=\"\(trClass)\""
+                let trAttrs = trClass.isEmpty ? "" : Tag.classes([trClass])
                 // DX-11a (CONTINUUM_DX §2.11): the typed per-control id
                 // vocabulary on INTERACTIVE tables (wired = typed handlers) —
                 // every data row carries `{id}-r{rowIndex}` + `data-key`
@@ -1075,11 +1123,11 @@ public struct WebUITable: View {
                 // attribute order id → data-key → class.
                 let trIdKey: String
                 if wired, let tableID = id {
-                    trIdKey = " id=\"\(htmlEscape(tableID))-r\(rowIndex)\" data-key=\"\(htmlEscape(rowId))\""
+                    trIdKey = Tag.attr("id", "\(htmlEscape(tableID))-r\(rowIndex)") + Tag.escAttr("data-key", rowId)
                 } else {
                     trIdKey = ""
                 }
-                html += "<tr\(trIdKey)\(trAttrs)>"
+                html += Tag.begin("tr", trIdKey, trAttrs)
                 if hasSelect {
                     var selectHandler: EventHandler? = nil
                     if let onSelect {
@@ -1089,7 +1137,15 @@ public struct WebUITable: View {
                     let selectAttrs = wired
                         ? controlAttributes(id: "\(base)-select-\(rowId)", handler: selectHandler)
                         : ""
-                    html += "<td class=\"table__select-col align-center\"><span class=\"table__select\" id=\"\(htmlEscape(base))-select-\(htmlEscape(rowId))\" role=\"checkbox\" aria-checked=\"\(selected)\" aria-label=\"Select row \(htmlEscape(rowId))\" tabindex=\"0\"\(selectAttrs)></span></td>"
+                    html += Tag.element("td",
+                        [Tag.classes(["table__select-col align-center"])],
+                        Tag.element("span",
+                            [Tag.classes(["table__select"]),
+                             Tag.attr("id", "\(htmlEscape(base))-select-\(htmlEscape(rowId))"),
+                             Tag.attr("role", "checkbox"), Tag.attr("aria-checked", "\(selected)"),
+                             Tag.attr("aria-label", "Select row \(htmlEscape(rowId))"),
+                             Tag.attr("tabindex", "0"), selectAttrs],
+                            ""))
                 }
                 if hasExpand {
                     let canExpand = rowDetails?[rowId] != nil
@@ -1102,47 +1158,65 @@ public struct WebUITable: View {
                         ? controlAttributes(id: "\(base)-expand-\(rowId)", handler: expandHandler)
                         : ""
                     if canExpand {
-                        html += "<td class=\"table__expand-col\"><button type=\"button\" class=\"table__expand-btn\" id=\"\(htmlEscape(base))-expand-\(htmlEscape(rowId))\" aria-expanded=\"\(expanded)\"\(expandAttrs)>\(expandIcon)</button></td>"
+                        html += Tag.element("td",
+                            [Tag.classes(["table__expand-col"])],
+                            Tag.element("button",
+                                [Tag.attr("type", "button"),
+                                 Tag.classes(["table__expand-btn"]),
+                                 Tag.attr("id", "\(htmlEscape(base))-expand-\(htmlEscape(rowId))"),
+                                 Tag.attr("aria-expanded", "\(expanded)"),
+                                 expandAttrs],
+                                expandIcon))
                     } else {
-                        html += "<td class=\"table__expand-col\"><button type=\"button\" class=\"table__expand-btn\" id=\"\(htmlEscape(base))-expand-\(htmlEscape(rowId))\" aria-disabled=\"true\" disabled\(expandAttrs)>\(expandIcon)</button></td>"
+                        html += Tag.element("td",
+                            [Tag.classes(["table__expand-col"])],
+                            Tag.element("button",
+                                [Tag.attr("type", "button"),
+                                 Tag.classes(["table__expand-btn"]),
+                                 Tag.attr("id", "\(htmlEscape(base))-expand-\(htmlEscape(rowId))"),
+                                 Tag.attr("aria-disabled", "true"),
+                                 Tag.flag("disabled"),
+                                 expandAttrs],
+                                expandIcon))
                     }
                 }
                 for (i, cell) in row.enumerated() where !hiddenColumns.contains(i) {
-                    var attrs = ""
+                    var tdAttrs: [String] = []
                     if responsive, i < headers.count {
-                        attrs += "data-label=\"\(htmlEscape(headers[i]))\""
+                        tdAttrs.append(Tag.escAttr("data-label", headers[i]))
                     }
                     if let a = alignmentClass(i) {
-                        if attrs.isEmpty {
-                            attrs += "class=\"\(a)\""
-                        } else {
-                            attrs += " class=\"\(a)\""
-                        }
+                        tdAttrs.append(Tag.classes([a]))
                     }
-                    let tdAttrs = attrs.isEmpty ? "" : " " + attrs
-                    html += "<td\(tdAttrs)>\(cell.render())</td>"
+                    html += Tag.element("td", tdAttrs, cell.render())
                 }
-                html += "</tr>"
+                html += Tag.end("tr")
                 if hasExpand, expanded, let detail = rowDetails?[rowId] {
-                    html += "<tr class=\"table__detail-row\"><td colspan=\"\(totalColumns)\"><div class=\"table__detail\">\(detail.render())</div></td></tr>"
+                    html += Tag.element("tr",
+                        [Tag.classes(["table__detail-row"])],
+                        Tag.element("td",
+                            [Tag.attr("colspan", "\(totalColumns)")],
+                            Tag.element("div", [Tag.classes(["table__detail"])], detail.render())))
                 }
             }
         }
-        html += "</tbody>"
+        html += Tag.end("tbody")
         if let footer {
-            html += "<tfoot><tr>"
+            html += Tag.begin("tfoot")
+            html += Tag.begin("tr")
             for (i, cell) in footer.enumerated() {
                 if let a = alignmentClass(i) {
-                    html += "<td class=\"\(a)\">\(cell.render())</td>"
+                    html += Tag.element("td", [Tag.classes([a])], cell.render())
                 } else {
-                    html += "<td>\(cell.render())</td>"
+                    html += Tag.element("td", [], cell.render())
                 }
             }
-            html += "</tr></tfoot>"
+            html += Tag.end("tr")
+            html += Tag.end("tfoot")
         }
-        html += "</table>"
+        html += Tag.end("table")
         if wrapped {
-            html = "<div class=\"table-wrap\">" + html + "</div>"
+            html = Tag.element("div", [Tag.classes(["table-wrap"])], html)
         }
         return html
     }
@@ -1224,13 +1298,13 @@ public struct WebUIChip: View, Dismissible {
 
     public func render(into buffer: inout HTMLBuffer) {
         let dismissal = makeDismissal(ariaLabel: "Remove")
-        var attributeText = " class=\"chip \(variant.rawValue)\""
+        var attributeText = Tag.classes(["chip", variant.rawValue])
         if let elementID = dismissal.elementID ?? id {
-            attributeText += " id=\"\(htmlEscape(elementID))\""
+            attributeText += Tag.escAttr("id", elementID)
         }
         buffer.beginElement("span", attributeText)
         buffer.endOpenTag()
-        buffer.append("<span class=\"chip__label\">\(htmlEscape(text))</span>")
+        buffer.append(Tag.element("span", [Tag.classes(["chip__label"])], htmlEscape(text)))
         if removable || onDismiss != nil {
             buffer.append(dismissal.buttonHTML)
         }
@@ -1262,14 +1336,13 @@ public struct WebUIEmptyState: View {
     }
 
     public func render(into buffer: inout HTMLBuffer) {
-        let attributeText = " class=\"empty-state\""
-        buffer.beginElement("div", attributeText)
+        buffer.beginElement("div", Tag.classes(["empty-state"]))
         buffer.endOpenTag()
-        buffer.append("<div class=\"empty-state__icon fill-slot\">" + WebUIIcon(icon, size: .slot).render() + "</div>")
-        buffer.append("<h3 class=\"empty-state__title\">\(htmlEscape(title))</h3>")
-        buffer.append("<p class=\"empty-state__message\">\(htmlEscape(message))</p>")
+        buffer.append(Tag.element("div", [Tag.classes(["empty-state__icon fill-slot"])], WebUIIcon(icon, size: .slot).render()))
+        buffer.append(Tag.element("h3", [Tag.classes(["empty-state__title"])], htmlEscape(title)))
+        buffer.append(Tag.element("p", [Tag.classes(["empty-state__message"])], htmlEscape(message)))
         if let (label, actionId) = action {
-            buffer.append("<button class=\"button button--primary\" id=\"\(htmlEscape(actionId))\">\(htmlEscape(label))</button>")
+            buffer.append(Tag.element("button", [Tag.classes(["button button--primary"]), Tag.escAttr("id", actionId)], htmlEscape(label)))
         }
         buffer.endElement()
     }
@@ -1296,13 +1369,13 @@ public struct WebUISpinner: View {
     }
 
     public func render(into buffer: inout HTMLBuffer) {
-        var attributeText = " class=\"spinner \(size.rawValue)\" role=\"status\""
-        if let label { attributeText += " aria-label=\"\(htmlEscape(label))\"" }
+        var attributeText = Tag.classes(["spinner", size.rawValue]) + Tag.attr("role", "status")
+        if let label { attributeText += Tag.escAttr("aria-label", label) }
         buffer.beginElement("div", attributeText)
         buffer.endOpenTag()
-        buffer.append("<div class=\"spinner__ring\"></div>")
+        buffer.append(Tag.element("div", [Tag.classes(["spinner__ring"])], ""))
         if let label {
-            buffer.append("<span class=\"spinner__label\">\(htmlEscape(label))</span>")
+            buffer.append(Tag.element("span", [Tag.classes(["spinner__label"])], htmlEscape(label)))
         }
         buffer.endElement()
     }
@@ -1336,16 +1409,15 @@ public struct WebUITooltip: View {
     }
 
     public func render(into buffer: inout HTMLBuffer) {
-        let attributeText = " class=\"tooltip-container\""
-        buffer.beginElement("div", attributeText)
+        buffer.beginElement("div", Tag.classes(["tooltip-container"]))
         buffer.endOpenTag()
         for child in children {
             child.render(into: &buffer)
         }
-        buffer.append("<div class=\"tooltip \(position.rawValue)\" role=\"tooltip\">")
-        buffer.append("<span class=\"tooltip__arrow\"></span>")
-        buffer.append("<span class=\"tooltip__text\">\(htmlEscape(text))</span>")
-        buffer.append("</div>")
+        buffer.append(Tag.begin("div", Tag.classes(["tooltip", position.rawValue]), Tag.attr("role", "tooltip")))
+        buffer.append(Tag.element("span", [Tag.classes(["tooltip__arrow"])], ""))
+        buffer.append(Tag.element("span", [Tag.classes(["tooltip__text"])], htmlEscape(text)))
+        buffer.append(Tag.end("div"))
         buffer.endElement()
     }
 }
@@ -1401,27 +1473,33 @@ public struct WebUIStat: View {
     }
 
     public func render(into buffer: inout HTMLBuffer) {
-        let attributeText = " class=\"\(size.rawValue)\""
-        buffer.beginElement("div", attributeText)
+        buffer.beginElement("div", Tag.classes([size.rawValue]))
         buffer.endOpenTag()
-        buffer.append("<span class=\"stat__label\">\(htmlEscape(label))</span>")
-        buffer.append("<span class=\"stat__value\">\(htmlEscape(value))</span>")
+        buffer.append(Tag.element("span", [Tag.classes(["stat__label"])], htmlEscape(label)))
+        buffer.append(Tag.element("span", [Tag.classes(["stat__value"])], htmlEscape(value)))
         if let trend, let trendDirection {
             let arrowPath = trendDirection == .up ? "M2 6.5L5 3.5l3 3" : "M2 3.5L5 6.5l3-3"
-            let arrow = "<svg class=\"stat__trend-arrow\" viewBox=\"0 0 10 10\" width=\"10\" height=\"10\" fill=\"none\" aria-hidden=\"true\"><path d=\"\(arrowPath)\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\"/></svg>"
-            buffer.append("<span class=\"stat__row\">")
-            buffer.append("<span class=\"stat__trend \(trendDirection.rawValue)\">\(arrow)\(htmlEscape(trend))</span>")
+            let arrow = Tag.element("svg",
+                [Tag.classes(["stat__trend-arrow"]),
+                 Tag.attr("viewBox", "0 0 10 10"), Tag.attr("width", "10"), Tag.attr("height", "10"),
+                 Tag.attr("fill", "none"), Tag.attr("aria-hidden", "true")],
+                Tag.selfClose("path",
+                    Tag.attr("d", arrowPath),
+                    Tag.attr("stroke", "currentColor"), Tag.attr("stroke-width", "1.5"),
+                    Tag.attr("stroke-linecap", "butt"), Tag.attr("stroke-linejoin", "miter")))
+            buffer.append(Tag.begin("span", Tag.classes(["stat__row"])))
+            buffer.append(Tag.element("span", [Tag.classes(["stat__trend", trendDirection.rawValue])], arrow + htmlEscape(trend)))
             if let compare {
-                buffer.append("<span class=\"stat__compare\">\(htmlEscape(compare))</span>")
+                buffer.append(Tag.element("span", [Tag.classes(["stat__compare"])], htmlEscape(compare)))
             }
-            buffer.append("</span>")
+            buffer.append(Tag.end("span"))
         } else if let compare {
-            buffer.append("<span class=\"stat__compare\">\(htmlEscape(compare))</span>")
+            buffer.append(Tag.element("span", [Tag.classes(["stat__compare"])], htmlEscape(compare)))
         }
         if let spark, spark.count >= 2 {
-            buffer.append("<span class=\"stat__spark\">")
+            buffer.append(Tag.begin("span", Tag.classes(["stat__spark"])))
             buffer.append(sparklineSVG(spark))
-            buffer.append("</span>")
+            buffer.append(Tag.end("span"))
         }
         buffer.endElement()
     }
@@ -1440,9 +1518,10 @@ public struct WebUIStat: View {
         }
         let line = coords.joined(separator: " ")
         let area = "\(coords.first ?? "0,16") \(line) 100,32 0,32"
-        return "<svg viewBox=\"0 0 100 32\" preserveAspectRatio=\"none\" aria-hidden=\"true\">"
-            + "<polygon class=\"stat__spark-area\" points=\"\(area)\"/>"
-            + "<polyline class=\"stat__spark-line\" points=\"\(line)\"/></svg>"
+        return Tag.begin("svg", Tag.attr("viewBox", "0 0 100 32"), Tag.attr("preserveAspectRatio", "none"), Tag.attr("aria-hidden", "true"))
+            + Tag.selfClose("polygon", Tag.classes(["stat__spark-area"]), Tag.attr("points", area))
+            + Tag.selfClose("polyline", Tag.classes(["stat__spark-line"]), Tag.attr("points", line))
+            + Tag.end("svg")
     }
 }
 
@@ -1500,11 +1579,11 @@ public struct WebUIPagination: View {
         let wired = interactiveWanted && id != nil
         let me = id.map { ElementRef.stable($0) } ?? ElementRef.stable("webui-pagination")
 
-        let attributeText = " class=\"pagination\" aria-label=\"Pagination\""
+        let attributeText = Tag.classes(["pagination"]) + Tag.attr("aria-label", "Pagination")
         buffer.beginElement("nav", attributeText)
         buffer.endOpenTag()
-        let prevIdAttr = pid("prev").map { " id=\"\($0)\"" } ?? ""
-        let prevDisabled = page <= 1 ? " disabled" : ""
+        let prevIdAttr = pid("prev").map { Tag.attr("id", $0) } ?? ""
+        let prevDisabled = page <= 1 ? Tag.flag("disabled") : ""
         var prevHandler: EventHandler? = nil
         if wired, let onPageChange {
             let h: @Sendable (ElementRef, Int) async -> [FragmentUpdate] = onPageChange
@@ -1513,16 +1592,19 @@ public struct WebUIPagination: View {
         let prevRoute = wired
             ? controlAttributes(id: base.map { "\($0)-prev" } ?? "", handler: prevHandler)
             : ""
-        buffer.append("<button class=\"pagination__btn\"\(prevIdAttr) type=\"button\" aria-label=\"Previous page\"\(prevDisabled)\(prevRoute)>&#8249;</button>")
+        buffer.append(Tag.element("button",
+            [Tag.classes(["pagination__btn"]), prevIdAttr, Tag.attr("type", "button"),
+             Tag.attr("aria-label", "Previous page"), prevDisabled, prevRoute],
+            "&#8249;"))
         for item in pageWindow(page: page, pages: pages) {
             switch item {
             case .ellipsis:
-                buffer.append("<span class=\"pagination__ellipsis\">…</span>")
+                buffer.append(Tag.element("span", [Tag.classes(["pagination__ellipsis"])], "…"))
             case .number(let n):
                 let isActive = n == page
                 let cls = isActive ? "pagination__btn pagination__btn--active" : "pagination__btn"
-                let idAttr = pid("page-\(n)").map { " id=\"\($0)\"" } ?? ""
-                let current = isActive ? " aria-current=\"page\"" : ""
+                let idAttr = pid("page-\(n)").map { Tag.attr("id", $0) } ?? ""
+                let current = isActive ? Tag.attr("aria-current", "page") : ""
                 var pageHandler: EventHandler? = nil
                 if wired, let onPageChange {
                     let h: @Sendable (ElementRef, Int) async -> [FragmentUpdate] = onPageChange
@@ -1531,11 +1613,13 @@ public struct WebUIPagination: View {
                 let pageRoute = wired
                     ? controlAttributes(id: base.map { "\($0)-page-\(n)" } ?? "", handler: pageHandler)
                     : ""
-                buffer.append("<button class=\"\(cls)\"\(idAttr) type=\"button\"\(current)\(pageRoute)>\(n)</button>")
+                buffer.append(Tag.element("button",
+                    [Tag.classes([cls]), idAttr, Tag.attr("type", "button"), current, pageRoute],
+                    "\(n)"))
             }
         }
-        let nextIdAttr = pid("next").map { " id=\"\($0)\"" } ?? ""
-        let nextDisabled = page >= pages ? " disabled" : ""
+        let nextIdAttr = pid("next").map { Tag.attr("id", $0) } ?? ""
+        let nextDisabled = page >= pages ? Tag.flag("disabled") : ""
         var nextHandler: EventHandler? = nil
         if wired, let onPageChange {
             let h: @Sendable (ElementRef, Int) async -> [FragmentUpdate] = onPageChange
@@ -1544,9 +1628,12 @@ public struct WebUIPagination: View {
         let nextRoute = wired
             ? controlAttributes(id: base.map { "\($0)-next" } ?? "", handler: nextHandler)
             : ""
-        buffer.append("<button class=\"pagination__btn\"\(nextIdAttr) type=\"button\" aria-label=\"Next page\"\(nextDisabled)\(nextRoute)>&#8250;</button>")
+        buffer.append(Tag.element("button",
+            [Tag.classes(["pagination__btn"]), nextIdAttr, Tag.attr("type", "button"),
+             Tag.attr("aria-label", "Next page"), nextDisabled, nextRoute],
+            "&#8250;"))
         if let rowsPerPage {
-            let rowsIdAttr = pid("rows").map { " id=\"\($0)\"" } ?? ""
+            let rowsIdAttr = pid("rows").map { Tag.attr("id", $0) } ?? ""
             var rowsHandler: EventHandler? = nil
             if wired, let onRowsPerPageChange {
                 let h: @Sendable (ElementRef, Int) async -> [FragmentUpdate] = onRowsPerPageChange
@@ -1563,12 +1650,15 @@ public struct WebUIPagination: View {
                     handler: rowsHandler
                 )
                 : ""
-            buffer.append("<span class=\"pagination__meta\"><label>Rows per page</label><select class=\"select\"\(rowsIdAttr)\(rowsRoute)>")
+            buffer.append(Tag.begin("span", Tag.classes(["pagination__meta"])))
+            buffer.append(Tag.element("label", [], "Rows per page"))
+            buffer.append(Tag.begin("select", Tag.classes(["select"]), rowsIdAttr, rowsRoute))
             for opt in rowsPerPageOptions {
-                let selected = opt == rowsPerPage ? " selected" : ""
-                buffer.append("<option value=\"\(opt)\"\(selected)>\(opt)</option>")
+                let selected = opt == rowsPerPage ? Tag.flag("selected") : ""
+                buffer.append(Tag.element("option", [Tag.attr("value", "\(opt)"), selected], "\(opt)"))
             }
-            buffer.append("</select></span>")
+            buffer.append(Tag.end("select"))
+            buffer.append(Tag.end("span"))
         }
         buffer.endElement()
     }
@@ -1658,18 +1748,18 @@ public struct WebUITimeline: View {
     }
 
     public func render(into buffer: inout HTMLBuffer) {
-        let attributeText = " class=\"\(orientation.rawValue)\""
-        buffer.beginElement("div", attributeText)
+        buffer.beginElement("div", Tag.classes([orientation.rawValue]))
         buffer.endOpenTag()
         for event in events {
             let statusCls = event.status == .plain ? "" : " \(event.status.rawValue)"
-            buffer.append("<div class=\"timeline__event\(statusCls)\"><span class=\"timeline__dot\"></span>")
-            buffer.append("<span class=\"timeline__time\">\(htmlEscape(event.time))</span>")
-            buffer.append("<div class=\"timeline__title\">\(htmlEscape(event.title))</div>")
+            buffer.append(Tag.begin("div", Tag.classes(["timeline__event", statusCls])))
+            buffer.append(Tag.element("span", [Tag.classes(["timeline__dot"])], ""))
+            buffer.append(Tag.element("span", [Tag.classes(["timeline__time"])], htmlEscape(event.time)))
+            buffer.append(Tag.element("div", [Tag.classes(["timeline__title"])], htmlEscape(event.title)))
             if let desc = event.desc {
-                buffer.append("<div class=\"timeline__desc\">\(htmlEscape(desc))</div>")
+                buffer.append(Tag.element("div", [Tag.classes(["timeline__desc"])], htmlEscape(desc)))
             }
-            buffer.append("</div>")
+            buffer.append(Tag.end("div"))
         }
         buffer.endElement()
     }
@@ -1712,18 +1802,16 @@ public struct WebUITree: View {
 
     public func render() -> String {
         let interactive = onToggle != nil && id != nil
-        var html = interactive
-            ? "<div class=\"tree tree--interactive\" role=\"tree\""
-            : "<div class=\"tree\" role=\"tree\""
+        var attrs = Tag.classes(["tree", interactive ? " tree--interactive" : ""]) + Tag.attr("role", "tree")
         if let id = id {
-            html += " id=\"" + htmlEscape(id) + "\""
+            attrs += Tag.escAttr("id", id)
         }
         if onToggle != nil, let id = id {
-            html += controlAttributes(id: id, event: .click, handler: onToggle)
+            attrs += controlAttributes(id: id, event: .click, handler: onToggle)
         }
-        html += ">"
+        var html = Tag.begin("div", attrs)
         for node in nodes { html += renderNode(node, level: 1, interactive: interactive) }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 
@@ -1736,33 +1824,31 @@ public struct WebUITree: View {
 
         var rowAttrs = ""
         if let base = id {
-            rowAttrs += " id=\"" + htmlEscape(base) + "-node-" + htmlEscape(node.id) + "\""
+            rowAttrs += Tag.attr("id", "\(htmlEscape(base))-node-\(htmlEscape(node.id))")
         }
-        rowAttrs += " role=\"treeitem\""
-        rowAttrs += " aria-level=\"" + String(level) + "\""
+        rowAttrs += Tag.attr("role", "treeitem")
+        rowAttrs += Tag.attr("aria-level", String(level))
         if hasChildren {
-            rowAttrs += " aria-expanded=\"" + String(isOpen) + "\""
+            rowAttrs += Tag.attr("aria-expanded", String(isOpen))
         }
         if interactive {
-            rowAttrs += " tabindex=\"0\""
+            rowAttrs += Tag.attr("tabindex", "0")
         }
 
-        var html = "<div class=\"" + nodeCls + "\""
-        if hasChildren { html += " role=\"group\"" }
-        html += ">"
-        html += "<div class=\"" + rowCls + "\"" + rowAttrs + ">"
-        html += "<span class=\"" + caretCls + "\"></span>"
+        var html = Tag.begin("div", Tag.classes([nodeCls]), hasChildren ? Tag.attr("role", "group") : "")
+        html += Tag.begin("div", Tag.classes([rowCls]), rowAttrs)
+        html += Tag.element("span", [Tag.classes([caretCls])], "")
         if let icon = node.icon {
-            html += "<span class=\"tree__icon fill-slot\">" + WebUIIcon(icon, size: .slot).render() + "</span>"
+            html += Tag.element("span", [Tag.classes(["tree__icon fill-slot"])], WebUIIcon(icon, size: .slot).render())
         }
-        html += "<span class=\"tree__label\">" + htmlEscape(node.label) + "</span>"
-        html += "</div>"
+        html += Tag.element("span", [Tag.classes(["tree__label"])], htmlEscape(node.label))
+        html += Tag.end("div")
         if let children = node.children, !children.isEmpty {
-            html += "<div class=\"tree__children\">"
+            html += Tag.begin("div", Tag.classes(["tree__children"]))
             for child in children { html += renderNode(child, level: level + 1, interactive: interactive) }
-            html += "</div>"
+            html += Tag.end("div")
         }
-        html += "</div>"
+        html += Tag.end("div")
         return html
     }
 }
@@ -1827,25 +1913,27 @@ public struct WebUIBreadcrumb: View {
         let tailCount = collapsed ? 2 : 1
 
         func itemHTML(_ item: Item, index: Int, isCurrent: Bool) -> String {
-            let idAttr = isCurrent ? "" : base.map { " id=\"\($0)-item-\(index)\"" } ?? ""
+            let idAttr = isCurrent ? "" : base.map { Tag.attr("id", "\($0)-item-\(index)") } ?? ""
             if isCurrent {
-                return "<span class=\"breadcrumb__item breadcrumb__item--current\" aria-current=\"page\">\(htmlEscape(item.label))</span>"
+                return Tag.element("span",
+                    [Tag.classes(["breadcrumb__item breadcrumb__item--current"]), Tag.attr("aria-current", "page")],
+                    htmlEscape(item.label))
             }
             if let href = item.href {
                 // canonical URL policy: a blocked scheme degrades to plain
                 // text (never an href) — mirrors the Link/Image primitives.
                 guard let safe = sanitizeURL(href) else {
-                    return "<span class=\"breadcrumb__item\"\(idAttr)>\(htmlEscape(item.label))</span>"
+                    return Tag.element("span", [Tag.classes(["breadcrumb__item"]), idAttr], htmlEscape(item.label))
                 }
-                return "<a class=\"breadcrumb__item\"\(idAttr) href=\"\(htmlEscape(safe))\">\(htmlEscape(item.label))</a>"
+                return Tag.element("a", [Tag.classes(["breadcrumb__item"]), idAttr, Tag.escAttr("href", safe)], htmlEscape(item.label))
             }
-            return "<span class=\"breadcrumb__item\"\(idAttr)>\(htmlEscape(item.label))</span>"
+            return Tag.element("span", [Tag.classes(["breadcrumb__item"]), idAttr], htmlEscape(item.label))
         }
         func sepHTML() -> String {
-            "<span class=\"breadcrumb__separator\" aria-hidden=\"true\">\(htmlEscape(sep))</span>"
+            Tag.element("span", [Tag.classes(["breadcrumb__separator"]), Tag.attr("aria-hidden", "true")], htmlEscape(sep))
         }
 
-        let attributeText = " class=\"breadcrumb\(slashCls)\" aria-label=\"Breadcrumb\""
+        let attributeText = Tag.classes(["breadcrumb", slashCls]) + Tag.attr("aria-label", "Breadcrumb")
         buffer.beginElement("nav", attributeText)
         buffer.endOpenTag()
         // head (links)
@@ -1855,8 +1943,11 @@ public struct WebUIBreadcrumb: View {
         }
         // collapsed middle
         if collapsed {
-            let ellipsisId = base.map { " id=\"\($0)-ellipsis\"" } ?? ""
-            buffer.append("<button type=\"button\" class=\"breadcrumb__ellipsis\"\(ellipsisId) aria-label=\"Show omitted items\">…</button>")
+            let ellipsisId = base.map { Tag.attr("id", "\($0)-ellipsis") } ?? ""
+            buffer.append(Tag.element("button",
+                [Tag.attr("type", "button"), Tag.classes(["breadcrumb__ellipsis"]), ellipsisId,
+                 Tag.attr("aria-label", "Show omitted items")],
+                "…"))
             buffer.append(sepHTML())
         }
         // tail (last N−1 as links, final as current)
@@ -1887,12 +1978,11 @@ public struct WebUIDescriptionList: View {
     }
 
     public func render(into buffer: inout HTMLBuffer) {
-        let attributeText = " class=\"list--desc\""
-        buffer.beginElement("dl", attributeText)
+        buffer.beginElement("dl", Tag.classes(["list--desc"]))
         buffer.endOpenTag()
         for item in items {
-            buffer.append("<dt>\(htmlEscape(item.term))</dt>")
-            buffer.append("<dd>\(htmlEscape(item.detail))</dd>")
+            buffer.append(Tag.element("dt", [], htmlEscape(item.term)))
+            buffer.append(Tag.element("dd", [], htmlEscape(item.detail)))
         }
         buffer.endElement()
     }
@@ -1929,11 +2019,10 @@ public struct WebUIAspectRatio: View {
     }
 
     public func render(into buffer: inout HTMLBuffer) {
-        let attributeText = " class=\"aspect \(ratio.rawValue)\""
-        buffer.beginElement("div", attributeText)
+        buffer.beginElement("div", Tag.classes(["aspect", ratio.rawValue]))
         buffer.endOpenTag()
         if let label {
-            buffer.append("<span class=\"aspect__label\">\(htmlEscape(label))</span>")
+            buffer.append(Tag.element("span", [Tag.classes(["aspect__label"])], htmlEscape(label)))
         }
         buffer.endElement()
     }
@@ -1995,27 +2084,27 @@ public struct WebUICircularProgress: View {
         if !size.rawValue.isEmpty { classes.append(size.rawValue) }
         if !tone.rawValue.isEmpty { classes.append(tone.rawValue) }
         if indeterminate { classes.append("ring--indeterminate") }
-        var attributeText = " class=\"\(classes.joined(separator: " "))\" role=\"progressbar\""
-        attributeText += " aria-label=\"\(htmlEscape(ariaLabel))\""
+        var attributeText = Tag.classes(classes) + Tag.attr("role", "progressbar")
+        attributeText += Tag.escAttr("aria-label", ariaLabel)
         if !indeterminate {
-            attributeText += " aria-valuemin=\"0\" aria-valuemax=\"100\" aria-valuenow=\"\(Int((clamped * 100).rounded()))\""
+            attributeText += Tag.attr("aria-valuemin", "0") + Tag.attr("aria-valuemax", "100") + Tag.attr("aria-valuenow", "\(Int((clamped * 100).rounded()))")
         }
         buffer.beginElement("div", attributeText)
         buffer.endOpenTag()
-        buffer.append("<svg viewBox=\"0 0 36 36\" aria-hidden=\"true\">")
-        buffer.append("<circle class=\"ring__track\" cx=\"18\" cy=\"18\" r=\"15.915\"/>")
+        buffer.append(Tag.begin("svg", Tag.attr("viewBox", "0 0 36 36"), Tag.attr("aria-hidden", "true")))
+        buffer.append(Tag.selfClose("circle", Tag.classes(["ring__track"]), Tag.attr("cx", "18"), Tag.attr("cy", "18"), Tag.attr("r", "15.915")))
         if indeterminate {
-            buffer.append("<circle class=\"ring__fill\" cx=\"18\" cy=\"18\" r=\"15.915\"/>")
+            buffer.append(Tag.selfClose("circle", Tag.classes(["ring__fill"]), Tag.attr("cx", "18"), Tag.attr("cy", "18"), Tag.attr("r", "15.915")))
         } else {
             let offset = webuiFixedPoint((1 - clamped) * 100, places: 1)
-            buffer.append("<circle class=\"ring__fill\" cx=\"18\" cy=\"18\" r=\"15.915\" stroke-dasharray=\"100\" stroke-dashoffset=\"\(offset)\"/>")
+            buffer.append(Tag.selfClose("circle", Tag.classes(["ring__fill"]), Tag.attr("cx", "18"), Tag.attr("cy", "18"), Tag.attr("r", "15.915"), Tag.attr("stroke-dasharray", "100"), Tag.attr("stroke-dashoffset", offset)))
         }
-        buffer.append("</svg>")
+        buffer.append(Tag.end("svg"))
         if label != nil || sublabel != nil {
-            buffer.append("<span class=\"ring__label\">")
+            buffer.append(Tag.begin("span", Tag.classes(["ring__label"])))
             if let label { buffer.append(htmlEscape(label)) }
-            if let sublabel { buffer.append("<span class=\"ring__label-sub\">\(htmlEscape(sublabel))</span>") }
-            buffer.append("</span>")
+            if let sublabel { buffer.append(Tag.element("span", [Tag.classes(["ring__label-sub"])], htmlEscape(sublabel))) }
+            buffer.append(Tag.end("span"))
         }
         buffer.endElement()
     }
