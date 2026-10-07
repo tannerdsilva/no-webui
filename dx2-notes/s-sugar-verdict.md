@@ -188,3 +188,22 @@ toolchain — the documented wall is specific to `names: arbitrary`.)
 - `swift build` · `swift test --filter EventOutcomeBuilder` green; EventHandling.swift byte-unchanged.
 
 recorded by lane S · prototype evidence: `~/fleet/macro-dx/sugar-spike/` (overview below)
+
+## gate: executed (amended after the implementation, 2026-10-07)
+
+the shipped piece landed per this note: `Sources/WebUICore/EventOutcomeBuilder.swift`
+(the six helpers) + `Tests/WebUITests/EventOutcomeBuilderTests.swift` (the twin fixtures).
+EventHandling.swift, Package.swift, the demo, the server and designer are untouched
+(`git status` listed only the two new files; `git diff` over the forbidden surfaces was empty).
+
+```
+$ swift build                     → Build complete!
+$ swift test --filter EventOutcome → Test run with 11 tests in 2 suites passed.
+   (the 6 new twin fixtures + the pre-existing DX-14 outcome suite, unchanged)
+```
+
+the twin gate holds: every helper's dispatch equals the hand-written `control("id") { … }`
+spelling — same attributes, same frames, same invalidations (asserted per helper in the
+suite). the lone-effect guard survives by construction: `noOutcome`'s body is `Void` by
+signature, so "yields nothing" is named intent, not a silent default (unlike the builder's
+B9 case, which this lane refused to ship).
