@@ -116,7 +116,8 @@ every attribute parameter (`id`, `class`, `name`, `for`, `data-status`,
 |---|---|
 | `EventData` | `{ component: String, event: String, data: [String: String] }` — `click` data carries `targetId` and `targetClass` of the clicked element |
 | `EventHandler` | `@Sendable (EventData) async -> [FragmentUpdate]` — the pre-DX-14 shape, unchanged |
-| `control(_:event:handler:)` | the generic entry point: the handler yields an `EventOutcome` instead of `[FragmentUpdate]`, and the framework adapts it to the wire. the closure's return type fixes `O` — annotate it at the call site (`control(_:)` unlabeled vs `controlAttributes(id:)` labeled — the first-arg label disambiguates) |
+| `control(_:event:handler:)` | the generic entry point: the handler yields an `EventOutcome` instead of `[FragmentUpdate]`, and the framework adapts it to the wire. the closure's return type fixes `O` — annotate it at the call site (`control(_:)` unlabeled vs `controlAttributes(id:)` labeled — the first-arg label disambiguates). measured: the annotation is already optional in every probed call shape on this toolchain; a lone-effect body is still refused (no silent no-op) |
+| per-shape helpers (`Sources/WebUICore/EventOutcomeBuilder.swift`) | `noOutcome(_:event:_:)` · `fragments(_:event:_:)` · `replaceFragment(_:event:_:)` · `replaceView(_:event:_:)` · `invalidate(_:event:ids:)` · `updateThenInvalidate(_:ids:event:_:)` — one typed entry point per `EventOutcome` shape; each body spells the conformance it adapts so the protocol stays first-class. additive: the hand-written `control("id") { … }` spelling is unchanged and keeps its lone-effect guard. the no-op case is the function NAME (`noOutcome`), never a silent default |
 | `EventOutcome` | protocol — `resolve(_ context: OutcomeContext) async -> [FragmentUpdate]`. six framework conformances: `FragmentUpdate` (one update), `[FragmentUpdate]` (several), `ViewOutcome<Content: View>` (render + replace `#<component id>` — the replaceable root MUST carry that DOM id; minted `cN` ids are out of contract and return fragments), `RegionInvalidations` (declares region changes; the live registry pushes), `NoOutcome` (nothing), `CombinedOutcome<A, B>` (both, in order). a custom struct conformance drives the same dispatch path |
 | `OutcomeContext` | the dispatch-scoped facts a `resolve` may use: `component: ComponentID` (the firing control — a routing id, not necessarily a DOM id) and `invalidate: @Sendable ([String]) -> Void` (reaches the live registry; a no-op provider without one). `OutcomeContext.current` is the `@TaskLocal` a handler reads — `nil` outside a dispatch |
 | `EventRouter` | routes events to registered handlers. `maxHandlers: Int` (default 10,000), `handlerCount: Int`. one router per render pass — call `reset()` before rendering a fresh page |
@@ -535,6 +536,26 @@ stable ids only, the registry warns when a render grows the handler map); a disp
 `RegionInvalidations` marks dirty inside the seam and wakes only after the handler frame is on the
 wire (two-push ordering); zero frames after `stop()`. see `Documentation/SUBSTITUTION.md` (axis —
 live data) for the consumer recipe.
+
+### live data, macro-spelled (the four declaration macros)
+
+four **optional** declarations in `Sources/WebUIServer/LiveMacroDeclarations.swift` (resolve with
+`import WebUIServer`; additive — the frozen protocols are untouched, the hand-written conformances
+keep compiling and stay byte-identical):
+
+| macro | attached to | generates |
+|---|---|---|
+| `@LiveRegion(id:cadence:)` | a struct/class/actor | the `LiveRegion` conformance: `id`/`cadence` from the attribute, `source` from the `@RegionState`-marked property |
+| `@RegionState` | the ONE stored property that is the region's `source` | nothing alone — a marker the `@LiveRegion` member scan reads (none marked = `source == nil`, two = diagnostic) |
+| `@LiveRegions` | the live-data group | `registry: WebUILiveRegions` from the group's region properties, in declaration order (syntactic classification: region types and `ClosureLiveRegion`/`StateLiveRegion` included, `LiveBox`/`LiveNotifier`/nested-`@LiveState` skipped, anything else diagnosed) |
+| `@LiveState` | an actor | the `LiveState` conformance: a `nonisolated subscribe` (generated `nonisolated` by construction) forwarding to an injected `LiveNotifier`, and `notify()` |
+
+each of `@LiveRegion`/`@LiveState` is both a member macro (the witnesses — **computed**, so the
+memberwise initializer is unchanged) and an extension macro (the conformance); `@LiveState`'s
+`liveNotifier` storage is a member because an extension cannot add stored properties. misuse
+diagnostics live in `Tests/WebUIServerMacroTests/NegativeFixturesTests.swift`; the expansions are
+frozen byte-exact (`FrozenFixtures.swift`) and the twin parity is gate-executed by
+`Tests/WebUITests/MacroParityTests.swift`.
 
 ### host assets
 

@@ -79,6 +79,24 @@ the frozen surface is:
   point, and `RenderContext.withCurrent(router:_:)` — pinned by
   `Tests/WebUITests/SubstitutionTests.swift`. the pre-existing `EventHandler` /
   `controlAttributes(id:)` contract and emitted bytes are unchanged (I5).
+- the outcome helpers (macro_dx — additive): the six per-shape entry points in
+  `Sources/WebUICore/EventOutcomeBuilder.swift` — `noOutcome(_:event:_:)`,
+  `fragments(_:event:_:)`, `replaceFragment(_:event:_:)`, `replaceView(_:event:_:)`,
+  `invalidate(_:event:ids:)`, `updateThenInvalidate(_:ids:event:_:)` — one typed
+  entry point per `EventOutcome` conformance, each body spelling the conformance it
+  adapts. the hand-written `control(_:event:handler:)` spelling is unchanged and
+  keeps its lone-effect guard; the helpers name intent, they do not replace the
+  protocol. pinned by `Tests/WebUITests/EventOutcomeBuilderTests.swift` and the
+  `outcomeHelperSurfacePins` row of `APISurfaceTests`.
+- the live-data macros (macro_dx — additive): `@LiveRegion(id:cadence:)`,
+  `@RegionState`, `@LiveRegions`, `@LiveState` — each **optional**, generating only
+  members the frozen protocols already require (the hand-written conformances keep
+  compiling and stay byte-identical). declared in
+  `Sources/WebUIServer/LiveMacroDeclarations.swift` (resolve with `import
+  WebUIServer`); misuse diagnostics instead of `fatalError`. pinned by
+  `Tests/WebUIServerMacroTests` (frozen byte-exact expansions + negative fixtures)
+  and `Tests/WebUITests/MacroParityTests.swift` (byte-equal twins), plus the
+  `macroSurfacePins` row of `APISurfaceTests`.
 - the theme-pipeline surface (live_dx — additive): `WebUIThemeBuild.emit`, the
   `WebUIThemePlugin` build-tool attach, and the framework `WebUIThemeTool` the
   plugin runs — pinned by the theme-pipeline probes
