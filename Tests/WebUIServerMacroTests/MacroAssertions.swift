@@ -47,6 +47,21 @@ func assertExpansionDiagnoses(_ source: String, message: String) {
 	#expect(messages.contains(message), "expected diagnostic \(String(reflecting: message)); got \(messages)")
 }
 
+/// assert a misuse produces the expected diagnostic message with WARNING
+/// severity (feature B: duplicates warn, non-literal ids say so — they are
+/// not errors, and the suite must not let a warning silently become an error).
+func assertExpansionWarns(_ source: String, message: String) {
+	let file = Parser.parse(source: source)
+	let context = BasicMacroExpansionContext()
+	_ = file.expand(macros: liveMacroSpecs, contextGenerator: { _ in context })
+	let matching = context.diagnostics.filter { $0.message == message }
+	#expect(!matching.isEmpty, "expected warning \(String(reflecting: message)); got \(context.diagnostics.map(\.message))")
+	for diagnostic in matching {
+		#expect(diagnostic.diagMessage.severity == .warning,
+			"'\(message)' must be a WARNING, not an error")
+	}
+}
+
 /// the raw expansion as text — the "assert by name" half: a member name must be
 /// present in the expansion regardless of formatting drift.
 func expandedText(of source: String) -> String {
