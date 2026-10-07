@@ -577,6 +577,14 @@ enum WebUIContinuumTool {
 		                 capability-import mismatches against the host grants
 		                 --sources <dir> [--inventory <path>]
 		                 [--grants a,b,c] [--hotview-sources <dir>]...
+		                 markup-debt audit (MACRO_DX G3, additive): five
+		                 per-file metrics — raw html tags · class= literals ·
+		                 inline style= · #hex colours · var(--) refs — with the
+		                 framework allowlist reported-not-ratcheted and a
+		                 committed baseline + --fail-on-increase
+		                 [--debt-sources <dir>]... [--debt-allowlist a,b]
+		                 [--baseline <designer/markup-debt.json>]
+		                 [--fail-on-increase] [--emit-baseline <path>]
 		  shadow         DX-15b anti-shadow policy: extract exact class tokens
 		                 from CONSUMER sources (string-literal CSS, CSSRule
 		                 args, class= literals), intersect with the DS class
@@ -781,6 +789,33 @@ enum WebUIContinuumTool {
 			// warn-only in d1: class lint always exits 0 (the orphan ratchet
 			// owns the class-error level); the capability check above is the
 			// error level t2.6 adds.
+
+			// MACRO_DX G3 — the markup-debt audit, additive to this one verb
+			// (never a second scanner): five code-borne metrics per file, the
+			// framework allowlist reported-not-ratcheted, the committed
+			// baseline (designer/markup-debt.json) + `--fail-on-increase`.
+			if let emitPath = Args.option(argv, "--emit-baseline") {
+				let payload = try markupDebtBaselineJSON(
+					dirs: debtSourceDirs(argv),
+					allowlist: debtAllowlist(argv)
+				)
+				try payload.write(toFile: emitPath, atomically: true, encoding: .utf8)
+				print("[WebUIContinuumTool] markup-debt baseline written: \(emitPath)")
+				return
+			}
+			let debtDirs = debtSourceDirs(argv)
+			if !debtDirs.isEmpty {
+				let baselinePath = Args.option(argv, "--baseline")
+				let baseline = try baselinePath.map { path in
+					try MarkupDebtBaseline.load(path)
+				}
+				try printMarkupDebt(
+					dirs: debtDirs,
+					allowlistPrefixes: debtAllowlist(argv, baseline: baseline),
+					baseline: baseline,
+					failOnIncrease: Args.has(argv, "--fail-on-increase")
+				)
+			}
 		}
 
 		/// the class tokens a generated inventory's `union` array owns.
@@ -794,4 +829,42 @@ enum WebUIContinuumTool {
 			return out
 		}
 	}
+}
+
+// MARK: - markup-debt CLI helpers (MACRO_DX G3)
+
+/// every `--debt-sources <dir>` in occurrence order (repeatable).
+func debtSourceDirs(_ argv: [String]) -> [String] {
+	Args.options(argv, "--debt-sources")
+}
+
+/// the framework allowlist for the debt ratchet: `--debt-allowlist` wins,
+/// else the baseline's own prefixes, else the framework default (the one
+/// directory whose emission is legitimate — reported, not ratcheted).
+func debtAllowlist(_ argv: [String], baseline: MarkupDebtBaseline? = nil) -> [String] {
+	if let cli = Args.option(argv, "--debt-allowlist") {
+		return cli.split(separator: ",").map(String.init).filter { !$0.isEmpty }
+	}
+	if let baseline, !baseline.allowlistPrefixes.isEmpty {
+		return baseline.allowlistPrefixes
+	}
+	return ["Sources/WebUIDesignSystemCore"]
+}
+
+/// the committed baseline document for the currently scanned dirs.
+func markupDebtBaselineJSON(dirs: [String], allowlist: [String]) throws -> String {
+	var files: [String: MarkupDebtMetrics] = [:]
+	for dir in dirs {
+		let scan = try MarkupDebtScan.scanning(dir)
+		for (file, metrics) in scan.files { files[file] = metrics }
+	}
+	let baseline = MarkupDebtBaseline(
+		version: MarkupDebtBaseline.currentVersion,
+		allowlistPrefixes: allowlist,
+		files: files
+	)
+	let encoder = JSONEncoder()
+	encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+	let data = try encoder.encode(baseline)
+	return String(decoding: data, as: UTF8.self) + "\n"
 }

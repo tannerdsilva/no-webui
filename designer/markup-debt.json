@@ -1,0 +1,274 @@
+{
+  "allowlistPrefixes" : [
+    "Sources\/WebUIDesignSystemCore"
+  ],
+  "files" : {
+    "Sources\/WebUI\/ClientBoot.swift" : {
+      "classLiterals" : 0,
+      "inlineStyles" : 0,
+      "literalColors" : 0,
+      "rawTags" : 4,
+      "varRefs" : 0
+    },
+    "Sources\/WebUI\/ContinuumHot.swift" : {
+      "classLiterals" : 3,
+      "inlineStyles" : 1,
+      "literalColors" : 0,
+      "rawTags" : 6,
+      "varRefs" : 0
+    },
+    "Sources\/WebUI\/HTMLDocument.swift" : {
+      "classLiterals" : 2,
+      "inlineStyles" : 0,
+      "literalColors" : 0,
+      "rawTags" : 20,
+      "varRefs" : 0
+    },
+    "Sources\/WebUI\/WebUIIsland.swift" : {
+      "classLiterals" : 0,
+      "inlineStyles" : 0,
+      "literalColors" : 0,
+      "rawTags" : 2,
+      "varRefs" : 0
+    },
+    "Sources\/WebUIAssetTool\/MainProgram.swift" : {
+      "classLiterals" : 0,
+      "inlineStyles" : 0,
+      "literalColors" : 0,
+      "rawTags" : 11,
+      "varRefs" : 0
+    },
+    "Sources\/WebUIAuthExample\/MainProgram.swift" : {
+      "classLiterals" : 3,
+      "inlineStyles" : 0,
+      "literalColors" : 0,
+      "rawTags" : 10,
+      "varRefs" : 23
+    },
+    "Sources\/WebUIBench\/main.swift" : {
+      "classLiterals" : 12,
+      "inlineStyles" : 1,
+      "literalColors" : 2,
+      "rawTags" : 32,
+      "varRefs" : 10
+    },
+    "Sources\/WebUIBlocks\/Blocks.swift" : {
+      "classLiterals" : 0,
+      "inlineStyles" : 0,
+      "literalColors" : 0,
+      "rawTags" : 0,
+      "varRefs" : 1
+    },
+    "Sources\/WebUIChart\/ChartGeometry.swift" : {
+      "classLiterals" : 0,
+      "inlineStyles" : 0,
+      "literalColors" : 0,
+      "rawTags" : 5,
+      "varRefs" : 0
+    },
+    "Sources\/WebUIChart\/ChartP5Marks.swift" : {
+      "classLiterals" : 0,
+      "inlineStyles" : 0,
+      "literalColors" : 0,
+      "rawTags" : 0,
+      "varRefs" : 2
+    },
+    "Sources\/WebUIChart\/ChartRenderer.swift" : {
+      "classLiterals" : 52,
+      "inlineStyles" : 4,
+      "literalColors" : 0,
+      "rawTags" : 102,
+      "varRefs" : 0
+    },
+    "Sources\/WebUIContinuumTool\/MainProgram.swift" : {
+      "classLiterals" : 1,
+      "inlineStyles" : 0,
+      "literalColors" : 0,
+      "rawTags" : 6,
+      "varRefs" : 0
+    },
+    "Sources\/WebUICore\/CSSRule.swift" : {
+      "classLiterals" : 2,
+      "inlineStyles" : 1,
+      "literalColors" : 0,
+      "rawTags" : 0,
+      "varRefs" : 0
+    },
+    "Sources\/WebUICore\/Dismissible.swift" : {
+      "classLiterals" : 2,
+      "inlineStyles" : 0,
+      "literalColors" : 0,
+      "rawTags" : 4,
+      "varRefs" : 0
+    },
+    "Sources\/WebUICore\/Icon.swift" : {
+      "classLiterals" : 2,
+      "inlineStyles" : 0,
+      "literalColors" : 0,
+      "rawTags" : 4,
+      "varRefs" : 0
+    },
+    "Sources\/WebUICore\/Layouts.swift" : {
+      "classLiterals" : 10,
+      "inlineStyles" : 3,
+      "literalColors" : 0,
+      "rawTags" : 0,
+      "varRefs" : 0
+    },
+    "Sources\/WebUICore\/ModifiedView.swift" : {
+      "classLiterals" : 0,
+      "inlineStyles" : 1,
+      "literalColors" : 0,
+      "rawTags" : 0,
+      "varRefs" : 0
+    },
+    "Sources\/WebUICore\/Primitives.swift" : {
+      "classLiterals" : 14,
+      "inlineStyles" : 0,
+      "literalColors" : 0,
+      "rawTags" : 0,
+      "varRefs" : 0
+    },
+    "Sources\/WebUICore\/Utilities.swift" : {
+      "classLiterals" : 2,
+      "inlineStyles" : 0,
+      "literalColors" : 0,
+      "rawTags" : 33,
+      "varRefs" : 0
+    },
+    "Sources\/WebUIDesignSystemCore\/Viewport.swift" : {
+      "classLiterals" : 6,
+      "inlineStyles" : 1,
+      "literalColors" : 0,
+      "rawTags" : 12,
+      "varRefs" : 0
+    },
+    "Sources\/WebUIDesignSystemCore\/WebUIComponents.swift" : {
+      "classLiterals" : 136,
+      "inlineStyles" : 3,
+      "literalColors" : 2,
+      "rawTags" : 252,
+      "varRefs" : 0
+    },
+    "Sources\/WebUIDesignSystemCore\/WebUIExtrasCommsState.swift" : {
+      "classLiterals" : 110,
+      "inlineStyles" : 1,
+      "literalColors" : 0,
+      "rawTags" : 234,
+      "varRefs" : 0
+    },
+    "Sources\/WebUIDesignSystemCore\/WebUIExtrasData.swift" : {
+      "classLiterals" : 127,
+      "inlineStyles" : 7,
+      "literalColors" : 0,
+      "rawTags" : 264,
+      "varRefs" : 0
+    },
+    "Sources\/WebUIDesignSystemCore\/WebUIExtrasForm.swift" : {
+      "classLiterals" : 108,
+      "inlineStyles" : 4,
+      "literalColors" : 0,
+      "rawTags" : 223,
+      "varRefs" : 1
+    },
+    "Sources\/WebUIDesignSystemCore\/WebUIExtrasLongTail.swift" : {
+      "classLiterals" : 11,
+      "inlineStyles" : 0,
+      "literalColors" : 0,
+      "rawTags" : 22,
+      "varRefs" : 0
+    },
+    "Sources\/WebUIDesignSystemCore\/WebUIExtrasNavOverlay.swift" : {
+      "classLiterals" : 146,
+      "inlineStyles" : 0,
+      "literalColors" : 0,
+      "rawTags" : 299,
+      "varRefs" : 0
+    },
+    "Sources\/WebUIDesignSystemCore\/WebUIShell.swift" : {
+      "classLiterals" : 52,
+      "inlineStyles" : 0,
+      "literalColors" : 0,
+      "rawTags" : 105,
+      "varRefs" : 0
+    },
+    "Sources\/WebUIDesignSystemCore\/WebUITurn.swift" : {
+      "classLiterals" : 6,
+      "inlineStyles" : 0,
+      "literalColors" : 0,
+      "rawTags" : 16,
+      "varRefs" : 0
+    },
+    "Sources\/WebUIExample\/DemoTheme.swift" : {
+      "classLiterals" : 0,
+      "inlineStyles" : 0,
+      "literalColors" : 5,
+      "rawTags" : 0,
+      "varRefs" : 0
+    },
+    "Sources\/WebUIExample\/main.swift" : {
+      "classLiterals" : 11,
+      "inlineStyles" : 0,
+      "literalColors" : 0,
+      "rawTags" : 26,
+      "varRefs" : 17
+    },
+    "Sources\/WebUIIconTool\/MainProgram.swift" : {
+      "classLiterals" : 8,
+      "inlineStyles" : 0,
+      "literalColors" : 11,
+      "rawTags" : 41,
+      "varRefs" : 10
+    },
+    "Sources\/WebUIIslandCore\/ProbeIsland.swift" : {
+      "classLiterals" : 7,
+      "inlineStyles" : 0,
+      "literalColors" : 0,
+      "rawTags" : 17,
+      "varRefs" : 0
+    },
+    "Sources\/WebUIIslandCore\/ValidateIsland.swift" : {
+      "classLiterals" : 3,
+      "inlineStyles" : 0,
+      "literalColors" : 0,
+      "rawTags" : 6,
+      "varRefs" : 0
+    },
+    "Sources\/WebUISharedCore\/HTMLBuffer.swift" : {
+      "classLiterals" : 0,
+      "inlineStyles" : 0,
+      "literalColors" : 0,
+      "rawTags" : 1,
+      "varRefs" : 0
+    },
+    "Sources\/WebUIShowcaseContent\/ShowcaseLive.swift" : {
+      "classLiterals" : 2,
+      "inlineStyles" : 0,
+      "literalColors" : 0,
+      "rawTags" : 10,
+      "varRefs" : 0
+    },
+    "Sources\/WebUIShowcaseContent\/ShowcasePage.swift" : {
+      "classLiterals" : 0,
+      "inlineStyles" : 1,
+      "literalColors" : 15,
+      "rawTags" : 17,
+      "varRefs" : 22
+    },
+    "Sources\/WebUISmokeTest\/main.swift" : {
+      "classLiterals" : 4,
+      "inlineStyles" : 0,
+      "literalColors" : 0,
+      "rawTags" : 23,
+      "varRefs" : 31
+    },
+    "Sources\/WebUIWasmTool\/Main.swift" : {
+      "classLiterals" : 0,
+      "inlineStyles" : 0,
+      "literalColors" : 0,
+      "rawTags" : 4,
+      "varRefs" : 0
+    }
+  },
+  "version" : 1
+}
