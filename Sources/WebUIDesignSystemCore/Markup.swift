@@ -57,10 +57,10 @@ package enum Tag {
         " \(name)=\"\(htmlEscape(value))\""
     }
 
-    /// ` class="…"` — the space-joined class list (empty when every segment
-    /// is empty). segments keep their exact bytes; the smart single-space
-    /// join reproduces the old spellings whether a modifier carries its own
-    /// leading space or not (see the file comment).
+    /// the space-joined class list as one `class` attribute (empty when
+    /// every segment is empty). segments keep their exact bytes; the smart
+    /// single-space join reproduces the old spellings whether a modifier
+    /// carries its own leading space or not (see the file comment).
     package static func classes(_ segments: [String]) -> String {
         var joined = ""
         for segment in segments {
