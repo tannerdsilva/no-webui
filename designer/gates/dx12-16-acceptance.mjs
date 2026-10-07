@@ -425,13 +425,34 @@ async function run() {
         else bad("step 12: the probe does not exercise --fail-on-increase");
       }
       // the measured demo-tree counts REPLACE the plan's aspirational 0/0/0: the demo's
-      // live-region markup is real markup, and the audit reports it rather than wishing
-      // it away (feature G's warn-only rule).
-      skip(
-        "step 12: the ratchet baseline is re-pinned at W2 — lane D's deliberate macro-twin markup " +
-          "moved the demo counts AFTER lane G committed designer/markup-debt.json, so the ratchet " +
-          "trips on the merged head. recorded, never silently re-pinned (W2 owns the re-baseline)."
-      );
+      // live-region markup is real markup, and the audit reports it rather than wishing it
+      // away (feature G's warn-only rule). the ratchet is RUN here, never assumed: while the
+      // baseline is stale it is a recorded pending, and W2's re-baseline flips it to a pass.
+      const debtTool = join(ROOT, ".build", "out", "Products", "Debug", "WebUIContinuumTool");
+      const debtBaseline = join(ROOT, "designer", "markup-debt.json");
+      if (!existsSync(debtTool)) {
+        bad(`step 12: WebUIContinuumTool binary unavailable at ${debtTool} — run swift build`);
+      } else if (!existsSync(debtBaseline)) {
+        bad("step 12: designer/markup-debt.json is missing — the ratchet has no baseline");
+      } else {
+        const ratchet = spawnSync(
+          debtTool,
+          [
+            "lint", "--sources", "Sources/WebUIExample", "--debt-sources", "Sources",
+            "--baseline", debtBaseline, "--fail-on-increase",
+          ],
+          { cwd: ROOT, encoding: "utf8" }
+        );
+        if (ratchet.status === 0) {
+          ok("step 12: the committed-baseline ratchet is green (--fail-on-increase, exit 0) — no file grew past its baseline");
+        } else {
+          skip(
+            `step 12: the ratchet TRIPS on the merged head (exit ${ratchet.status}) — lane D's deliberate ` +
+              "macro-twin markup grew Sources/WebUIExample/main.swift AFTER lane G committed the baseline. " +
+              "recorded, never silently re-pinned; W2 owns the re-baseline."
+          );
+        }
+      }
       ok("step 12: `swift test --filter \"LayoutSpacing|TokenDebt|MarkupDebt\"`, `node designer/probes/g-styling.mjs` and the content pin + sheet budget run as separate orchestrator commands");
     }
 
