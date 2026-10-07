@@ -1,0 +1,126 @@
+[
+  [
+    "mention",
+    "<span class=\"mention\">@ada<\/span>"
+  ],
+  [
+    "mention\/dropdown",
+    "<div class=\"mention-dropdown\" data-component-id=\"mn\" data-event=\"click\"><div class=\"mention-option mention-option--active\" id=\"mn-option-0\"><span class=\"mention-option__avatar\"><\/span><span class=\"mention-option__name\">Ada<\/span><span class=\"mention-option__handle\">@ada<\/span><\/div><div class=\"mention-option\" id=\"mn-option-1\"><span class=\"mention-option__avatar\"><\/span><span class=\"mention-option__name\">Bob<\/span><span class=\"mention-option__handle\">@bob<\/span><\/div><\/div>"
+  ],
+  [
+    "reactions",
+    "<div class=\"reactions\" data-component-id=\"rx\" data-event=\"click\"><button class=\"reactions__emoji reactions__emoji--active\" id=\"rx-r-0\"><span aria-hidden=\"true\">👍<\/span><span class=\"reactions__count\">3<\/span><\/button><button class=\"reactions__emoji\" id=\"rx-r-1\"><span aria-hidden=\"true\">❤️<\/span><span class=\"reactions__count\">1<\/span><\/button><button class=\"reactions__more\" aria-label=\"Add reaction\">＋<\/button><\/div>"
+  ],
+  [
+    "typingIndicator",
+    "<div class=\"typing typing--inline\" role=\"status\" aria-label=\"Someone is typing\"><span class=\"typing__dot\"><\/span><span class=\"typing__dot\"><\/span><span class=\"typing__dot\"><\/span><\/div>"
+  ],
+  [
+    "notification",
+    "<div class=\"notification\" data-component-id=\"nt\" data-event=\"click\"><span class=\"notification__icon\"><svg class=\"icon icon--md\" viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><circle cx=\"12\" cy=\"12\" r=\"10\"\/><line x1=\"12\" y1=\"16\" x2=\"12\" y2=\"12\"\/><line x1=\"12\" y1=\"8\" x2=\"12.01\" y2=\"8\" stroke-linecap=\"round\"\/><\/svg><\/span><div class=\"notification__body\"><div class=\"notification__title\">Update<\/div><div class=\"notification__text\">New version<\/div><div class=\"notification__time\">2h<\/div><\/div><\/div>"
+  ],
+  [
+    "notification\/read",
+    "<div class=\"notification notification--read\"><span class=\"notification__icon\"><span class=\"notification__unread\"><\/span><\/span><div class=\"notification__body\"><div class=\"notification__text\">hi<\/div><\/div><\/div>"
+  ],
+  [
+    "toastStack",
+    "<div class=\"toast-stack\" aria-live=\"polite\"><div class=\"toast toast--info\" role=\"alert\"><span class=\"toast__icon\"><\/span><span class=\"toast__message\">one<\/span><button class=\"toast__close\" data-dismiss aria-label=\"Dismiss\">&times;<\/button><\/div><div class=\"toast toast--danger\" role=\"alert\"><span class=\"toast__icon\"><\/span><span class=\"toast__message\">two<\/span><button class=\"toast__close\" data-dismiss aria-label=\"Dismiss\">&times;<\/button><\/div><\/div>"
+  ],
+  [
+    "bell",
+    "<button class=\"bell\" data-component-id=\"bl\" data-event=\"click\" aria-label=\"Notifications, 3 unread\"><span class=\"bell__icon\"><svg class=\"icon icon--md\" viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><path d=\"M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9\"\/><path d=\"M13.73 21a2 2 0 0 1-3.46 0\"\/><\/svg><\/span><span class=\"bell__badge\">3<\/span><\/button>"
+  ],
+  [
+    "statCard",
+    "<div class=\"stat-card stat-card--accent\"><div class=\"stat-card__label\">Uptime<\/div><div class=\"stat-card__value\">99.9%<\/div><div class=\"stat-card__delta delta delta--up\">+0.1%<\/div><\/div>"
+  ],
+  [
+    "delta",
+    "<span class=\"delta delta--down\">▼ +12%<\/span>"
+  ],
+  [
+    "celebrate",
+    "<div class=\"celebrate\"><div class=\"celebrate__emoji\">🎉<\/div><div class=\"celebrate__title\">Done<\/div><div class=\"celebrate__text\">All passed<\/div><\/div>"
+  ],
+  [
+    "confetti",
+    "<div class=\"confetti-stage\"><div class=\"confetti\" aria-hidden=\"true\"><span class=\"confetti__piece\"><\/span><span class=\"confetti__piece\"><\/span><span class=\"confetti__piece\"><\/span><span class=\"confetti__piece\"><\/span><span class=\"confetti__piece\"><\/span><span class=\"confetti__piece\"><\/span><span class=\"confetti__piece\"><\/span><span class=\"confetti__piece\"><\/span><span class=\"confetti__piece\"><\/span><span class=\"confetti__piece\"><\/span><span class=\"confetti__piece\"><\/span><span class=\"confetti__piece\"><\/span><span class=\"confetti__piece\"><\/span><span class=\"confetti__piece\"><\/span><span class=\"confetti__piece\"><\/span><span class=\"confetti__piece\"><\/span><span class=\"confetti__piece\"><\/span><span class=\"confetti__piece\"><\/span><span class=\"confetti__piece\"><\/span><span class=\"confetti__piece\"><\/span><span class=\"confetti__piece\"><\/span><span class=\"confetti__piece\"><\/span><span class=\"confetti__piece\"><\/span><span class=\"confetti__piece\"><\/span><\/div><\/div>"
+  ],
+  [
+    "countdown",
+    "<div class=\"countdown countdown--urgent\"><div class=\"countdown__label\">Until launch<\/div><div class=\"countdown__units\"><div class=\"countdown__unit\"><span class=\"countdown__value\">02<\/span><span class=\"countdown__unit-label\">d<\/span><\/div><div class=\"countdown__unit\"><span class=\"countdown__value\">03<\/span><span class=\"countdown__unit-label\">h<\/span><\/div><\/div><\/div>"
+  ],
+  [
+    "cookieConsent",
+    "<div class=\"cookie-consent\" role=\"dialog\" aria-modal=\"false\"><div class=\"cookie-consent__body\"><div class=\"cookie-consent__title\">Cookies<\/div><div class=\"cookie-consent__text\">We use them.<\/div><div class=\"cookie-consent__actions\"><button class=\"button button--primary button--md\"><span class=\"button__label\">OK<\/span><\/button><\/div><\/div><\/div>"
+  ],
+  [
+    "pullRefresh",
+    "<div class=\"pull-refresh pull-refresh--active\" data-component-id=\"pr\" data-event=\"click\" role=\"status\"><div class=\"pull-refresh__indicator\"><span class=\"pull-refresh__spinner\"><\/span><span class=\"pull-refresh__text\">Refreshing…<\/span><\/div><\/div>"
+  ],
+  [
+    "skeletonCard",
+    "<div class=\"skeleton-card\"><div class=\"skeleton-card__media skeleton skeleton--rect\"><\/div><div class=\"skeleton__text skeleton__text--w100 skeleton\"><\/div><div class=\"skeleton__text skeleton__text--w60 skeleton\"><\/div><\/div>"
+  ],
+  [
+    "appletCard",
+    "<div class=\"applet-card\"><div class=\"applet-card__label\">GitHub<\/div><div class=\"applet-card__value\">12<\/div><\/div>"
+  ],
+  [
+    "avatarStack",
+    "<div class=\"avatar-stack\"><span class=\"avatar avatar--md avatar--initials\">AL<\/span><span class=\"avatar avatar--md avatar--initials\">BO<\/span><span class=\"avatar avatar--md avatar--more\">+3<\/span><\/div>"
+  ],
+  [
+    "badgeStatus",
+    "<span class=\"badge-status\"><span class=\"badge-status__dot  badge-status__dot--online\"><\/span>Online<\/span>"
+  ],
+  [
+    "badgeCount",
+    "<span class=\"badge-count\"><span class=\"badge-count__icon\"><svg class=\"icon icon--md\" viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><path d=\"M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9\"\/><path d=\"M13.73 21a2 2 0 0 1-3.46 0\"\/><\/svg><\/span><span class=\"badge-count__num\">5<\/span><\/span>"
+  ],
+  [
+    "radioGroup",
+    "<div class=\"radio-group radio-group--inline\" role=\"radiogroup\"><label class=\"radio\"><input type=\"radio\" name=\"radio-group\" value=\"a\" checked class=\"radio__input\"><span class=\"radio__circle\"><\/span><span class=\"radio__label\">A<\/span><\/label><label class=\"radio\"><input type=\"radio\" name=\"radio-group\" value=\"b\" class=\"radio__input\"><span class=\"radio__circle\"><\/span><span class=\"radio__label\">B<\/span><\/label><\/div>"
+  ],
+  [
+    "checkboxGroup",
+    "<div class=\"checkbox-group\"><label class=\"checkbox\"><input type=\"checkbox\" class=\"checkbox__input\" checked><span class=\"checkbox__box\"><\/span><span class=\"checkbox__label\">A<\/span><\/label><label class=\"checkbox\"><input type=\"checkbox\" class=\"checkbox__input\"><span class=\"checkbox__box\"><\/span><span class=\"checkbox__label\">B<\/span><\/label><\/div>"
+  ],
+  [
+    "banner",
+    "<div class=\"banner banner--warning\" role=\"status\" id=\"bn\"><div class=\"banner__icon fill-slot\"><svg class=\"icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><path d=\"M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z\"\/><line x1=\"12\" y1=\"9\" x2=\"12\" y2=\"13\"\/><line x1=\"12\" y1=\"17\" x2=\"12.01\" y2=\"17\" stroke-linecap=\"round\"\/><\/svg><\/div><div class=\"banner__body\"><span class=\"banner__title\">Heads up<\/span><div class=\"banner__text\">Careful<\/div><\/div><button class=\"banner__close\" data-dismiss aria-label=\"Dismiss\">&times;<\/button><\/div>"
+  ],
+  [
+    "activityFeed",
+    "<div class=\"activity\"><div class=\"activity__group\">Today<\/div><div class=\"activity__item\"><div class=\"activity__icon fill-slot\"><svg class=\"icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><polygon points=\"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2\"\/><\/svg><\/div><div class=\"activity__text\">Loved a post<\/div><span class=\"activity__time\">2h<\/span><\/div><div class=\"activity__item\"><div class=\"activity__icon fill-slot\"><svg class=\"icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><path d=\"M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2\"\/><circle cx=\"12\" cy=\"7\" r=\"4\"\/><\/svg><\/div><div class=\"activity__text\">Joined<\/div><\/div><div class=\"activity__group\">Earlier<\/div><div class=\"activity__item\"><div class=\"activity__icon fill-slot\"><svg class=\"icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><polyline points=\"20 6 9 17 4 12\"\/><\/svg><\/div><div class=\"activity__text\">Done<\/div><\/div><\/div>"
+  ],
+  [
+    "messageScroller",
+    "<div class=\"scroll-area scroll-area--reverse scroll-area--fade-y\" id=\"ms\" style=\"height: 20rem; max-height: 20rem\" role=\"log\" aria-live=\"polite\" aria-label=\"Chat\" tabindex=\"0\">newold<\/div>"
+  ],
+  [
+    "marker",
+    "<div class=\"marker marker--sticky\" role=\"separator\"><span class=\"marker__glyph\"><svg class=\"icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><rect x=\"3\" y=\"4\" width=\"18\" height=\"18\" rx=\"2\" ry=\"2\"\/><line x1=\"16\" y1=\"2\" x2=\"16\" y2=\"6\"\/><line x1=\"8\" y1=\"2\" x2=\"8\" y2=\"6\"\/><line x1=\"3\" y1=\"10\" x2=\"21\" y2=\"10\"\/><\/svg><\/span><span class=\"marker__label\">Tuesday<\/span><\/div>"
+  ],
+  [
+    "attachment",
+    "<div class=\"attachment attachment--uploading\" id=\"at\"><span class=\"attachment__icon\"><svg class=\"icon icon--sm\" viewBox=\"0 0 24 24\" width=\"0.75em\" height=\"0.75em\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><path d=\"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z\"\/><polyline points=\"14 2 14 8 20 8\"\/><line x1=\"16\" y1=\"13\" x2=\"8\" y2=\"13\"\/><line x1=\"16\" y1=\"17\" x2=\"8\" y2=\"17\"\/><polyline points=\"10 9 9 9 8 9\"\/><\/svg><\/span><span class=\"attachment__body\"><span class=\"attachment__name\">photo.png<\/span><span class=\"attachment__meta\">2 MB<\/span><\/span><button class=\"attachment__remove\" data-dismiss aria-label=\"Remove attachment\">&times;<\/button><\/div>"
+  ],
+  [
+    "attachment\/readme",
+    "<div class=\"attachment\"><span class=\"attachment__icon\"><svg class=\"icon icon--sm\" viewBox=\"0 0 24 24\" width=\"0.75em\" height=\"0.75em\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><path d=\"M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z\"\/><polyline points=\"14 2 14 8 20 8\"\/><line x1=\"16\" y1=\"13\" x2=\"8\" y2=\"13\"\/><line x1=\"16\" y1=\"17\" x2=\"8\" y2=\"17\"\/><polyline points=\"10 9 9 9 8 9\"\/><\/svg><\/span><span class=\"attachment__body\"><span class=\"attachment__name\">a.txt<\/span><\/span><\/div>"
+  ],
+  [
+    "chatBubble",
+    "<div class=\"chat__bubble chat__bubble--sent\" id=\"cb\">hi there<span class=\"chat__time\">09:41<span class=\"chat__receipt chat__receipt--read\" role=\"img\" aria-label=\"Read\"><svg class=\"icon icon--sm\" viewBox=\"0 0 24 24\" width=\"0.75em\" height=\"0.75em\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><path d=\"M18 6 7 17l-5-5\"\/><path d=\"m22 10-7.5 7.5L13 16\"\/><\/svg><\/span><\/span><\/div><div class=\"chat__reactions\"><span class=\"chat__reaction chat__reaction--active\"><span aria-hidden=\"true\">👍<\/span><span>1<\/span><\/span><\/div>"
+  ],
+  [
+    "chatBubble\/in",
+    "<div class=\"chat__bubble chat__bubble--received\">yo<\/div>"
+  ],
+  [
+    "message",
+    "<div class=\"chat__thread chat__thread--own\"><div class=\"chat__meta\"><span>Ada<\/span><span>09:42<\/span><\/div><div class=\"chat__bubble chat__bubble--own\">hello<br>world<\/div><div class=\"chat__reactions\"><span class=\"chat__reaction\"><span aria-hidden=\"true\">❤️<\/span><span>2<\/span><\/span><\/div><\/div>"
+  ]
+]

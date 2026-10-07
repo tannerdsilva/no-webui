@@ -1,0 +1,106 @@
+[
+  [
+    "slider",
+    "<div class=\"slider slider--lg slider--vertical\"><input type=\"range\" class=\"slider__input\" id=\"sl-input\" min=\"0.0\" max=\"100.0\" value=\"42.0\" aria-valuenow=\"42.0\" data-component-id=\"sl-input\" data-event=\"input\"><div class=\"slider__track\"><div class=\"slider__fill\" style=\"width:100.00%\"><\/div><span class=\"slider__thumb\" style=\"left:100.00%\"><\/span><\/div><div class=\"slider__ticks\"><span class=\"slider__tick\"><\/span><span class=\"slider__tick\"><\/span><span class=\"slider__tick\"><\/span><span class=\"slider__tick\"><\/span><span class=\"slider__tick\"><\/span><span class=\"slider__tick\"><\/span><span class=\"slider__tick\"><\/span><span class=\"slider__tick\"><\/span><span class=\"slider__tick\"><\/span><span class=\"slider__tick\"><\/span><span class=\"slider__tick\"><\/span><\/div><div class=\"slider__labels\"><span>0<\/span><span>100<\/span><\/div><\/div>"
+  ],
+  [
+    "slider\/plain",
+    "<div class=\"slider\"><input type=\"range\" class=\"slider__input\" min=\"0.0\" max=\"10.0\" value=\"5.0\" aria-valuenow=\"5.0\"><div class=\"slider__track\"><div class=\"slider__fill\" style=\"width:100.00%\"><\/div><span class=\"slider__thumb\" style=\"left:100.00%\"><\/span><\/div><div class=\"slider__ticks\"><span class=\"slider__tick\"><\/span><span class=\"slider__tick\"><\/span><span class=\"slider__tick\"><\/span><span class=\"slider__tick\"><\/span><span class=\"slider__tick\"><\/span><span class=\"slider__tick\"><\/span><span class=\"slider__tick\"><\/span><span class=\"slider__tick\"><\/span><span class=\"slider__tick\"><\/span><span class=\"slider__tick\"><\/span><span class=\"slider__tick\"><\/span><\/div><\/div>"
+  ],
+  [
+    "toggle",
+    "<label class=\"toggle toggle--lg toggle--label-left toggle--loading\"><span class=\"toggle__label\">Enabled<\/span><input type=\"checkbox\" class=\"toggle__input\" id=\"tg-input\" checked data-component-id=\"tg-input\" data-event=\"change\"><span class=\"toggle__track\"><span class=\"toggle__thumb\"><\/span><\/span><\/label>"
+  ],
+  [
+    "toggle\/plain",
+    "<label class=\"toggle\"><input type=\"checkbox\" class=\"toggle__input\"><span class=\"toggle__track\"><span class=\"toggle__thumb\"><\/span><\/span><span class=\"toggle__label\">Off<\/span><\/label>"
+  ],
+  [
+    "stepper",
+    "<div class=\"stepper stepper--sm\" data-component-id=\"st\" data-event=\"click\" role=\"group\" aria-label=\"Stepper\"><button class=\"stepper__btn\" id=\"st-dec\" aria-label=\"Decrease\">−<\/button><span class=\"stepper__value\">3<\/span><button class=\"stepper__btn\" id=\"st-inc\" aria-label=\"Increase\">+<\/button><\/div>"
+  ],
+  [
+    "otp",
+    "<div class=\"otp otp--lg otp--error\" aria-label=\"One-time code\"><input class=\"otp__cell otp__cell--filled\" id=\"ot-cell-0\" type=\"text\" inputmode=\"numeric\" maxlength=\"1\" value=\"1\" aria-label=\"Digit 1\" data-component-id=\"ot-cell-0\" data-event=\"input\"><input class=\"otp__cell otp__cell--filled\" id=\"ot-cell-1\" type=\"text\" inputmode=\"numeric\" maxlength=\"1\" value=\"2\" aria-label=\"Digit 2\" data-component-id=\"ot-cell-1\" data-event=\"input\"><input class=\"otp__cell otp__cell--active\" id=\"ot-cell-2\" type=\"text\" inputmode=\"numeric\" maxlength=\"1\" value=\"\" aria-label=\"Digit 3\" data-component-id=\"ot-cell-2\" data-event=\"input\"><input class=\"otp__cell\" id=\"ot-cell-3\" type=\"text\" inputmode=\"numeric\" maxlength=\"1\" value=\"\" aria-label=\"Digit 4\" data-component-id=\"ot-cell-3\" data-event=\"input\"><\/div>"
+  ],
+  [
+    "mfa",
+    "<div class=\"mfa\"><div class=\"mfa__qr\"><div class=\"qr\"><div class=\"qr__code\"><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><\/div><\/div><\/div><div class=\"mfa__steps\"><div class=\"mfa__step\"><span class=\"mfa__step-label\">Scan<\/span><\/div><div class=\"mfa__step mfa__step--current\"><span class=\"mfa__step-label\">Enter code<\/span><\/div><div class=\"mfa__step\"><span class=\"mfa__step-label\">Verify<\/span><\/div><\/div><div class=\"mfa__code\"><span class=\"mfa__digit\">•<\/span><span class=\"mfa__digit\">•<\/span><span class=\"mfa__digit\">·<\/span><span class=\"mfa__digit\">·<\/span><span class=\"mfa__digit\">·<\/span><span class=\"mfa__digit\">·<\/span><\/div><div class=\"mfa__recovery\"><div class=\"mfa__recovery-item\">AAAA-1111<\/div><div class=\"mfa__recovery-item\">BBBB-2222<\/div><\/div><\/div>"
+  ],
+  [
+    "mfa\/none",
+    "<div class=\"mfa\"><div class=\"mfa__qr\"><div class=\"qr\"><div class=\"qr__code\"><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><span class=\"qr__cell\"><\/span><\/div><\/div><\/div><div class=\"mfa__steps\"><div class=\"mfa__step\"><span class=\"mfa__step-label\">Scan<\/span><\/div><div class=\"mfa__step mfa__step--current\"><span class=\"mfa__step-label\">Enter code<\/span><\/div><div class=\"mfa__step\"><span class=\"mfa__step-label\">Verify<\/span><\/div><\/div><div class=\"mfa__code\"><span class=\"mfa__digit\">•<\/span><span class=\"mfa__digit\">•<\/span><span class=\"mfa__digit\">·<\/span><span class=\"mfa__digit\">·<\/span><span class=\"mfa__digit\">·<\/span><span class=\"mfa__digit\">·<\/span><\/div><\/div>"
+  ],
+  [
+    "recurrence",
+    "<div class=\"recurrence\" data-component-id=\"rc\" data-event=\"click\"><div class=\"recurrence__options\"><button class=\"recurrence__chip recurrence__chip--active\" id=\"rc-chip-0\">Daily<\/button><button class=\"recurrence__chip\" id=\"rc-chip-1\">Weekly<\/button><\/div><div class=\"recurrence__days\"><button class=\"recurrence__day recurrence__day--active\" id=\"rc-day-0\">M<\/button><button class=\"recurrence__day recurrence__day--active\" id=\"rc-day-1\">T<\/button><button class=\"recurrence__day recurrence__day--active\" id=\"rc-day-2\">W<\/button><\/div><\/div>"
+  ],
+  [
+    "multiSelect",
+    "<div class=\"multiselect\" data-component-id=\"ms\" data-event=\"click\"><button class=\"multiselect__trigger\"><span class=\"chip chip--sm\">Red<\/span><span class=\"chip chip--sm\">Green<\/span><span class=\"multiselect__chevron\">▾<\/span><\/button><div class=\"multiselect__panel\"><div class=\"multiselect__search\"><input type=\"search\" placeholder=\"Filter…\"><\/div><div class=\"multiselect__option multiselect__option--selected\" id=\"ms-opt-0\">Red<\/div><div class=\"multiselect__option multiselect__option--selected\" id=\"ms-opt-1\">Green<\/div><div class=\"multiselect__option\" id=\"ms-opt-2\">Blue<\/div><\/div><\/div>"
+  ],
+  [
+    "validation",
+    "<div class=\"validation validation--success\" role=\"status\"><span class=\"validation__icon\" aria-hidden=\"true\">✓<\/span><span class=\"validation__text\">Must be unique<\/span><\/div>"
+  ],
+  [
+    "dropZone",
+    "<div class=\"dropzone dropzone--hover\" role=\"button\" tabindex=\"0\"><div class=\"file-drop__icon\" aria-hidden=\"true\">⇪<\/div><div class=\"file-drop__title\">Drop files<\/div><div class=\"file-drop__hint\">or click<\/div><input type=\"file\" style=\"display:none\"><\/div>"
+  ],
+  [
+    "signature",
+    "<div class=\"sigpad\"><div class=\"sigpad__canvas\" role=\"img\" aria-label=\"Sign here\"><\/div><div class=\"sigpad__tools\"><button class=\"button button--ghost button--sm\">Clear<\/button><\/div><\/div>"
+  ],
+  [
+    "inlineEdit",
+    "<div class=\"inline-edit inline-edit--editing inline-edit--error\" data-component-id=\"ie\" data-event=\"click\"><div class=\"inline-edit__value\">Hello<span class=\"inline-edit__pencil\" aria-hidden=\"true\">✎<\/span><\/div><div class=\"inline-edit__editing\"><input class=\"inline-edit__input inline-edit__input--error\" value=\"Hello\"><div class=\"inline-edit__actions\"><button class=\"inline-edit__check\" id=\"ie-save\" aria-label=\"Save\">✓<\/button><button class=\"inline-edit__pencil\" id=\"ie-cancel\" aria-label=\"Cancel\">✕<\/button><\/div><\/div><\/div>"
+  ],
+  [
+    "inlineEdit\/idle",
+    "<div class=\"inline-edit inline-edit--idle\"><div class=\"inline-edit__value\">Hello<span class=\"inline-edit__pencil\" aria-hidden=\"true\">✎<\/span><\/div><\/div>"
+  ],
+  [
+    "masked",
+    "<div class=\"masked\"><span class=\"masked__prefix\">$<\/span><input type=\"text\" value=\"••••••\" aria-label=\"masked value\"><span class=\"masked__caret\" aria-hidden=\"true\"><\/span><\/div>"
+  ],
+  [
+    "rating",
+    "<div class=\"rating rating--lg rating--heart rating--filled\" data-component-id=\"rt\" data-event=\"click\" role=\"img\" aria-label=\"3.5 of 5\"><span class=\"rating__star rating__star--filled\" id=\"rt-star-1\" aria-hidden=\"true\">♥<\/span><span class=\"rating__star rating__star--filled\" id=\"rt-star-2\" aria-hidden=\"true\">♥<\/span><span class=\"rating__star rating__star--filled\" id=\"rt-star-3\" aria-hidden=\"true\">♥<\/span><span class=\"rating__star\" id=\"rt-star-4\" aria-hidden=\"true\">♥<\/span><span class=\"rating__star\" id=\"rt-star-5\" aria-hidden=\"true\">♥<\/span><span class=\"rating__value\">3.5<\/span><\/div>"
+  ],
+  [
+    "rating\/plain",
+    "<div class=\"rating rating--filled\" role=\"img\" aria-label=\"2.0 of 5\"><span class=\"rating__star rating__star--filled\" aria-hidden=\"true\">★<\/span><span class=\"rating__star rating__star--filled\" aria-hidden=\"true\">★<\/span><span class=\"rating__star\" aria-hidden=\"true\">★<\/span><span class=\"rating__star\" aria-hidden=\"true\">★<\/span><span class=\"rating__star\" aria-hidden=\"true\">★<\/span><\/div>"
+  ],
+  [
+    "tag",
+    "<span class=\"tag tag--success tag--clickable\" data-component-id=\"tg2\" data-event=\"click\"><span class=\"tag__icon\"><svg class=\"icon icon--sm\" viewBox=\"0 0 24 24\" width=\"0.75em\" height=\"0.75em\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><polygon points=\"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2\"\/><\/svg><\/span><span class=\"tag__label\">Swift<\/span><span class=\"tag__count\">2<\/span><button class=\"tag__remove\" id=\"tg2-remove\" aria-label=\"Remove Swift\">×<\/button><\/span>"
+  ],
+  [
+    "chipInput",
+    "<div class=\"chip-input\" data-component-id=\"ci\" data-event=\"click\"><span class=\"chip chip--sm chip--primary\">a<button class=\"chip__remove\" id=\"ci-chip-0\" aria-label=\"Remove\">×<\/button><\/span><span class=\"chip chip--sm chip--primary\">b<button class=\"chip__remove\" id=\"ci-chip-1\" aria-label=\"Remove\">×<\/button><\/span><input type=\"text\" placeholder=\"Add…\"><\/div>"
+  ],
+  [
+    "cardInput",
+    "<div class=\"card-input\"><div class=\"card-input__row\"><div class=\"card-input__preview\"><span class=\"card-input__chip\"><\/span><span class=\"card-input__number\">4242<\/span><span class=\"card-input__holder\">Ada<\/span><span class=\"card-input__brand-icon card-input__brand-icon--amex\"><\/span><\/div><\/div><div class=\"card-input__row\"><div class=\"card-input__field\"><label>Card number<\/label><input class=\"input\" value=\"4242\"><\/div><\/div><div class=\"card-input__row\"><div class=\"card-input__field\"><label>Card holder<\/label><input class=\"input\" value=\"Ada\"><\/div><\/div><\/div>"
+  ],
+  [
+    "inputGroup",
+    "<div class=\"input input--with-affix input--error\"><span class=\"input__affix input__affix--left\"><svg class=\"icon icon--sm\" viewBox=\"0 0 24 24\" width=\"0.75em\" height=\"0.75em\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><line x1=\"12\" y1=\"1\" x2=\"12\" y2=\"23\"\/><path d=\"M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6\"\/><\/svg><\/span><span class=\"input__prefix\">$<\/span><input class=\"input__el\" type=\"text\" id=\"ig\" name=\"amt\" placeholder=\"Amount\" value=\"12\" aria-invalid=\"true\"><span class=\"input__suffix input__suffix--error\">USD<\/span><\/div>"
+  ],
+  [
+    "inputGroup\/plain",
+    "<div class=\"input input--with-affix\"><input class=\"input__el\" type=\"text\" placeholder=\"\"><\/div>"
+  ],
+  [
+    "field",
+    "<div class=\"field\"><div class=\"field__row\"><label class=\"field__label field__label--required\" for=\"em\">Email<\/label><span class=\"field__hint field__hint--error\">Required<\/span><span class=\"field__count\">4 \/ 10<\/span><\/div><div class=\"input-wrapper\"><input id=\"em\" type=\"text\" class=\"input \" placeholder=\"you@x.com\"><\/div><span class=\"field__helper field__helper--error\">Enter it<\/span><\/div>"
+  ],
+  [
+    "field\/bare",
+    "<div class=\"field\"><div class=\"input-wrapper\"><input type=\"text\" class=\"input \" placeholder=\"\"><\/div><\/div>"
+  ],
+  [
+    "toggleGroup",
+    "<div style=\"display: flex; flex-wrap: wrap; gap: var(--space-2)\" id=\"tgg\" role=\"group\" data-component-id=\"tgg\" data-event=\"click\"><button type=\"button\" class=\"chip chip--filter chip--filter-active\" id=\"tgg-opt-0\" aria-pressed=\"true\">All<\/button><button type=\"button\" class=\"chip chip--filter\" id=\"tgg-opt-1\">Mine<\/button><\/div>"
+  ]
+]

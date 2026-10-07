@@ -1,0 +1,150 @@
+[
+  [
+    "navbar",
+    "<nav class=\"navbar navbar--sticky\" data-component-id=\"nav\" data-event=\"click\"><a class=\"navbar__brand\" href=\"\/\"><span class=\"navbar__brand-mark\"><\/span>App<\/a><label class=\"navbar__search\" role=\"search\"><input type=\"search\" id=\"nav-search\" placeholder=\"Search…\" aria-label=\"Search…\"><kbd>Ctrl K<\/kbd><\/label><div class=\"navbar__links\"><a class=\"navbar__link navbar__link--active\" id=\"nav-link-0\" href=\"\/\">Home<\/a><a class=\"navbar__link\" id=\"nav-link-1\" href=\"\/docs\">Docs<\/a><\/div><div class=\"navbar__actions\"><button class=\"button button--primary button--md\"><span class=\"button__label\">Go<\/span><\/button><\/div><button class=\"navbar__hamburger\" type=\"button\" aria-label=\"Menu\"><span><\/span><span><\/span><span><\/span><\/button><\/nav>"
+  ],
+  [
+    "navbar\/bare",
+    "<nav class=\"navbar\"><div class=\"navbar__actions\">x<\/div><\/nav>"
+  ],
+  [
+    "bottomNav",
+    "<nav class=\"bottom-nav\" data-component-id=\"bn\" data-event=\"click\" aria-label=\"Primary\"><a class=\"bottom-nav__item bottom-nav__item--active\" id=\"bn-item-0\" href=\"#\"><span class=\"bottom-nav__icon\"><svg class=\"icon icon--md\" viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><path d=\"M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z\"\/><polyline points=\"9 22 9 12 15 12 15 22\"\/><\/svg><\/span><span class=\"bottom-nav__badge\">3<\/span><span class=\"bottom-nav__label\">Home<\/span><\/a><a class=\"bottom-nav__item\" id=\"bn-item-1\" href=\"#\"><span class=\"bottom-nav__icon\"><svg class=\"icon icon--md\" viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><line x1=\"8\" y1=\"6\" x2=\"21\" y2=\"6\"\/><line x1=\"8\" y1=\"12\" x2=\"21\" y2=\"12\"\/><line x1=\"8\" y1=\"18\" x2=\"21\" y2=\"18\"\/><line x1=\"3\" y1=\"6\" x2=\"3.01\" y2=\"6\" stroke-linecap=\"round\"\/><line x1=\"3\" y1=\"12\" x2=\"3.01\" y2=\"12\" stroke-linecap=\"round\"\/><line x1=\"3\" y1=\"18\" x2=\"3.01\" y2=\"18\" stroke-linecap=\"round\"\/><\/svg><\/span><span class=\"bottom-nav__label\">Feed<\/span><\/a><a class=\"bottom-nav__item\" id=\"bn-item-2\" href=\"#\"><span class=\"bottom-nav__icon\"><svg class=\"icon icon--md\" viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><path d=\"M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2\"\/><circle cx=\"12\" cy=\"7\" r=\"4\"\/><\/svg><\/span><span class=\"bottom-nav__label\">Me<\/span><\/a><\/nav>"
+  ],
+  [
+    "fab\/secondary\/extended",
+    "<button class=\"fab fab--secondary fab--lg fab--extended\" id=\"fab1\" data-component-id=\"fab1\" data-event=\"click\" aria-label=\"Add\"><span class=\"fab__icon\"><svg class=\"icon icon--md\" viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><line x1=\"12\" y1=\"5\" x2=\"12\" y2=\"19\"\/><line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"\/><\/svg><\/span><span class=\"fab__label\">Add<\/span><\/button>"
+  ],
+  [
+    "fab\/plain",
+    "<button class=\"fab\" aria-label=\"\"><span class=\"fab__icon\"><svg class=\"icon icon--md\" viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><line x1=\"12\" y1=\"5\" x2=\"12\" y2=\"19\"\/><line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"\/><\/svg><\/span><\/button>"
+  ],
+  [
+    "speedDial",
+    "<div class=\"fab-stage fab-stage--dial\"><button class=\"fab\" aria-label=\"A\"><span class=\"fab__icon\"><svg class=\"icon icon--md\" viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><polygon points=\"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2\"\/><\/svg><\/span><span class=\"fab__label\">A<\/span><\/button><button class=\"fab\" aria-label=\"B\"><span class=\"fab__icon\"><svg class=\"icon icon--md\" viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><path d=\"M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z\"\/><\/svg><\/span><span class=\"fab__label\">B<\/span><\/button><\/div>"
+  ],
+  [
+    "wizard",
+    "<ol class=\"wizard wizard--vertical\"><li class=\"wizard__step wizard__step--done\"><span class=\"wizard__dot\"><\/span><span class=\"wizard__label\">One<\/span><span class=\"wizard__desc\">start<\/span><\/li><li class=\"wizard__step wizard__step--current\"><span class=\"wizard__dot\"><\/span><span class=\"wizard__label\">Two<\/span><\/li><li class=\"wizard__step\"><span class=\"wizard__dot\"><\/span><span class=\"wizard__label\">Three<\/span><\/li><li class=\"wizard__step wizard__step--error\"><span class=\"wizard__dot\"><\/span><span class=\"wizard__label\">Four<\/span><\/li><\/ol>"
+  ],
+  [
+    "transfer",
+    "<div class=\"transfer\"><div class=\"transfer__head\"><span class=\"transfer__title\">Members<\/span><span class=\"transfer__count\">3<\/span><\/div><div class=\"transfer__search\"><input type=\"search\" placeholder=\"Filter…\"><\/div><div class=\"transfer__list\"><div class=\"transfer__item transfer__item--selected\"><span class=\"transfer__row-label\">A<\/span><\/div><div class=\"transfer__item transfer__row--moved\"><span class=\"transfer__row-label\">B<\/span><button class=\"transfer__remove\" aria-label=\"Remove\">×<\/button><\/div><div class=\"transfer__item\"><span class=\"transfer__row-label\">C<\/span><\/div><\/div><div class=\"transfer__controls\"><button class=\"transfer__btn\" aria-label=\"Add\">→<\/button><button class=\"transfer__btn\" aria-label=\"Remove\">←<\/button><\/div><\/div>"
+  ],
+  [
+    "buttonGroup",
+    "<div class=\"button-group\" role=\"group\"><button class=\"button button--primary button--md\"><span class=\"button__label\">A<\/span><\/button><button class=\"button button--primary button--md\"><span class=\"button__label\">B<\/span><\/button><\/div>"
+  ],
+  [
+    "splitButton",
+    "<div class=\"split-button\"><button class=\"button button--primary\" id=\"sb-main\">Save<\/button><button class=\"button button--primary button--caret\" id=\"sb-caret\" aria-label=\"Options\">▾<\/button><\/div>"
+  ],
+  [
+    "splitButton\/wired",
+    "<div class=\"split-button\" data-component-id=\"sb\" data-event=\"click\"><button class=\"button button--primary\" id=\"sb-main\">Save<\/button><button class=\"button button--primary button--caret\" id=\"sb-caret\" aria-label=\"Options\">▾<\/button><\/div>"
+  ],
+  [
+    "toc",
+    "<nav class=\"toc-rail\" aria-label=\"Table of contents\"><div class=\"toc-rail__title\">Contents<\/div><a class=\"toc-rail__item toc-rail__item--active\" href=\"#intro\">Intro<\/a><a class=\"toc-rail__item toc__link--nested\" href=\"#syntax\">Syntax<\/a><a class=\"toc-rail__item toc__link--nested-2\" href=\"#n\">Nested<\/a><\/nav>"
+  ],
+  [
+    "accordion",
+    "<div class=\"accordion accordion--card\" data-component-id=\"acc\" data-event=\"click\"><div class=\"accordion__item accordion__item--open\"><button class=\"accordion__header\" id=\"acc-item-0\" aria-expanded=\"true\"><span class=\"accordion__chevron\"><\/span>One<\/button><div class=\"accordion__body\">body1<\/div><\/div><div class=\"accordion__item\"><button class=\"accordion__header\" id=\"acc-item-1\" aria-expanded=\"false\"><span class=\"accordion__chevron\"><\/span>Two<\/button><div class=\"accordion__body\">body2<\/div><\/div><\/div>"
+  ],
+  [
+    "collapse",
+    "<div class=\"collapse collapse--open\"><button class=\"collapse__header\" id=\"col\" aria-expanded=\"true\"><span class=\"collapse__chevron\"><\/span>Details<\/button><div class=\"collapse__content\"><div class=\"collapse__inner\">inner<\/div><\/div><\/div>"
+  ],
+  [
+    "collapse\/wired",
+    "<div class=\"collapse\" data-component-id=\"col\" data-event=\"click\"><button class=\"collapse__header\" id=\"col\" aria-expanded=\"false\"><span class=\"collapse__chevron\"><\/span>Details<\/button><div class=\"collapse__content\"><div class=\"collapse__inner\">inner<\/div><\/div><\/div>"
+  ],
+  [
+    "actionSheet",
+    "<div class=\"action-sheet\" data-component-id=\"as\" data-event=\"click\" role=\"menu\"><div class=\"action-sheet__header\"><div class=\"action-sheet__title\">Choose<\/div><div class=\"action-sheet__sub\">Pick one<\/div><\/div><button class=\"action-sheet__item action-sheet__item--destructive\" id=\"as-item-0\" role=\"menuitem\">Edit<\/button><button class=\"action-sheet__item\" id=\"as-item-1\" role=\"menuitem\">Share<\/button><button class=\"action-sheet__item\" id=\"as-item-2\" role=\"menuitem\">Delete<\/button><div class=\"action-sheet__divider\"><\/div><button class=\"action-sheet__cancel\" id=\"as-cancel\">Cancel<\/button><\/div>"
+  ],
+  [
+    "bottomSheet",
+    "<div class=\"bottom-sheet bottom-sheet--half\" role=\"dialog\" aria-modal=\"true\"><div class=\"bottom-sheet__handle\"><\/div><div class=\"bottom-sheet__header\"><div class=\"bottom-sheet__title\">Sheet<\/div><button class=\"bottom-sheet__close\" id=\"bs-close\" aria-label=\"Close\">×<\/button><\/div><div class=\"bottom-sheet__body\">body<\/div><div class=\"bottom-sheet__footer\"><button class=\"button button--primary button--md\"><span class=\"button__label\">OK<\/span><\/button><\/div><\/div>"
+  ],
+  [
+    "drawer",
+    "<div class=\"drawer drawer--right\" role=\"dialog\" aria-modal=\"true\"><div class=\"drawer__panel\"><div class=\"drawer__header\"><div class=\"drawer__title\">Filters<\/div><button class=\"drawer__close\" id=\"dr-close\" aria-label=\"Close\">×<\/button><\/div><div class=\"drawer__content\">body<\/div><div class=\"drawer__footer\"><button class=\"button button--primary button--md\"><span class=\"button__label\">Apply<\/span><\/button><\/div><\/div><\/div>"
+  ],
+  [
+    "popover",
+    "<div class=\"popover popover--top\"><span class=\"popover__arrow\"><\/span><div class=\"popover__title\">Tip<\/div><div class=\"popover__text\">More info<\/div><div class=\"popover__actions\"><button class=\"button button--primary button--md\"><span class=\"button__label\">Act<\/span><\/button><\/div><\/div>"
+  ],
+  [
+    "hoverCard",
+    "<div class=\"hovercard\"><div class=\"hovercard__body\"><div class=\"hovercard__name\">Ada<\/div><div class=\"hovercard__handle\">@ada<\/div><div class=\"hovercard__bio\">Runs<\/div><div class=\"hovercard__meta\"><span>Work: <strong>ML<\/strong><\/span><span>City: <strong>NYC<\/strong><\/span><\/div><div class=\"hovercard__domain\">example.com<\/div><div class=\"hovercard__actions\"><button class=\"button button--primary button--md\"><span class=\"button__label\">Follow<\/span><\/button><\/div><\/div><\/div>"
+  ],
+  [
+    "linkPreview",
+    "<a class=\"link-preview\" href=\"https:\/\/example.com\/a\" target=\"_blank\" rel=\"noopener noreferrer\"><img class=\"link-preview__img\" src=\"https:\/\/example.com\/i.png\" alt=\"\" loading=\"lazy\"><div class=\"link-preview__body\"><div class=\"link-preview__domain\">https:\/\/example.com\/a<\/div><div class=\"link-preview__title\">The Page<\/div><div class=\"link-preview__desc\">A description.<\/div><button class=\"link-preview__close\" aria-label=\"Close\">×<\/button><\/div><\/a>"
+  ],
+  [
+    "lightbox",
+    "<div class=\"lightbox\" data-component-id=\"lb\" data-event=\"click\" role=\"dialog\" aria-modal=\"true\"><div class=\"lightbox__stage\"><img class=\"lightbox__img\" src=\"https:\/\/example.com\/p.png\" alt=\"Sunset\"><\/div><div class=\"lightbox__toolbar\"><div class=\"lightbox__counter\">2 \/ 5<\/div><button class=\"lightbox__tool\" id=\"lb-prev\" aria-label=\"Previous\">‹<\/button><button class=\"lightbox__tool\" id=\"lb-next\" aria-label=\"Next\">›<\/button><button class=\"lightbox__close\" id=\"lb-close\" aria-label=\"Close\">×<\/button><\/div><div class=\"lightbox__caption\">Sunset<\/div><\/div>"
+  ],
+  [
+    "menu",
+    "<div class=\"menu menu__panel\" id=\"menu\" data-component-id=\"menu\" data-event=\"click\" role=\"menu\"><div class=\"menu__header\">Actions<\/div><div class=\"menu__search\"><input type=\"search\" placeholder=\"Find…\" aria-label=\"Find…\"><\/div><button class=\"menu__item\" id=\"menu-item-0\" role=\"menuitem\"><span class=\"menu__icon\"><svg class=\"icon icon--sm\" viewBox=\"0 0 24 24\" width=\"0.75em\" height=\"0.75em\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><line x1=\"12\" y1=\"5\" x2=\"12\" y2=\"19\"\/><line x1=\"5\" y1=\"12\" x2=\"19\" y2=\"12\"\/><\/svg><\/span><span class=\"menu__label\">New<\/span><span class=\"menu__shortcut\">⌘N<\/span><\/button><button class=\"menu__item menu__item--active\" id=\"menu-item-1\" role=\"menuitem\"><span class=\"menu__avatar\"><span class=\"avatar avatar--initials avatar--sm\">AB<\/span><\/span><span class=\"menu__label\">Rename<\/span><span class=\"menu__hint\">Inline<\/span><\/button><div class=\"menu__divider\"><\/div><button class=\"menu__item menu__item--destructive menu__item--danger\" id=\"menu-item-2\" role=\"menuitem\"><span class=\"menu__label\">Delete<\/span><\/button><button class=\"menu__item menu__item--has-sub\" id=\"menu-item-3\" role=\"menuitem\"><span class=\"menu__label\">More<\/span><\/button><\/div>"
+  ],
+  [
+    "menu\/plain",
+    "<div class=\"menu\" role=\"menu\"><button class=\"menu__item\" role=\"menuitem\"><span class=\"menu__label\">Cut<\/span><\/button><button class=\"menu__item\" role=\"menuitem\"><span class=\"menu__label\">Copy<\/span><\/button><\/div>"
+  ],
+  [
+    "contextMenu",
+    "<div class=\"context-menu\"><div class=\"menu\" id=\"cm\" role=\"menu\"><button class=\"menu__item\" id=\"cm-item-0\" role=\"menuitem\"><span class=\"menu__label\">Open<\/span><\/button><button class=\"menu__item\" id=\"cm-item-1\" role=\"menuitem\"><span class=\"menu__label\">Pin<\/span><\/button><\/div><\/div>"
+  ],
+  [
+    "dropdown",
+    "<div class=\"dropdown\"><button class=\"dropdown__trigger\" id=\"dd-trigger\">Menu<span class=\"dropdown__chevron\">▾<\/span><\/button><div class=\"dropdown__panel\"><div class=\"menu\" role=\"menu\"><button class=\"menu__item\" role=\"menuitem\"><span class=\"menu__label\">A<\/span><\/button><\/div><\/div><\/div>"
+  ],
+  [
+    "comboBox",
+    "<div class=\"combo\" data-component-id=\"cb\" data-event=\"click\"><div class=\"combo__input\"><input type=\"text\" placeholder=\"Pick\"><span class=\"dropdown__chevron\">▾<\/span><\/div><div class=\"combo__panel\"><div class=\"combo__option combo__option--selected\" id=\"cb-opt-0\" role=\"option\" aria-selected=\"true\">One<\/div><div class=\"combo__option\" id=\"cb-opt-1\" role=\"option\" aria-selected=\"false\">Two<\/div><\/div><\/div>"
+  ],
+  [
+    "comboBox\/empty",
+    "<div class=\"combo\"><div class=\"combo__input\"><input type=\"text\" placeholder=\"\"><span class=\"dropdown__chevron\">▾<\/span><\/div><div class=\"combo__panel\"><div class=\"combo__empty\">No matches<\/div><\/div><\/div>"
+  ],
+  [
+    "commandPalette",
+    "<div class=\"command-palette\" data-component-id=\"cp\" data-event=\"click\" role=\"dialog\" aria-modal=\"true\"><div class=\"command-palette__input\"><input type=\"text\" placeholder=\"Type…\"><\/div><div class=\"command-palette__results\"><div class=\"command-palette__group\"><div class=\"command-palette__group-label\">Navigation<\/div><div class=\"command-palette__item\" id=\"cp-cmd-0\"><span class=\"command-palette__item-label\">Go to file<\/span><kbd>⌘P<\/kbd><\/div><div class=\"command-palette__item\" id=\"cp-cmd-1\"><span class=\"command-palette__item-label\">New file<\/span><\/div><\/div><div class=\"command-palette__group\"><div class=\"command-palette__group-label\">Actions<\/div><div class=\"command-palette__item\" id=\"cp-cmd-2\"><span class=\"command-palette__item-label\">Run<\/span><\/div><\/div><\/div><div class=\"command-palette__footer\">↑↓ to move<\/div><\/div>"
+  ],
+  [
+    "separator\/vertical",
+    "<div class=\"divider divider--vertical\" role=\"separator\" aria-orientation=\"vertical\"><\/div>"
+  ],
+  [
+    "separator\/icon",
+    "<div class=\"divider divider--icon divider--strong\" role=\"separator\"><span class=\"divider__label\"><svg class=\"icon\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><polygon points=\"12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2\"\/><\/svg><\/span><\/div>"
+  ],
+  [
+    "separator\/label",
+    "<div class=\"divider-divider\" role=\"separator\"><span class=\"divider-divider__label\">or<\/span><\/div>"
+  ],
+  [
+    "separator\/plain",
+    "<div class=\"divider divider--strong\" role=\"separator\"><\/div>"
+  ],
+  [
+    "kbd\/single",
+    "<kbd class=\"kbd\">K<\/kbd>"
+  ],
+  [
+    "kbd\/combo",
+    "<span class=\"kbd-combo\"><kbd class=\"kbd kbd--lg\">⌘<\/kbd><span class=\"kbd-sep\">+<\/span><kbd class=\"kbd kbd--lg\">K<\/kbd><\/span>"
+  ],
+  [
+    "scrollTop",
+    "<button class=\"scroll-top scroll-top--ring\" type=\"button\" aria-label=\"Top\" id=\"st\" data-component-id=\"st\" data-event=\"click\"><svg class=\"scroll-top__ring\" viewBox=\"0 0 36 36\" aria-hidden=\"true\"><circle class=\"ring__track\" cx=\"18\" cy=\"18\" r=\"15.915\"\/><circle class=\"ring__fill\" cx=\"18\" cy=\"18\" r=\"15.915\" stroke-dasharray=\"100\" stroke-dashoffset=\"58.0\"\/><\/svg><span class=\"scroll-top__icon\"><svg class=\"icon icon--md\" viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><line x1=\"12\" y1=\"19\" x2=\"12\" y2=\"5\"\/><polyline points=\"5 12 12 5 19 12\"\/><\/svg><\/span><\/button>"
+  ],
+  [
+    "scrollTop\/plain",
+    "<button class=\"scroll-top\" type=\"button\" aria-label=\"Back to top\"><span class=\"scroll-top__icon\"><svg class=\"icon icon--md\" viewBox=\"0 0 24 24\" width=\"1em\" height=\"1em\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\" aria-hidden=\"true\"><line x1=\"12\" y1=\"19\" x2=\"12\" y2=\"5\"\/><polyline points=\"5 12 12 5 19 12\"\/><\/svg><\/span><\/button>"
+  ]
+]
