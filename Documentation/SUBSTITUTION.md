@@ -126,8 +126,15 @@ func swapStage1HTML() -> String {
 - **`OutcomeContext.$current` is dispatch-scoped.** a handler (or an erased adapter) reads the
   firing component and the invalidate half from it; it is `nil` outside a dispatch
   (`EventHandling.swift:60–62`; pinned at `SubstitutionTests.swift:217–231`).
-- **annotate the closure's return type.** the closure's type fixes `O`; a bare `{ _ in [] }` cannot
-  infer it — every demo call site annotates (`main.swift:65`, `:77`, `:93`, `:112`).
+- **annotate the closure's return type — though on this toolchain it is already optional.** the
+  closure's type fixes `O`; the demo's call sites annotate (`main.swift:65`, `:77`, `:93`, `:112`)
+  as documented convention. measured during the s-sugar spike (against the real `WebUICore`): every
+  probed call shape compiles **without** the annotation — single expression, multi-statement with
+  `return`, with `await`, through the erased generic wrapper, and a bare `[]` literal. the
+  annotation is convention, not a compiler requirement; what the seam itself still refuses is a
+  handler body that yields nothing (a lone-effect body is a compile error at `control`). for the
+  three effect-only handlers in that shape, the per-shape helpers below are the named way to say
+  nothing.
 - **two-push ordering.** when a handler's `RegionInvalidations` wakes a region, the dispatch frame is
   written to the socket **before** the region pushes — the registry marks dirty inside the seam and
   wakes only after the handler frame is on the wire (`WebUIServer.swift:1131–1133`;
@@ -135,6 +142,28 @@ func swapStage1HTML() -> String {
 
 **twin.** a custom `EventOutcome` struct the framework has never seen drives the same dispatch path
 (`Tests/WebUITests/SubstitutionTests.swift:31–36`, run at `:187–202`).
+
+**the per-shape outcome helpers (new public API — `Sources/WebUICore/EventOutcomeBuilder.swift`).**
+six typed entry points, one per outcome shape; each body is the shape's conformance spelled once, so
+the protocol stays first-class (no builder, no hidden grouping, no hidden default). the helpers are
+**additive** — the hand-written `control("id") { … }` spelling keeps compiling, keeps its bytes, and
+keeps its lone-effect guard.
+
+| helper | yields | abuse case it names |
+|---|---|---|
+| `noOutcome(_:event:_:)` | `NoOutcome()` | the effect-only handler — `await body(data); return NoOutcome()` in one step. the body is `Void` by signature, so *yields nothing* is the caller's named intent, not a silent default |
+| `fragments(_:event:_:)` | `[FragmentUpdate]` | several updates, verbatim (a one-element array for one) |
+| `replaceFragment(_:event:_:)` | `FragmentUpdate` | the single-update shape, sealed as a named entry point |
+| `replaceView(_:event:_:)` | `ViewOutcome<Content>` | render `Content` and replace `#<id>` (its root must carry the DOM id, per the `ViewOutcome` contract above) |
+| `invalidate(_:event:ids:)` | `RegionInvalidations(ids)` | declare the change only; static by design — ids cannot depend on the payload (the raw seam remains for that) |
+| `updateThenInvalidate(_:ids:event:_:)` | `CombinedOutcome<FragmentUpdate, RegionInvalidations>` | one update AND an invalidation, in that order — the ordering the live-region demos depend on |
+
+measured honestly (the s-sugar verdict, `dx2-notes/s-sugar-verdict.md`): the `O` annotation was
+**already optional** on this toolchain, so the helpers do not remove a compiler requirement — they
+remove the *residual* ceremony at the effect-only sites (`_ in`, `return NoOutcome()`) and name each
+shape at the call site. they **do not replace the protocol**: a custom `EventOutcome` conformance, a
+payload-dependent combination, or any novel shape still uses `control` directly. what they remove is
+spelled in each body — `await body(data)` into the adapted conformance — so nothing is hidden.
 
 ---
 
@@ -247,6 +276,114 @@ actor FeedState: LiveState {
 
 **twins.** the custom struct (`TwinRegion`) and the custom actor (`TwinState`) above pass the same
 suite the framework defaults pass — `Tests/WebUITests/LiveRegionsTests.swift:406–429`.
+
+### live data, macro-spelled — the four declaration macros (`@LiveRegion` · `@RegionState` · `@LiveRegions` · `@LiveState`)
+
+**the macros are optional.** this is the substitution law applied to sugar, and it is the spine of
+everything below: every macro generates **only** members the frozen protocols already require; the
+hand-written spelling keeps compiling and stays **byte-identical** on the wire; and a twin proves the
+macro path equals the hand path (same ids, same frames, same bytes). the four declarations live in
+`Sources/WebUIServer/LiveMacroDeclarations.swift` and resolve with `import WebUIServer`. misuse
+yields diagnostics, never `fatalError`.
+
+| macro | attaches to | generates (additive) |
+|---|---|---|
+| `@LiveRegion(id:cadence:)` | a struct/class/actor | the `LiveRegion` conformance: `id` from the attribute, `cadence` from the attribute (`nil` when omitted), and `source` from the property marked `@RegionState` |
+| `@RegionState` | the ONE stored property that is the region's `source` | nothing alone — a marker the `@LiveRegion` member scan reads; marking none means `source == nil` (the protocol default), marking two is a diagnostic |
+| `@LiveRegions` | the live-data group | `var registry: WebUILiveRegions` assembled from the group's region properties, in declaration order |
+| `@LiveState` | an actor | the `LiveState` conformance: a `nonisolated subscribe` forwarding to an injected `LiveNotifier`, and `notify()` |
+
+```swift
+@LiveRegions
+struct DemoRegions {
+	// (2) a custom LiveRegion STRUCT — the conformance, id, cadence and source
+	//     hook are generated; the marked property IS the source.
+	@LiveRegion(id: "g-region-b")
+	struct Tick {
+		@RegionState let box: LiveBox<Int>
+		func render() async -> String? {
+			"<div id=\"g-region-b\">…\\(box.value)</div>"
+		}
+	}
+
+	// (4) a custom LiveState ACTOR — subscribe (nonisolated, by construction)
+	//     and notify() are generated; the state and its mutators stay yours.
+	@LiveState
+	actor Feed {
+		private var value = 0
+		func bump() { value += 1; notify() }
+		func snapshot() -> Int { value }
+	}
+
+	// the framework defaults, unchanged — the macro layer is not required for them
+	var tick = Tick(box: LiveBox(0))
+	var feed = Feed()
+	var clock = ClosureLiveRegion(id: "g-region-a") { "…" }
+	var countBox = LiveBox(0)
+	var count = StateLiveRegion(id: "g-region-c", state: countBox) { box in "<div id=\"g-region-c\">…</div>" }
+}
+// → registry is generated from the property list, in declaration order
+```
+
+**the generated surface, exactly** (frozen at i0, `macro-dx/i0-landing.md`):
+
+- **two roles per macro.** `@LiveRegion` and `@LiveState` are each both `@attached(member, names:)`
+  (the witnesses) and `@attached(extension, conformances:)` (the `extension T: LiveRegion {}` /
+  `extension T: LiveState {}`). a member macro cannot declare conformances and an extension cannot
+  add stored properties — `@LiveState`'s `liveNotifier` storage is a member for exactly that reason.
+- **computed witnesses.** `var id: String { "…" }`, never stored — a macro-injected stored property
+  would join the memberwise initializer and change every call site (`Tick(box:)` still constructs).
+- **`@LiveRegions` classifies by syntax, not type** (a macro sees syntax): a property is a region
+  when its written type — or its initializer's callee — names a nested type carrying `@LiveRegion`,
+  or `ClosureLiveRegion`/`StateLiveRegion`; a nested `@LiveState` type, `LiveBox` or `LiveNotifier`
+  is skipped; **anything else is a diagnostic, never a silent skip** (a silently dropped region is
+  the failure this arc exists to remove). the generated `registry` is computed
+  (`WebUILiveRegions([tick, clock, count])`), declaration order, no ordering knob.
+- the full diagnostic set (missing `render()`, a hand-written `id`/`cadence`/`source`/`subscribe`
+  colliding with a generated one, `@LiveState` on a non-actor, empty or unclassifiable groups,
+  duplicate ids as a warning) is pinned by `Tests/WebUIServerMacroTests/NegativeFixturesTests.swift`,
+  and the expansions themselves are frozen byte-exact (`FrozenFixtures.swift`, captured from the
+  real expander).
+
+**the three footguns the macros retire:**
+
+1. **`source` is the registry's subscription hook** — omit it by hand and state changes silently
+   never wake the region; nothing at compile time says so. `@LiveRegion` + `@RegionState` make the
+   marked property the source.
+2. **a custom actor's `subscribe` witness must be `nonisolated`** — write it the natural way and the
+   registry's *synchronous* subscribe hops onto the actor; a busy actor then blocks `start()`. the
+   failure is a stall, not an error. `@LiveState` generates `nonisolated` by construction; it
+   cannot be written wrong.
+3. **the registry array assembly** — `var registry { WebUILiveRegions([…]) }`, measured at **20
+   code lines** on the demo — is generated from the property list.
+
+**when the hand path is clearer:**
+
+- **you are composing the framework defaults.** a `ClosureLiveRegion` or `StateLiveRegion<LiveBox>`
+  needs no conformance at all — `regions:` on the server is the whole surface. reach for the macros
+  when a custom struct or actor conformance is what you would otherwise write by hand.
+- **you have a member the classifier cannot read** — the classification diagnoses rather than
+  guesses, so anything not syntactically a region stays in a hand-written group.
+- **a runtime-computed id** — the attribute takes a literal; a conformance whose `id` must be
+  computed belongs in the hand path.
+- **you cannot take a macro-target dependency** (a library product consumed by tools) — the hand
+  path has no compiler-plugin dependency at all.
+- **you want the conformance spelled out in your source** — generated code is real code, but it is
+  a tool's text, not your text; if a reviewer or a generator needs the conformance in the source
+  tree, write it by hand (byte-identical on the wire either way).
+
+**the measured net is the honest half** (the re-measure, `dx2-notes/m-consumer-deletion-ladder.md`
+· `designer/probes/m-ladder.sh`): the demo's live-data surface — four mechanisms + five controls +
+the registry — was **89 code lines** hand-written and is **72 code lines** macro-spelled (the hand
+path, untouched, still compiles to the identical surface). the macros remove the conformance
+declarations, the notifier plumbing, and the registry assembly; they **cannot** remove the
+`render()` bodies and their markup, the states' own properties and mutators, or the choice of
+mechanisms and ids — that is content, identical in both spellings.
+
+**parity is gate-executed, not asserted.** `Tests/WebUITests/MacroParityTests.swift` drives the two
+spellings through the same registry seam (`start`/render/push) and asserts byte-equal frames for the
+same input sequence, and `designer/gates/dx12-16-acceptance.mjs` step 9c runs the same twin against
+the live demo while step 9b asserts **both** spellings stay in the source.
 
 ---
 
@@ -408,6 +545,10 @@ yourself writing one of those, re-read the top of this document: the seam is mis
 - `Documentation/JS_RUNTIME.md` — the browser side (unchanged by this arc: region pushes ride the
   existing `update` frame + `replace` op).
 - `skills/webui-design-system/` — the consumer skill: `references/substitution.md` (this document,
-  packaged) and `references/live-regions.md` (the live-data recipe).
+  packaged), `references/live-regions.md` (the live-data recipe), and the new
+  `references/live-data-declarations.md` (the macro spellings, consumer-stated).
+- the macro layer's own words: `Sources/WebUIServer/LiveMacroDeclarations.swift` (the shipped doc
+  comments) · the twinning proof `Tests/WebUITests/MacroParityTests.swift` · the measured finding
+  `dx2-notes/s-sugar-verdict.md` · the ladder re-measure `dx2-notes/m-consumer-deletion-ladder.md`.
 - `dx2-notes/r-to-d.md` · `dx2-notes/r-to-g.md` · `dx2-notes/t-to-g.md` — the lane handoffs this
   guide is built from.
