@@ -104,4 +104,21 @@ struct MarkupDebtTests {
 		#expect(decoded.files["a.swift"] == baseline.files["a.swift"])
 		#expect(decoded.allowlistPrefixes == baseline.allowlistPrefixes)
 	}
+
+	// the stripper's single-line-string rule: a line whose quotes do NOT pair up — a
+	// regex literal's character class, say — must not leave the scanner "inside a
+	// string" across the newline, or the next doc comment's `class="…"` text gets
+	// counted as code. found by lane G's W2 re-pin (ShadowCheck.swift's new
+	// `tagEmissionTokens` leg carries exactly such a line).
+	@Test("an odd-quote line (a regex literal) cannot swallow the next comment")
+	func oddQuoteLineDoesNotSwallowComments() {
+		let source = """
+		let re = /"((?:[^"\\\\]|\\\\.)*)"/
+		/// the doc comment mentions `class="ghost"` and must NOT count
+		let live = "<div class=\\\"live\\\"></div>"
+		"""
+		let m = markupDebtMetrics(in: source)
+		#expect(m.classLiterals == 1, "only the code literal counts: got \(m.classLiterals)")
+		#expect(m.rawTags == 2, "the code div opens and closes: got \(m.rawTags)")
+	}
 }

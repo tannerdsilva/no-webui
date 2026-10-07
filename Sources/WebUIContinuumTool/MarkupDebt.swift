@@ -127,6 +127,16 @@ func strippingComments(_ source: String) -> String {
 				i += 2
 				continue
 			}
+			// a single-line string literal cannot contain a raw newline, so an
+			// UNTERMINATED quote must not swallow the following lines — that is
+			// how a regex literal's character class (an odd number of quotes on
+			// one line) used to make the next doc comment count as code
+			// (MACRO_DX i2; found by lane G's re-pin).
+			if c == "\n" {
+				inString = false
+				i += 1
+				continue
+			}
 			if c == "\"" { inString = false }
 			i += 1
 			continue
