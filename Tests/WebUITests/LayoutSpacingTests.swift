@@ -75,3 +75,74 @@ struct LayoutSpacingTests {
 			== "<div class=\"grid\" style=\"display:grid;grid-template-columns:repeat(2, 1fr);gap:9px;\">\ng\n</div>")
 	}
 }
+
+// MARK: - G2 — the five typed-surface gaps (MACRO_DX)
+//
+// measured zero-coverage in the consumer sheet (justify-content 55 · flex-basis
+// 27 · align-self · position 39 · z-index 17) — these are the named modifiers a
+// migration writes instead of an inline `style="…"`. token-typed where a scale
+// exists: flex-basis rides the `SpaceToken` scale.
+
+@Suite("G2 typed layout gaps: the five named modifiers")
+struct TypedSurfaceGapsTests {
+
+	@Test("justifyContent emits justify-content inline")
+	func justifyContent() {
+		#expect(Text("x").justifyContent(.spaceBetween).render()
+			== "<span style=\"justify-content: space-between;\">x</span>")
+		#expect(Text("x").justifyContent(.flexEnd).render()
+			== "<span style=\"justify-content: flex-end;\">x</span>")
+		// the raw-string overload stays for values outside the enum.
+		#expect(Text("x").justifyContent("safe center").render()
+			== "<span style=\"justify-content: safe center;\">x</span>")
+	}
+
+	@Test("flexBasis emits flex-basis in px, token-typed on the space scale")
+	func flexBasis() {
+		#expect(Text("x").flexBasis(200).render()
+			== "<span style=\"flex-basis: 200px;\">x</span>")
+		// the token form references the shipped space variable, like padding.
+		#expect(Text("x").flexBasis(.sixteen).render()
+			== "<span style=\"flex-basis: var(--space-16);\">x</span>")
+	}
+
+	@Test("alignSelf emits align-self inline")
+	func alignSelf() {
+		#expect(Text("x").alignSelf(.flexEnd).render()
+			== "<span style=\"align-self: flex-end;\">x</span>")
+		#expect(Text("x").alignSelf(.stretch).render()
+			== "<span style=\"align-self: stretch;\">x</span>")
+	}
+
+	@Test("position emits position inline")
+	func position() {
+		#expect(Text("x").position(.relative).render()
+			== "<span style=\"position: relative;\">x</span>")
+		#expect(Text("x").position(.absolute).render()
+			== "<span style=\"position: absolute;\">x</span>")
+	}
+
+	@Test("zIndex emits z-index inline")
+	func zIndex() {
+		#expect(Text("x").zIndex(10).render()
+			== "<span style=\"z-index: 10;\">x</span>")
+		#expect(Text("x").zIndex(-1).render()
+			== "<span style=\"z-index: -1;\">x</span>")
+	}
+
+	@Test("the five gaps compose with the existing style chain")
+	func composesWithStyle() {
+		#expect(
+			Text("x").justifyContent(.center).zIndex(3).padding(4).render()
+				== "<span style=\"justify-content: center; z-index: 3; padding: 4px;\">x</span>"
+		)
+	}
+
+	@Test("fill() and stretch() still emit align-self: stretch (byte-unchanged)")
+	func fillStretchKeepBytes() {
+		#expect(Div { Text("x") }.fill().render()
+			== "<div style=\"flex: 1 1 0%; min-width: 0; min-height: 0; align-self: stretch;\">x</div>")
+		#expect(Div { Text("x") }.stretch().render()
+			== "<div style=\"align-self: stretch; min-width: 0; min-height: 0;\">x</div>")
+	}
+}
