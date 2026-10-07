@@ -4,24 +4,28 @@
 // shape copied from designer/showcase-ws-smoke.mjs, via g-seam.mjs — a RAW client:
 // fetch the page over HTTP, read the region/control ids out of the SERVED markup,
 // connect its own socket, dispatch events, and assert on the server's own frames.
-// no browser, no page patching, nothing inferred. lane ports 9370–9379 only.
+// no browser, no page patching, nothing inferred. lane D ports 9410–9419 only.
 //
 // usage:
-//   node designer/probes/g-regions.mjs                             # green build, :9371
+//   node designer/probes/g-regions.mjs                             # green build, :9411
 //   node designer/probes/g-regions.mjs --port 9372 --binary <path>
 //
 // asserts (appendix C steps 4–6 + the d-k ordering rule):
-//   1. the served markup carries the four region roots and the five controls
+//   1. the served markup carries the four region roots and the five controls —
+//      for BOTH variants: the hand-written control group and the macro twin
+//      (MACRO_DX lane D), ids read from the served markup
 //   2. DX-13 invalidation: one nudge -> EXACTLY ONE update, fragment id == the
-//      region id, and the frame is <= the rendered html + 512 B (I8)
+//      region id, and the frame is <= the rendered html + 512 B (I8) — and the
+//      macro twin's nudge does the same (its ids from served markup)
 //   3. I7 silence: after a push has settled, an idle window carries ZERO frames
 //   4. DX-16: a LiveBox-backed region, a custom-LiveRegion-struct-backed region
 //      and a custom-LiveState-actor-backed region each push exactly once per
-//      state change
+//      state change — plus the macro twin's three drivers (same expectations)
 //   5. d-k ordering: a COMBINED outcome writes its fragment BEFORE the region
-//      push it wakes (dispatch frame first, registry frame second)
+//      push it wakes (dispatch frame first, registry frame second) — both
+//      variants' combined controls
 //   6. racing invalidates converge: two rapid nudges never let an older render
-//      land last (the value sequence is strictly increasing)
+//      land last (the value sequence is strictly increasing) — both variants
 
 import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
@@ -34,11 +38,11 @@ const flag = (name, fallback) => {
   const i = args.indexOf(name);
   return i >= 0 && args[i + 1] !== undefined ? args[i + 1] : fallback;
 };
-const PORT = Number(flag("--port", "9371"));
-const BINARY = flag("--binary", join(ROOT, ".build", "debug", "WebUIExample"));
+const PORT = Number(flag("--port", "9411"));
+const BINARY = flag("--binary", join(ROOT, ".build", "out", "Products", "Debug", "WebUIExample"));
 
-if (PORT < 9370 || PORT > 9379) {
-  console.log(`  FAIL port ${PORT} is outside the lane block 9370–9379 (canonical ports are orchestrator-only)`);
+if (PORT < 9410 || PORT > 9419) {
+  console.log(`  FAIL port ${PORT} is outside the lane block 9410–9419 (canonical ports are orchestrator-only)`);
   process.exit(1);
 }
 const major = Number(process.versions.node.split(".")[0]);
@@ -56,17 +60,44 @@ const bad = (m) => { fail++; console.log(`  FAIL ${m}`); };
 const event = (id) => JSON.stringify({ type: "event", component: id, event: "click", data: { targetId: id } });
 
 /// connect, run `send(socket)` on open, collect every inbound frame for windowMs.
+/// a failed socket is retried: the reference server transiently resets a bare
+/// connection that immediately follows a closed one (pre-existing accept quirk —
+/// the i0 probe's second socket was the I7 idle check, which passes vacuously on
+/// an errored socket, so the bug never surfaced), so a probe must re-establish
+/// before it can assert — mirroring the acceptance's retry-on-no-open. only
+/// frames from a genuinely OPEN socket count.
 function collect(send, windowMs = 1500) {
   return new Promise((resolve) => {
     const frames = [];
-    let opened = false;
-    const socket = new WebSocket(WS_URL);
-    socket.addEventListener("open", () => { opened = true; if (send) send(socket); });
-    socket.addEventListener("message", (ev) => {
-      try { frames.push({ raw: String(ev.data), msg: JSON.parse(String(ev.data)) }); } catch (e) {}
-    });
-    socket.addEventListener("error", () => {});
-    setTimeout(() => { try { socket.close(); } catch (e) {} resolve({ frames, opened }); }, windowMs);
+    let attempts = 0;
+    let done = false;
+    const finish = (opened) => {
+      if (done) return;
+      done = true;
+      resolve({ frames, opened });
+    };
+    const schedule = () => {
+      let timer = null;
+      let opened = false;
+      let failed = false;
+      const socket = new WebSocket(WS_URL);
+      socket.addEventListener("open", () => { opened = true; if (send) send(socket); });
+      socket.addEventListener("message", (ev) => {
+        try { frames.push({ raw: String(ev.data), msg: JSON.parse(String(ev.data)) }); } catch (e) {}
+      });
+      socket.addEventListener("error", () => { failed = true; });
+      socket.addEventListener("close", () => {
+        if (timer) { clearTimeout(timer); timer = null; }
+        if (opened) { finish(true); }
+        else if (failed) { attempts += 1; attempts < 4 ? setTimeout(schedule, 120) : finish(false); }
+      });
+      timer = setTimeout(() => {
+        timer = null;
+        if (!opened) { try { socket.close(); } catch (e) {} attempts += 1; attempts < 4 ? schedule() : finish(false); }
+        else { try { socket.close(); } catch (e) {} finish(true); }
+      }, windowMs);
+    };
+    schedule();
   });
 }
 const updates = (frames) => frames.filter((f) => f.msg.type === "update");
@@ -103,15 +134,24 @@ async function run() {
   }
   ok(`server ready on :${PORT}`);
 
-  // 1. the served markup carries the four region roots and the five controls.
+  // 1. the served markup carries the four region roots and the five controls,
+  //    for BOTH variants — the hand-written control group and the macro twin.
   const roots = ["g-region-a", "g-region-b", "g-region-c", "g-region-d"];
   const controls = ["g-region-nudge", "g-region-combined", "g-region-b-bump", "g-region-c-bump", "g-region-d-bump"];
+  const macroRoots = ["g-mreg-a", "g-mreg-b", "g-mreg-c", "g-mreg-d"];
+  const macroControls = ["g-mreg-nudge", "g-mreg-combined", "g-mreg-b-bump", "g-mreg-c-bump", "g-mreg-d-bump"];
   const missingRoots = roots.filter((id) => !page.includes(`id="${id}"`));
   const missingControls = controls.filter((id) => !page.includes(`data-component-id="${id}"`));
+  const missingMacroRoots = macroRoots.filter((id) => !page.includes(`id="${id}"`));
+  const missingMacroControls = macroControls.filter((id) => !page.includes(`data-component-id="${id}"`));
   if (missingRoots.length === 0) ok(`served markup carries the four region roots (${roots.join(", ")})`);
   else bad(`region roots missing from the served markup: ${missingRoots.join(", ")}`);
   if (missingControls.length === 0) ok(`served markup carries the five region controls`);
   else bad(`region controls missing: ${missingControls.join(", ")}`);
+  if (missingMacroRoots.length === 0) ok(`served markup carries the four MACRO region roots (${macroRoots.join(", ")}) — read from the served markup`);
+  else bad(`MACRO region roots missing from the served markup: ${missingMacroRoots.join(", ")}`);
+  if (missingMacroControls.length === 0) ok(`served markup carries the five MACRO region controls`);
+  else bad(`MACRO region controls missing: ${missingMacroControls.join(", ")}`);
 
   // 2. DX-13 invalidation — exactly one update, fragment id == the region id, I8 bytes.
   {
@@ -126,6 +166,23 @@ async function run() {
       else bad(`I8: frame ${frameBytes} B exceeds html ${htmlBytes} B + 512`);
     } else {
       bad(`nudge -> expected exactly one update with fragment id g-region-a, got ${JSON.stringify(ups.map((u) => u.msg))}`);
+    }
+  }
+
+  // 2m. the macro sibling of driver 2 — same DX-13 contract, ids read from the
+  //     served markup (g-mreg-a): exactly one update, fragment id == region id, I8.
+  {
+    const { frames } = await collect((s) => s.send(event("g-mreg-nudge")), 1500);
+    const ups = updates(frames);
+    const frags = ups.flatMap((f) => f.msg.fragments ?? []);
+    if (ups.length === 1 && frags.length === 1 && frags[0].id === "g-mreg-a") {
+      ok(`macro nudge -> exactly one update carrying fragment id g-mreg-a`);
+      const frameBytes = Buffer.byteLength(ups[0].raw, "utf8");
+      const htmlBytes = Buffer.byteLength(frags[0].html, "utf8");
+      if (frameBytes <= htmlBytes + 512) ok(`macro I8: frame ${frameBytes} B <= html ${htmlBytes} B + 512`);
+      else bad(`macro I8: frame ${frameBytes} B exceeds html ${htmlBytes} B + 512`);
+    } else {
+      bad(`macro nudge -> expected exactly one update with fragment id g-mreg-a, got ${JSON.stringify(ups.map((u) => u.msg))}`);
     }
   }
 
@@ -148,6 +205,19 @@ async function run() {
     }
   }
 
+  // 4m. the macro siblings of driver 4 — the three macro state-driven drivers each
+  //     push exactly once per change (ids from the served markup).
+  for (const [control, region] of [["g-mreg-b-bump", "g-mreg-b"], ["g-mreg-c-bump", "g-mreg-c"], ["g-mreg-d-bump", "g-mreg-d"]]) {
+    const { frames } = await collect((s) => s.send(event(control)), 1500);
+    const ups = updates(frames);
+    const frags = ups.flatMap((f) => f.msg.fragments ?? []);
+    if (ups.length === 1 && frags.length === 1 && frags[0].id === region) {
+      ok(`${control} -> exactly one update carrying fragment id ${region}`);
+    } else {
+      bad(`${control} -> expected one update with fragment id ${region}, got ${JSON.stringify(ups.map((u) => u.msg))}`);
+    }
+  }
+
   // 5. d-k ordering — the combined control's fragment lands BEFORE the region push.
   {
     const { frames } = await collect((s) => s.send(event("g-region-combined")), 1800);
@@ -156,6 +226,17 @@ async function run() {
       ok(`d-k: the dispatch frame (g-combined-out) precedes the region push (g-region-a) — order [${ids.join(", ")}]`);
     } else {
       bad(`d-k: expected [g-combined-out, …, g-region-a], got [${ids.join(", ")}]`);
+    }
+  }
+
+  // 5m. the macro sibling of driver 5 — same d-k ordering contract.
+  {
+    const { frames } = await collect((s) => s.send(event("g-mreg-combined")), 1800);
+    const ids = idsOf(frames);
+    if (ids.length >= 2 && ids[0] === "g-mreg-combined-out" && ids.includes("g-mreg-a")) {
+      ok(`macro d-k: the dispatch frame (g-mreg-combined-out) precedes the region push (g-mreg-a) — order [${ids.join(", ")}]`);
+    } else {
+      bad(`macro d-k: expected [g-mreg-combined-out, …, g-mreg-a], got [${ids.join(", ")}]`);
     }
   }
 
@@ -171,6 +252,21 @@ async function run() {
       ok(`racing: the g-region-a value sequence is strictly increasing [${values.join(", ")}] — no stale-wins`);
     } else {
       bad(`racing: value sequence not strictly increasing [${values.join(", ")}]`);
+    }
+  }
+
+  // 6m. the macro sibling of driver 6 — same racing convergence on the macro twin.
+  {
+    const { frames } = await collect((s) => {
+      s.send(event("g-mreg-nudge"));
+      setTimeout(() => s.send(event("g-mreg-nudge")), 40);
+    }, 2000);
+    const values = valuesOf(frames, "g-mreg-a").filter((v) => !Number.isNaN(v));
+    const mono = values.every((v, i) => i === 0 || v > values[i - 1]);
+    if (values.length >= 1 && mono) {
+      ok(`macro racing: the g-mreg-a value sequence is strictly increasing [${values.join(", ")}] — no stale-wins`);
+    } else {
+      bad(`macro racing: value sequence not strictly increasing [${values.join(", ")}]`);
     }
   }
 
