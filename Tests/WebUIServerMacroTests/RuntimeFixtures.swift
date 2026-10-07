@@ -38,14 +38,35 @@ struct MacroWidgetGroup {
 		func snapshot() -> Int { value }
 	}
 
+	@LiveRegion(id: "macro-region-c", cadence: .milliseconds(50))
+	struct Metronome {
+		@RegionState let box: LiveBox<Int>
+
+		func render() async -> String? {
+			let value = box.value
+			return "<div id=\"macro-region-c\">\(value)</div>"
+		}
+	}
+
+	/// a region with no `@RegionState` marker — its `source` must be nil (the
+	/// protocol default), so nothing subscribes at `start()`.
+	@LiveRegion(id: "macro-region-e")
+	struct Driven {
+		func render() async -> String? {
+			"<div id=\"macro-region-e\">driven</div>"
+		}
+	}
+
 	let tick = Tick(box: LiveBox(0))
 	let feed = Feed()
 	let clock = ClosureLiveRegion(id: "macro-region-b") { () async -> String? in
 		"<div id=\"macro-region-b\">clock</div>"
 	}
-	let count = StateLiveRegion(id: "macro-region-c", state: LiveBox(0)) { box -> String? in
-		"<div id=\"macro-region-c\">\(box.value)</div>"
+	let count = StateLiveRegion(id: "macro-region-d", state: LiveBox(0)) { box -> String? in
+		"<div id=\"macro-region-d\">\(box.value)</div>"
 	}
+	let metronome = Metronome(box: LiveBox(0))
+	let driven = Driven()
 }
 
 /// a Sendable delivery counter for the actor fixture.
@@ -79,6 +100,15 @@ struct LiveMacroRuntimeFixtureTests {
 		#expect(html == "<div id=\"macro-region-a\">7</div>")
 	}
 
+	@Test("an explicit cadence is carried by the generated witness; a region with no marker has a nil source")
+	func cadenceAndNoSource() {
+		let metronome = MacroWidgetGroup.Metronome(box: LiveBox(0))
+		#expect(metronome.cadence == .milliseconds(50))
+		let driven = MacroWidgetGroup.Driven()
+		#expect(driven.source == nil)
+		#expect(driven.id == "macro-region-e")
+	}
+
 	@Test("subscribe is nonisolated (called synchronously) and notify delivers once per change")
 	func stateActorNotifies() async {
 		let group = MacroWidgetGroup()
@@ -101,5 +131,7 @@ struct LiveMacroRuntimeFixtureTests {
 		#expect(registry.currentHTML("macro-region-a") == nil)
 		#expect(registry.currentHTML("macro-region-b") == nil)
 		#expect(registry.currentHTML("macro-region-c") == nil)
+		#expect(registry.currentHTML("macro-region-d") == nil)
+		#expect(registry.currentHTML("macro-region-e") == nil)
 	}
 }
