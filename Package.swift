@@ -255,6 +255,9 @@ let package = Package(
             dependencies: [
                 "WebUI",
                 "WebUIDesignSystem",
+                // the live-data macro plugin (MACRO_DX): the declarations below
+                // are inert; the compiler builds this target to expand them.
+                "WebUIServerMacros",
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
                 .product(name: "NIOPosix", package: "swift-nio"),
@@ -385,6 +388,21 @@ let package = Package(
                 .product(name: "SwiftSyntax", package: "swift-syntax"),
                 .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
                 .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
+            ]
+        ),
+
+        // ── the live-data macros (MACRO_DX features A–C) ─────────
+        // one target, four attached macros over the frozen live-data ABI. no
+        // `.macro` product (removed on 6.3+): consumers reach it through the
+        // `#externalMacro(module:)` declarations in `WebUIServer`, and that
+        // library target names this one so the plugin is found.
+        .macro(
+            name: "WebUIServerMacros",
+            dependencies: [
+                .product(name: "SwiftSyntax", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
+                .product(name: "SwiftCompilerPlugin", package: "swift-syntax"),
+                .product(name: "SwiftDiagnostics", package: "swift-syntax"),
             ]
         ),
 
@@ -799,6 +817,21 @@ let package = Package(
                 "WebUI",
                 "WebUIIslandCore",
                 "WebUIContinuumMacros",
+                .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxMacroExpansion", package: "swift-syntax"),
+                .product(name: "SwiftSyntaxMacrosGenericTestSupport", package: "swift-syntax"),
+                .product(name: "SwiftParser", package: "swift-syntax"),
+                .product(name: "SwiftDiagnostics", package: "swift-syntax"),
+            ]
+        ),
+        // the live-data macro suite: exact expansions captured from the real
+        // expander, the negative fixtures (diagnostics compared, never
+        // positions), and the compiled runtime fixtures.
+        .testTarget(
+            name: "WebUIServerMacroTests",
+            dependencies: [
+                "WebUIServer",
+                "WebUIServerMacros",
                 .product(name: "SwiftSyntaxMacros", package: "swift-syntax"),
                 .product(name: "SwiftSyntaxMacroExpansion", package: "swift-syntax"),
                 .product(name: "SwiftSyntaxMacrosGenericTestSupport", package: "swift-syntax"),
