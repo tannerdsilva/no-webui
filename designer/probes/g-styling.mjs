@@ -27,12 +27,17 @@
 
 import { spawnSync } from "node:child_process";
 import { mkdirSync, writeFileSync, readFileSync, existsSync, rmSync, mkdtempSync } from "node:fs";
-import { dirname, join, resolve } from "node:path";
+import { dirname, join, resolve, basename } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath } from "node:url";
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const SCRATCH = join(dirname(ROOT), "g-styling-probe");
+// a path dependency's package identity is its DIRECTORY name, so the scratch manifest
+// must derive it from the resolved root. a hardcoded "lane-g" only ever worked when the
+// clone happened to be named lane-g — it broke against every other checkout (the
+// integration clone at i2), which made the gate non-portable.
+const PACKAGE_NAME = basename(ROOT).toLowerCase();
 
 let pass = 0, fail = 0;
 const ok = (m) => { pass++; console.log(`  PASS ${m}`); };
@@ -60,7 +65,7 @@ let pkg = Package(
     targets: [
         .executableTarget(
             name: "Probe",
-            dependencies: [.product(name: "WebUICore", package: "lane-g")]
+            dependencies: [.product(name: "WebUICore", package: ${JSON.stringify(PACKAGE_NAME)})]
         ),
     ]
 )
