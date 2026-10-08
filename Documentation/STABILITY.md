@@ -187,35 +187,41 @@ deprecation cycle — say so here rather than silently breaking a promise.
 these are real, documented constraints. depending on them as if they were
 frozen surface is a mistake:
 
+> **note (post-deletion):** the wasm monolith client (`WebUIClientRuntime`,
+> `WebUIClient`, the chamber + content-addressed artifact) has been deleted. the
+> engine is the client runtime; wasm survives only as capability islands. where a
+> numbered item below refers to the client boot, it is historical — it is kept
+> because the *limits* it names are still worth knowing, not because the path
+> exists.
+
 1. **session caps are a deployment policy.** `WebUIAuth`'s `AuthSessionStore`
    holds every live session until expiry; hosts that cap per-identity
    sessions must do so at login (`listSessions` / `invalidateAll` — see
    `ASSEMBLY.md`).
-2. **the wasm client is not the default runtime anymore; it is a partial
-   mirror.** the engine (`webui-engine.js`, the next-architecture default
-   client for server-rendered pages, see `NEXT_ARCHITECTURE.md` d2) carries
-   the full browser-mode keyboard surface — tree Enter/Space, composer
-   enter-to-send, modal Escape-to-dismiss — plus modal focus trapping and
-   focus return. the wasm `WebUIClient` remains available via an explicit
-   `ClientBoot(flavor: .wasm, …)` (applet/client-mode pages) and keeps its
-   own limitations: it does **not** mirror the keyboard affordances, and its
-   `sources/WebUIClientRuntime` does not render the server's views. the boot
-   flip rides the `clientMode` experimental-surface carve-out — page-contract
-   pins are test-internal and were retargeted with the flip.
+2. **there is no wasm client runtime.** the monolith client was deleted; the
+   engine (`webui-engine.js`, the next-architecture default client for
+   server-rendered pages, see `NEXT_ARCHITECTURE.md` d2) is the only client
+   runtime, and wasm survives as per-capability islands. `ClientBoot(flavor: .wasm, …)`
+   does not exist — a page that used it does not compile, which is the honest
+   failure mode rather than a silent downgrade. the engine carries the full
+   browser-mode keyboard surface — tree Enter/Space, composer enter-to-send,
+   modal Escape-to-dismiss — plus modal focus trapping and focus return, probed
+   in `designer/browser-smoke.mjs`.
 3. **modal focus management is engine-owned.** initial focus into a
    `WebUIModal` is still server-driven (the caller renders the modal open
    with the intended focus within its own markup); trapping and focus return
-   for the engine path are implemented and probed in
-   `designer/browser-smoke.mjs` (Escape probe). the wasm client path keeps
-   none of this (see #2).
+   are implemented and probed in
+   `designer/browser-smoke.mjs` (Escape probe). the deleted wasm path kept
+   none of this.
 4. **`WebUIChart` pins live in `ChartTests`** and follow the same epoch, but
    charts are the youngest surface — treat them as the least battle-tested. the
    width/label contract has a second pin outside the unit suite:
    `designer/chart-mobile-audit.mjs` (six viewports × two themes; painted text
    ≥ 11px *and* the visible fraction of every plot).
-5. **phase 6 of the wasm trajectory** (size diet + per-SKU distribution) is
-   post-1.0 scope; it changes distribution and payload size, never the
-   frozen surface.
+5. **the wasm size/distribution trajectory is closed.** the monolith it
+   described (size diet, per-SKU distribution) was deleted, so nothing here is
+   post-1.0 scope any more. its replacement — islands, built per capability by
+   the `wasm-island` verb — is described in `NEXT_ARCHITECTURE.md` §2c–§2d.
 6. **the deprecation rule is a process rule, not a machine rule.** there is
    no CI or lint that can verify "one full minor before removal"; it is
    enforced by review against this document and the changelog. the in-repo
@@ -226,8 +232,8 @@ frozen surface is a mistake:
    contract — applet regions, renderer registry, expanded import surface, v2
    message shapes — is described in `NEXT_ARCHITECTURE.md` §2c–§2d. the v1
    wire/ABI pinned by this 1.0.0 epoch remains
-   authoritative until the 2.0 epoch cut — the harness lands behind
-   `clientMode` so the JS-runtime path and its pins stay untouched.
+   authoritative until the 2.0 epoch cut — the harness lands as an island
+   capability, so the engine path and its pins stay untouched.
 
 ## change discipline
 
@@ -241,8 +247,3 @@ frozen surface is a mistake:
   `swift build` → `swift test` → `swift package --disable-sandbox plugin
   smoke` → `plugin fullstack-smoke` → `node designer/browser-smoke.mjs`,
   each self-contained and runnable by one human.
-
-> **note (post-deletion):** the wasm monolith client (`WebUIClientRuntime`,
-> `WebUIClient`, the chamber + content-addressed artifact) has been deleted. the
-> engine is the client runtime; wasm survives only as capability islands. any
-> reference to the client boot below is historical.

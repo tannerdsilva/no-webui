@@ -141,8 +141,9 @@ real `POST` — bodies, uploads, redirect-after-post — lands in **W3**
 
 | Type | Description |
 |---|---|
-| `EventData` | `{ component: String, event: String, data: [String: String] }` — `click` data carries `targetId` and `targetClass` of the clicked element |
+| `EventData` | `{ component: ComponentID, event: String, data: [String: JSONValue] }` — **not** `[String: String]`. read flat fields through `event.string(_:)` / `event.number(_:)`; structured values (search terms, row ids) arrive as `JSONValue` and are read through it. `click` data carries `targetId` and `targetClass` of the clicked element |
 | `EventHandler` | `@Sendable (EventData) async -> [FragmentUpdate]` |
+| `OutcomeHandler` | `@Sendable (EventData) async throws -> HandlerOutcome` — a handler that can answer with a redirect, a client-state write, a reload or a failure, and may throw. a throw becomes `HandlerOutcome.fail(code: "handler", …)`; register a fallback with `register(fallback:for:)` to keep the control usable. register with `register(outcome:for:)` / `controlAttributes(id:event:outcome:)` |
 | `EventRouter` | routes events to registered handlers. `maxHandlers: Int` (default 10,000), `handlerCount: Int`. one router per render pass — call `reset()` before rendering a fresh page |
 | `RenderContext` | `@TaskLocal` context providing component ID generation, element ID minting, and handler registration |
 | `ComponentID` | hashable/codable string wrapper for component ids |
@@ -399,7 +400,7 @@ suites.
 | `WebUISkeleton` | variant, width, height, count |
 | `WebUIToast` | variant, message, id, dismissible — close button carries `data-dismiss` |
 | `WebUIModal` | title, id, content, footer — close button carries `data-dismiss` |
-| `WebUITable` | headers, rows ([[any View]]), striped, hoverable, compact, wrapped, responsive, alignments, footer, emptyState, id, rowIds, sortable, selected, expanded, rowDetails — typed handlers `.onSort`/`.onSelectAll`/`.onSelect`/`.onToggleExpand` (routed per control) |
+| `WebUITable` | headers, rows ([[any View]]), striped, hoverable, compact, responsive, wrapped, alignments, footer, emptyState, id, `sortableColumns: Set<Int>`, `hiddenColumns: Set<Int>`, `sort: (column: Int, direction: SortDirection)?`, `selectable: Bool`, rowIds, `selectedRows: Set<String>`, `expandedRows: Set<String>`, rowDetails — typed handlers `.onSort`/`.onSelectAll`/`.onSelect`/`.onToggleExpand` (routed per control) |
 | `WebUIChip` | text, variant, removable, id — remove button carries `data-remove` |
 | `WebUIEmptyState` | icon, title, message, action (label, id) |
 | `WebUISpinner` | size, label |

@@ -32,9 +32,12 @@ scroll/focus survival, keyboard/focus parity (incl. modal trap + return),
 view transitions, and capability-island mounting. **wasm islands**
 (pure-Swift logic compiled with the embedded sdk, ~kb-scale, e.g.
 `WebUIValidateIsland`) are fetched lazily per declared capability and
-compose regions with zero round trips. the **wasm client** (`WebUIClient`)
-remains available via an explicit `ClientBoot(flavor: .wasm, …)` for
-applet/client-mode pages. the server stays authority for persistence,
+compose regions with zero round trips. the **wasm monolith client**
+(`WebUIClient` — a chamber-hosted boot plus a content-addressed ~55 mb module)
+was deleted: it fetched and instantiated that module on every app-mode page for
+work the ~37 kb engine does, and it could not render server views. there is no
+`ClientBoot(flavor:)`; the engine is the client runtime, and wasm survives only
+as capability islands (Layer 5). the server stays authority for persistence,
 auth, and render correctness (`FragmentUpdate` is the universal patch
 envelope in both directions).
 
@@ -287,37 +290,59 @@ factories:
 
 See `Documentation/JS_RUNTIME.md` for detailed documentation of each module.
 
-## Layer 5: Client Mode (wasm)
+## Layer 5: Capability Islands (wasm)
 
-client mode compiles the same render core (`WebUICore`) plus the design-system
-components (`WebUIDesignSystemCore`) and charts (`WebUIChart`) with the official
-swift 6.4 wasm sdk into `WebUIClient.wasm` — a chamber-hosted browser product
-(`designer/assets/webui-client.js`). three modes coexist:
+there is no wasm client mode.
+
+the monolith client — `WebUIClient`, a chamber-hosted `designer/assets/webui-client.js`
+booting a content-addressed ~55 mb module — was deleted. it fetched and
+instantiated that module on every app-mode page for work a ~37 kb runtime does,
+and it could not render server views at all. the `webui-wasm` meta contract, the
+`ClientBoot(flavor: .wasm, …)` spelling and the `clientMode: ClientBoot(wasmURL: …)`
+argument went with it. `designer/assets/` ships four files today: the sheet, the
+engine, the legacy runtime and the shell.
+
+what remains is **islands**: a page declares a capability, and that island's
+compiled artifact is fetched lazily when the capability first needs it. pure-Swift
+logic (`WebUIIslandCore`, e.g. `WebUIValidateIsland`) cross-compiles with the
+officially hosted swift 6.4 wasm sdk and is served as a `.wasm` the engine mounts
+into a declared region.
 
 | mode | rendering brain | event routing | ws |
 |---|---|---|---|
 | server (default) | NIO + `WebUI` | server `EventRouter` over ws | round trip per event |
-| **client** | wasm (same `render()`) | resident `EventRouter` in the page | silent on the hot path |
+| island | server renders; wasm owns one region | page's `EventRouter` for dom events; the island computes locally | only when the island asks |
 | static | `includeRuntime: false` | none (warn-and-drop) | none |
 
-adoption is one argument: `HTMLDocument(…, clientMode: ClientBoot(wasmURL: …))`
-emits the `webui-wasm` meta contract + external chamber/boot scripts + the
-client csp; `WebUIBoot` hashes the release artifact for the immutable route.
-the bridge is a hand-rolled `[UInt8]` JSONValue ABI (trajectory w§3.2): wasm
-owns linear memory; the chamber writes event envelopes at `webui_input_ptr`,
-calls `webui_handle_event`, reads fragments from the frame, and patches by id.
-async handlers run through `swift_task_donateThreadToGlobalExecutorUntil` (the
-6.4 cooperative executor's blessed pump) — one call drains spawned tasks and
-their awaits to quiescence. full detail (**historical**):
-`Documentation/WASM_BOOTSTRAP.md` + `Documentation/WASM_IMPLEMENTATION_PLAN.md`,
-both deleted with the chamber — the island machinery that remains is described in
-`NEXT_ARCHITECTURE.md` §2c–§2d.
+building one is the `wasm-island` plugin verb:
+
+```bash
+swift package --disable-sandbox plugin wasm-island [--product TheirIsland] [--no-strip]
+```
+
+it cross-builds into `.build/wasm-island-scratch` — an isolated root, because the
+plugin invocation already holds the package `.build` lock and building into it
+would deadlock — strips custom sections (name table + DWARF) unless `--no-strip`
+keeps devtools stack traces, and copies the artifact to
+`.build/out/Products/Release-webassembly-wasm32/<product>.wasm`. `WebUIWasmTool`
+is the strip step's tool (invoked through the plugin's own path, not a build
+plugin — there is no `WebUIWasmPlugin`), and it emits a `WebUIWasmInfo` enum from
+an artifact. `node designer/browser-smoke.mjs` is what verifies an island is
+genuinely browser-hosted once its env imports are linked.
+
+the import-surface pin (a fixed `wasi_snapshot_preview1` + `env` function count,
+once asserted by a `WasmIntegrityTests` suite) went with the chamber: it described
+that module, not the islands. nothing in-tree asserts an island's import list today.
+
+historical detail — `Documentation/WASM_BOOTSTRAP.md` and
+`Documentation/WASM_IMPLEMENTATION_PLAN.md` — was deleted with the chamber; the
+island machinery that remains is described in `NEXT_ARCHITECTURE.md` §2c–§2d.
 
 ## Security Architecture
 
 | Threat | Mitigation |
 |---|---|
-| XSS via fragment injection | the fragment sanitizer parses each patch into a detached DOM subtree (target element as parse context), then strips `<script>` elements, `on*` event-handler attributes, and unsafe `href`/`src`/`action`/`formaction`/`xlink:href` values on the real nodes — the parser resolves character references and quoting, so entity-encoded (`jav&#x61;script:`, `java&Tab;script:`), unquoted, and space-less-handler payloads cannot reach the DOM. the wasm chamber applies the same parse-and-strip to its own fragment writes (`applyUpdates`/`setInnerHTML`) and to authoritative fragments arriving over the client transport |
+| XSS via fragment injection | the fragment sanitizer parses each patch into a detached DOM subtree (target element as parse context), then strips `<script>` elements, `on*` event-handler attributes, and unsafe `href`/`src`/`action`/`formaction`/`xlink:href` values on the real nodes — the parser resolves character references and quoting, so entity-encoded (`jav&#x61;script:`, `java&Tab;script:`), unquoted, and space-less-handler payloads cannot reach the DOM. the client engine applies the same parse-and-strip to its own fragment writes, so a hostile fragment cannot ride in through a patch either |
 | Prototype pollution | `State.set()` rejects keys `__proto__`, `constructor`, `prototype` |
 | `javascript:` URLs | `sanitizeURL()` blocks `javascript:`, `data:`, `vbscript:` in Link, Image, Form, and the js Router — c0 controls and ascii whitespace are stripped before the scheme check, matching the browser's parser so padded/obfuscated schemes are caught |
 | Attribute injection | `htmlEscape()` on every attribute key and value the framework emits — primitive `id`/`class`/`name`/`for`/`data-status`/`method` parameters included, not just modifiers |
@@ -327,10 +352,9 @@ both deleted with the chamber — the island machinery that remains is described
 | CSRF | `CSRFProtection` enum with HMAC-SHA256 stateless tokens, optional `Form.csrfToken` parameter — secret/token minting throws on entropy or hmac failure (no prng fallback) and `validate` rejects on signing failure, never accepting an empty signature |
 | Stack overflow via deeply nested json | `JSONValue.parse` caps container nesting at 128 (`JSONError.nestingTooDeep`); a nested-bracket frame inside NIO's 16 kb frame budget was probe-verified to segfault the process before the cap (2026-09) |
 | Login-token exhaustion | `SingleUseTokenStore` budgets outstanding (reserved, unsubmitted) tokens per issuer key (`maxOutstandingPerKey`, default 5), and the auth demo throttles both the mint page (60/min/ip) and submit attempts (20/min/ip) — one caller cannot stockpile login tokens and flood the store past capacity |
-| Cross-session ws replay | pages mint a per-render token (`RuntimeConfig.renderToken`) that the runtime echoes with every `event`/`ping`; the server resolves each message against the session's current render tokens and answers unknown/missing ones with a redirect + close — a stale page from another user's (or a former) session cannot drive the current session's router. a token this session minted but LRU-evicted resolves through the registry's bounded forward chain: the server pushes the live token as an in-place `token` refresh (no reload) and the runtime adopts it for subsequent echoes |
-| wasm compilation under a strict csp | client-mode pages substitute `script-src 'self' 'wasm-unsafe-eval'` (still `'self'`, still no `'unsafe-inline'`); `'wasm-unsafe-eval'` only permits wasm compilation, narrowing the old blanket `'unsafe-eval'` risk |
-| transmitted code | structurally impossible in client mode: server→client updates are data into a fixed, pinned wasm (no script-message type). the chamber sanitizes its fragment writes (parse-and-strip, same defense as the server patcher) even though they originate in the pinned binary, so the client path never bypasses the sanitizer |
-| import surface | the shipped module imports exactly 34 `wasi_snapshot_preview1` + 8 `env` functions, pinned by `WasmIntegrityTests` — the chamber must implement all of them or instantiation fails |
+| Cross-session ws replay | pages mint a per-render token (`RuntimeConfig.renderToken`) that the runtime echoes with every `event`/`ping`; the server resolves each message against the session's current render tokens and answers unknown/missing ones with a redirect + close — a stale page from another user's (or a former) session cannot drive the current session's router. a token this session minted but LRU-evicted resolves through the registry's bounded forward chain: the server pushes the live token as an in-place `token` refresh (no reload) and the runtime adopts it for subsequent echoes. `WebUIServer` now provides this itself: it mints a 128-bit `RenderToken` per page render, routes every frame through the session that token names, and — under `WebUIServerConfig.requireRenderToken` — answers an unknown or missing token with an `error` frame and closes the socket. the flag defaults off so a 1.x host is unaffected; the auth example remains the reference for per-identity routers |
+| wasm compilation under a strict csp | island-capable pages carry `script-src 'self' 'wasm-unsafe-eval'` (still `'self'`, still no `'unsafe-inline'`); `'wasm-unsafe-eval'` only permits wasm compilation, narrowing the old blanket `'unsafe-eval'` risk. the delivered default carries it on every page today — a page that declares no island capability still gets it; scoping it to declared capabilities is a follow-up (`ClientBoot.defaultCSP`) |
+| transmitted code | server→client updates carry data, never code: `WSOutgoing` has no script-message type, so a compromised or buggy server response cannot become executable in the page. the engine sanitizes every fragment it applies, so the patch path never bypasses the sanitizer either |
 | Large-response truncation | http responses are written through the raw channel and the terminal write's promise is awaited before closing — the async channel writer does not await write promises, so a response larger than the socket send buffer silently lost its tail at close (probe-verified) |
 | Data race | `Mutex` (Swift `Synchronization`) on all `EventRouter.State` and `ObserverList` mutations |
 | Unbounded growth | Caps on `EventRouter.maxHandlers` (10K) and `ObserverList.maxObservers` (100) |

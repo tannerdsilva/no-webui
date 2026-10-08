@@ -4,6 +4,45 @@ all notable changes to this project are documented here.
 
 ## [unreleased]
 
+### docs — the high-level docs now match the shipped surface
+
+every claim below was measured against the tree, not restated. the five defects
+D1–D9 were all drift of the same kind: a document describing a different
+package than the one that builds.
+
+- **README**: test count 903 → **1095**; doc-file count 11 → **16**; rawdog pin
+  "v21+" → **`22.0.0..<23.0.0`**; the module table listed 11 entries against
+  **24 targets** and omitted every target added since — it now names the 24
+  (13 libraries, 10 executables, 1 macro), the 11 plugins split into 3 build
+  tools vs **8 command verbs as `swift package plugin --list` actually reports
+  them** (`budget` had been misfiled as a build tool), and the real dependency
+  set (swift-log 1.x, swift-nio 2.x, swift-service-lifecycle 2.6.x,
+  swift-syntax 603.x, rawdog 22.x — the list had omitted two of the five).
+  the project tree, the doc index and the requirements were re-derived the same way.
+- **API.md**: `EventData.data` documented as `[String: String]` — it is
+  `[String: JSONValue]`, and the accessors are `string(_:)` / `number(_:)`
+  (**no** `bool(_:)`; the wrong accessor would have been easy to write here and
+  impossible to compile). the `WebUITable` parameter list was paraphrased and
+  three parameters short — it now names `sortableColumns`, `hiddenColumns`,
+  `sort`, `selectable`, `selectedRows`, `expandedRows` exactly. `OutcomeHandler`
+  (added in W0.2) is now documented too.
+- **ARCHITECTURE.md**: the wasm monolith client was described as live — "the
+  **wasm client** (`WebUIClient`) remains available via an explicit
+  `ClientBoot(flavor: .wasm, …)`" — in a file that notes its deletion fifty lines
+  later. `flavor:` does not exist anywhere in `Sources/`, and
+  `designer/assets/webui-client.js` does not exist either. Layer 5 is now the
+  capability-island model (`wasm-island`, `WebUIIslandCore`, the artifact path),
+  and the three security-table rows describing the deleted chamber as a current
+  mitigation were corrected or dropped.
+- **STABILITY.md**: the post-deletion note disclaimed "any reference to the
+  client boot **below**" while sitting *below* the stale references — the file's
+  own contradiction. the note now heads the section it governs, and items 2/3/5/7
+  state the deletion instead of describing the deleted path as available.
+- **CHANGELOG.md** is at the repo root, not `Documentation/` as the plan had it.
+
+evidence: `swift test` → 1095 tests / 113 suites pass, exit 0 (docs-only change;
+the suite is run because the claims above are about the code).
+
 ### stability — the frozen list now matches its own evidence
 
 - **seven unproven types left the frozen surface.** `WebUISelect`,
