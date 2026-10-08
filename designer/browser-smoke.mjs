@@ -187,13 +187,46 @@ if (sameTurn.immediately === "0") ok("click patched DOM to the predicted 0 in th
 else bad(`same-turn read was not the prediction: ${JSON.stringify(sameTurn)}`);
 
 await page.waitForTimeout(200);
+// a default patch rides a view transition when the engine allows one, so its DOM
+// write lands inside the transition callback — a frame later, not in the calling
+// turn (webui-engine.js `wantsTransition`). every other same-turn read in this
+// gate asserts that precondition first: the reduced-motion probe at #6 emulates
+// it, the policy probes pass `transition: false` or an off-region. this one did
+// not, so it read the *pre-patch* value on a host with Reduce Motion disabled
+// and passed only where the ambient OS setting happened to make the patch
+// synchronous. assert both paths explicitly instead of inheriting whichever one
+// the machine picks.
 const chamberPatch = await page.evaluate((runName) => {
   const inst = window[runName]._getInstance();
-  inst.patch([{ id: "counter-value", html: '<div id="counter-value" class="counter-value" role="status"><span>9</span></div>' }]);
-  return { immediate: document.querySelector("#counter-value").textContent.trim() };
+  const frag = (n, extra) => Object.assign({
+    id: "counter-value",
+    html: `<div id="counter-value" class="counter-value" role="status"><span>${n}</span></div>`,
+  }, extra);
+  // (a) the synchronous path, named rather than inherited
+  inst.patch([frag(9, { transition: false })]);
+  const immediate = document.querySelector("#counter-value").textContent.trim();
+  return { immediate };
 }, "WebUIEngine");
-if (chamberPatch.immediate === "9") ok("runtime applies an authoritative fragment patch (counter -> 9)");
+if (chamberPatch.immediate === "9") ok("runtime applies an authoritative fragment patch (counter -> 9, synchronous path)");
 else bad(`chamber patch failed: ${JSON.stringify(chamberPatch)}`);
+
+// (b) the transition path: emitted with no refusal, it must land too — in the
+// transition callback where the engine allows one, synchronously otherwise.
+const chamberDeferred = await page.evaluate(async (runName) => {
+  const inst = window[runName]._getInstance();
+  inst.patch([{
+    id: "counter-value",
+    html: '<div id="counter-value" class="counter-value" role="status"><span>11</span></div>',
+  }]);
+  const read = () => document.querySelector("#counter-value").textContent.trim();
+  const first = read();
+  for (let i = 0; i < 90 && read() !== "11"; i++) {
+    await new Promise((r) => requestAnimationFrame(r));
+  }
+  return { first, settled: read() };
+}, "WebUIEngine");
+if (chamberDeferred.settled === "11") ok("a default patch lands too (transition path)");
+else bad(`default patch never landed: ${JSON.stringify(chamberDeferred)}`);
 
 // 5. Save/restore hardening: a scrollable element inside a patched fragment
 // keeps its scroll position across the replacement.
