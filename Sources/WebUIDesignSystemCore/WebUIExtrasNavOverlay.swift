@@ -139,15 +139,28 @@ public struct WebUIBottomNav: View {
 
 // MARK: WebUI Fab
 /// a floating action button.
-public struct WebUIFab: View {
-    public enum Variant: String, Sendable {
-        case primary = "", secondary = " fab--secondary", danger = " fab--danger"
+public struct WebUIFab: View {    @available(*, deprecated, renamed: "Tone")
+    public typealias Variant = Tone
+
+    /// this component's own class for a shared tone. a tone this component
+    /// never offered forwards the same pattern (`" fab--neutral"`) rather than
+    /// silently rendering the default — the class stays an extension point.
+    private static func classFor(_ tone: Tone) -> String {
+        switch tone {
+            case .neutral: return " fab--neutral"
+            case .primary: return ""
+            case .secondary: return " fab--secondary"
+            case .info: return " fab--info"
+            case .success: return " fab--success"
+            case .warning: return " fab--warning"
+            case .danger: return " fab--danger"
+        }
     }
     @available(*, deprecated, renamed: "ControlSize")
     public typealias Size = ControlSize
     public let label: String?
     public let icon: IconName
-    public let variant: Variant
+    public let tone: Tone
     public let size: ControlSize
     public let extended: Bool
     public let id: String?
@@ -162,15 +175,23 @@ public struct WebUIFab: View {
             case .xl: return " fab--xl"
         }
     }
+    @available(*, deprecated, message: "use tone: — Tone is the shared vocabulary")
 
-    public init(_ label: String? = nil, icon: IconName, variant: Variant = .primary,
+    public init(_ label: String? = nil, icon: IconName, variant: Tone,
                 size: ControlSize = .md, extended: Bool = false, id: String? = nil, onTap: EventHandler? = nil) {
-        self.label = label; self.icon = icon; self.variant = variant
+        self.label = label; self.icon = icon; self.tone = variant
+        self.size = size; self.extended = extended; self.id = id; self.onTap = onTap
+    }
+
+
+    public init(_ label: String? = nil, icon: IconName, tone: Variant = .primary,
+                size: ControlSize = .md, extended: Bool = false, id: String? = nil, onTap: EventHandler? = nil) {
+        self.label = label; self.icon = icon; self.tone = tone
         self.size = size; self.extended = extended; self.id = id; self.onTap = onTap
     }
 
     public func render() -> String {
-        var classes = "fab\(variant.rawValue)\(Self.classFor(size))"
+        var classes = "fab\(Self.classFor(tone))\(Self.classFor(size))"
         if extended { classes += " fab--extended" }
         let tapAttrs = id.map { controlAttributes(id: $0, event: .click, handler: onTap) } ?? ""
         var html = "<button class=\"\(classes)\""

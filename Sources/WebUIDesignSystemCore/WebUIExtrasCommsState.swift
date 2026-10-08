@@ -408,44 +408,74 @@ public struct WebUICheckboxGroup: View {
 /// a page-level message strip: full-bleed, persistent, dismissible. distinct
 /// from the in-content alert, which is rounded and inset; the sheet gives the
 /// banner a bottom border and no radius, for the top of a page or a section.
-public struct WebUIBanner: View, Dismissible {
-    public enum Variant: String, Sendable {
-        case info = "banner--info"
-        case success = "banner--success"
-        case warning = "banner--warning"
-        case danger = "banner--error"
+public struct WebUIBanner: View, Dismissible {    @available(*, deprecated, renamed: "Tone")
+    public typealias Variant = Tone
+
+    /// this component's own class for a shared tone. a tone this component
+    /// never offered forwards the same pattern (`"banner--neutral"`) rather than
+    /// silently rendering the default — the class stays an extension point.
+    private static func classFor(_ tone: Tone) -> String {
+        switch tone {
+            case .neutral: return "banner--neutral"
+            case .primary: return "banner--primary"
+            case .secondary: return "banner--secondary"
+            case .info: return "banner--info"
+            case .success: return "banner--success"
+            case .warning: return "banner--warning"
+            case .danger: return "banner--error"
+        }
     }
 
-    private static func defaultIcon(for variant: Variant) -> IconName {
-        switch variant {
+    private static func defaultIcon(for tone: Tone) -> IconName {
+        switch tone {
         case .info: return .info
         case .success: return .checkCircle
         case .warning: return .alertTriangle
         case .danger: return .xCircle
-        }
+                case .neutral, .primary, .secondary: return .info
+}
     }
 
-    public let variant: Variant
+    public let tone: Tone
     public let title: String?
     public let message: String
     public let dismissible: Bool
     public let icon: IconName
     public let id: String?
     public var onDismiss: DismissHandler?
+    @available(*, deprecated, message: "use tone: — Tone is the shared vocabulary")
 
     public init(
-        variant: Variant = .info,
+        variant: Tone,
         title: String? = nil,
         message: String,
         dismissible: Bool = false,
         icon: IconName? = nil,
         id: String? = nil
     ) {
-        self.variant = variant
+        self.tone = variant
         self.title = title
         self.message = message
         self.dismissible = dismissible
         self.icon = icon ?? Self.defaultIcon(for: variant)
+        self.id = id
+        self.onDismiss = nil
+    }
+
+
+    public init(
+        tone: Variant = .info,
+        title: String? = nil,
+        message: String,
+        dismissible: Bool = false,
+        icon: IconName? = nil,
+        id: String? = nil
+    ) {
+        self.tone = tone
+        self.title = title
+        self.message = message
+        self.dismissible = dismissible
+        self.icon = icon ?? Self.defaultIcon(for: tone)
         self.id = id
         self.onDismiss = nil
     }
@@ -456,7 +486,7 @@ public struct WebUIBanner: View, Dismissible {
 
     public func render() -> String {
         let dismissal = makeDismissal(ariaLabel: "Dismiss")
-        var html = "<div class=\"banner \(variant.rawValue)\" role=\"status\""
+        var html = "<div class=\"banner \(Self.classFor(tone))\" role=\"status\""
         if let elementID = dismissal.elementID ?? id {
             html += " id=\"\(htmlEscape(elementID))\""
         }

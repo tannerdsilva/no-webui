@@ -363,22 +363,29 @@ public struct WebUICard: View {
 }
 
 // MARK: - WebUI Badge
-public struct WebUIBadge: View {
-    public enum Variant: String, Sendable {
-        case primary   = "badge--primary"
-        case secondary = "badge--secondary"
-        case success   = "badge--success"
-        case warning   = "badge--warning"
-        case danger    = "badge--danger"
-        case info      = "badge--info"
-        case neutral   = "badge--neutral"
+public struct WebUIBadge: View {    @available(*, deprecated, renamed: "Tone")
+    public typealias Variant = Tone
+
+    /// this component's own class for a shared tone. a tone this component
+    /// never offered forwards the same pattern (`"badge--neutral"`) rather than
+    /// silently rendering the default — the class stays an extension point.
+    private static func classFor(_ tone: Tone) -> String {
+        switch tone {
+            case .neutral: return "badge--neutral"
+            case .primary: return "badge--primary"
+            case .secondary: return "badge--secondary"
+            case .info: return "badge--info"
+            case .success: return "badge--success"
+            case .warning: return "badge--warning"
+            case .danger: return "badge--danger"
+        }
     }
 
     @available(*, deprecated, renamed: "ControlSize")
     public typealias Size = ControlSize
 
     public let text: String
-    public let variant: Variant
+    public let tone: Tone
     public let size: ControlSize
     public let dot: Bool
 
@@ -392,15 +399,29 @@ public struct WebUIBadge: View {
             case .xl: return "badge--xl"
         }
     }
+    @available(*, deprecated, message: "use tone: — Tone is the shared vocabulary")
 
     public init(
         _ text: String,
-        variant: Variant = .neutral,
+        variant: Tone,
         size: ControlSize = .md,
         dot: Bool = false
     ) {
         self.text = text
-        self.variant = variant
+        self.tone = variant
+        self.size = size
+        self.dot = dot
+    }
+
+
+    public init(
+        _ text: String,
+        tone: Variant = .neutral,
+        size: ControlSize = .md,
+        dot: Bool = false
+    ) {
+        self.text = text
+        self.tone = tone
         self.size = size
         self.dot = dot
     }
@@ -410,7 +431,7 @@ public struct WebUIBadge: View {
     }
 
     public func render(into buffer: inout HTMLBuffer) {
-        var classes = "badge \(variant.rawValue) \(Self.classFor(size))"
+        var classes = "badge \(Self.classFor(tone)) \(Self.classFor(size))"
         if dot { classes += " badge--dot" }
 
         let attributeText = " class=\"\(classes)\""
@@ -425,25 +446,36 @@ public struct WebUIBadge: View {
 }
 
 // MARK: - WebUI Alert
-public struct WebUIAlert: View, Dismissible {
-    public enum Variant: String, Sendable {
-        case info    = "alert--info"
-        case success = "alert--success"
-        case warning = "alert--warning"
-        case danger  = "alert--danger"
+public struct WebUIAlert: View, Dismissible {    @available(*, deprecated, renamed: "Tone")
+    public typealias Variant = Tone
+
+    /// this component's own class for a shared tone. a tone this component
+    /// never offered forwards the same pattern (`"alert--neutral"`) rather than
+    /// silently rendering the default — the class stays an extension point.
+    private static func classFor(_ tone: Tone) -> String {
+        switch tone {
+            case .neutral: return "alert--neutral"
+            case .primary: return "alert--primary"
+            case .secondary: return "alert--secondary"
+            case .info: return "alert--info"
+            case .success: return "alert--success"
+            case .warning: return "alert--warning"
+            case .danger: return "alert--danger"
+        }
     }
 
     /// Semantic default glyph for a variant (used when `icon` is not set).
-    private static func defaultIcon(for variant: Variant) -> IconName {
-        switch variant {
+    private static func defaultIcon(for tone: Tone) -> IconName {
+        switch tone {
         case .info:    return .info
         case .success: return .checkCircle
         case .warning: return .alertTriangle
         case .danger:  return .xCircle
-        }
+                case .neutral, .primary, .secondary: return .info
+}
     }
 
-    public let variant: Variant
+    public let tone: Tone
     public let title: String?
     public let message: String
     public let dismissible: Bool
@@ -459,20 +491,39 @@ public struct WebUIAlert: View, Dismissible {
     /// handler wired onto the close button; `nil` renders the static
     /// `data-dismiss` marker only.
     public var onDismiss: DismissHandler?
+    @available(*, deprecated, message: "use tone: — Tone is the shared vocabulary")
 
     public init(
-        variant: Variant = .info,
+        variant: Tone,
         title: String? = nil,
         message: String,
         dismissible: Bool = false,
         icon: IconName? = nil,
         id: String? = nil
     ) {
-        self.variant = variant
+        self.tone = variant
         self.title = title
         self.message = message
         self.dismissible = dismissible
         self.icon = icon ?? Self.defaultIcon(for: variant)
+        self.id = id
+        self.onDismiss = nil
+    }
+
+
+    public init(
+        tone: Variant = .info,
+        title: String? = nil,
+        message: String,
+        dismissible: Bool = false,
+        icon: IconName? = nil,
+        id: String? = nil
+    ) {
+        self.tone = tone
+        self.title = title
+        self.message = message
+        self.dismissible = dismissible
+        self.icon = icon ?? Self.defaultIcon(for: tone)
         self.id = id
         self.onDismiss = nil
     }
@@ -487,7 +538,7 @@ public struct WebUIAlert: View, Dismissible {
 
     public func render(into buffer: inout HTMLBuffer) {
         let dismissal = makeDismissal(ariaLabel: "Dismiss")
-        var attributeText = " class=\"alert \(variant.rawValue)\" role=\"alert\""
+        var attributeText = " class=\"alert \(Self.classFor(tone))\" role=\"alert\""
         if let elementID = dismissal.elementID ?? id {
             attributeText += " id=\"\(htmlEscape(elementID))\""
         }
@@ -630,19 +681,29 @@ public struct WebUIAvatar: View {
 }
 
 // MARK: - WebUI Progress
-public struct WebUIProgress: View {
-    public enum Variant: String, Sendable {
-        case primary   = "progress--primary"
-        case success   = "progress--success"
-        case warning   = "progress--warning"
-        case danger    = "progress--danger"
+public struct WebUIProgress: View {    @available(*, deprecated, renamed: "Tone")
+    public typealias Variant = Tone
+
+    /// this component's own class for a shared tone. a tone this component
+    /// never offered forwards the same pattern (`"progress--neutral"`) rather than
+    /// silently rendering the default — the class stays an extension point.
+    private static func classFor(_ tone: Tone) -> String {
+        switch tone {
+            case .neutral: return "progress--neutral"
+            case .primary: return "progress--primary"
+            case .secondary: return "progress--secondary"
+            case .info: return "progress--info"
+            case .success: return "progress--success"
+            case .warning: return "progress--warning"
+            case .danger: return "progress--danger"
+        }
     }
 
     @available(*, deprecated, renamed: "ControlSize")
     public typealias Size = ControlSize
 
     public let value: Double  // 0.0 to 1.0
-    public let variant: Variant
+    public let tone: Tone
     public let showLabel: Bool
     public let size: ControlSize
 
@@ -656,15 +717,29 @@ public struct WebUIProgress: View {
             case .xl: return "progress--xl"
         }
     }
+    @available(*, deprecated, message: "use tone: — Tone is the shared vocabulary")
 
     public init(
         value: Double,
-        variant: Variant = .primary,
+        variant: Tone,
         showLabel: Bool = false,
         size: ControlSize = .md
     ) {
         self.value = min(max(value, 0), 1)
-        self.variant = variant
+        self.tone = variant
+        self.showLabel = showLabel
+        self.size = size
+    }
+
+
+    public init(
+        value: Double,
+        tone: Variant = .primary,
+        showLabel: Bool = false,
+        size: ControlSize = .md
+    ) {
+        self.value = min(max(value, 0), 1)
+        self.tone = tone
         self.showLabel = showLabel
         self.size = size
     }
@@ -674,7 +749,7 @@ public struct WebUIProgress: View {
     }
 
     public func render(into buffer: inout HTMLBuffer) {
-        let classes = "progress \(variant.rawValue) \(Self.classFor(size))"
+        let classes = "progress \(Self.classFor(tone)) \(Self.classFor(size))"
 
         let attributeText = " class=\"\(classes)\" role=\"progressbar\" aria-valuenow=\"\(Int(value * 100))\" aria-valuemin=\"0\" aria-valuemax=\"100\""
         buffer.beginElement("div", attributeText)
@@ -749,29 +824,54 @@ public struct WebUISkeleton: View {
 }
 
 // MARK: - WebUI Toast
-public struct WebUIToast: View, Dismissible {
-    public enum Variant: String, Sendable {
-        case info    = "toast--info"
-        case success = "toast--success"
-        case warning = "toast--warning"
-        case danger  = "toast--danger"
+public struct WebUIToast: View, Dismissible {    @available(*, deprecated, renamed: "Tone")
+    public typealias Variant = Tone
+
+    /// this component's own class for a shared tone. a tone this component
+    /// never offered forwards the same pattern (`"toast--neutral"`) rather than
+    /// silently rendering the default — the class stays an extension point.
+    private static func classFor(_ tone: Tone) -> String {
+        switch tone {
+            case .neutral: return "toast--neutral"
+            case .primary: return "toast--primary"
+            case .secondary: return "toast--secondary"
+            case .info: return "toast--info"
+            case .success: return "toast--success"
+            case .warning: return "toast--warning"
+            case .danger: return "toast--danger"
+        }
     }
 
-    public let variant: Variant
+    public let tone: Tone
     public let message: String
     public let id: String?
     public let dismissible: Bool
     /// handler wired onto the close button; `nil` renders the static
     /// `data-dismiss` marker only.
     public var onDismiss: DismissHandler?
+    @available(*, deprecated, message: "use tone: — Tone is the shared vocabulary")
 
     public init(
-        variant: Variant = .info,
+        variant: Tone,
         message: String,
         id: String? = nil,
         dismissible: Bool = true
     ) {
-        self.variant = variant
+        self.tone = variant
+        self.message = message
+        self.id = id
+        self.dismissible = dismissible
+        self.onDismiss = nil
+    }
+
+
+    public init(
+        tone: Variant = .info,
+        message: String,
+        id: String? = nil,
+        dismissible: Bool = true
+    ) {
+        self.tone = tone
         self.message = message
         self.id = id
         self.dismissible = dismissible
@@ -788,7 +888,7 @@ public struct WebUIToast: View, Dismissible {
 
     public func render(into buffer: inout HTMLBuffer) {
         let dismissal = makeDismissal(ariaLabel: "Dismiss")
-        var attributeText = " class=\"toast \(variant.rawValue)\" role=\"alert\""
+        var attributeText = " class=\"toast \(Self.classFor(tone))\" role=\"alert\""
         if let elementID = dismissal.elementID ?? id {
             attributeText += " id=\"\(htmlEscape(elementID))\""
         }
@@ -1219,33 +1319,55 @@ public extension WebUITable {
 }
 
 // MARK: - WebUI Chip
-public struct WebUIChip: View, Dismissible {
-    public enum Variant: String, Sendable {
-        case primary   = "chip--primary"
-        case secondary = "chip--secondary"
-        case success   = "chip--success"
-        case warning   = "chip--warning"
-        case danger    = "chip--danger"
-        case info      = "chip--info"
-        case neutral   = "chip--neutral"
+public struct WebUIChip: View, Dismissible {    @available(*, deprecated, renamed: "Tone")
+    public typealias Variant = Tone
+
+    /// this component's own class for a shared tone. a tone this component
+    /// never offered forwards the same pattern (`"chip--neutral"`) rather than
+    /// silently rendering the default — the class stays an extension point.
+    private static func classFor(_ tone: Tone) -> String {
+        switch tone {
+            case .neutral: return "chip--neutral"
+            case .primary: return "chip--primary"
+            case .secondary: return "chip--secondary"
+            case .info: return "chip--info"
+            case .success: return "chip--success"
+            case .warning: return "chip--warning"
+            case .danger: return "chip--danger"
+        }
     }
 
     public let text: String
-    public let variant: Variant
+    public let tone: Tone
     public let removable: Bool
     public let id: String?
     /// handler wired onto the remove button; `nil` renders the static
     /// `data-remove` marker only.
     public var onDismiss: DismissHandler?
+    @available(*, deprecated, message: "use tone: — Tone is the shared vocabulary")
 
     public init(
         _ text: String,
-        variant: Variant = .neutral,
+        variant: Tone,
         removable: Bool = false,
         id: String? = nil
     ) {
         self.text = text
-        self.variant = variant
+        self.tone = variant
+        self.removable = removable
+        self.id = id
+        self.onDismiss = nil
+    }
+
+
+    public init(
+        _ text: String,
+        tone: Variant = .neutral,
+        removable: Bool = false,
+        id: String? = nil
+    ) {
+        self.text = text
+        self.tone = tone
         self.removable = removable
         self.id = id
         self.onDismiss = nil
@@ -1261,7 +1383,7 @@ public struct WebUIChip: View, Dismissible {
 
     public func render(into buffer: inout HTMLBuffer) {
         let dismissal = makeDismissal(ariaLabel: "Remove")
-        var attributeText = " class=\"chip \(variant.rawValue)\""
+        var attributeText = " class=\"chip \(Self.classFor(tone))\""
         if let elementID = dismissal.elementID ?? id {
             attributeText += " id=\"\(htmlEscape(elementID))\""
         }

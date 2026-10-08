@@ -62,13 +62,22 @@ public enum Emphasis: String, Sendable, CaseIterable {
     case solid, outline, ghost, link
 }
 
-/// the semantic colour intent.
+/// the semantic colour intent — which token slot a component renders in.
 ///
-/// a tone names *meaning*, not a colour: the sheet maps it to a token, so a
-/// theme can restyle `danger` without any component knowing what colour it is.
+/// a tone names *meaning*, not a colour: the sheet maps it to a token, so a theme
+/// can restyle `danger` without any component knowing what colour it is.
+///
+/// `secondary` is the one member that names a brand position rather than an
+/// intent. it is here because four components (button, badge, chip, fab) have
+/// carried a `secondary` case all along, as a peer of `primary` in the same enum —
+/// so the sheet's own vocabulary is "which colour slot", and a six-value list
+/// could not express what the sheet already ships. mapping it onto `neutral` was
+/// the alternative, and it would have changed the emitted class.
 public enum Tone: String, Sendable, CaseIterable {
     case neutral
     case primary
+    /// the muted brand slot — a brand position, not a semantic intent.
+    case secondary
     case info
     case success
     case warning

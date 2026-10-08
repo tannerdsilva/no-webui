@@ -81,4 +81,68 @@ struct VariantSplitTests {
         #expect(render(WebUISkeleton(variant: a)).contains("skeleton--card"))
         #expect(render(WebUIBottomSheet(variant: b) { Text("b") }).contains(" bottom-sheet--full"))
     }
+
+    // MARK: - the seven single-axis tone components
+
+    /// each pair renders the same component through the 1.x `variant:` spelling and
+    /// the new `tone:` one, so the two must produce identical bytes.
+    private static let toneComponents: [(name: String, legacy: @Sendable (Tone) -> String, current: @Sendable (Tone) -> String)] = [
+        ("WebUIBadge", { render(WebUIBadge("n", variant: $0)) }, { render(WebUIBadge("n", tone: $0)) }),
+        ("WebUIAlert", { render(WebUIAlert(variant: $0, message: "m")) }, { render(WebUIAlert(tone: $0, message: "m")) }),
+        ("WebUIProgress", { render(WebUIProgress(value: 0.5, variant: $0)) }, { render(WebUIProgress(value: 0.5, tone: $0)) }),
+        ("WebUIToast", { render(WebUIToast(variant: $0, message: "m")) }, { render(WebUIToast(tone: $0, message: "m")) }),
+        ("WebUIChip", { render(WebUIChip("c", variant: $0)) }, { render(WebUIChip("c", tone: $0)) }),
+        ("WebUIBanner", { render(WebUIBanner(variant: $0, message: "m")) }, { render(WebUIBanner(tone: $0, message: "m")) }),
+        ("WebUIFab", { render(WebUIFab(icon: .check, variant: $0)) }, { render(WebUIFab(icon: .check, tone: $0)) }),
+    ]
+
+    @Test("the 1.x variant: spelling is byte-identical to tone:, for every tone")
+    func toneOldEqualsNew() {
+        #expect(Self.toneComponents.count == 7, "this list must track the migration")
+        for c in Self.toneComponents {
+            for tone in Tone.allCases {
+                #expect(c.legacy(tone) == c.current(tone), "\(c.name) / \(tone.rawValue)")
+            }
+        }
+    }
+
+    @Test("every offered tone keeps its original class — including the one whose name lies")
+    func toneClassesUnchanged() {
+        #expect(render(WebUIBadge("n", tone: .danger)).contains("badge--danger"))
+        #expect(render(WebUIAlert(tone: .success, message: "m")).contains("alert--success"))
+        #expect(render(WebUIProgress(value: 0.5, tone: .warning)).contains("progress--warning"))
+        #expect(render(WebUIToast(tone: .info, message: "m")).contains("toast--info"))
+        #expect(render(WebUIChip("c", tone: .neutral)).contains("chip--neutral"))
+
+        // the trap: Banner's `danger` case has always emitted `banner--error`. any
+        // mapping written from the case NAMES would emit `banner--danger` here and
+        // ship a class the sheet does not define.
+        #expect(render(WebUIBanner(tone: .danger, message: "m")).contains("banner--error"))
+        #expect(!render(WebUIBanner(tone: .danger, message: "m")).contains("banner--danger"))
+
+        // Fab's `primary` is the bare base class — no modifier at all.
+        #expect(render(WebUIFab(icon: .check, tone: .primary)).contains("class=\"fab\""))
+        #expect(render(WebUIFab(icon: .check, tone: .secondary)).contains(" fab--secondary"))
+    }
+
+    @Test("a tone the component never offered forwards the pattern, not the default")
+    func unofferedTonesForward() {
+        // Alert/Toast/Banner/Progress ship four tones; the other three forward the
+        // component's own pattern rather than silently rendering their default.
+        #expect(render(WebUIAlert(tone: .secondary, message: "m")).contains("alert--secondary"))
+        #expect(render(WebUIToast(tone: .neutral, message: "m")).contains("toast--neutral"))
+        #expect(render(WebUIProgress(value: 0.5, tone: .primary)).contains("progress--primary"))
+        // and where the class is undefined, the element still carries the base class
+        #expect(render(WebUIAlert(tone: .neutral, message: "m")).contains("alert alert--neutral"))
+    }
+
+    @Test("Tone carries the brand slot the sheet already shipped")
+    func toneCarriesSecondary() {
+        // four components had a `secondary` case as a peer of `primary`; the sheet's
+        // vocabulary is "which colour slot", so the six-value list was incomplete.
+        // mapping it onto `neutral` would have changed the emitted class.
+        #expect(Tone.secondary.rawValue == "secondary")
+        #expect(Tone.allCases.count == 7)
+        #expect(Tone.allCases.contains(.secondary))
+    }
 }
