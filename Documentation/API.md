@@ -49,6 +49,33 @@ every attribute parameter (`id`, `class`, `name`, `for`, `data-status`,
 `Form.method`, …) is html-escaped before emission. url-valued parameters
 (`Link.href`, `Image.src`, `Form.action`) pass through `sanitizeURL` first.
 
+### Forms
+
+`Form(action:method:id:class:csrfToken:content:)` renders a `<form>`. `method` is a
+typed `FormMethod` — `.get`, `.post`, `.dialog` — defaulting to `.post`. the
+raw-string spelling (`method: "post"`) is still accepted and still emits verbatim.
+
+**the default does not work against `WebUIServer`.** the shipped server answers `GET`
+only; every other method gets a `405` whose body points here. a
+`<form method="post">` is correct only when the page runs the js runtime *and* the
+form has an `.onSubmit` handler — the engine then intercepts the submit and sends an
+event over the websocket instead of letting the browser post. with no render context
+there is nothing to intercept, and the browser posts for real.
+
+the framework warns **once per process** when it renders a `method="post"` form with no
+render context, naming this section.
+
+| you want | write |
+|---|---|
+| a live, server-handled form | `Form(action: "/save") { … }.onSubmit { … }`, served through `WebUIServer` |
+| an ordinary navigation | `Form(action: "/search", method: .get) { … }` |
+| a dialog closer | `Form(method: .dialog) { … }` inside a `<dialog>` |
+
+real `POST` — bodies, uploads, redirect-after-post — lands in **W3**
+(`CHANGELOG.md`). until then, `GET` plus websocket events is the supported path.
+
+`csrfToken:` emits a hidden `_csrf` input; see **CSRF Protection** below.
+
 ### Layouts
 
 | Type | Initializer | Output |

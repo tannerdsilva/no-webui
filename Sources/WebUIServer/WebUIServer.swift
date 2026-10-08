@@ -875,7 +875,8 @@ final class Runner: Sendable {
 		body: String,
 		contentType: String,
 		status: HTTPResponseStatus = .ok,
-		cacheControl: String = "no-store"
+		cacheControl: String = "no-store",
+		extraHeaders: [(name: String, value: String)] = []
 	) async throws {
 		// one copy: the utf-8 view goes straight into the channel's buffer.
 		var buf = channel.allocator.buffer(capacity: body.utf8.count)
@@ -885,7 +886,8 @@ final class Runner: Sendable {
 			bytes: buf,
 			contentType: contentType,
 			status: status,
-			cacheControl: cacheControl
+			cacheControl: cacheControl,
+			extraHeaders: extraHeaders
 		)
 	}
 
@@ -900,7 +902,8 @@ final class Runner: Sendable {
 		acceptEncoding: String? = nil,
 		contentType: String,
 		status: HTTPResponseStatus = .ok,
-		cacheControl: String = "no-store"
+		cacheControl: String = "no-store",
+		extraHeaders: [(name: String, value: String)] = []
 	) async throws {
 		// negotiate once. a client that accepts gzip gets the pre-compressed body, and
 		// `Vary` goes out whenever a variant EXISTS — not only when it was chosen — or a
@@ -917,6 +920,11 @@ final class Runner: Sendable {
 		head.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
 		head.headers.replaceOrAdd(name: "Service-Worker-Allowed", value: "/")
 		head.headers.replaceOrAdd(name: "Cache-Control", value: cacheControl)
+		// per-response extras, applied last so a caller cannot have one silently
+		// overwritten by the block above.
+		for header in extraHeaders {
+			head.headers.replaceOrAdd(name: header.name, value: header.value)
+		}
 		// await the terminal write promise: the async channel writer does not
 		// await write promises, and a response larger than the socket send
 		// buffer would otherwise lose its tail when the connection closes
@@ -936,14 +944,23 @@ final class Runner: Sendable {
 		)
 	}
 
+	/// the 405 body names the real cause rather than restating the status.
+	///
+	/// `Form`'s default method is `post` and this server answers GET only, so a
+	/// POST arriving here means a form with no JS interception reached the wire.
+	/// a bare "405" tells a welder nothing they can act on.
+	private static let methodNotAllowedBody =
+		"405 — WebUIServer accepts GET only; a POST here means a <form> has no JS "
+		+ "interception. See Documentation/API.md#forms (POST support: W3)."
+
 	private func respond405(channel: Channel) async throws {
-		var head = HTTPResponseHead(version: .http1_1, status: .methodNotAllowed)
-		head.headers.replaceOrAdd(name: "Content-Length", value: "0")
-		head.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
-		head.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
-		head.headers.replaceOrAdd(name: "Cache-Control", value: "no-store")
-		_ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.head(head))
-		try await channel.writeAndFlush(HTTPPart<HTTPResponseHead, ByteBuffer>.end(nil)).get()
+		try await respond(
+			channel: channel,
+			body: Self.methodNotAllowedBody,
+			contentType: "text/plain; charset=utf-8",
+			status: .methodNotAllowed,
+			extraHeaders: [("Allow", "GET")]
+		)
 	}
 }
 

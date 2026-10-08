@@ -106,9 +106,12 @@ struct WebUIServerSeamsTests {
 			let (_, missingStatus) = try await get("http://127.0.0.1:\(port)/nope")
 			#expect(missingStatus == 404)
 
-			// a page whose path is query-only-different is still the page.
-			let (_, postStatus) = try await post("http://127.0.0.1:\(port)/")
+			// a POST gets 405 — and the body now names the cause instead of being empty.
+			let (postData, postStatus) = try await post("http://127.0.0.1:\(port)/")
 			#expect(postStatus == 405)
+			let postBody = String(decoding: postData, as: UTF8.self)
+			#expect(postBody.contains("accepts GET only"), "got \(postBody)")
+			#expect(postBody.contains("Documentation/API.md#forms"), "got \(postBody)")
 		}
 	}
 

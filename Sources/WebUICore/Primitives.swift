@@ -713,17 +713,41 @@ public struct Group: View {
     }
 }
 
+// MARK: - FormMethod
+
+/// the `method` attribute of a ``Form``.
+///
+/// `dialog` is html's third value: it closes the nearest `<dialog>` and fires no
+/// request, which is why it is not simply a spelling of get or post.
+public enum FormMethod: String, Sendable, CaseIterable {
+    case get
+    case post
+    case dialog
+}
+
 // MARK: - Form
 public struct Form: View {
     public let action: String
-    public let method: String
+    /// the emitted `method`.
+    ///
+    /// the default is `.post`, which is what the framework's own `WebUIServer`
+    /// does *not* answer — see the render-time diagnostic in `render(into:)`.
+    public let method: FormMethod
     public let id: String?
     public let `class`: String?
     public let csrfToken: String?
     public let children: [any View]
+    /// the verbatim attribute text when the caller passed a raw string.
+    ///
+    /// the typed initializer leaves this nil. the raw initializer needs
+    /// byte-for-byte fidelity — an attribute-escaping test pins a hostile method
+    /// string — and an enum with three named cases cannot carry an arbitrary
+    /// value, so the raw spelling is kept beside it rather than mapped onto it.
+    private let rawMethod: String?
+
     public init(
         action: String = "",
-        method: String = "post",
+        method: FormMethod = .post,
         id: String? = nil,
         class: String? = nil,
         csrfToken: String? = nil,
@@ -731,23 +755,62 @@ public struct Form: View {
     ) {
         self.action = action
         self.method = method
+        self.rawMethod = nil
         self.id = id
         self.class = `class`
         self.csrfToken = csrfToken
         self.children = content()
     }
 
+    /// the raw-string spelling, kept so a 1.x call site emits exactly what it
+    /// always did.
+    public init(
+        action: String = "",
+        method: String,
+        id: String? = nil,
+        class: String? = nil,
+        csrfToken: String? = nil,
+        @ViewBuilder content: () -> [any View]
+    ) {
+        self.action = action
+        self.method = FormMethod(rawValue: method) ?? .post
+        self.rawMethod = method
+        self.id = id
+        self.class = `class`
+        self.csrfToken = csrfToken
+        self.children = content()
+    }
+
+    /// the exact `method` attribute value this form emits.
+    private var emittedMethod: String { rawMethod ?? method.rawValue }
+
     public func render() -> String {
         renderThroughBuffer()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
+        // the framework's own default is the one its own server refuses: a POST
+        // form with no render context has nothing to intercept its submit, so the
+        // browser sends a real POST and `WebUIServer` answers 405 with no
+        // explanation anywhere. say so once, where the welder can act on it.
+        if emittedMethod.lowercased() == "post", RenderContext.current == nil {
+            RenderDiagnostics.warnOnce(
+                "form.post-without-render-context",
+                """
+                a <form method="post"> rendered with no RenderContext: nothing \
+                intercepts its submit, so the browser POSTs and WebUIServer \
+                answers 405. use method: .get, or serve the page through \
+                WebUIServer with an .onSubmit handler (POST support: W3) — see \
+                Documentation/API.md#forms
+                """
+            )
+        }
         var attributeText = ""
         if let id { attributeText += " id=\"\(htmlEscape(id))\"" }
         if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
         let safeAction = sanitizeURL(action) ?? ""
         attributeText += " action=\"\(htmlEscape(safeAction))\""
-        attributeText += " method=\"\(htmlEscape(method))\""
+        attributeText += " method=\"\(htmlEscape(emittedMethod))\""
         buffer.beginElement("form", attributeText)
         buffer.endOpenTag()
         if let token = csrfToken {
