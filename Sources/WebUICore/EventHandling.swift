@@ -52,7 +52,7 @@ public final class EventRouter: Sendable {
         /// one render pass's worth of routing state: the handlers it registered
         /// and the two mint counters it drained.
         struct Session {
-            var handlers: [ComponentID: EventHandler] = [:]
+            var handlers: [ComponentID: OutcomeHandler] = [:]
             var nextID: Int = 0
             var nextElementID: Int = 0
             /// the clock reading at this session's last use — the LRU key.
@@ -138,7 +138,7 @@ public final class EventRouter: Sendable {
 
         // MARK: handlers
 
-        func register(_ handler: @escaping EventHandler, for componentID: ComponentID, in session: RenderSessionID) {
+        func register(_ handler: @escaping OutcomeHandler, for componentID: ComponentID, in session: RenderSessionID) {
             values.withLock { values in
                 if values.sessions[session] == nil {
                     values.clock += 1
@@ -151,7 +151,7 @@ public final class EventRouter: Sendable {
             }
         }
 
-        func handler(for componentID: ComponentID, in session: RenderSessionID) -> EventHandler? {
+        func handler(for componentID: ComponentID, in session: RenderSessionID) -> OutcomeHandler? {
             values.withLock { $0.sessions[session]?.handlers[componentID] }
         }
 
@@ -253,9 +253,22 @@ public final class EventRouter: Sendable {
 
     // MARK: registration
 
-    /// register `handler` for `componentID` in `session`.
+    /// register a fragment-returning `handler` for `componentID` in `session`.
+    ///
+    /// the 1.x handler shape, adapted to ``HandlerOutcome``: a handler that only
+    /// ever returns fragments keeps saying exactly that.
     public func register(
         _ handler: @escaping EventHandler,
+        for componentID: ComponentID,
+        in session: RenderSessionID
+    ) {
+        register(outcome: { event in .fragments(await handler(event)) }, for: componentID, in: session)
+    }
+
+    /// register a handler that can answer with a redirect, a client-state write,
+    /// a reload or a failure — not only fragments.
+    public func register(
+        outcome handler: @escaping OutcomeHandler,
         for componentID: ComponentID,
         in session: RenderSessionID
     ) {
@@ -269,6 +282,11 @@ public final class EventRouter: Sendable {
     /// register into the shared default session — the single-page host's path.
     public func register(_ handler: @escaping EventHandler, for componentID: ComponentID) {
         register(handler, for: componentID, in: .default)
+    }
+
+    /// register an outcome handler into the shared default session.
+    public func register(outcome handler: @escaping OutcomeHandler, for componentID: ComponentID) {
+        register(outcome: handler, for: componentID, in: .default)
     }
 
     /// mint the next component id in `session`.
@@ -298,20 +316,34 @@ public final class EventRouter: Sendable {
 
     // MARK: dispatch
 
-    /// route `event` within `session`.
-    public func handle(_ event: EventData, in session: RenderSessionID) async -> [FragmentUpdate] {
+    /// route `event` within `session`, returning the full outcome.
+    public func dispatch(_ event: EventData, in session: RenderSessionID) async -> HandlerOutcome {
         logger.emit(ObservableEvent.eventReceived(component: event.component.value, event: event.event), observers: observers)
 
         guard let handler = state.handler(for: event.component, in: session) else {
             // route through `logger.emit` so the observer fan-out stays on the
             // single funnel every other emission uses (log line + notify).
             logger.emit(ObservableEvent.debug(message: "no handler registered for component '\(event.component.value)'"), observers: observers)
-            return []
+            return .fragments([])
         }
 
-        let updates = await handler(event)
-        logger.emit(ObservableEvent.eventHandled(component: event.component.value, event: event.event, fragmentCount: updates.count), observers: observers)
-        return updates
+        let outcome = await handler(event)
+        logger.emit(ObservableEvent.eventHandled(component: event.component.value, event: event.event, fragmentCount: outcome.fragments.count), observers: observers)
+        return outcome
+    }
+
+    /// route within the shared default session.
+    public func dispatch(_ event: EventData) async -> HandlerOutcome {
+        await dispatch(event, in: .default)
+    }
+
+    /// route `event` within `session`, returning its fragments.
+    ///
+    /// the fragment-only view of ``dispatch(_:in:)``, kept because every 1.x
+    /// call site reads fragments. an outcome that carries none — a redirect, a
+    /// state write, a reload — reports `[]`.
+    public func handle(_ event: EventData, in session: RenderSessionID) async -> [FragmentUpdate] {
+        await dispatch(event, in: session).fragments
     }
 
     /// route within the shared default session.
@@ -347,6 +379,14 @@ public struct RenderContext: Sendable {
     public mutating func register(handler: @escaping EventHandler, for componentID: ComponentID) {
         router.register(handler, for: componentID, in: session)
     }
+
+    /// register a handler that can answer with more than fragments.
+    public mutating func register(
+        outcome handler: @escaping OutcomeHandler,
+        for componentID: ComponentID
+    ) {
+        router.register(outcome: handler, for: componentID, in: session)
+    }
     @TaskLocal public static var current: RenderContext?
 }
 
@@ -374,6 +414,24 @@ public func controlAttributes(
     guard let handler else { return "" }
     if var context = RenderContext.current {
         context.register(handler: handler, for: ComponentID(id))
+    }
+    return " data-component-id=\"\(htmlEscape(id))\" data-event=\"\(htmlEscape(event.rawValue))\""
+}
+
+/// Wire a caller-stable interactive control whose handler can answer with more
+/// than fragments — a redirect, a client-state write, a reload.
+///
+/// the same contract as ``controlAttributes(id:event:handler:)``: registration
+/// happens only when a `RenderContext` is present, so a fragment re-render
+/// re-emits identical routing attributes without re-registering.
+public func controlAttributes(
+    id: String,
+    event: HTMLEvent = .click,
+    outcome handler: OutcomeHandler?
+) -> String {
+    guard let handler else { return "" }
+    if var context = RenderContext.current {
+        context.register(outcome: handler, for: ComponentID(id))
     }
     return " data-component-id=\"\(htmlEscape(id))\" data-event=\"\(htmlEscape(event.rawValue))\""
 }

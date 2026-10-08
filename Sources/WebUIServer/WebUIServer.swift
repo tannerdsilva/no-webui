@@ -670,9 +670,9 @@ final class Runner: Sendable {
 					return false
 				}
 				let eventData = EventData(component: ComponentID(component), event: event, data: data)
-				let updates = await router.handle(eventData, in: session)
-				guard !updates.isEmpty else { return true }
-				try await writeJSON(WSOutgoing.update(fragments: updates), outbound: outbound)
+				let outcome = await router.dispatch(eventData, in: session)
+				guard let frame = outcome.wireMessage else { return true }
+				try await writeJSON(frame, outbound: outbound)
 			case .ping(let token):
 				guard boundSession(token) != nil else {
 					try? await writeJSON(
