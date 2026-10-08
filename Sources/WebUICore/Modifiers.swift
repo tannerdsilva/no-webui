@@ -179,6 +179,20 @@ extension View {
     public func onClick(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
         ModifiedView(content: self, modifier: EventHandlerModifier(event: .click, handler: handler))
     }
+
+    /// declare any DOM event, including one the vocabulary does not name.
+    ///
+    /// every named case above has its own sugar; this is the way to the rest —
+    /// `HTMLEvent.custom("dragstart")`, or a case added to the enum before its
+    /// sugar lands. it is what made the vocabulary's own escape hatch reachable:
+    /// `HTMLEvent` has always accepted `.custom(_:)`, and until this existed no
+    /// modifier could attach one.
+    public func on(
+        _ event: HTMLEvent,
+        perform handler: @escaping EventHandler
+    ) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: event, handler: handler))
+    }
     public func onSubmit(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
         ModifiedView(content: self, modifier: EventHandlerModifier(event: .submit, handler: handler))
     }

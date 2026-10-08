@@ -2070,8 +2070,6 @@ code, .inline-code {
 }
 .menu__item:hover { background: var(--color-bg-subtle); }
 .menu__item:focus-visible { box-shadow: var(--ring-focus); outline: none; }
-.menu__item--destructive { color: var(--color-danger); }
-.menu__item--destructive:hover { background: var(--color-danger-soft); }
 .menu__item:disabled { color: var(--color-text-faint); cursor: not-allowed; }
 .menu__icon {
   width: 1rem;
@@ -2079,7 +2077,6 @@ code, .inline-code {
   color: var(--color-text-muted);
   flex: none;
 }
-.menu__item--destructive .menu__icon { color: var(--color-danger); }
 .menu__label { flex: 1; }
 .menu__shortcut {
   font-family: var(--font-mono);
@@ -7182,8 +7179,13 @@ code, .inline-code {
 .menu__section { display: block; padding: var(--space-2) var(--space-2) var(--space-1); font-size: var(--font-size-xs); font-weight: var(--font-weight-semibold); letter-spacing: var(--letter-spacing-wide); text-transform: uppercase; color: var(--color-text-faint); }
 .menu__search { display: flex; align-items: center; gap: var(--space-2); margin: var(--space-1) 0; padding: var(--space-2) var(--space-2); background: var(--color-bg-inset); border-radius: var(--radius-md); color: var(--color-text-muted); font-size: var(--font-size-sm); }
 .menu__item--active { background: var(--color-primary-soft); color: var(--color-primary-strong); }
+/* the danger treatment. this absorbed .menu__item--destructive's three rules
+   when the two flags and their two parallel blocks collapsed into one: same
+   colours, and the icon rule came with it so an item with a glyph keeps its red
+   icon. */
 .menu__item--danger { color: var(--color-danger); }
 .menu__item--danger:hover { background: var(--color-danger-soft); }
+.menu__item--danger .menu__icon { color: var(--color-danger); }
 .menu__avatar { flex: none; }
 .menu__label { display: flex; flex-direction: column; min-width: 0; }
 .menu__hint { font-size: var(--font-size-xs); color: var(--color-text-faint); }

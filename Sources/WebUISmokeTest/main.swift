@@ -101,7 +101,7 @@ func smokeColumnMenuHTML(state: SmokeState) -> String {
 		},
 		id: "smoke-column-menu",
 		onSelect: { event in
-			guard let raw = event.string("targetId"),
+			guard let raw = event.targetID,
 			      let last = raw.split(separator: "-").last,
 			      let index = Int(last) else { return [] }
 			if state.hiddenColumns.contains(index) {
@@ -309,7 +309,7 @@ func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
 					Heading("Echo (input → server → DOM)", level: .h3)
 					WebUIInput(placeholder: "Type something…", id: "echo-input", label: "Input", helpText: "Round-trips over the WebSocket.")
 						.onInput { event in
-							state.echo = event.string("value") ?? ""
+							state.echo = event.value ?? ""
 							return [FragmentUpdate(id: "echo-out", html: echoOutHTML(state.echo))]
 						}
 					Raw(echoOutHTML(state.echo))

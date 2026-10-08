@@ -1059,7 +1059,7 @@ public struct ShowcasePage: Sendable {
                                 Label("Type here:").class("demo-label")
                                 Input(id: "preview-input", placeholder: "Type to preview...", type: .text)
                                     .onInput { event in
-                                        state.preview = event.string("value") ?? ""
+                                        state.preview = event.value ?? ""
                                         return [FragmentUpdate(id: "preview-output", html: previewOutputHTML(state.preview))]
                                     }
                                 Div(class: "preview-box") {

@@ -359,7 +359,7 @@ public struct WebUIAccordion: View {
     public let items: [Item]
     public let variant: Variant
     /// stable container id. when set alongside `onToggle`, the accordion
-    /// self-wires its item headers (dispatch on `event.string("targetId")`).
+    /// self-wires its item headers (dispatch on `event.targetID`).
     public let id: String?
     /// handler for item toggles; each header carries `id + "-item-<index>"`.
     public let onToggle: EventHandler?
@@ -692,7 +692,6 @@ public struct WebUIMenu: View {
         public let label: String
         public let shortcut: String?
         public let icon: IconName?
-        public let destructive: Bool
         public let disabled: Bool
         /// leading initials chip instead of a glyph.
         public let avatar: String?
@@ -700,7 +699,7 @@ public struct WebUIMenu: View {
         public let hint: String?
         /// marks the item as the current one.
         public let active: Bool
-        /// danger treatment (the newer spelling of `destructive`).
+        /// danger treatment.
         public let danger: Bool
         /// opens a submenu; the sheet draws the trailing chevron via `::after`.
         public let submenu: Bool
@@ -708,16 +707,39 @@ public struct WebUIMenu: View {
         public let dividerBefore: Bool
         /// renders a section label above this item.
         public let section: String?
+        /// the older spelling of ``danger``.
+        ///
+        /// both flags were live at once and the renderer read them separately, so
+        /// one item could carry both treatments or neither. this reads through to
+        /// `danger`, and exists so a 1.x read keeps compiling.
+        @available(*, deprecated, renamed: "danger")
+        public var destructive: Bool { danger }
+
         public init(_ label: String, shortcut: String? = nil, icon: IconName? = nil,
-                    destructive: Bool = false, disabled: Bool = false,
+                    disabled: Bool = false,
                     avatar: String? = nil, hint: String? = nil, active: Bool = false,
                     danger: Bool = false, submenu: Bool = false,
                     dividerBefore: Bool = false, section: String? = nil) {
             self.label = label; self.shortcut = shortcut; self.icon = icon
-            self.destructive = destructive; self.disabled = disabled
+            self.disabled = disabled
             self.avatar = avatar; self.hint = hint; self.active = active
             self.danger = danger; self.submenu = submenu
             self.dividerBefore = dividerBefore; self.section = section
+        }
+
+        /// the 1.x initializer, kept so a call site passing `destructive:` still
+        /// compiles. it writes through to `danger` — which is what the renderer
+        /// reads — so the deprecated spelling keeps its treatment.
+        @available(*, deprecated, renamed: "init(_:shortcut:icon:disabled:avatar:hint:active:danger:submenu:dividerBefore:section:)")
+        public init(_ label: String, shortcut: String? = nil, icon: IconName? = nil,
+                    destructive: Bool, disabled: Bool = false,
+                    avatar: String? = nil, hint: String? = nil, active: Bool = false,
+                    danger: Bool = false, submenu: Bool = false,
+                    dividerBefore: Bool = false, section: String? = nil) {
+            self.init(label, shortcut: shortcut, icon: icon, disabled: disabled,
+                      avatar: avatar, hint: hint, active: active,
+                      danger: danger || destructive, submenu: submenu,
+                      dividerBefore: dividerBefore, section: section)
         }
     }
     public let items: [Item]
@@ -756,7 +778,8 @@ public struct WebUIMenu: View {
             if let section = item.section { html += "<span class=\"menu__section\">\(htmlEscape(section))</span>" }
             if item.dividerBefore { html += "<div class=\"menu__divider\"></div>" }
             var cls = "menu__item"
-            if item.destructive { cls += " menu__item--destructive" }
+            // one class for one concept: two flags and two parallel css blocks were
+            // the same treatment emitted twice.
             if item.danger { cls += " menu__item--danger" }
             if item.active { cls += " menu__item--active" }
             if item.submenu { cls += " menu__item--has-sub" }

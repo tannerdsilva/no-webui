@@ -34,6 +34,39 @@ public struct EventData: Sendable, Codable {
         guard case .number(let value)? = data[key] else { return nil }
         return value
     }
+
+    /// a boolean field.
+    public func bool(_ key: String) -> Bool? {
+        guard case .bool(let value)? = data[key] else { return nil }
+        return value
+    }
+
+    // MARK: the named payload fields
+
+    // every framework-shipped handler reads these instead of the stringly
+    // accessors above, so the pattern a reader copies out of the source is the
+    // typed one, and a typo is a compile error in framework code immediately and
+    // in consumer code on migration. `string(_:)` stays — it is frozen surface —
+    // for a field the framework does not name.
+
+    /// the id of the nearest id-bearing element *inside* the component boundary.
+    ///
+    /// a click usually lands on a label or an icon child rather than the item
+    /// itself, which is why this exists: it is how a container handler learns
+    /// which row was clicked. clicking the component's own root reports `nil`.
+    public var targetID: String? { string("targetId") }
+
+    /// the class of the nearest class-bearing element inside the boundary.
+    public var targetClass: String? { string("targetClass") }
+
+    /// a control's current value.
+    public var value: String? { string("value") }
+
+    /// the key from a keyboard event.
+    public var key: String? { string("key") }
+
+    /// a checkbox's checked state.
+    public var checked: Bool? { bool("checked") }
 }
 
 // MARK: - EventHandler

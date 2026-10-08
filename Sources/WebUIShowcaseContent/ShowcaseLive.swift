@@ -198,7 +198,7 @@ func columnMenu(state: ShowcaseState) -> WebUIMenu {
 		},
 		id: "column-menu",
 		onSelect: { event in
-			guard let raw = event.string("targetId"),
+			guard let raw = event.targetID,
 			      let last = raw.split(separator: "-").last,
 			      let index = Int(last) else { return [] }
 			if state.hiddenColumns.contains(index) {
@@ -328,7 +328,7 @@ func treeDemo(state: ShowcaseState) -> WebUITree {
 		expanded: state.treeExpanded,
 		selected: state.treeSelected,
 		onToggle: { event in
-			let raw = event.string("targetId") ?? ""
+			let raw = event.targetID ?? ""
 			let prefix = "demo-tree-node-"
 			guard raw.hasPrefix(prefix) else { return [] }
 			let nodeID = String(raw.dropFirst(prefix.count))

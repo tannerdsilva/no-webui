@@ -66,7 +66,7 @@ func renderExamplePage(state: ExampleState, router: EventRouter) -> String {
 					Heading("Echo (input → server → DOM)", level: .h3)
 					WebUIInput(placeholder: "Type something…", id: "echo-input", label: "Input")
 						.onInput { event in
-							state.echo = event.string("value") ?? ""
+							state.echo = event.value ?? ""
 							return [FragmentUpdate(id: "echo-out", html: echoOutHTML(state.echo))]
 						}
 					Raw(echoOutHTML(state.echo))
