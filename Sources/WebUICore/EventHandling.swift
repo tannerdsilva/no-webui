@@ -53,6 +53,9 @@ public final class EventRouter: Sendable {
         /// and the two mint counters it drained.
         struct Session {
             var handlers: [ComponentID: OutcomeHandler] = [:]
+            /// per-component fragments to render when that component's handler
+            /// fails, so a broken interaction degrades instead of vanishing.
+            var fallbacks: [ComponentID: EventHandler] = [:]
             var nextID: Int = 0
             var nextElementID: Int = 0
             /// the clock reading at this session's last use — the LRU key.
@@ -153,6 +156,20 @@ public final class EventRouter: Sendable {
 
         func handler(for componentID: ComponentID, in session: RenderSessionID) -> OutcomeHandler? {
             values.withLock { $0.sessions[session]?.handlers[componentID] }
+        }
+
+        func registerFallback(_ handler: @escaping EventHandler, for componentID: ComponentID, in session: RenderSessionID) {
+            values.withLock { values in
+                if values.sessions[session] == nil {
+                    values.clock += 1
+                    values.sessions[session] = Session(tick: values.clock)
+                }
+                values.sessions[session]?.fallbacks[componentID] = handler
+            }
+        }
+
+        func fallback(for componentID: ComponentID, in session: RenderSessionID) -> EventHandler? {
+            values.withLock { $0.sessions[session]?.fallbacks[componentID] }
         }
 
         /// handlers in one session — the number a soak test asserts on.
@@ -289,6 +306,24 @@ public final class EventRouter: Sendable {
         register(outcome: handler, for: componentID, in: .default)
     }
 
+    /// register fragments to render when `componentID`'s handler fails.
+    ///
+    /// a fallback is what turns a dead control into a degraded one: the page is
+    /// told the interaction failed and, in the same message, given something to
+    /// show in the control's place.
+    public func register(
+        fallback handler: @escaping EventHandler,
+        for componentID: ComponentID,
+        in session: RenderSessionID
+    ) {
+        state.registerFallback(handler, for: componentID, in: session)
+    }
+
+    /// register a fallback into the shared default session.
+    public func register(fallback handler: @escaping EventHandler, for componentID: ComponentID) {
+        register(fallback: handler, for: componentID, in: .default)
+    }
+
     /// mint the next component id in `session`.
     public func nextComponentID(in session: RenderSessionID) -> ComponentID {
         state.nextComponentID(in: session)
@@ -327,7 +362,25 @@ public final class EventRouter: Sendable {
             return .fragments([])
         }
 
-        let outcome = await handler(event)
+        let outcome: HandlerOutcome
+        do {
+            outcome = try await handler(event)
+        } catch {
+            // a handler used to be unable to fail at all — the type said so — and
+            // the server's own comment admitted the gap. now a throw is an
+            // answer: it reaches observers, and the page when the host's policy
+            // says so.
+            let message = String(describing: error)
+            logger.emit(ObservableEvent.error(message: "handler for '\(event.component.value)' threw: \(message)"), observers: observers)
+            let fragments: [FragmentUpdate]
+            if let fallback = state.fallback(for: event.component, in: session) {
+                fragments = await fallback(event)
+            } else {
+                fragments = []
+            }
+            return .fail(code: "handler", message: message, fallback: fragments)
+        }
+
         logger.emit(ObservableEvent.eventHandled(component: event.component.value, event: event.event, fragmentCount: outcome.fragments.count), observers: observers)
         return outcome
     }

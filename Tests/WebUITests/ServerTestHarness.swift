@@ -72,6 +72,7 @@ func withServer(
 	assets: [WebUIServerAsset],
 	themeSheet: ThemeSheet? = nil,
 	requireRenderToken: Bool = false,
+	handlerFailurePolicy: HandlerFailurePolicy = .notifyClient,
 	portBase: Int = 21000,
 	_ body: (Int) async throws -> Void
 ) async throws {
@@ -81,7 +82,8 @@ func withServer(
 		router: router,
 		config: WebUIServerConfig(
 			host: "127.0.0.1", port: port, themeSheet: themeSheet, assets: assets,
-			requireRenderToken: requireRenderToken
+			requireRenderToken: requireRenderToken,
+			handlerFailurePolicy: handlerFailurePolicy
 		)
 	)
 	let task = Task { try await server.start() }

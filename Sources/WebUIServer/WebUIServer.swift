@@ -245,6 +245,13 @@ public struct WebUIServerConfig: Sendable {
 	/// `renderToken:` — can turn it on now.
 	public var requireRenderToken: Bool
 
+	/// what the server does when a handler throws.
+	///
+	/// defaults to ``HandlerFailurePolicy/notifyClient``: the page is told and,
+	/// when the component registered a fallback, given something to render in the
+	/// broken control's place. a silent failure is what made C3 invisible.
+	public var handlerFailurePolicy: HandlerFailurePolicy
+
 	public init(
 		host: String = "0.0.0.0",
 		port: Int = 9090,
@@ -254,7 +261,8 @@ public struct WebUIServerConfig: Sendable {
 		pagePath: String = "/",
 		themeSheet: ThemeSheet? = nil,
 		assets: [WebUIServerAsset] = [],
-		requireRenderToken: Bool = false
+		requireRenderToken: Bool = false,
+		handlerFailurePolicy: HandlerFailurePolicy = .notifyClient
 	) {
 		self.host = host
 		self.port = port
@@ -265,6 +273,7 @@ public struct WebUIServerConfig: Sendable {
 		self.themeSheet = themeSheet
 		self.assets = assets
 		self.requireRenderToken = requireRenderToken
+		self.handlerFailurePolicy = handlerFailurePolicy
 	}
 }
 
@@ -671,8 +680,9 @@ final class Runner: Sendable {
 				}
 				let eventData = EventData(component: ComponentID(component), event: event, data: data)
 				let outcome = await router.dispatch(eventData, in: session)
-				guard let frame = outcome.wireMessage else { return true }
-				try await writeJSON(frame, outbound: outbound)
+				for frame in frames(of: outcome) {
+					try await writeJSON(frame, outbound: outbound)
+				}
 			case .ping(let token):
 				guard boundSession(token) != nil else {
 					try? await writeJSON(
@@ -690,6 +700,21 @@ final class Runner: Sendable {
 			try? await writeJSON(err, outbound: outbound)
 		}
 		return true
+	}
+
+	/// the frames to send for `outcome`, after applying the failure policy.
+	///
+	/// the router reports every failure through the observer funnel regardless;
+	/// this decides whether the page learns about it and whether it reaches the
+	/// server's log.
+	private func frames(of outcome: HandlerOutcome) -> [WSOutgoing] {
+		guard case .fail(let code, let message, _) = outcome else {
+			return outcome.wireMessages
+		}
+		if config.handlerFailurePolicy != .silent {
+			logger.warning("WebUIServer: handler failed (\(code)): \(message)")
+		}
+		return config.handlerFailurePolicy == .notifyClient ? outcome.wireMessages : []
 	}
 
 	/// resolve the render session a frame's token names.

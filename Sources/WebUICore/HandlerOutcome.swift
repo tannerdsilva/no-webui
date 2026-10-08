@@ -16,31 +16,43 @@ public enum HandlerOutcome: Sendable {
     case state(path: String, value: String)
     /// reload the page.
     case reload
-    /// surface a typed failure to the client.
-    case fail(code: String, message: String)
+    /// the handler failed.
+    ///
+    /// `fallback` carries fragments that keep the page usable — the router fills
+    /// it from the component's registered fallback, when the host supplied one.
+    case fail(code: String, message: String, fallback: [FragmentUpdate])
 
     /// a redirect that pushes a history entry.
     public static func redirect(to url: String) -> HandlerOutcome {
         .redirect(to: url, replace: false)
     }
 
-    /// the frame this outcome sends, or `nil` for "send nothing".
+    /// a failure with nothing to fall back to.
+    public static func fail(code: String, message: String) -> HandlerOutcome {
+        .fail(code: code, message: message, fallback: [])
+    }
+
+    /// the frames this outcome sends, in order.
     ///
-    /// an empty fragment list is deliberately silent: it is how a handler says
-    /// "handled, nothing changed" without a round trip's worth of noise. that is
-    /// the pre-outcome behaviour, preserved.
-    public var wireMessage: WSOutgoing? {
+    /// a list rather than one frame because a failure carries two: the error the
+    /// page must be told about, and the fallback that keeps it usable. an empty
+    /// fragment list is deliberately silent — it is how a handler says "handled,
+    /// nothing changed" without a round trip's worth of noise, which is the
+    /// pre-outcome behaviour preserved.
+    public var wireMessages: [WSOutgoing] {
         switch self {
         case .fragments(let updates):
-            return updates.isEmpty ? nil : .update(fragments: updates)
+            return updates.isEmpty ? [] : [.update(fragments: updates)]
         case .redirect(let to, let replace):
-            return .redirect(url: to, replace: replace)
+            return [.redirect(url: to, replace: replace)]
         case .state(let path, let value):
-            return .state(path: path, value: value)
+            return [.state(path: path, value: value)]
         case .reload:
-            return .reload
-        case .fail(let code, let message):
-            return .error(code: code, message: message)
+            return [.reload]
+        case .fail(let code, let message, let fallback):
+            var frames: [WSOutgoing] = [.error(code: code, message: message)]
+            if !fallback.isEmpty { frames.append(.update(fragments: fallback)) }
+            return frames
         }
     }
 
@@ -57,7 +69,33 @@ public enum HandlerOutcome: Sendable {
         default: return false
         }
     }
+
+    /// whether this outcome reports a handler failure.
+    public var isFailure: Bool {
+        if case .fail = self { return true }
+        return false
+    }
 }
 
-/// a handler that can answer with more than fragments.
-public typealias OutcomeHandler = @Sendable (EventData) async -> HandlerOutcome
+/// a handler that can answer with more than fragments, and may fail.
+///
+/// the throw is caught by the router and becomes ``HandlerOutcome/fail(code:message:fallback:)``,
+/// so a failing handler can no longer die silently. a closure that never throws
+/// satisfies this type unchanged — `{ _ in .redirect(to: "/x") }` needs no `try`.
+public typealias OutcomeHandler = @Sendable (EventData) async throws -> HandlerOutcome
+
+/// what a server does with a handler that failed.
+///
+/// the router always reports a failure through the observer funnel
+/// (``ObservableEvent/error(message:)``); this decides what the *client* is told.
+public enum HandlerFailurePolicy: Sendable, Equatable {
+    /// no client frame, no server log — a host that observes programmatically
+    /// sees the failure and nothing else does.
+    case silent
+    /// no client frame; the server logs a warning naming the component and the
+    /// thrown error.
+    case log
+    /// the page is told: an error frame, plus the component's fallback fragment
+    /// when the host registered one, so the interaction stays usable.
+    case notifyClient
+}

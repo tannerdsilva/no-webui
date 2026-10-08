@@ -23,29 +23,30 @@ struct HandlerOutcomeTests {
     @Test("fragments map to one update frame")
     func fragmentsMapToUpdate() {
         let update = FragmentUpdate(id: "a", html: "<span>a</span>")
-        let message = HandlerOutcome.fragments([update]).wireMessage
-        guard case .update(let fragments, _)? = message else {
-            Issue.record("expected an update frame, got \(String(describing: message))")
+        let messages = HandlerOutcome.fragments([update]).wireMessages
+        guard case .update(let fragments, _)? = messages.first else {
+            Issue.record("expected an update frame, got \(messages)")
             return
         }
+        #expect(messages.count == 1)
         #expect(fragments == [update])
     }
 
     @Test("an empty fragment list sends nothing — the pre-outcome behaviour")
     func emptyFragmentsAreSilent() {
-        #expect(HandlerOutcome.fragments([]).wireMessage == nil)
+        #expect(HandlerOutcome.fragments([]).wireMessages.isEmpty)
     }
 
     @Test("a redirect maps to one redirect frame")
     func redirectMapsToRedirect() {
-        guard case .redirect(let url, let replace)? = HandlerOutcome.redirect(to: "/next").wireMessage else {
+        guard case .redirect(let url, let replace)? = HandlerOutcome.redirect(to: "/next").wireMessages.first else {
             Issue.record("expected a redirect frame")
             return
         }
         #expect(url == "/next")
         #expect(replace == false)
 
-        guard case .redirect(_, let replaceTrue)? = HandlerOutcome.redirect(to: "/x", replace: true).wireMessage else {
+        guard case .redirect(_, let replaceTrue)? = HandlerOutcome.redirect(to: "/x", replace: true).wireMessages.first else {
             Issue.record("expected a redirect frame")
             return
         }
@@ -54,7 +55,7 @@ struct HandlerOutcomeTests {
 
     @Test("a state write maps to one state frame")
     func stateMapsToState() {
-        guard case .state(let path, let value)? = HandlerOutcome.state(path: "user.tab", value: "billing").wireMessage else {
+        guard case .state(let path, let value)? = HandlerOutcome.state(path: "user.tab", value: "billing").wireMessages.first else {
             Issue.record("expected a state frame")
             return
         }
@@ -64,7 +65,7 @@ struct HandlerOutcomeTests {
 
     @Test("a reload maps to one reload frame")
     func reloadMapsToReload() {
-        guard case .reload? = HandlerOutcome.reload.wireMessage else {
+        guard case .reload? = HandlerOutcome.reload.wireMessages.first else {
             Issue.record("expected a reload frame")
             return
         }
@@ -72,12 +73,28 @@ struct HandlerOutcomeTests {
 
     @Test("a failure maps to one error frame carrying the code and message")
     func failureMapsToError() {
-        guard case .error(let code, let message)? = HandlerOutcome.fail(code: "boom", message: "went wrong").wireMessage else {
+        guard case .error(let code, let message)? = HandlerOutcome.fail(code: "boom", message: "went wrong").wireMessages.first else {
             Issue.record("expected an error frame")
             return
         }
         #expect(code == "boom")
         #expect(message == "went wrong")
+    }
+
+    @Test("a failure with a fallback sends the error first, then the fallback")
+    func failureWithFallbackSendsBoth() {
+        let fallback = FragmentUpdate(id: "ctrl", html: "<span>unavailable</span>")
+        let messages = HandlerOutcome.fail(code: "handler", message: "m", fallback: [fallback]).wireMessages
+        #expect(messages.count == 2, "got \(messages)")
+        guard case .error? = messages.first else {
+            Issue.record("the error must be the first frame")
+            return
+        }
+        guard case .update(let fragments, _)? = messages.last else {
+            Issue.record("the fallback must be the last frame")
+            return
+        }
+        #expect(fragments == [fallback])
     }
 
     @Test("only redirect and reload count as navigation")
@@ -119,7 +136,7 @@ struct HandlerOutcomeTests {
         let router = EventRouter()
         let outcome = await router.dispatch(EventData(component: ComponentID("nobody"), event: "click"))
         #expect(outcome.fragments.isEmpty)
-        #expect(outcome.wireMessage == nil)
+        #expect(outcome.wireMessages.isEmpty)
     }
 }
 
