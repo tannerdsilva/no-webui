@@ -7,11 +7,12 @@ import WebUICore
 // MARK: WebUI Slider
 /// a range slider with fill, thumb, ticks, and labels.
 public struct WebUISlider: View {
-    public enum Size: String, Sendable { case sm = " slider--sm", md = "", lg = " slider--lg" }
+    @available(*, deprecated, renamed: "ControlSize")
+    public typealias Size = ControlSize
     public let value: Double
     public let min: Double
     public let max: Double
-    public let size: Size
+    public let size: ControlSize
     public let vertical: Bool
     public let showLabels: Bool
     public let minLabel: String
@@ -20,7 +21,18 @@ public struct WebUISlider: View {
     /// (`targetId == "<id>-input"`, event `.input`).
     public let id: String?
     public let onChange: EventHandler?
-    public init(_ value: Double, min: Double = 0, max: Double = 100, size: Size = .md,
+    /// this component's own class for a shared size — the sheet's bytes are
+    /// unchanged for sm/md/lg; xl forwards the same pattern (a theme can honor it).
+    private static func classFor(_ size: ControlSize) -> String {
+        switch size {
+            case .sm: return " slider--sm"
+            case .md: return ""
+            case .lg: return " slider--lg"
+            case .xl: return " slider--xl"
+        }
+    }
+
+    public init(_ value: Double, min: Double = 0, max: Double = 100, size: ControlSize = .md,
                 vertical: Bool = false, showLabels: Bool = false, minLabel: String = "", maxLabel: String = "",
                 id: String? = nil, onChange: EventHandler? = nil) {
         self.value = value; self.min = min; self.max = max; self.size = size
@@ -34,7 +46,7 @@ public struct WebUISlider: View {
         let inputID = id.map { htmlEscape("\($0)-input") } ?? ""
         let inputAttrs = id.map { controlAttributes(id: "\($0)-input", event: .input, handler: onChange) } ?? ""
         let idAttr = inputID.isEmpty ? "" : " id=\"\(inputID)\""
-        var html = "<div class=\"slider\(size.rawValue)\(vertical ? " slider--vertical" : "")\">"
+        var html = "<div class=\"slider\(Self.classFor(size))\(vertical ? " slider--vertical" : "")\">"
         html += "<input type=\"range\" class=\"slider__input\"\(idAttr) min=\"\(min)\" max=\"\(max)\" value=\"\(value)\" aria-valuenow=\"\(value)\"\(inputAttrs)>"
         html += "<div class=\"slider__track\"><div class=\"slider__fill\" style=\"width:\(webuiFixedPoint(pct, places: 2))%\"></div><span class=\"slider__thumb\" style=\"left:\(webuiFixedPoint(pct, places: 2))%\"></span></div>"
         html += "<div class=\"slider__ticks\">"
@@ -51,10 +63,11 @@ public struct WebUISlider: View {
 // MARK: WebUI Toggle
 /// a switch control with label.
 public struct WebUIToggle: View {
-    public enum Size: String, Sendable { case sm = " toggle--sm", md = "", lg = " toggle--lg" }
+    @available(*, deprecated, renamed: "ControlSize")
+    public typealias Size = ControlSize
     public let label: String
     public let checked: Bool
-    public let size: Size
+    public let size: ControlSize
     public let labelLeft: Bool
     public let loading: Bool
     public let disabled: Bool
@@ -62,7 +75,18 @@ public struct WebUIToggle: View {
     /// (`targetId == "<id>-input"`, event `.change`).
     public let id: String?
     public let onChange: EventHandler?
-    public init(_ label: String = "", checked: Bool = false, size: Size = .md,
+    /// this component's own class for a shared size — the sheet's bytes are
+    /// unchanged for sm/md/lg; xl forwards the same pattern (a theme can honor it).
+    private static func classFor(_ size: ControlSize) -> String {
+        switch size {
+            case .sm: return " toggle--sm"
+            case .md: return ""
+            case .lg: return " toggle--lg"
+            case .xl: return " toggle--xl"
+        }
+    }
+
+    public init(_ label: String = "", checked: Bool = false, size: ControlSize = .md,
                 labelLeft: Bool = false, loading: Bool = false, disabled: Bool = false,
                 id: String? = nil, onChange: EventHandler? = nil) {
         self.label = label; self.checked = checked; self.size = size
@@ -71,7 +95,7 @@ public struct WebUIToggle: View {
     }
 
     public func render() -> String {
-        var classes = "toggle\(size.rawValue)"
+        var classes = "toggle\(Self.classFor(size))"
         if labelLeft { classes += " toggle--label-left" }
         if loading { classes += " toggle--loading" }
         if disabled { classes += " toggle--disabled" }
@@ -91,14 +115,26 @@ public struct WebUIToggle: View {
 // MARK: WebUI Stepper
 /// a numeric stepper with +/− buttons.
 public struct WebUIStepper: View {
-    public enum Size: String, Sendable { case sm = " stepper--sm", md = "", lg = " stepper--lg" }
+    @available(*, deprecated, renamed: "ControlSize")
+    public typealias Size = ControlSize
     public let value: Int
-    public let size: Size
+    public let size: ControlSize
     /// stable container id; when set with `onChange` the +/− buttons
     /// self-wire (`targetId == "<id>-inc" | "<id>-dec"`).
     public let id: String?
     public let onChange: EventHandler?
-    public init(_ value: Int, size: Size = .md, id: String? = nil, onChange: EventHandler? = nil) {
+    /// this component's own class for a shared size — the sheet's bytes are
+    /// unchanged for sm/md/lg; xl forwards the same pattern (a theme can honor it).
+    private static func classFor(_ size: ControlSize) -> String {
+        switch size {
+            case .sm: return " stepper--sm"
+            case .md: return ""
+            case .lg: return " stepper--lg"
+            case .xl: return " stepper--xl"
+        }
+    }
+
+    public init(_ value: Int, size: ControlSize = .md, id: String? = nil, onChange: EventHandler? = nil) {
         self.value = value; self.size = size; self.id = id; self.onChange = onChange
     }
 
@@ -111,7 +147,7 @@ public struct WebUIStepper: View {
         }
         let decID = id.map { " id=\"\(htmlEscape("\($0)-dec"))\"" } ?? ""
         let incID = id.map { " id=\"\(htmlEscape("\($0)-inc"))\"" } ?? ""
-        var html = "<div class=\"stepper\(size.rawValue)\"\(attrs) role=\"group\" aria-label=\"Stepper\">"
+        var html = "<div class=\"stepper\(Self.classFor(size))\"\(attrs) role=\"group\" aria-label=\"Stepper\">"
         html += "<button class=\"stepper__btn\"\(decID) aria-label=\"Decrease\">−</button>"
         html += "<span class=\"stepper__value\">\(value)</span>"
         html += "<button class=\"stepper__btn\"\(incID) aria-label=\"Increase\">+</button>"
@@ -123,16 +159,28 @@ public struct WebUIStepper: View {
 // MARK: WebUI OTP
 /// a one-time-code input with per-digit cells.
 public struct WebUIOTP: View {
-    public enum Size: String, Sendable { case sm = " otp--sm", md = "", lg = " otp--lg" }
+    @available(*, deprecated, renamed: "ControlSize")
+    public typealias Size = ControlSize
     public let length: Int
     public let value: [Int]?
-    public let size: Size
+    public let size: ControlSize
     public let error: Bool
     /// stable id; when set with `onChange` each digit cell self-wires
     /// (`targetId == "<id>-cell-<index>"`, event `.input`).
     public let id: String?
     public let onChange: EventHandler?
-    public init(length: Int = 6, value: [Int]? = nil, size: Size = .md, error: Bool = false,
+    /// this component's own class for a shared size — the sheet's bytes are
+    /// unchanged for sm/md/lg; xl forwards the same pattern (a theme can honor it).
+    private static func classFor(_ size: ControlSize) -> String {
+        switch size {
+            case .sm: return " otp--sm"
+            case .md: return ""
+            case .lg: return " otp--lg"
+            case .xl: return " otp--xl"
+        }
+    }
+
+    public init(length: Int = 6, value: [Int]? = nil, size: ControlSize = .md, error: Bool = false,
                 id: String? = nil, onChange: EventHandler? = nil) {
         self.length = length; self.value = value; self.size = size; self.error = error
         self.id = id; self.onChange = onChange
@@ -140,7 +188,7 @@ public struct WebUIOTP: View {
 
     public func render() -> String {
         let digits = value ?? []
-        var html = "<div class=\"otp\(size.rawValue)\(error ? " otp--error" : "")\" aria-label=\"One-time code\">"
+        var html = "<div class=\"otp\(Self.classFor(size))\(error ? " otp--error" : "")\" aria-label=\"One-time code\">"
         for i in 0..<length {
             let filled = i < digits.count
             let cellID = id.map { " id=\"\(htmlEscape("\($0)-cell-\(i)"))\"" } ?? ""
@@ -364,10 +412,11 @@ public struct WebUIMasked: View {
 // MARK: WebUI Rating
 /// a star rating.
 public struct WebUIRating: View {
-    public enum Size: String, Sendable { case sm = " rating--sm", md = "", lg = " rating--lg" }
+    @available(*, deprecated, renamed: "ControlSize")
+    public typealias Size = ControlSize
     public let value: Double
     public let max: Int
-    public let size: Size
+    public let size: ControlSize
     public let heart: Bool
     public let showValue: Bool
     /// stable id; when set with `onChange` the root div self-wires
@@ -375,7 +424,18 @@ public struct WebUIRating: View {
     /// `id == "<id>-star-<index>"` (1-based).
     public let id: String?
     public let onChange: EventHandler?
-    public init(_ value: Double, max: Int = 5, size: Size = .md, heart: Bool = false, showValue: Bool = false,
+    /// this component's own class for a shared size — the sheet's bytes are
+    /// unchanged for sm/md/lg; xl forwards the same pattern (a theme can honor it).
+    private static func classFor(_ size: ControlSize) -> String {
+        switch size {
+            case .sm: return " rating--sm"
+            case .md: return ""
+            case .lg: return " rating--lg"
+            case .xl: return " rating--xl"
+        }
+    }
+
+    public init(_ value: Double, max: Int = 5, size: ControlSize = .md, heart: Bool = false, showValue: Bool = false,
                 id: String? = nil, onChange: EventHandler? = nil) {
         self.value = value; self.max = max; self.size = size; self.heart = heart; self.showValue = showValue
         self.id = id; self.onChange = onChange
@@ -383,7 +443,7 @@ public struct WebUIRating: View {
 
     public func render() -> String {
         let full = Int(value)
-        var classes = "rating\(size.rawValue)"
+        var classes = "rating\(Self.classFor(size))"
         if heart { classes += " rating--heart" }
         if full > 0 { classes += " rating--filled" }
         let rootAttrs = id.map { controlAttributes(id: $0, event: .click, handler: onChange) } ?? ""

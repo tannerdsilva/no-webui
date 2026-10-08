@@ -143,24 +143,34 @@ public struct WebUIFab: View {
     public enum Variant: String, Sendable {
         case primary = "", secondary = " fab--secondary", danger = " fab--danger"
     }
-    public enum Size: String, Sendable {
-        case sm = " fab--sm", md = "", lg = " fab--lg"
-    }
+    @available(*, deprecated, renamed: "ControlSize")
+    public typealias Size = ControlSize
     public let label: String?
     public let icon: IconName
     public let variant: Variant
-    public let size: Size
+    public let size: ControlSize
     public let extended: Bool
     public let id: String?
     public let onTap: EventHandler?
+    /// this component's own class for a shared size — the sheet's bytes are
+    /// unchanged for sm/md/lg; xl forwards the same pattern (a theme can honor it).
+    private static func classFor(_ size: ControlSize) -> String {
+        switch size {
+            case .sm: return " fab--sm"
+            case .md: return ""
+            case .lg: return " fab--lg"
+            case .xl: return " fab--xl"
+        }
+    }
+
     public init(_ label: String? = nil, icon: IconName, variant: Variant = .primary,
-                size: Size = .md, extended: Bool = false, id: String? = nil, onTap: EventHandler? = nil) {
+                size: ControlSize = .md, extended: Bool = false, id: String? = nil, onTap: EventHandler? = nil) {
         self.label = label; self.icon = icon; self.variant = variant
         self.size = size; self.extended = extended; self.id = id; self.onTap = onTap
     }
 
     public func render() -> String {
-        var classes = "fab\(variant.rawValue)\(size.rawValue)"
+        var classes = "fab\(variant.rawValue)\(Self.classFor(size))"
         if extended { classes += " fab--extended" }
         let tapAttrs = id.map { controlAttributes(id: $0, event: .click, handler: onTap) } ?? ""
         var html = "<button class=\"\(classes)\""
@@ -512,17 +522,29 @@ public struct WebUIBottomSheet: View {
 /// edge-anchored sliding surface.
 public struct WebUIDrawer: View {
     public enum Edge: String, Sendable { case left = " drawer--left", right = " drawer--right", top = " drawer--top", bottom = " drawer--bottom" }
-    public enum Size: String, Sendable { case sm = " drawer--sm", md = "", lg = " drawer--lg" }
+    @available(*, deprecated, renamed: "ControlSize")
+    public typealias Size = ControlSize
     public let title: String?
     public let edge: Edge
-    public let size: Size
+    public let size: ControlSize
     public let children: [any View]
     public let footer: [any View]
     /// stable container id; when set with `onDismiss` the close button
     /// self-wires (`targetId == "<id>-close"`).
     public let id: String?
     public let onDismiss: EventHandler?
-    public init(title: String? = nil, edge: Edge = .right, size: Size = .md, id: String? = nil, onDismiss: EventHandler? = nil,
+    /// this component's own class for a shared size — the sheet's bytes are
+    /// unchanged for sm/md/lg; xl forwards the same pattern (a theme can honor it).
+    private static func classFor(_ size: ControlSize) -> String {
+        switch size {
+            case .sm: return " drawer--sm"
+            case .md: return ""
+            case .lg: return " drawer--lg"
+            case .xl: return " drawer--xl"
+        }
+    }
+
+    public init(title: String? = nil, edge: Edge = .right, size: ControlSize = .md, id: String? = nil, onDismiss: EventHandler? = nil,
                 @ViewBuilder content: () -> [any View], @ViewBuilder footer: () -> [any View] = { [] }) {
         self.title = title; self.edge = edge; self.size = size; self.id = id; self.onDismiss = onDismiss
         self.children = content(); self.footer = footer()
@@ -535,7 +557,7 @@ public struct WebUIDrawer: View {
         } else {
             attrs = ""
         }
-        var html = "<div class=\"drawer\(edge.rawValue)\(size.rawValue)\"\(attrs) role=\"dialog\" aria-modal=\"true\">"
+        var html = "<div class=\"drawer\(edge.rawValue)\(Self.classFor(size))\"\(attrs) role=\"dialog\" aria-modal=\"true\">"
         html += "<div class=\"drawer__panel\">"
         if let title {
             let closeID = id.map { " id=\"\(htmlEscape("\($0)-close"))\"" } ?? ""
@@ -1009,31 +1031,42 @@ public struct WebUISeparator: View {
 /// combo whose keys sit adjacently (the macOS convention, `⌘K`) or with a
 /// separator glyph between them (`separator: "+"`).
 public struct WebUIKbd: View {
-    public enum Size: String, Sendable {
-        case small = "kbd--sm"
-        case medium = ""
-        case large = "kbd--lg"
-    }
+    @available(*, deprecated, renamed: "ControlSize")
+    public typealias Size = ControlSize
 
     public let keys: [String]
-    public let size: Size
+    public let size: ControlSize
     /// glyph placed between keys. `nil` places them adjacently without one.
     public let separator: String?
 
-    public init(_ key: String, size: Size = .medium) {
+    /// this component's own class for a shared size — the sheet's bytes are
+    /// unchanged for sm/md/lg; xl forwards the same pattern (a theme can honor it).
+    private static func classFor(_ size: ControlSize) -> String {
+        switch size {
+            case .sm: return "kbd--sm"
+            case .md: return ""
+            case .lg: return "kbd--lg"
+            case .xl: return "kbd--xl"
+        }
+    }
+
+    public init(_ key: String, size: ControlSize = .md) {
         self.keys = [key]
         self.size = size
         self.separator = nil
     }
 
-    public init(_ keys: [String], size: Size = .medium, separator: String? = nil) {
+    public init(_ keys: [String], size: ControlSize = .md, separator: String? = nil) {
         self.keys = keys
         self.size = size
         self.separator = separator
     }
 
     private func keyHTML(_ key: String) -> String {
-        let sizeClass = size.rawValue.isEmpty ? "" : " \(size.rawValue)"
+        // kbd appends the size class after the base class, so an empty mapping
+        // means no trailing space — the shape the 1.x raw values encoded.
+        let kbdSize = Self.classFor(size)
+        let sizeClass = kbdSize.isEmpty ? "" : " \(kbdSize)"
         return "<kbd class=\"kbd\(sizeClass)\">\(htmlEscape(key))</kbd>"
     }
 

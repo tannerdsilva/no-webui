@@ -40,11 +40,19 @@ struct SizeConsolidationTests {
         ("WebUISpinner", WebUISpinner().size),
         ("WebUIStat", WebUIStat(label: "Revenue", value: "$1").size),
         ("WebUICircularProgress", WebUICircularProgress(value: 0.5).size),
+        ("WebUISlider", WebUISlider(50).size),
+        ("WebUIToggle", WebUIToggle("on").size),
+        ("WebUIStepper", WebUIStepper(1).size),
+        ("WebUIOTP", WebUIOTP().size),
+        ("WebUIRating", WebUIRating(3).size),
+        ("WebUIFab", WebUIFab(icon: .check).size),
+        ("WebUIDrawer", WebUIDrawer { Text("body") }.size),
+        ("WebUIKbd", WebUIKbd("K").size),
     ]
 
     @Test("every migrated component publishes ControlSize")
     func componentsPublishControlSize() {
-        #expect(Self.sizedComponents.count == 7, "this list must track the migration")
+        #expect(Self.sizedComponents.count == 15, "all 15 nested Size enums migrated")
         for c in Self.sizedComponents {
             #expect(c.size == .md, "\(c.name) should default to .md")
         }
@@ -95,6 +103,41 @@ struct SizeConsolidationTests {
         #expect(render(WebUIStat(label: "l", value: "v", size: .xl)).contains("stat stat--xl"))
         // and where the sheet *does* define it, it is the real rule
         #expect(render(WebUIStat(label: "l", value: "v", size: .xl)).contains("stat--xl"))
+    }
+
+    @Test("the emitted class for sm/md/lg is unchanged — the form and overlay components")
+    func emittedClassesAreUnchangedSecondBatch() {
+        // these five carry the odd `md = ""` shape, so their md renders as the bare
+        // base class with no trailing modifier — and their sm/lg keep the LEADING
+        // SPACE the 1.x raw values had.
+        #expect(render(WebUISlider(50, size: .sm)).contains("slider slider--sm"))
+        #expect(render(WebUISlider(50, size: .md)).contains("class=\"slider\""))
+        #expect(render(WebUISlider(50, size: .lg)).contains("slider slider--lg"))
+
+        #expect(render(WebUIToggle("on", size: .sm)).contains("toggle toggle--sm"))
+        #expect(render(WebUIToggle("on", size: .md)).contains("class=\"toggle\""))
+        #expect(render(WebUIToggle("on", size: .lg)).contains("toggle toggle--lg"))
+
+        #expect(render(WebUIStepper(1, size: .sm)).contains("stepper stepper--sm"))
+        #expect(render(WebUIStepper(1, size: .md)).contains("class=\"stepper\""))
+
+        #expect(render(WebUIOTP(size: .sm)).contains("otp otp--sm"))
+        #expect(render(WebUIOTP(size: .lg)).contains("otp otp--lg"))
+
+        #expect(render(WebUIRating(3, size: .sm)).contains("rating rating--sm"))
+        #expect(render(WebUIRating(3, size: .lg)).contains("rating rating--lg"))
+
+        #expect(render(WebUIFab(icon: .check, size: .sm)).contains(" fab--sm"))
+        #expect(render(WebUIFab(icon: .check, size: .lg)).contains(" fab--lg"))
+
+        #expect(render(WebUIDrawer(size: .sm) { Text("b") }).contains(" drawer--sm"))
+        #expect(render(WebUIDrawer(size: .lg) { Text("b") }).contains(" drawer--lg"))
+
+        // kbd appends its size class rather than embedding it, so md is the bare
+        // class and sm/lg carry the space
+        #expect(render(WebUIKbd("K", size: .sm)).contains("kbd kbd--sm"))
+        #expect(render(WebUIKbd("K", size: .md)).contains("class=\"kbd\""))
+        #expect(render(WebUIKbd("K", size: .lg)).contains("kbd kbd--lg"))
     }
 
     @Test("the 1.x size spellings still compile and mean the same thing")
