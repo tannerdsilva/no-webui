@@ -690,35 +690,55 @@ public struct WebUIProgress: View {
 
 // MARK: - WebUI Skeleton
 public struct WebUISkeleton: View {
-    public enum Variant: String, Sendable {
-        case text    = "skeleton--text"
-        case title   = "skeleton--title"
-        case avatar  = "skeleton--avatar"
-        case card    = "skeleton--card"
-        case custom  = ""
-    }
+    @available(*, deprecated, renamed: "SkeletonShape")
+    public typealias Variant = SkeletonShape
 
-    public let variant: Variant
+    public let shape: SkeletonShape
     public let width: String?
     public let height: String?
     public let count: Int
 
+    /// this component's own class for a shared shape. `custom` maps to the empty
+    /// string, which is what its 1.x raw value was — so the emitted class keeps
+    /// its trailing space ("skeleton ") exactly as before.
+    private static func classFor(_ shape: SkeletonShape) -> String {
+        switch shape {
+            case .text: return "skeleton--text"
+            case .title: return "skeleton--title"
+            case .avatar: return "skeleton--avatar"
+            case .card: return "skeleton--card"
+            case .custom: return ""
+        }
+    }
+
     public init(
-        variant: Variant = .text,
+        shape: SkeletonShape = .text,
         width: String? = nil,
         height: String? = nil,
         count: Int = 1
     ) {
-        self.variant = variant
+        self.shape = shape
         self.width = width
         self.height = height
         self.count = max(count, 1)
     }
 
+    /// the 1.x initializer. `SkeletonShape` is the shared vocabulary, so the old
+    /// spelling takes it directly rather than resolving the alias.
+    @available(*, deprecated, message: "use shape: — SkeletonShape is the shared vocabulary")
+    public init(
+        variant: SkeletonShape,
+        width: String? = nil,
+        height: String? = nil,
+        count: Int = 1
+    ) {
+        self.init(shape: variant, width: width, height: height, count: count)
+    }
+
     public func render() -> String {
         var result = ""
         for _ in 0..<count {
-            var html = "<div class=\"skeleton \(variant.rawValue)\""
+            var html = "<div class=\"skeleton \(Self.classFor(shape))\""
             if let width { html += " style=\"width:\(width)\"" }
             if let height { html += " style=\"height:\(height)\"" }
             html += " aria-hidden=\"true\"></div>"

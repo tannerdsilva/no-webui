@@ -477,19 +477,38 @@ public struct WebUIActionSheet: View {
 // MARK: WebUI Bottom Sheet
 /// bottom-anchored modal surface.
 public struct WebUIBottomSheet: View {
-    public enum Variant: String, Sendable { case peek = " bottom-sheet--peek", half = " bottom-sheet--half", full = " bottom-sheet--full" }
+    @available(*, deprecated, renamed: "SlidePosition")
+    public typealias Variant = SlidePosition
     public let title: String?
     public let children: [any View]
     public let footer: [any View]
-    public let variant: Variant
+    public let position: SlidePosition
     /// stable container id; when set with `onDismiss` the close button
     /// self-wires (`targetId == "<id>-close"`).
     public let id: String?
     public let onDismiss: EventHandler?
-    public init(title: String? = nil, variant: Variant = .half, id: String? = nil, onDismiss: EventHandler? = nil,
+
+    /// this component's own class for a shared shape — same three values, same
+    /// bytes, including the leading space the 1.x raw values carried.
+    private static func classFor(_ position: SlidePosition) -> String {
+        switch position {
+            case .peek: return " bottom-sheet--peek"
+            case .half: return " bottom-sheet--half"
+            case .full: return " bottom-sheet--full"
+        }
+    }
+
+    public init(title: String? = nil, position: SlidePosition = .half, id: String? = nil, onDismiss: EventHandler? = nil,
                 @ViewBuilder content: () -> [any View], @ViewBuilder footer: () -> [any View] = { [] }) {
-        self.title = title; self.variant = variant; self.id = id; self.onDismiss = onDismiss
+        self.title = title; self.position = position; self.id = id; self.onDismiss = onDismiss
         self.children = content(); self.footer = footer()
+    }
+
+    /// the 1.x initializer, kept so `variant:` call sites still compile.
+    @available(*, deprecated, message: "use position: — SlidePosition is the shared vocabulary")
+    public init(title: String? = nil, variant: SlidePosition, id: String? = nil, onDismiss: EventHandler? = nil,
+                @ViewBuilder content: () -> [any View], @ViewBuilder footer: () -> [any View] = { [] }) {
+        self.init(title: title, position: variant, id: id, onDismiss: onDismiss, content: content, footer: footer)
     }
 
     public func render() -> String {
@@ -499,7 +518,7 @@ public struct WebUIBottomSheet: View {
         } else {
             attrs = ""
         }
-        var html = "<div class=\"bottom-sheet\(variant.rawValue)\"\(attrs) role=\"dialog\" aria-modal=\"true\">"
+        var html = "<div class=\"bottom-sheet\(Self.classFor(position))\"\(attrs) role=\"dialog\" aria-modal=\"true\">"
         html += "<div class=\"bottom-sheet__handle\"></div>"
         if let title {
             let closeID = id.map { " id=\"\(htmlEscape("\($0)-close"))\"" } ?? ""
