@@ -190,10 +190,22 @@ public struct WebUIServerRequest: Sendable {
 	public var path: String
 	/// the decoded `?a=1&b=2` pairs. a repeated key keeps its first value.
 	public var query: [String: String]
+	/// the token minted for THIS render.
+	///
+	/// a page echoes it into `RuntimeConfig.renderToken` so the socket's frames
+	/// can be bound back to this render's session. empty when the entropy source
+	/// failed, in which case the page's events are refused under
+	/// `WebUIServerConfig.requireRenderToken`.
+	public var renderToken: RenderToken
 
-	public init(path: String, query: [String: String] = [:]) {
+	public init(
+		path: String,
+		query: [String: String] = [:],
+		renderToken: RenderToken = RenderToken("")
+	) {
 		self.path = path
 		self.query = query
+		self.renderToken = renderToken
 	}
 
 	/// the percent-decoded value for `name`, or `nil`.
@@ -223,6 +235,16 @@ public struct WebUIServerConfig: Sendable {
 	/// neither shadow nor disable them. duplicate paths: the last entry wins.
 	public var assets: [WebUIServerAsset]
 
+	/// when true, a websocket `event`/`ping` whose render token is absent or
+	/// unknown is answered with a `token` error frame and the socket is closed
+	/// (AGENTS.md security invariant 11).
+	///
+	/// defaults to false so a 1.x host that never threaded a token keeps working
+	/// unchanged; it flips to true at the 2.0 cut. a host that threads the token
+	/// today — pass `WebUIServerRequest.renderToken.value` into the document's
+	/// `renderToken:` — can turn it on now.
+	public var requireRenderToken: Bool
+
 	public init(
 		host: String = "0.0.0.0",
 		port: Int = 9090,
@@ -231,7 +253,8 @@ public struct WebUIServerConfig: Sendable {
 		assetCacheSeconds: Int = 3600,
 		pagePath: String = "/",
 		themeSheet: ThemeSheet? = nil,
-		assets: [WebUIServerAsset] = []
+		assets: [WebUIServerAsset] = [],
+		requireRenderToken: Bool = false
 	) {
 		self.host = host
 		self.port = port
@@ -241,6 +264,7 @@ public struct WebUIServerConfig: Sendable {
 		self.pagePath = pagePath
 		self.themeSheet = themeSheet
 		self.assets = assets
+		self.requireRenderToken = requireRenderToken
 	}
 }
 
@@ -604,7 +628,11 @@ final class Runner: Sendable {
 						switch frame.opcode {
 						case .text:
 							let payload = String(buffer: frame.unmaskedData)
-							await self.dispatch(eventText: payload, outbound: outbound)
+							// a frame the server refuses (an unknown render token)
+							// ends the connection: that page can no longer be
+							// trusted to drive this router.
+							let keepGoing = await self.dispatch(eventText: payload, outbound: outbound)
+							if !keepGoing { return }
 						case .ping:
 							let buf = ByteBuffer()
 							let pong = WebSocketFrame(fin: true, opcode: .pong, data: buf)
@@ -626,16 +654,33 @@ final class Runner: Sendable {
 		}
 	}
 
-	private func dispatch(eventText payload: String, outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>) async {
+	private func dispatch(
+		eventText payload: String,
+		outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>
+	) async -> Bool {
 		do {
 			let msg = try WSIncoming(jsonText: payload)
 			switch msg {
-			case .event(let component, let event, let data, _):
+			case .event(let component, let event, let data, let token):
+				guard let session = boundSession(token) else {
+					try? await writeJSON(
+						WSOutgoing.error(code: "token", message: "unknown or missing render token"),
+						outbound: outbound
+					)
+					return false
+				}
 				let eventData = EventData(component: ComponentID(component), event: event, data: data)
-				let updates = await self.router.handle(eventData)
-				guard !updates.isEmpty else { return }
+				let updates = await router.handle(eventData, in: session)
+				guard !updates.isEmpty else { return true }
 				try await writeJSON(WSOutgoing.update(fragments: updates), outbound: outbound)
-			case .ping:
+			case .ping(let token):
+				guard boundSession(token) != nil else {
+					try? await writeJSON(
+						WSOutgoing.error(code: "token", message: "unknown or missing render token"),
+						outbound: outbound
+					)
+					return false
+				}
 				try await writeJSON(WSOutgoing.pong, outbound: outbound)
 			case .navigate:
 				break
@@ -644,6 +689,24 @@ final class Runner: Sendable {
 			let err = WSOutgoing.error(code: "decode", message: "bad event: \(error)")
 			try? await writeJSON(err, outbound: outbound)
 		}
+		return true
+	}
+
+	/// resolve the render session a frame's token names.
+	///
+	/// `nil` means "refuse and close". a frame with no token — or with a token
+	/// this server never minted — is refused only while
+	/// ``WebUIServerConfig/requireRenderToken`` is on; otherwise it routes to the
+	/// shared default session, which is exactly the pre-session behaviour.
+	private func boundSession(_ token: String?) -> RenderSessionID? {
+		guard let token, !token.isEmpty else {
+			return config.requireRenderToken ? nil : .default
+		}
+		let session = RenderSessionID(token)
+		guard router.contains(session) else {
+			return config.requireRenderToken ? nil : .default
+		}
+		return session
 	}
 
 	private func writeJSON(_ msg: WSOutgoing, outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>) async throws {
@@ -749,8 +812,25 @@ final class Runner: Sendable {
 					// that wraps its own context still wins (the inner
 					// `withValue` takes precedence), so existing hosts are
 					// unaffected.
-					let body = await RenderContext.$current.withValue(RenderContext(router: router)) {
-						await render(request)
+					//
+					// every render also mints a token and opens a render session
+					// for it. the session is what bounds the router: a page's
+					// auto-minted ids are minted *within* it, so re-rendering
+					// overwrites the same keys instead of appending new ones, and
+					// two page instances can reuse one id space without ever
+					// sharing a handler.
+					let token = RenderToken.mint() ?? RenderToken("")
+					if token.value.isEmpty {
+						logger.error("WebUIServer: entropy unavailable — this render's events cannot be token-bound")
+					}
+					let session = token.session
+					router.begin(session)
+					var pageRequest = request
+					pageRequest.renderToken = token
+					let body = await RenderContext.$current.withValue(
+						RenderContext(router: router, session: session)
+					) {
+						await render(pageRequest)
 					}
 					try await respond(
 						channel: channel.channel,
