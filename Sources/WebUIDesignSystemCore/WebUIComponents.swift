@@ -85,15 +85,12 @@ public struct WebUIButton: View {
         case warning   = "button--warning"
     }
 
-    public enum Size: String, Sendable {
-        case sm = "button--sm"
-        case md = "button--md"
-        case lg = "button--lg"
-    }
+    @available(*, deprecated, renamed: "ControlSize")
+    public typealias Size = ControlSize
 
     public let label: String
     public let variant: Variant
-    public let size: Size
+    public let size: ControlSize
     public let disabled: Bool
     public let id: String?
     public let fullWidth: Bool
@@ -104,10 +101,21 @@ public struct WebUIButton: View {
     /// `.onClick` modifier dance. nil (default) renders the static button.
     public let onTap: EventHandler?
 
+    /// this component's own class for a shared size — the sheet's bytes are
+    /// unchanged for sm/md/lg; xl forwards the same pattern (a theme can honor it).
+    private static func classFor(_ size: ControlSize) -> String {
+        switch size {
+            case .sm: return "button--sm"
+            case .md: return "button--md"
+            case .lg: return "button--lg"
+            case .xl: return "button--xl"
+        }
+    }
+
     public init(
         _ label: String,
         variant: Variant = .primary,
-        size: Size = .md,
+        size: ControlSize = .md,
         disabled: Bool = false,
         id: String? = nil,
         fullWidth: Bool = false,
@@ -129,7 +137,7 @@ public struct WebUIButton: View {
     }
 
     public func render(into buffer: inout HTMLBuffer) {
-        var classes = "button \(variant.rawValue) \(size.rawValue)"
+        var classes = "button \(variant.rawValue) \(Self.classFor(size))"
         if fullWidth { classes += " button--full" }
         if loading { classes += " button--loading" }
 
@@ -366,21 +374,29 @@ public struct WebUIBadge: View {
         case neutral   = "badge--neutral"
     }
 
-    public enum Size: String, Sendable {
-        case sm = "badge--sm"
-        case md = "badge--md"
-        case lg = "badge--lg"
-    }
+    @available(*, deprecated, renamed: "ControlSize")
+    public typealias Size = ControlSize
 
     public let text: String
     public let variant: Variant
-    public let size: Size
+    public let size: ControlSize
     public let dot: Bool
+
+    /// this component's own class for a shared size — the sheet's bytes are
+    /// unchanged for sm/md/lg; xl forwards the same pattern (a theme can honor it).
+    private static func classFor(_ size: ControlSize) -> String {
+        switch size {
+            case .sm: return "badge--sm"
+            case .md: return "badge--md"
+            case .lg: return "badge--lg"
+            case .xl: return "badge--xl"
+        }
+    }
 
     public init(
         _ text: String,
         variant: Variant = .neutral,
-        size: Size = .md,
+        size: ControlSize = .md,
         dot: Bool = false
     ) {
         self.text = text
@@ -394,7 +410,7 @@ public struct WebUIBadge: View {
     }
 
     public func render(into buffer: inout HTMLBuffer) {
-        var classes = "badge \(variant.rawValue) \(size.rawValue)"
+        var classes = "badge \(variant.rawValue) \(Self.classFor(size))"
         if dot { classes += " badge--dot" }
 
         let attributeText = " class=\"\(classes)\""
@@ -559,21 +575,28 @@ public extension WebUITabs {
 
 // MARK: - WebUI Avatar
 public struct WebUIAvatar: View {
-    public enum Size: String, Sendable {
-        case sm = "avatar--sm"
-        case md = "avatar--md"
-        case lg = "avatar--lg"
-        case xl = "avatar--xl"
-    }
+    @available(*, deprecated, renamed: "ControlSize")
+    public typealias Size = ControlSize
 
     public let initials: String
-    public let size: Size
+    public let size: ControlSize
     public let src: String?
     public let status: String?
 
+    /// this component's own class for a shared size — the sheet's bytes are
+    /// unchanged for sm/md/lg; xl forwards the same pattern (a theme can honor it).
+    private static func classFor(_ size: ControlSize) -> String {
+        switch size {
+            case .sm: return "avatar--sm"
+            case .md: return "avatar--md"
+            case .lg: return "avatar--lg"
+            case .xl: return "avatar--xl"
+        }
+    }
+
     public init(
         initials: String,
-        size: Size = .md,
+        size: ControlSize = .md,
         src: String? = nil,
         status: String? = nil
     ) {
@@ -588,7 +611,7 @@ public struct WebUIAvatar: View {
     }
 
     public func render(into buffer: inout HTMLBuffer) {
-        var attributeText = " class=\"avatar \(size.rawValue)\""
+        var attributeText = " class=\"avatar \(Self.classFor(size))\""
         if let status {
             attributeText += " data-status=\"\(htmlEscape(status))\""
         }
@@ -615,22 +638,30 @@ public struct WebUIProgress: View {
         case danger    = "progress--danger"
     }
 
-    public enum Size: String, Sendable {
-        case sm = "progress--sm"
-        case md = "progress--md"
-        case lg = "progress--lg"
-    }
+    @available(*, deprecated, renamed: "ControlSize")
+    public typealias Size = ControlSize
 
     public let value: Double  // 0.0 to 1.0
     public let variant: Variant
     public let showLabel: Bool
-    public let size: Size
+    public let size: ControlSize
+
+    /// this component's own class for a shared size — the sheet's bytes are
+    /// unchanged for sm/md/lg; xl forwards the same pattern (a theme can honor it).
+    private static func classFor(_ size: ControlSize) -> String {
+        switch size {
+            case .sm: return "progress--sm"
+            case .md: return "progress--md"
+            case .lg: return "progress--lg"
+            case .xl: return "progress--xl"
+        }
+    }
 
     public init(
         value: Double,
         variant: Variant = .primary,
         showLabel: Bool = false,
-        size: Size = .md
+        size: ControlSize = .md
     ) {
         self.value = min(max(value, 0), 1)
         self.variant = variant
@@ -643,7 +674,7 @@ public struct WebUIProgress: View {
     }
 
     public func render(into buffer: inout HTMLBuffer) {
-        let classes = "progress \(variant.rawValue) \(size.rawValue)"
+        let classes = "progress \(variant.rawValue) \(Self.classFor(size))"
 
         let attributeText = " class=\"\(classes)\" role=\"progressbar\" aria-valuenow=\"\(Int(value * 100))\" aria-valuemin=\"0\" aria-valuemax=\"100\""
         buffer.beginElement("div", attributeText)
@@ -1263,16 +1294,24 @@ public struct WebUIEmptyState: View {
 
 // MARK: - WebUI Spinner
 public struct WebUISpinner: View {
-    public enum Size: String, Sendable {
-        case sm = "spinner--sm"
-        case md = "spinner--md"
-        case lg = "spinner--lg"
-    }
+    @available(*, deprecated, renamed: "ControlSize")
+    public typealias Size = ControlSize
 
-    public let size: Size
+    public let size: ControlSize
     public let label: String?
 
-    public init(size: Size = .md, label: String? = nil) {
+    /// this component's own class for a shared size — the sheet's bytes are
+    /// unchanged for sm/md/lg; xl forwards the same pattern (a theme can honor it).
+    private static func classFor(_ size: ControlSize) -> String {
+        switch size {
+            case .sm: return "spinner--sm"
+            case .md: return "spinner--md"
+            case .lg: return "spinner--lg"
+            case .xl: return "spinner--xl"
+        }
+    }
+
+    public init(size: ControlSize = .md, label: String? = nil) {
         self.size = size
         self.label = label
     }
@@ -1282,7 +1321,7 @@ public struct WebUISpinner: View {
     }
 
     public func render(into buffer: inout HTMLBuffer) {
-        var attributeText = " class=\"spinner \(size.rawValue)\" role=\"status\""
+        var attributeText = " class=\"spinner \(Self.classFor(size))\" role=\"status\""
         if let label { attributeText += " aria-label=\"\(htmlEscape(label))\"" }
         buffer.beginElement("div", attributeText)
         buffer.endOpenTag()
@@ -1341,11 +1380,8 @@ public struct WebUITooltip: View {
 /// trend (direction + magnitude) and compare note, and an optional
 /// sparkline. Renders the canonical `.stat` block.
 public struct WebUIStat: View {
-    public enum Size: String, Sendable {
-        case sm = "stat stat--sm"
-        case md = "stat"
-        case lg = "stat stat--lg"
-    }
+    @available(*, deprecated, renamed: "ControlSize")
+    public typealias Size = ControlSize
 
     public enum Trend: String, Sendable {
         case up   = "stat__trend--up"
@@ -1354,7 +1390,7 @@ public struct WebUIStat: View {
 
     public let label: String
     public let value: String
-    public let size: Size
+    public let size: ControlSize
     /// Trend magnitude text, e.g. "+4.2%" — renders with the up/down
     /// arrow when `trendDirection` is set.
     public let trend: String?
@@ -1364,10 +1400,21 @@ public struct WebUIStat: View {
     /// Normalized sparkline data points (any indexed series).
     public let spark: [Double]?
 
+    /// this component's own class for a shared size — the sheet's bytes are
+    /// unchanged for sm/md/lg; xl forwards the same pattern (a theme can honor it).
+    private static func classFor(_ size: ControlSize) -> String {
+        switch size {
+            case .sm: return "stat stat--sm"
+            case .md: return "stat"
+            case .lg: return "stat stat--lg"
+            case .xl: return "stat stat--xl"
+        }
+    }
+
     public init(
         label: String,
         value: String,
-        size: Size = .md,
+        size: ControlSize = .md,
         trend: String? = nil,
         trendDirection: Trend? = nil,
         compare: String? = nil,
@@ -1387,7 +1434,7 @@ public struct WebUIStat: View {
     }
 
     public func render(into buffer: inout HTMLBuffer) {
-        let attributeText = " class=\"\(size.rawValue)\""
+        let attributeText = " class=\"\(Self.classFor(size))\""
         buffer.beginElement("div", attributeText)
         buffer.endOpenTag()
         buffer.append("<span class=\"stat__label\">\(htmlEscape(label))</span>")
@@ -1937,28 +1984,36 @@ public struct WebUICircularProgress: View {
         case danger = "ring--danger"
     }
 
-    public enum Size: String, Sendable {
-        case small = "ring--sm"
-        case medium = ""
-        case large = "ring--lg"
-    }
+    @available(*, deprecated, renamed: "ControlSize")
+    public typealias Size = ControlSize
 
     /// completion in 0...1 (clamped). ignored when `indeterminate`.
     public let value: Double
     public let label: String?
     public let sublabel: String?
     public let tone: Tone
-    public let size: Size
+    public let size: ControlSize
     public let indeterminate: Bool
     /// accessible name for the `progressbar` role.
     public let ariaLabel: String
+
+    /// this component's own class for a shared size — the sheet's bytes are
+    /// unchanged for sm/md/lg; xl forwards the same pattern (a theme can honor it).
+    private static func classFor(_ size: ControlSize) -> String {
+        switch size {
+            case .sm: return "ring--sm"
+            case .md: return ""
+            case .lg: return "ring--lg"
+            case .xl: return "ring--xl"
+        }
+    }
 
     public init(
         value: Double,
         label: String? = nil,
         sublabel: String? = nil,
         tone: Tone = .primary,
-        size: Size = .medium,
+        size: ControlSize = .md,
         indeterminate: Bool = false,
         ariaLabel: String = "progress"
     ) {
@@ -1978,7 +2033,7 @@ public struct WebUICircularProgress: View {
     public func render(into buffer: inout HTMLBuffer) {
         let clamped = value < 0 ? 0 : (value > 1 ? 1 : value)
         var classes = ["ring"]
-        if !size.rawValue.isEmpty { classes.append(size.rawValue) }
+        if !Self.classFor(size).isEmpty { classes.append(Self.classFor(size)) }
         if !tone.rawValue.isEmpty { classes.append(tone.rawValue) }
         if indeterminate { classes.append("ring--indeterminate") }
         var attributeText = " class=\"\(classes.joined(separator: " "))\" role=\"progressbar\""

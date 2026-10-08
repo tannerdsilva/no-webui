@@ -37,6 +37,23 @@ public enum ControlSize: String, Sendable, CaseIterable {
     case sm, md, lg, xl
 }
 
+// the 1.x spellings, kept as deprecated aliases so a call site written against
+// `WebUICircularProgress.Size.medium` or `WebUIKbd.Size.large` still compiles.
+//
+// these are static aliases rather than enum cases on purpose: `allCases` stays
+// four, so the vocabulary a catalog enumerates is unchanged, and the token rule
+// (`VocabularyTests`) never sees them. a per-component static would not have
+// worked — the parameter *type* becomes `ControlSize`, so `.medium` has to
+// resolve on `ControlSize` for `size: .medium` to keep compiling.
+extension ControlSize {
+    @available(*, deprecated, renamed: "sm")
+    public static var small: ControlSize { .sm }
+    @available(*, deprecated, renamed: "md")
+    public static var medium: ControlSize { .md }
+    @available(*, deprecated, renamed: "lg")
+    public static var large: ControlSize { .lg }
+}
+
 /// how much visual weight a control carries.
 ///
 /// `solid` fills, `outline` draws a border, `ghost` shows only hover/focus
