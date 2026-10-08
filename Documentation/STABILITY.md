@@ -32,7 +32,15 @@ the frozen surface is the consumer-facing API of the library products
 **`Tests/WebUITests/APISurfaceTests.swift`**: every public initializer is
 referenced at compile time (a signature change fails the build) and every
 component's render contract — class/role/aria/escaping markers — is
-asserted. `Tests/WebUITests/ChartTests.swift` pins the chart product, the
+asserted. not every frozen name is pinned *here*, though — some are pinned by
+another suite or by the demo page that renders them: `WebUIMenubar` is
+constructed only in `WebUISmokeTest` and `WebUIBlocks`, `ClientBoot` in
+`EngineBootTests`/`CSPExtrasTests`, `DesignSystemAssets` in `ThemeSheetTests`
+and the deployment-integrity suites. equivalent as a build-time guard, which is
+what the promise needs, though a demo-page pin catches a signature break and not
+a marker break. a full count of pin coverage is measured in *measured
+consumption* below.
+`Tests/WebUITests/ChartTests.swift` pins the chart product, the
 `WebUIAuth` signatures are pinned by the same suite's `authSurfacePins`
 (behavior by the `WebUIAuthTests` suites), and the wire/runtime contracts
 are pinned by `WebUIClientTests` + `DeploymentIntegrityTests`.
@@ -52,13 +60,19 @@ the frozen surface is:
   (`.onClick`/`.onSubmit`/`.onInput`/`.onChange`/`onOptimisticClick` …).
 - components: `WebUIButton`, `WebUIInput`, `WebUIBadge`, `WebUIAvatar`,
   `WebUICard`, `WebUITabs`, `WebUITree`, `WebUITable`, `WebUIEmptyState`,
-  `WebUISpinner`, `WebUIProgress`, `WebUISkeleton`, `WebUIModal`,
-  `WebUIToast`, `WebUITooltip`, `WebUITimeline`, `WebUIBreadcrumb`,
-  `WebUIStat`, `WebUIPagination`, `WebUIAlert`, `WebUIChip`,
-  `WebUIDescriptionList`, `WebUIReasoningBlock`, `WebUIToolStep`,
-  `WebUITurnSummary`, and the shell set (`WebUISidebar`,
+  `WebUIProgress`, `WebUISkeleton`, `WebUIModal`,
+  `WebUIToast`, `WebUITimeline`, `WebUIBreadcrumb`,
+  `WebUIStat`, `WebUIPagination`, `WebUIAlert`,
+  `WebUIDescriptionList`, and the shell set (`WebUISidebar`,
   `WebUISegmentedControl`, `WebUISearchField`, `WebUIListView`,
-  `WebUIListItem`, `WebUIComposer`, `WebUIPanel`, `WebUISelect`).
+  `WebUIListItem`, `WebUIComposer`, `WebUIPanel`).
+- components that joined the promise because a shipped page already renders
+  them, so their shape is a de-facto contract whether or not it was declared
+  one: `WebUISidebarItem` (named in `WebUISidebar`'s own signature),
+  `WebUIField`, `WebUIMenubar`, `WebUIMenu`, `WebUIActivityFeed`,
+  `WebUIAspectRatio`, `WebUICircularProgress`, `WebUIBanner`,
+  `WebUIToggleGroup`, `WebUISeparator`, `WebUIKbd`, `WebUIInputGroup`,
+  `WebUIMarker`, `WebUIAttachment`, `WebUINavbar`, `WebUIItem`.
 - document/assembly: `WebUIDocument` (title/body/`includeRuntime`/
   `runtimeConfig`/`contentSecurityPolicy`/`theme`/`rawStyles`/`clientMode`),
   `RuntimeConfig`, `ClientBoot` (the engine boot + `csp(nonce:)`),
@@ -82,20 +96,34 @@ the frozen surface is:
   optimistic rollback, input/scroll/focus restoration) — pinned by the
   client-runtime suites and the byte-identity asset tests.
 
-### measured consumption (2026-09-28)
+### measured consumption (re-measured 2026-10-08)
 
 the frozen list above is a **promise**, not a usage report. a survey of every
 top-level `public` declaration in `Sources/` — non-comment mentions outside the
 declaring file, partitioned by consumer class (library product target / demo
-app / `Tests/`) — found the two lists below. re-measure before trusting the
-counts.
+app / `Tests/`) — found three sets. re-measure before trusting the counts.
 
-**frozen but unexercised (9).** no library target and no demo page renders these;
-the `APISurfaceTests` pin is their only exerciser. the promise stands — change
-them only through the deprecation cycle — but their shape is unproven, so treat
-any new use as a design review, not a drop-in.
+**exercised (the list above).** every decl in the frozen list is rendered by a
+library target or a demo page. the 16 that had been outside it were measured
+into it on 2026-10-08, with these mention counts in
+`WebUIShowcaseContent/ShowcasePage.swift`: `WebUIMenu` 10 · `WebUIActivityFeed`
+8 · `WebUIAspectRatio` 7 · `WebUICircularProgress` · `WebUIBanner` ·
+`WebUIToggleGroup` · `WebUISeparator` · `WebUIKbd` (6 each) · `WebUIInputGroup`
+5 · `WebUIAttachment` · `WebUINavbar` · `WebUIItem` (4 each) · `WebUIMarker` 3.
+`WebUISidebarItem`, `WebUIField` and `WebUIMenubar` render in `WebUIBlocks`
+rather than the showcase (`WebUIMenubar` also on the smoke page), and
+`WebUISidebarItem` is named in the frozen `WebUISidebar`'s own signature — a
+frozen type cannot honestly promise a shape while leaving its parameter type
+free to change.
 
-| name | why it reads as unused |
+**shipped but unproven — review on first use (7).** no library target and no
+demo page renders these; the `APISurfaceTests` pin is their only exerciser. they
+are deliberately **outside** the frozen list: a shape nothing exercises has not
+earned a promise, and binding a release to an unvalidated shape costs more than
+it buys. treat any new use as a design review — the first real consumer is what
+freezes them, and that is now a one-line edit to the list above.
+
+| name | why it is unproven |
 |---|---|
 | `WebUISelect` | one mention repo-wide (its own pin); `Select` (primitives) and `WebUIComboBox` cover the demos |
 | `WebUISpinner` | no non-test renderer; `WebUIProgress` and `WebUICircularProgress` carry the loading demos |
@@ -103,21 +131,20 @@ any new use as a design review, not a drop-in.
 | `WebUIChip` | no non-test renderer; `WebUITag` restates it with a parallel variant enum |
 | `WebUIReasoningBlock` · `WebUIToolStep` · `WebUITurnSummary` | the agent-turn trio ships with no page that renders it |
 
-two of the nine read as unused because they are consumed *structurally* rather
-than by name, and no action is implied: `EmptyView` (a `ViewBuilder` sentinel)
-and `Argon2Parameters` (the config type in the frozen `PasswordVerifier`'s
-signature).
+two further types stay **inside** the frozen list although nothing renders them
+by name, because they are consumed *structurally* and their shape is
+load-bearing: `EmptyView` (the `ViewBuilder` sentinel every empty branch
+produces) and `Argon2Parameters` (the config type in the frozen
+`PasswordVerifier`'s signature).
 
-**showcase-rendered but not frozen (16).** outside the promise, therefore free
-to change in a minor — which is the opposite of what their demo coverage
-suggests. `WebUIMenu` (15 demo sites) · `WebUIActivityFeed` (8) ·
-`WebUIAspectRatio` (7) · `WebUICircularProgress` · `WebUIBanner` ·
-`WebUIToggleGroup` · `WebUISeparator` · `WebUIKbd` (6 each) · `WebUIInputGroup`
-(5) · `WebUIMarker` · `WebUIAttachment` · `WebUINavbar` · `WebUIItem` (4 each);
-`WebUISidebarItem`, `WebUIField` and `WebUIMenubar` additionally appear in a
-**frozen** type's own signature, so their absence from the frozen list reads as
-an oversight rather than a decision. the `WebUIExtras*` families are the other
-case: unproven by design, deliberately outside.
+**the long tail — deliberately outside (92).** `WebUIExtrasLongTail.swift` and
+`WebUIExtrasForm.swift` declare 92 public components between them (measured, not
+estimated). membership of
+those files is *not* the criterion — two of their types (`WebUIField`,
+`WebUIMenubar`) sit in the frozen list above precisely because a shipped page
+renders them, leaving 90 of the tail outside. the rule is coverage: a type with
+a renderer is a contract, a type
+without one is a draft, whichever file it lives in.
 
 outside the frozen surface (free to change in any release): example
 apps (`WebUIExample`, `WebUIAuthExample`, `WebUIShowcaseServer`), plugin

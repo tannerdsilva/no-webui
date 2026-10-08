@@ -1,6 +1,6 @@
 import WebUICore
 
-// MARK: - p5 marks: radar, radial, gradients, tips
+// MARK: - radial marks: radar, gauge, gradients
 
 /// A radar (spider) mark: one closed polygon per series over a shared set of
 /// axes, mirroring the shadcn radar-chart family. Every series must supply the

@@ -4,6 +4,38 @@ all notable changes to this project are documented here.
 
 ## [unreleased]
 
+### stability — the frozen list now matches its own evidence
+
+- **seven unproven types left the frozen surface.** `WebUISelect`,
+  `WebUISpinner`, `WebUITooltip`, `WebUIChip`, `WebUIReasoningBlock`,
+  `WebUIToolStep` and `WebUITurnSummary` have no renderer in any library target
+  or demo page — their only exerciser is the `APISurfaceTests` pin. they are now
+  documented as *shipped but unproven — review on first use*, so a shape nothing
+  has validated is no longer bound to a release promise. **this is a promise
+  being narrowed, not code being removed**: every one of them still compiles,
+  renders and is pinned; the change is that fixing their shape no longer needs a
+  deprecation cycle.
+- **sixteen exercised types joined the frozen surface.** `WebUIMenu`,
+  `WebUIActivityFeed`, `WebUIAspectRatio`, `WebUICircularProgress`,
+  `WebUIBanner`, `WebUIToggleGroup`, `WebUISeparator`, `WebUIKbd`,
+  `WebUIInputGroup`, `WebUIMarker`, `WebUIAttachment`, `WebUINavbar`,
+  `WebUIItem`, `WebUISidebarItem`, `WebUIField` and `WebUIMenubar` are rendered
+  by shipped pages, so their shape was already a de-facto contract while the
+  list said it was free to change in a minor. `WebUISidebarItem` is named in the
+  frozen `WebUISidebar`'s own signature, which made the mismatch a contradiction
+  rather than an omission. the criterion is now stated: coverage, not file
+  membership — which is why two types living in the `WebUIExtras*` long tail
+  (92 components, measured) are frozen while the other 90 of that tail stay
+  outside.
+- `Documentation/STABILITY.md` re-measured rather than asserted: mention counts
+  are recorded per type.
+- **no dead API was removed.** the plan's T11 read `Sources/WebUIChart/ChartP5Marks.swift`
+  as a `ChartP5*` public surface with no reader. no such type exists — the file
+  declares `RadarMark`, `RadialMark` and `ChartGradient`, all of which render on
+  the smoke page, in the showcase and in two test suites. the *filename* was the
+  defect: it named the plan phase that produced it. the file is now
+  `ChartRadialMarks.swift` (suite: `ChartRadialMarkTests`) so the trap is gone.
+
 ### runtime — streaming patch ops and calm patches
 
 - **`FragmentUpdate` gains ops.** `append` inserts one subtree as a child of the

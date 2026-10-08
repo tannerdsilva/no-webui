@@ -3,7 +3,12 @@ import Testing
 import WebUI
 @testable import WebUIChart
 
-// p5  radar, radial, css-only tips, area gradients, negative values.
+// radar, radial, css-only tips, area gradients, negative values.
+//
+// the file was named for the plan phase that produced it (`p5`), not for what it
+// declares. that misled a reviewer into reporting a dead `ChartP5*` public
+// surface — the whole of T11 in the W0 plan — when the type prefix does not
+// exist anywhere in the repo. named for its contents now.
 
 /// every capture of `group` across all matches of `regex`
 func allCaptures(_ regex: String, in haystack: String, group: Int = 1) -> [String] {
@@ -14,7 +19,7 @@ func allCaptures(_ regex: String, in haystack: String, group: Int = 1) -> [Strin
 	}
 }
 
-@Suite struct ChartP5Tests {
+@Suite struct ChartRadialMarkTests {
 
 	// MARK: t5  negative values
 

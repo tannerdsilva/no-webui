@@ -89,7 +89,7 @@ inside `ForEach`.
 - **y**: always numeric. bars/areas pin the baseline to `0` when all data is
 - **y**: always numeric. bars pin the baseline to `0` **and the bar domain spans zero at
   both ends**, so negative data draws below the baseline instead of collapsing to a
-  zero-height rect (fixed in p5-t5, pinned in `ChartP5Tests`). line/area get a 5%
+  zero-height rect (pinned in `ChartRadialMarkTests`). line/area get a 5%
   headroom. override with `.chartYScale` / `.chartYDomain`.
 - **ticks**: nice-number algorithm (`1/2/5 × 10^k`), in-domain filtering, or
   `AxisConfig(explicitValues:)`.
