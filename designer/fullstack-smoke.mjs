@@ -10,7 +10,10 @@
 //   [0]=btn-dec [1]=btn-inc [2]=btn-reset [3]=btn-pdec [4]=btn-pinc [5]=echo-input
 
 const BASE = "http://127.0.0.1:9123";
+import { createHash } from "node:crypto";
 const WS = "ws://127.0.0.1:9123/ws";
+
+import { chromium } from "playwright";
 
 let pass = 0, fail = 0;
 const ok = (m) => { pass++; console.log(`  PASS ${m}`); };
@@ -174,6 +177,55 @@ if (t && !t.fragments[0].html.includes("table__detail-row")) ok("table: collapse
 else bad(`collapse wrong: ${t ? "detail row still present" : "no update"}`);
 
 ws.close();
+
+// 11. Real file upload through the browser (plan w3.3, G5). the form ships
+// with a real action + method=post + a file input and lives inside a wired
+// component; the engine's submit guard lets it submit NATIVELY — the
+// browser's own multipart encoder — and the server echoes the exact bytes.
+// this probe also runs with JavaScript disabled: progressive enhancement
+// means file upload works with zero JS.
+const uploadFixture = Buffer.concat([
+  Buffer.from("W3.3 upload probe\nline two\r\n\x00\x01\x02", "latin1"),
+  Buffer.from([0x00, 0xff, 0x0d, 0x0a, 0x89, 0x50, 0x4e, 0x47]),
+  Buffer.from("tail bytes\r\nwith crlf\nend", "latin1"),
+]);
+
+const uploadProbe = async (label, jsDisabled) => {
+  const browser = await chromium.launch();
+  try {
+    const context = await browser.newContext({ javaScriptEnabled: !jsDisabled });
+    const page = await context.newPage();
+    const nav = await page.goto(BASE + "/");
+    if (!nav || nav.status() !== 200) {
+      bad(`${label}: upload page did not load`);
+      return;
+    }
+    const respPromise = page.waitForResponse(
+      (r) => r.request().method() === "POST" && r.url().split("?")[0].endsWith("/upload")
+    );
+    await page.setInputFiles('input[name="file"]', {
+      name: "w3.3-probe.bin",
+      mimeType: "application/octet-stream",
+      buffer: uploadFixture,
+    });
+    await page.click('form[action="/upload"] input[type="submit"]');
+    const resp = await respPromise;
+    const headers = resp.headers();
+    const sentHash = createHash("sha256").update(uploadFixture).digest("hex");
+    if (resp.status() === 200 && headers["x-upload-sha256"] === sentHash && headers["x-upload-name"] === "w3.3-probe.bin") {
+      ok(`${label}: server received the EXACT uploaded bytes (${uploadFixture.length}, sha256 matched, filename=w3.3-probe.bin)`);
+    } else {
+      bad(`${label}: upload mismatch — status ${resp.status()}, server sha=${headers["x-upload-sha256"] || "?"} expected ${sentHash}, name=${headers["x-upload-name"] || "?"}`);
+    }
+  } catch (e) {
+    bad(`${label}: upload probe threw: ${e.message}`);
+  } finally {
+    await browser.close();
+  }
+};
+
+await uploadProbe("file upload (engine native submit)", false);
+await uploadProbe("file upload with JavaScript disabled", true);
 
 console.log(`\n=== summary: ${pass} passed, ${fail} failed ===`);
 console.log(fail === 0 ? "FULL-STACK SMOKE PASS" : "FULL-STACK SMOKE FAIL");

@@ -86,11 +86,14 @@ public struct HTTPRequest: Sendable {
 	}
 }
 
-/// the request body shapes a typed request can carry. `.form`/`.multipart`
-/// land with `FormBody.swift` (w3.4), whose types the wire parser produces.
+/// the request body shapes a typed request can carry. the wire parser in
+/// `FormBody.swift` produces the typed values: a urlencoded body becomes
+/// `.form`, a multipart body `.multipart`, anything else `.bytes`.
 public enum RequestBody: Sendable {
 	case none
 	case bytes([UInt8])
+	case form(FormValues)
+	case multipart(MultipartForm)
 }
 
 // MARK: - HTTPResponse

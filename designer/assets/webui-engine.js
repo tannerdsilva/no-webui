@@ -398,11 +398,12 @@ window.WebUIEngine = (function () {
       }
 
       if (event.type === 'submit') {
+        var form = event.target && event.target.closest ? (event.target.closest('form') || event.target) : event.target;
+        if (form && form.getAttribute('action') && form.method === 'post' && form.querySelector('input[type="file"]')) {
+          return;
+        }
         event.preventDefault();
-        flushPendingInputs(
-          event.target && event.target.closest ? (event.target.closest('form') || event.target) : event.target,
-          componentId
-        );
+        flushPendingInputs(form, componentId);
       }
 
       var eventData = extractEventData(event, componentEl);

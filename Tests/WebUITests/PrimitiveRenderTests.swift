@@ -135,6 +135,26 @@ struct PrimitiveRenderTests {
 			== "<form class=\"c\" action=\"/go\" method=\"get\">x</form>")
 	}
 
+	@Test("form emits enctype only when set, and it is escaped")
+	func formEnctype() {
+		#expect(Form(action: "/go") { Text("x") }.renderThroughBuffer().contains(" enctype=") == false)
+		#expect(Form(action: "/go", enctype: "multipart/form-data") { Text("x") }.renderThroughBuffer()
+			== "<form action=\"/go\" method=\"post\" enctype=\"multipart/form-data\">x</form>")
+		#expect(Form(action: "/go", enctype: "multi\" onsubmit=\"x") { Text("x") }.renderThroughBuffer().contains("&quot;"))
+	}
+
+	@Test("a file input emits accept and multiple only when set")
+	func fileInputAttributes() {
+		let plain = Input(name: "f", type: .file).renderThroughBuffer()
+		#expect(plain == "<input name=\"f\" type=\"file\">")
+		#expect(Input(name: "f", type: .file, accept: "image/png,text/plain").renderThroughBuffer()
+			== "<input name=\"f\" type=\"file\" accept=\"image/png,text/plain\">")
+		#expect(Input(name: "f", type: .file, multiple: true).renderThroughBuffer()
+			== "<input name=\"f\" type=\"file\" multiple>")
+		// a hostile accept value is escaped, never emitted raw.
+		#expect(Input(name: "f", type: .file, accept: "\" onfocus=\"alert(1)").renderThroughBuffer().contains("&quot;"))
+	}
+
 	@Test("group composes its children with no wrapper")
 	func groupComposes() {
 		#expect(Group { Text("a"); Text("b") }.renderThroughBuffer() == "ab")

@@ -174,6 +174,8 @@ public struct Input: View {
     public let value: String
     public let disabled: Bool
     public let required: Bool
+    public let accept: String
+    public let multiple: Bool
     public let attributes: [(String, String)]
     public init(
         id: String? = nil,
@@ -183,6 +185,8 @@ public struct Input: View {
         value: String = "",
         disabled: Bool = false,
         required: Bool = false,
+        accept: String = "",
+        multiple: Bool = false,
         attributes: [(String, String)] = []
     ) {
         self.id = id
@@ -192,6 +196,8 @@ public struct Input: View {
         self.value = value
         self.disabled = disabled
         self.required = required
+        self.accept = accept
+        self.multiple = multiple
         self.attributes = attributes
     }
 
@@ -204,6 +210,10 @@ public struct Input: View {
         if !value.isEmpty { attributeText += " value=\"\(htmlEscape(value))\"" }
         if disabled { attributeText += " disabled" }
         if required { attributeText += " required" }
+        // a file input's picker filters by `accept` and `multiple` lets the
+        // browser send several files under one field.
+        if !accept.isEmpty { attributeText += " accept=\"\(htmlEscape(accept))\"" }
+        if multiple { attributeText += " multiple" }
         for (key, value) in attributes {
             let safeKey = htmlEscape(key)
             guard !safeKey.isEmpty else { continue }
@@ -643,6 +653,10 @@ public struct Form: View {
     /// the default is `.post`, which is what the framework's own `WebUIServer`
     /// does *not* answer — see the render-time diagnostic in `render(into:)`.
     public let method: FormMethod
+    /// the emitted `enctype`, when non-empty. a form with a file input should
+    /// set `enctype: "multipart/form-data"` so the browser's native submit
+    /// sends a multipart body the server can parse (plan w3.3).
+    public let enctype: String
     public let id: String?
     public let `class`: String?
     public let csrfToken: String?
@@ -658,6 +672,7 @@ public struct Form: View {
     public init(
         action: String = "",
         method: FormMethod = .post,
+        enctype: String = "",
         id: String? = nil,
         class: String? = nil,
         csrfToken: String? = nil,
@@ -665,6 +680,7 @@ public struct Form: View {
     ) {
         self.action = action
         self.method = method
+        self.enctype = enctype
         self.rawMethod = nil
         self.id = id
         self.class = `class`
@@ -677,6 +693,7 @@ public struct Form: View {
     public init(
         action: String = "",
         method: String,
+        enctype: String = "",
         id: String? = nil,
         class: String? = nil,
         csrfToken: String? = nil,
@@ -684,6 +701,7 @@ public struct Form: View {
     ) {
         self.action = action
         self.method = FormMethod(rawValue: method) ?? .post
+        self.enctype = enctype
         self.rawMethod = method
         self.id = id
         self.class = `class`
@@ -717,6 +735,7 @@ public struct Form: View {
         let safeAction = sanitizeURL(action) ?? ""
         attributeText += " action=\"\(htmlEscape(safeAction))\""
         attributeText += " method=\"\(htmlEscape(emittedMethod))\""
+        if !enctype.isEmpty { attributeText += " enctype=\"\(htmlEscape(enctype))\"" }
         buffer.beginElement("form", attributeText)
         buffer.endOpenTag()
         if let token = csrfToken {

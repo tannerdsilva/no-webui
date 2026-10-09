@@ -252,6 +252,15 @@ public struct WebUIServerConfig: Sendable {
 	/// broken control's place. a silent failure is what made C3 invisible.
 	public var handlerFailurePolicy: HandlerFailurePolicy
 
+	/// the hard cap on one request body, in bytes. a declared `Content-Length`
+	/// over the cap is refused before a single body byte is buffered, and a
+	/// body that grows past it mid-stream is cut off — an upload endpoint
+	/// without a cap is a DoS (plan w3.3). default 1 MiB.
+	public var maxBodyBytes: Int
+	/// the hard cap on one multipart body's parts. exceeding it is a 422 that
+	/// names the limit. default 64.
+	public var maxMultipartParts: Int
+
 	public init(
 		host: String = "0.0.0.0",
 		port: Int = 9090,
@@ -262,7 +271,9 @@ public struct WebUIServerConfig: Sendable {
 		themeSheet: ThemeSheet? = nil,
 		assets: [WebUIServerAsset] = [],
 		requireRenderToken: Bool = false,
-		handlerFailurePolicy: HandlerFailurePolicy = .notifyClient
+		handlerFailurePolicy: HandlerFailurePolicy = .notifyClient,
+		maxBodyBytes: Int = 1 << 20,
+		maxMultipartParts: Int = 64
 	) {
 		self.host = host
 		self.port = port
@@ -274,6 +285,8 @@ public struct WebUIServerConfig: Sendable {
 		self.assets = assets
 		self.requireRenderToken = requireRenderToken
 		self.handlerFailurePolicy = handlerFailurePolicy
+		self.maxBodyBytes = maxBodyBytes
+		self.maxMultipartParts = maxMultipartParts
 	}
 }
 
@@ -900,7 +913,11 @@ final class Runner: Sendable {
 		_ channel: NIOAsyncChannel<HTTPServerRequestPart, HTTPPart<HTTPResponseHead, ByteBuffer>>
 	) async throws {
 		try await channel.executeThenClose { inbound, outbound in
-			for try await part in inbound {
+			// nio's upgraded http stream allows exactly ONE iterator per
+			// connection, so the whole request loop — the head, the bounded body
+			// read, the next request's head — shares this one.
+			var iterator = inbound.makeAsyncIterator()
+			while let part = try await iterator.next() {
 				guard case .head(let head) = part else { continue }
 				// a wire verb the typed model cannot name (trace, connect,
 				// custom): answer the old blanket 405 rather than routing a
@@ -919,14 +936,54 @@ final class Runner: Sendable {
 				let queryText = uri.dropFirst(path.count).dropFirst()
 				// the framework asset chain is get-only (that is how browsers
 				// fetch it); every other request — a non-get included — is the
-				// typed router's (plan w3.2).
+				// typed router's (plan w3.2). a non-get body is read under the
+				// byte cap: a declared `Content-Length` over the cap is refused
+				// BEFORE any buffering, and a body that outgrows the cap
+				// mid-stream is refused the moment it does — the bounded-parse
+				// discipline, applied to request bodies (plan w3.3).
 				if method != .get {
+					let declaredLength = BodyReader.contentLength(head.headers)
+					var bodyBytes: [UInt8] = []
+					var received: Int = 0
+					if let declaredLength, declaredLength > config.maxBodyBytes {
+						received = declaredLength
+					} else {
+						while let bodyPart = try await iterator.next() {
+							guard case .body(let buffer) = bodyPart else { break }
+							if received != 0 { continue }
+							bodyBytes.append(contentsOf: buffer.readableBytesView)
+							if bodyBytes.count > config.maxBodyBytes {
+								received = bodyBytes.count
+							}
+						}
+					}
+					if received != 0 {
+						try await respond(
+							channel: channel.channel,
+							body: "413 — request body too large: WebUIServerConfig.maxBodyBytes is \(config.maxBodyBytes) bytes; received \(received)",
+							contentType: "text/plain; charset=utf-8",
+							status: .payloadTooLarge
+						)
+						continue
+					}
+					if let declaredLength, declaredLength != bodyBytes.count {
+						// a declared length that contradicts the received byte
+						// count is a smuggling red flag, never something to route.
+						try await respond(
+							channel: channel.channel,
+							body: "400 — Content-Length declares \(declaredLength) bytes, but \(bodyBytes.count) arrived; the body is refused",
+							contentType: "text/plain; charset=utf-8",
+							status: .badRequest
+						)
+						continue
+					}
 					try await routePage(
 						channel: channel.channel,
 						method: method,
 						path: path,
 						queryText: queryText,
-						headers: head.headers
+						headers: head.headers,
+						body: bodyBytes
 					)
 					continue
 				}
@@ -1032,7 +1089,8 @@ final class Runner: Sendable {
 		method: HTTPMethod,
 		path: String,
 		queryText: Substring,
-		headers: HTTPHeaders
+		headers: HTTPHeaders,
+		body: [UInt8] = []
 	) async throws {
 		let token = RenderToken.mint() ?? RenderToken("")
 		if token.value.isEmpty {
@@ -1040,11 +1098,65 @@ final class Runner: Sendable {
 		}
 		let session = token.session
 		router.begin(session)
+
+		// parse the bounded body into a typed shape. a refusal here — the
+		// byte cap, the part cap, a lying content length, a malformed
+		// boundary — is answered with a status that names the limit, never
+		// routed (plan w3.3).
+		var requestBody: RequestBody = body.isEmpty ? .none : .bytes(body)
+		if !body.isEmpty {
+			let contentType = headers.first(name: "Content-Type") ?? ""
+			let reader = BodyReader(
+				maxBodyBytes: config.maxBodyBytes,
+				maxMultipartParts: config.maxMultipartParts
+			)
+			do {
+				if contentType.hasPrefix("application/x-www-form-urlencoded") {
+					requestBody = .form(reader.urlencoded(body))
+				} else if contentType.hasPrefix("multipart/form-data") {
+					requestBody = .multipart(try reader.multipart(body, contentType: contentType))
+				}
+			} catch let error as BodyParseError {
+				switch error {
+				case .tooLarge(let limit, let actual):
+					try await respond(
+						channel: channel,
+						body: "413 — request body too large: WebUIServerConfig.maxBodyBytes is \(limit) bytes; received \(actual)",
+						contentType: "text/plain; charset=utf-8",
+						status: .payloadTooLarge
+					)
+				case .tooManyParts(let limit, let actual):
+					try await respond(
+						channel: channel,
+						body: "422 — multipart body has too many parts: WebUIServerConfig.maxMultipartParts is \(limit); received \(actual) parts",
+						contentType: "text/plain; charset=utf-8",
+						status: .unprocessableEntity
+					)
+				case .lengthMismatch(let declared, let actual):
+					try await respond(
+						channel: channel,
+						body: "400 — Content-Length declares \(declared) bytes, but \(actual) arrived; the body is refused",
+						contentType: "text/plain; charset=utf-8",
+						status: .badRequest
+					)
+				case .malformedMultipart:
+					try await respond(
+						channel: channel,
+						body: "400 — malformed multipart body",
+						contentType: "text/plain; charset=utf-8",
+						status: .badRequest
+					)
+				}
+				return
+			}
+		}
+
 		let request = HTTPRequest(
 			method: method,
 			path: path,
 			query: parseQuery(String(queryText)),
 			headers: headers,
+			body: requestBody,
 			renderToken: token
 		)
 		let response = await RenderContext.$current.withValue(
@@ -1209,7 +1321,7 @@ func parseQuery(_ text: String) -> [String: String] {
 }
 
 /// percent-decode one url component. invalid escapes pass through unchanged.
-private func percentDecode(_ text: Substring) -> String {
+func percentDecode(_ text: Substring) -> String {
 	guard text.contains("%") || text.contains("+") else { return String(text) }
 	let input = Array(text.utf8)
 	var bytes: [UInt8] = []

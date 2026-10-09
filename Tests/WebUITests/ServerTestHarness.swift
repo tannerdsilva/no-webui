@@ -109,10 +109,14 @@ func withServer(
 func withRouterServer(
 	_ router: Router,
 	portBase: Int = 30000,
+	config: WebUIServerConfig? = nil,
 	_ body: (Int) async throws -> Void
 ) async throws {
 	let port = try await freePort(base: portBase)
-	let server = WebUIServer(router: router, config: WebUIServerConfig(host: "127.0.0.1", port: port))
+	var serverConfig = config ?? WebUIServerConfig()
+	serverConfig.host = "127.0.0.1"
+	serverConfig.port = port
+	let server = WebUIServer(router: router, config: serverConfig)
 	let task = Task { try await server.start() }
 	_ = try await waitForServe(port: port)
 	do {

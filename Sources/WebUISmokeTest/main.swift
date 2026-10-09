@@ -14,6 +14,7 @@ import WebUI
 import WebUIDesignSystem
 import WebUIBlocks
 import WebUIChart
+import WebUIServer
 import WebUISmokeShared
 
 // MARK: - Shared state
@@ -424,6 +425,26 @@ func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
 						Text("The chip above is composed by a lazily loaded wasm island (no round trip).")
 					}
 				}
+				// File upload card — the post with a real action ships NATIVELY
+				// (the browser's own multipart encoder, exact bytes, no JS),
+				// even though the form is a wired component: the engine's
+				// submit guard lets a real-action + method=post form with a
+				// file input through (plan w3.3, G5). the fullstack gate
+				// drives it with playwright setInputFiles and asserts the
+				// server received exactly what it uploaded.
+				WebUICard(variant: .outlined) {
+					Heading("File upload (real POST)", level: .h3)
+					Div(class: "smoke__chart-hint") {
+						Text("A file input inside a wired component submits natively; the server echoes the exact bytes back.")
+					}
+					Form(action: "/upload", method: .post, enctype: "multipart/form-data") {
+						Input(name: "file", type: .file, accept: "application/octet-stream")
+						Div(class: "smoke__actions") {
+							Input(type: .submit, value: "Upload")
+						}
+					}
+					.onSubmit { _ in [] }
+				}
 			}
 		}
 	}
@@ -706,9 +727,80 @@ extension SmokeApp {
 
 	private func handleHTTP(_ channel: NIOAsyncChannel<HTTPServerRequestPart, HTTPPart<HTTPResponseHead, ByteBuffer>>) async throws {
 		try await channel.executeThenClose { inbound, outbound in
-			for try await part in inbound {
+			// nio's upgraded http stream allows exactly ONE iterator per
+			// connection, so the head loop and the upload body read share it.
+			var iterator = inbound.makeAsyncIterator()
+			while let part = try await iterator.next() {
 				guard case .head(let head) = part else { continue }
 				guard head.method == .GET else {
+					// plan w3.3: /upload is a real POST the browser's own
+					// multipart encoder fills. read the body under the
+					// mandatory caps, parse it with the production
+					// BodyReader, and echo the exact uploaded bytes back so
+					// the fullstack gate can compare them to the fixture.
+					if head.method == .POST, head.uri == "/upload" {
+						let maxBodyBytes = 1 << 20
+						var bodyBytes: [UInt8] = []
+						var refused = false
+						if let declared = BodyReader.contentLength(head.headers),
+						   declared > maxBodyBytes {
+							refused = true
+						} else {
+							while let bodyPart = try await iterator.next() {
+								guard case .body(let buffer) = bodyPart else { break }
+								if refused { continue }
+								bodyBytes.append(contentsOf: buffer.readableBytesView)
+								if bodyBytes.count > maxBodyBytes { refused = true }
+							}
+						}
+						if refused {
+							try await respond(
+								channel: channel.channel,
+								body: "413 — request body too large: WebUIServerConfig.maxBodyBytes is \(maxBodyBytes) bytes",
+								contentType: "text/plain; charset=utf-8",
+								status: .payloadTooLarge
+							)
+							return
+						}
+						do {
+							let reader = BodyReader(maxBodyBytes: maxBodyBytes, maxMultipartParts: 64)
+							let form = try reader.multipart(
+								bodyBytes,
+								contentType: head.headers.first(name: "Content-Type") ?? ""
+							)
+							if let file = form.file("file") {
+								try await respond(
+									channel: channel.channel,
+									bytes: file.bytes,
+									contentType: file.contentType,
+									extraHeaders: [
+										("X-Upload-Field", file.field),
+										("X-Upload-Name", file.filename),
+										("X-Upload-Type", file.contentType),
+										("X-Upload-Caption", form.values.string("caption") ?? ""),
+										("X-Upload-Bytes", "\(file.size)"),
+										("X-Upload-Sha256", SHA256.hex(file.bytes)),
+									]
+								)
+								return
+							}
+							try await respond(
+								channel: channel.channel,
+								body: "no file part under 'file'",
+								contentType: "text/plain; charset=utf-8",
+								status: .badRequest
+							)
+							return
+						} catch {
+							try await respond(
+								channel: channel.channel,
+								body: "400 — malformed upload body",
+								contentType: "text/plain; charset=utf-8",
+								status: .badRequest
+							)
+							return
+						}
+					}
 					try await respond405(channel: channel.channel)
 					return
 				}
@@ -803,7 +895,7 @@ extension SmokeApp {
 		try await channel.writeAndFlush(HTTPPart<HTTPResponseHead, ByteBuffer>.end(nil)).get()
 	}
 
-	private func respond(channel: Channel, bytes: [UInt8], contentType: String, cacheControl: String = "no-store") async throws {
+	private func respond(channel: Channel, bytes: [UInt8], contentType: String, cacheControl: String = "no-store", extraHeaders: [(name: String, value: String)] = []) async throws {
 		var head = HTTPResponseHead(version: .http1_1, status: .ok)
 		head.headers.replaceOrAdd(name: "Content-Type", value: contentType)
 		head.headers.replaceOrAdd(name: "Content-Length", value: "\(bytes.count)")
@@ -813,6 +905,9 @@ extension SmokeApp {
 		head.headers.replaceOrAdd(name: "Cross-Origin-Opener-Policy", value: "same-origin")
 		head.headers.replaceOrAdd(name: "Cross-Origin-Embedder-Policy", value: "require-corp")
 		head.headers.replaceOrAdd(name: "Cache-Control", value: cacheControl)
+		for header in extraHeaders {
+			head.headers.replaceOrAdd(name: header.name, value: header.value)
+		}
 		if let nonce = Self.smokeNonce {
 			head.headers.replaceOrAdd(name: "X-WebUI-Smoke-Nonce", value: nonce)
 		}
