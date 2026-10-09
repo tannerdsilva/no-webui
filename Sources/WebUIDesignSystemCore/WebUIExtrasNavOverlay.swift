@@ -378,7 +378,14 @@ public struct WebUIToc: View {
 // MARK: WebUI Accordion
 /// stacked expandable sections.
 public struct WebUIAccordion: View {
-    public enum Variant: String, Sendable { case default_ = "", card = " accordion--card", ghost = " accordion--ghost" }
+    /// the accordion's ONE appearance axis — two discrete surface treatments
+    /// (`.accordion--card`/`.accordion--ghost`) that share no axis with any
+    /// shared vocabulary type, so they stay component-local. renamed from
+    /// `Variant`.
+    public enum Appearance: String, Sendable { case default_ = "", card = " accordion--card", ghost = " accordion--ghost" }
+
+    @available(*, deprecated, renamed: "Appearance")
+    public typealias Variant = Appearance
     public struct Item: Sendable {
         public let title: String
         public let open: Bool
@@ -388,14 +395,21 @@ public struct WebUIAccordion: View {
         }
     }
     public let items: [Item]
-    public let variant: Variant
+    public let appearance: Appearance
     /// stable container id. when set alongside `onToggle`, the accordion
     /// self-wires its item headers (dispatch on `event.targetID`).
     public let id: String?
     /// handler for item toggles; each header carries `id + "-item-<index>"`.
     public let onToggle: EventHandler?
-    public init(items: [Item], variant: Variant = .default_, id: String? = nil, onToggle: EventHandler? = nil) {
-        self.items = items; self.variant = variant; self.id = id; self.onToggle = onToggle
+    public init(items: [Item], appearance: Appearance = .default_, id: String? = nil, onToggle: EventHandler? = nil) {
+        self.items = items; self.appearance = appearance; self.id = id; self.onToggle = onToggle
+    }
+
+    /// the 1.x initializer. required (no default) so it discriminates from the
+    /// `appearance:` one; forwards so a 1.x call site keeps compiling byte-identically.
+    @available(*, deprecated, message: "use appearance: — the members are the accordion's one appearance axis")
+    public init(items: [Item], variant: Appearance, id: String? = nil, onToggle: EventHandler? = nil) {
+        self.init(items: items, appearance: variant, id: id, onToggle: onToggle)
     }
 
     public func render() -> String {
@@ -405,7 +419,7 @@ public struct WebUIAccordion: View {
         } else {
             attrs = ""
         }
-        var html = "<div class=\"accordion\(variant.rawValue)\"\(attrs)>"
+        var html = "<div class=\"accordion\(appearance.rawValue)\"\(attrs)>"
         for (index, item) in items.enumerated() {
             html += "<div class=\"accordion__item\(item.open ? " accordion__item--open" : "")\">"
             let headerID = id.map { " id=\"\(htmlEscape("\($0)-item-\(index)"))\"" } ?? ""

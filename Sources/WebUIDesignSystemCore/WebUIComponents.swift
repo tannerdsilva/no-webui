@@ -75,7 +75,12 @@ func webuiZeroPad(_ value: Int, width: Int) -> String {
 
 // MARK: - WebUI Button
 public struct WebUIButton: View {
-    public enum Variant: String, Sendable {
+    /// the button's ONE appearance axis. measured (W1.3 part 3): these seven
+    /// cases are discrete named appearances whose sheet classes CONFLICT — they
+    /// set the same `--btn-bg`/`background` properties, and no `.button--outline.button--danger`
+    /// pair exists in the sheet — so there is nothing to split along. the defect
+    /// was the name, not the shape. renamed from `Variant`.
+    public enum Appearance: String, Sendable {
         case primary   = "button--primary"
         case secondary = "button--secondary"
         case outline   = "button--outline"
@@ -85,11 +90,14 @@ public struct WebUIButton: View {
         case warning   = "button--warning"
     }
 
+    @available(*, deprecated, renamed: "Appearance")
+    public typealias Variant = Appearance
+
     @available(*, deprecated, renamed: "ControlSize")
     public typealias Size = ControlSize
 
     public let label: String
-    public let variant: Variant
+    public let appearance: Appearance
     public let size: ControlSize
     public let disabled: Bool
     public let id: String?
@@ -114,7 +122,7 @@ public struct WebUIButton: View {
 
     public init(
         _ label: String,
-        variant: Variant = .primary,
+        appearance: Appearance = .primary,
         size: ControlSize = .md,
         disabled: Bool = false,
         id: String? = nil,
@@ -123,7 +131,7 @@ public struct WebUIButton: View {
         onTap: EventHandler? = nil
     ) {
         self.label = label
-        self.variant = variant
+        self.appearance = appearance
         self.size = size
         self.disabled = disabled
         self.id = id
@@ -132,12 +140,30 @@ public struct WebUIButton: View {
         self.onTap = onTap
     }
 
+    /// the 1.x initializer. `variant:` was the fused vocabulary's spelling; the
+    /// parameter is renamed and forwards, so a 1.x call site keeps compiling
+    /// with byte-identical output. the parameter is required (no default) so it
+    /// discriminates cleanly from the `appearance:` initializer above.
+    @available(*, deprecated, message: "use appearance: — the members are the button's one appearance axis")
+    public init(
+        _ label: String,
+        variant: Appearance,
+        size: ControlSize = .md,
+        disabled: Bool = false,
+        id: String? = nil,
+        fullWidth: Bool = false,
+        loading: Bool = false,
+        onTap: EventHandler? = nil
+    ) {
+        self.init(label, appearance: variant, size: size, disabled: disabled, id: id, fullWidth: fullWidth, loading: loading, onTap: onTap)
+    }
+
     public func render() -> String {
         renderThroughBuffer()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
-        var classes = "button \(variant.rawValue) \(Self.classFor(size))"
+        var classes = "button \(appearance.rawValue) \(Self.classFor(size))"
         if fullWidth { classes += " button--full" }
         if loading { classes += " button--loading" }
 
@@ -247,6 +273,12 @@ public struct WebUIInput: View {
 /// every anatomy slot defaults to absent, so a bare `WebUICard { … }` renders
 /// exactly the markup it always has.
 public struct WebUICard: View {
+    /// the 1.x fused enum, kept only for the deprecated initializer below.
+    ///
+    /// a `Variant` that could be `.disabled`, or `.compact`, was never a variant:
+    /// it fused an elevation axis (`elevated`/`outlined`/`flat`) with five
+    /// orthogonal flags. use `elevation:` plus the typed flags.
+    @available(*, deprecated, message: "use elevation: plus the typed flags")
     public enum Variant: String, Sendable {
         case elevated = "card--elevated"
         case outlined = "card--outlined"
@@ -264,7 +296,17 @@ public struct WebUICard: View {
         case disabled    = "card--disabled"
     }
 
-    public let variant: Variant
+    /// the elevation axis. `nil` leaves the card at its BASE surface — no
+    /// elevation class at all — which is exactly what the fused 1.x flag cases
+    /// rendered, since the enum could hold only one class. keeping that surface
+    /// expressible is what lets the flags COMPOSE with elevation while every 1.x
+    /// call site still renders byte-identically.
+    public let elevation: Elevation?
+    public let interactive: Bool
+    public let horizontal: Bool
+    public let hover: Bool
+    public let compact: Bool
+    public let disabled: Bool
     public let id: String?
     public let children: [any View]
     /// small caps label above the title.
@@ -286,8 +328,23 @@ public struct WebUICard: View {
     /// full-bleed action bar under the body.
     public let actions: [any View]
 
+    /// this component's own class for a shared elevation — the sheet's bytes are
+    /// unchanged.
+    private static func classFor(_ elevation: Elevation) -> String {
+        switch elevation {
+            case .flat: return "card--flat"
+            case .outlined: return "card--outlined"
+            case .elevated: return "card--elevated"
+        }
+    }
+
     public init(
-        variant: Variant = .elevated,
+        elevation: Elevation? = .elevated,
+        interactive: Bool = false,
+        horizontal: Bool = false,
+        hover: Bool = false,
+        compact: Bool = false,
+        disabled: Bool = false,
         id: String? = nil,
         eyebrow: String? = nil,
         title: String? = nil,
@@ -300,7 +357,12 @@ public struct WebUICard: View {
         @ViewBuilder actions: () -> [any View] = { [] },
         @ViewBuilder content: () -> [any View]
     ) {
-        self.variant = variant
+        self.elevation = elevation
+        self.interactive = interactive
+        self.horizontal = horizontal
+        self.hover = hover
+        self.compact = compact
+        self.disabled = disabled
         self.id = id
         self.eyebrow = eyebrow
         self.title = title
@@ -314,12 +376,60 @@ public struct WebUICard: View {
         self.children = content()
     }
 
+    /// the 1.x initializer. it maps the fused vocabulary onto the split one and
+    /// reproduces the fused enum's EXACT bytes: a flag case rendered the base
+    /// surface with no elevation class, so it maps to `elevation: nil` + the flag.
+    /// the parameter is required (no default) so it discriminates cleanly from
+    /// the `elevation:` initializer above.
+    @available(*, deprecated, message: "use elevation: plus the typed flags")
+    public init(
+        variant: Variant,
+        id: String? = nil,
+        eyebrow: String? = nil,
+        title: String? = nil,
+        description: String? = nil,
+        headerIcon: IconName? = nil,
+        media: IconName? = nil,
+        mediaBadge: String? = nil,
+        text: String? = nil,
+        footerMeta: String? = nil,
+        @ViewBuilder actions: () -> [any View] = { [] },
+        @ViewBuilder content: () -> [any View]
+    ) {
+        var elevation: Elevation? = .elevated
+        var interactive = false, horizontal = false, hover = false, compact = false, disabled = false
+        switch variant {
+            case .elevated: break
+            case .outlined: elevation = .outlined
+            case .flat: elevation = .flat
+            case .interactive: elevation = nil; interactive = true
+            case .horizontal: elevation = nil; horizontal = true
+            case .hover: elevation = nil; hover = true
+            case .compact: elevation = nil; compact = true
+            case .disabled: elevation = nil; disabled = true
+        }
+        self.init(
+            elevation: elevation, interactive: interactive, horizontal: horizontal,
+            hover: hover, compact: compact, disabled: disabled,
+            id: id, eyebrow: eyebrow, title: title, description: description,
+            headerIcon: headerIcon, media: media, mediaBadge: mediaBadge,
+            text: text, footerMeta: footerMeta, actions: actions, content: content
+        )
+    }
+
     public func render() -> String {
         renderThroughBuffer()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
-        var attributeText = " class=\"card \(variant.rawValue)\""
+        var classes = "card"
+        if let elevation { classes += " \(Self.classFor(elevation))" }
+        if interactive { classes += " card--interactive" }
+        if horizontal { classes += " card--horizontal" }
+        if hover { classes += " card--hover" }
+        if compact { classes += " card--compact" }
+        if disabled { classes += " card--disabled" }
+        var attributeText = " class=\"\(classes)\""
         if let id { attributeText += " id=\"\(htmlEscape(id))\"" }
         buffer.beginElement("div", attributeText)
         buffer.endOpenTag()

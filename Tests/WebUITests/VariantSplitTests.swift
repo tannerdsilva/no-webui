@@ -145,4 +145,88 @@ struct VariantSplitTests {
         #expect(Tone.allCases.count == 7)
         #expect(Tone.allCases.contains(.secondary))
     }
+
+    // MARK: - W1.3 part 3 · the four fused enums, by measurement
+
+    // measured (2026-10-08): only ONE of the four is genuinely fused. Card's
+    // `Variant` held three *elevations* plus five orthogonal *flags* — a real
+    // split into `elevation:` + typed flags. Button/Tag/Accordion each carry ONE
+    // axis whose classes CONFLICT (the sheet defines no `.button--outline.button--danger`
+    // pair; they set the same `--btn-bg`/`background` properties), so a
+    // two-parameter API would type-check, pass a byte test, and lie by silently
+    // dropping one axis. they are RENAMED (`Variant` -> `Appearance`), never split.
+
+    @Test("Card's elevations and flags render their original classes")
+    func cardClassesUnchanged() {
+        #expect(render(WebUICard(elevation: .elevated) { Text("c") }).contains("class=\"card card--elevated\""))
+        #expect(render(WebUICard(elevation: .outlined) { Text("c") }).contains("class=\"card card--outlined\""))
+        #expect(render(WebUICard(elevation: .flat) { Text("c") }).contains("class=\"card card--flat\""))
+        #expect(render(WebUICard(interactive: true) { Text("c") }).contains("card--interactive"))
+        #expect(render(WebUICard(horizontal: true) { Text("c") }).contains("card--horizontal"))
+        #expect(render(WebUICard(hover: true) { Text("c") }).contains("card--hover"))
+        #expect(render(WebUICard(compact: true) { Text("c") }).contains("card--compact"))
+        #expect(render(WebUICard(disabled: true) { Text("c") }).contains("card--disabled"))
+    }
+
+    @Test("Card's 1.x spelling is byte-identical to the new one, for every case")
+    func cardOldEqualsNew() {
+        // the fused 1.x enum held exactly one class, so a flag case rendered the
+        // BASE surface with no elevation class. `elevation: nil` is the new
+        // spelling that reproduces those bytes; the flags now COMPOSE with
+        // elevation instead of excluding it — which is the whole point of the split.
+        let cases: [(String, String)] = [
+            (render(WebUICard(variant: .elevated) { Text("c") }),    render(WebUICard(elevation: .elevated) { Text("c") })),
+            (render(WebUICard(variant: .outlined) { Text("c") }),    render(WebUICard(elevation: .outlined) { Text("c") })),
+            (render(WebUICard(variant: .flat) { Text("c") }),        render(WebUICard(elevation: .flat) { Text("c") })),
+            (render(WebUICard(variant: .interactive) { Text("c") }), render(WebUICard(elevation: nil, interactive: true) { Text("c") })),
+            (render(WebUICard(variant: .horizontal) { Text("c") }),  render(WebUICard(elevation: nil, horizontal: true) { Text("c") })),
+            (render(WebUICard(variant: .hover) { Text("c") }),       render(WebUICard(elevation: nil, hover: true) { Text("c") })),
+            (render(WebUICard(variant: .compact) { Text("c") }),     render(WebUICard(elevation: nil, compact: true) { Text("c") })),
+            (render(WebUICard(variant: .disabled) { Text("c") }),    render(WebUICard(elevation: nil, disabled: true) { Text("c") })),
+        ]
+        for (legacy, current) in cases {
+            #expect(legacy == current, "legacy \(legacy) != new \(current)")
+        }
+    }
+
+    @Test("Card's flags compose with elevation — the 1.x enum could hold one class")
+    func cardFlagsCompose() {
+        #expect(render(WebUICard(elevation: .elevated, interactive: true) { Text("c") })
+            .contains("class=\"card card--elevated card--interactive\""))
+    }
+
+    @Test("Button's 1.x variant: spelling is byte-identical to appearance:, every case")
+    func buttonOldEqualsNew() {
+        let all: [WebUIButton.Appearance] = [.primary, .secondary, .outline, .ghost, .danger, .success, .warning]
+        for a in all {
+            #expect(render(WebUIButton("b", variant: a)) == render(WebUIButton("b", appearance: a)), "\(a.rawValue)")
+        }
+    }
+
+    @Test("Tag's 1.x variant: spelling is byte-identical to appearance:, every case")
+    func tagOldEqualsNew() {
+        let all: [WebUITag.Appearance] = [.solid, .outlined, .ghost, .primary, .success, .warning, .danger, .info]
+        for a in all {
+            #expect(render(WebUITag("t", variant: a)) == render(WebUITag("t", appearance: a)), "\(a.rawValue)")
+        }
+    }
+
+    @Test("Accordion's 1.x variant: spelling is byte-identical to appearance:, every case")
+    func accordionOldEqualsNew() {
+        let all: [WebUIAccordion.Appearance] = [.default_, .card, .ghost]
+        for a in all {
+            #expect(render(WebUIAccordion(items: [], variant: a)) == render(WebUIAccordion(items: [], appearance: a)), "\(a.rawValue)")
+        }
+    }
+
+    @Test("the three renamed axes keep their 1.x type name resolvable")
+    func appearanceTypealiasResolves() {
+        // a 1.x call site that spelled the TYPE keeps compiling.
+        let b: WebUIButton.Variant = .outline
+        let t: WebUITag.Variant = .ghost
+        let a: WebUIAccordion.Variant = .card
+        #expect(render(WebUIButton("b", variant: b)).contains("button--outline"))
+        #expect(render(WebUITag("t", appearance: t)).contains(" tag--ghost"))
+        #expect(render(WebUIAccordion(items: [], appearance: a)).contains("accordion--card"))
+    }
 }

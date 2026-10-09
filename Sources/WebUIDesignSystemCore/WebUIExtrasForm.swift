@@ -463,10 +463,18 @@ public struct WebUIRating: View {
 // MARK: WebUI Tag
 /// an inline tag/label.
 public struct WebUITag: View {
-    public enum Variant: String, Sendable { case solid = " tag--solid", outlined = " tag--outlined", ghost = " tag--ghost",
+    /// the tag's ONE appearance axis — eight discrete named appearances whose
+    /// sheet classes CONFLICT (they set the same `background`/`border-color`/
+    /// `color` properties), so there is nothing to split along. renamed from
+    /// `Variant`.
+    public enum Appearance: String, Sendable { case solid = " tag--solid", outlined = " tag--outlined", ghost = " tag--ghost",
         primary = " tag--primary", success = " tag--success", warning = " tag--warning", danger = " tag--danger", info = " tag--info" }
+
+    @available(*, deprecated, renamed: "Appearance")
+    public typealias Variant = Appearance
+
     public let label: String
-    public let variant: Variant
+    public let appearance: Appearance
     public let removable: Bool
     public let clickable: Bool
     public let count: Int?
@@ -476,16 +484,26 @@ public struct WebUITag: View {
     /// `id == "<id>-remove"`.
     public let id: String?
     public let onRemove: EventHandler?
-    public init(_ label: String, variant: Variant = .solid, removable: Bool = false, clickable: Bool = false,
+    public init(_ label: String, appearance: Appearance = .solid, removable: Bool = false, clickable: Bool = false,
                 count: Int? = nil, icon: IconName? = nil,
                 id: String? = nil, onRemove: EventHandler? = nil) {
-        self.label = label; self.variant = variant; self.removable = removable
+        self.label = label; self.appearance = appearance; self.removable = removable
         self.clickable = clickable; self.count = count; self.icon = icon
         self.id = id; self.onRemove = onRemove
     }
 
+    /// the 1.x initializer. required (no default) so it discriminates from the
+    /// `appearance:` one; forwards so a 1.x call site keeps compiling byte-identically.
+    @available(*, deprecated, message: "use appearance: — the members are the tag's one appearance axis")
+    public init(_ label: String, variant: Appearance, removable: Bool = false, clickable: Bool = false,
+                count: Int? = nil, icon: IconName? = nil,
+                id: String? = nil, onRemove: EventHandler? = nil) {
+        self.init(label, appearance: variant, removable: removable, clickable: clickable,
+                  count: count, icon: icon, id: id, onRemove: onRemove)
+    }
+
     public func render() -> String {
-        var classes = "tag\(variant.rawValue)"
+        var classes = "tag\(appearance.rawValue)"
         if clickable { classes += " tag--clickable" }
         let rootAttrs = id.map { controlAttributes(id: $0, event: .click, handler: onRemove) } ?? ""
         let removeID = id.map { " id=\"\(htmlEscape("\($0)-remove"))\"" } ?? ""
