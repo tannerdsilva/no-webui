@@ -174,9 +174,16 @@ public struct Route: Sendable {
 	/// a page route: the builder's view renders as a whole document, inside
 	/// the render context the server establishes (component ids, handler
 	/// registration, csp nonce).
+	///
+	/// `content` is a plain closure, not `@ViewBuilder`: this package's
+	/// `ViewBuilder` is array-shaped (its `buildExpression` wraps every view
+	/// into `[any View]`), so a builder-returned `D: View` can never be
+	/// inferred from a single view expression. a document route needs exactly
+	/// one view; callers that want builder syntax build the view first and
+	/// return it here.
 	public static func page<D: View>(
 		_ pattern: PathPattern,
-		@ViewBuilder content: @escaping @Sendable (HTTPRequest) -> D
+		content: @escaping @Sendable (HTTPRequest) -> D
 	) -> Route {
 		Route(method: .get, pattern: pattern, responder: PageResponder(content: content))
 	}
