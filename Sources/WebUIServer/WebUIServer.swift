@@ -917,8 +917,22 @@ final class Runner: Sendable {
 			// connection, so the whole request loop — the head, the bounded body
 			// read, the next request's head — shares this one.
 			var iterator = inbound.makeAsyncIterator()
+			// a streaming response runs as a lease alongside this loop: the
+			// response is written by its own task, so a pipelined request is
+			// simply deferred until the stream's response completes (http/1.1
+			// answers in order). `StreamingReadKeeper` keeps the socket's reads
+			// armed so a mid-stream disconnect cancels the lease.
+			var streaming: Task<Void, Never>? = nil
+
 			while let part = try await iterator.next() {
 				guard case .head(let head) = part else { continue }
+				// a request that arrived while a stream is still answering the
+				// previous one cannot be answered out of order (http/1.1), so
+				// defer it until the stream's response is complete.
+				if let lease = streaming {
+					await lease.value
+					streaming = nil
+				}
 				// a wire verb the typed model cannot name (trace, connect,
 				// custom): answer the old blanket 405 rather than routing a
 				// verb the model has no case for.
@@ -977,7 +991,7 @@ final class Runner: Sendable {
 						)
 						continue
 					}
-					try await routePage(
+					streaming = try await routePage(
 						channel: channel.channel,
 						method: method,
 						path: path,
@@ -1059,7 +1073,7 @@ final class Runner: Sendable {
 					// the ONLY path into the page. a path no route matches is the
 					// router's 404; a matched pattern with an unmatched method is
 					// its 405 with an Allow header.
-					try await routePage(
+					streaming = try await routePage(
 						channel: channel.channel,
 						method: method,
 						path: path,
@@ -1068,6 +1082,7 @@ final class Runner: Sendable {
 					)
 				}
 			}
+			if let lease = streaming { await lease.value }
 		}
 	}
 
@@ -1091,7 +1106,7 @@ final class Runner: Sendable {
 		queryText: Substring,
 		headers: HTTPHeaders,
 		body: [UInt8] = []
-	) async throws {
+	) async throws -> Task<Void, Never>? {
 		let token = RenderToken.mint() ?? RenderToken("")
 		if token.value.isEmpty {
 			logger.error("WebUIServer: entropy unavailable — this render's events cannot be token-bound")
@@ -1147,7 +1162,7 @@ final class Runner: Sendable {
 						status: .badRequest
 					)
 				}
-				return
+				return nil
 			}
 		}
 
@@ -1164,14 +1179,22 @@ final class Runner: Sendable {
 		) {
 			await pageRouter.respond(to: request)
 		}
-		try await respond(channel: channel, response: response)
+		return try await respond(channel: channel, response: response)
 	}
 
 	/// encode a typed ``HTTPResponse`` onto the wire — status, headers,
 	/// cookies, and one body shape — through the same byte responder the
 	/// cached assets use, so the security-header block and the cache policy
 	/// stay in one place.
-	private func respond(channel: Channel, response: HTTPResponse) async throws {
+	///
+	/// a `Body.stream` response is not awaited here: it returns a lease the
+	/// connection's request loop defers subsequent requests to while the
+	/// stream runs (see `handleHTTP` and `respondStream`). every other body
+	/// shape returns nil.
+	private func respond(
+		channel: Channel,
+		response: HTTPResponse
+	) async throws -> Task<Void, Never>? {
 		let contentType: String
 		let status: HTTPResponseStatus
 		var extraHeaders: [(name: String, value: String)] = []
@@ -1194,6 +1217,26 @@ final class Runner: Sendable {
 			contentType = bytesContentType
 			status = HTTPResponseStatus(statusCode: response.status.code)
 			body = channel.allocator.buffer(bytes: bytes)
+		case .stream(let chunks, let streamContentType):
+			// a streaming body takes a different writer: chunked framing, a
+			// flush per chunk, and the producer cancelled on disconnect. the
+			// byte responder below would impose a content-length, which a
+			// stream cannot honor.
+			//
+			// the stream runs as a background lease: the connection's request
+			// loop must keep reading while it is in flight or a mid-stream
+			// disconnect would never surface (nio pauses the socket's reads the
+			// moment the loop stops demanding), so this hands the lease back
+			// instead of awaiting the stream's end.
+			let lease = Task<Void, Never> { _ = try? await respondStream(
+				channel: channel,
+				chunks: chunks,
+				contentType: streamContentType,
+				status: HTTPResponseStatus(statusCode: response.status.code),
+				extraHeaders: response.headers,
+				cookies: response.cookies
+			) }
+			return lease
 		case .empty:
 			contentType = "text/plain; charset=utf-8"
 			status = HTTPResponseStatus(statusCode: response.status.code)
@@ -1220,9 +1263,103 @@ final class Runner: Sendable {
 			contentType: contentType,
 			status: status,
 			cacheControl: "no-store",
-			extraHeaders: extraHeaders
-		)
+		extraHeaders: extraHeaders
+	)
+	return nil
+}
+
+	/// stream a `Body.stream` response: `Transfer-Encoding: chunked`, one flush
+	/// per chunk, and the producing stream cancelled the moment the connection
+	/// goes away.
+	///
+	/// the cancellation wiring mirrors `WebUIServerService.run()`. each stream
+	/// gets one task that owns the iteration, and every signal that says "the
+	/// client is gone" — the channel closing, or the outer request task being
+	/// cancelled — cancels that task. the cancellation propagates into the chunk
+	/// stream's storage (sse's async cancellation contract: a cancelled consumer
+	/// ends the `for await` and fires the producer's termination hook), which
+	/// lets a producer that never finishes be wound down on disconnect instead
+	/// of leaking. the registration order is safe by construction: a channel
+	/// that already closed has a complete close future, whose callback fires
+	/// immediately and cancels the task before its first iteration can write.
+	///
+	/// the lease runs detached from the request loop (see `respond`); the loop
+	/// defers pipelined requests to it, and `StreamingReadKeeper` keeps the
+	/// socket's reads armed past nio's response-pending gate, so a mid-stream
+	/// disconnect shows up as an eof that completes the close future and
+	/// cancels the iterate task. no timer or polling is involved.
+	///
+	/// there is no `defer` here — `await` is forbidden in `defer` — so the
+	/// terminal chunk is written on the success path and the error path simply
+	/// lets the closed channel swallow whatever could not be written.
+private func respondStream(
+	channel: Channel,
+	chunks: AsyncStream<[UInt8]>,
+	contentType: String,
+	status: HTTPResponseStatus,
+	extraHeaders: [String: String],
+	cookies: [WebUISharedCore.HTTPCookie]
+) async throws {
+	var head = HTTPResponseHead(version: .http1_1, status: status)
+	// chunked framing instead of a content-length: nio's http encoder frames
+	// each flushed body part once this header is present.
+	head.headers.replaceOrAdd(name: "Transfer-Encoding", value: "chunked")
+	head.headers.replaceOrAdd(name: "Content-Type", value: contentType)
+	// security headers — parity with the plain-http responder.
+	head.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
+	head.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
+	head.headers.replaceOrAdd(name: "Service-Worker-Allowed", value: "/")
+	head.headers.replaceOrAdd(name: "Cache-Control", value: "no-store")
+	for (name, value) in extraHeaders {
+		head.headers.replaceOrAdd(name: name, value: value)
 	}
+	for cookie in cookies {
+		if let header = try? cookie.setCookieHeaderValue() {
+			head.headers.replaceOrAdd(name: "Set-Cookie", value: header)
+		}
+	}
+	// the head goes out before the first chunk, so the client establishes
+	// the stream on the headers instead of waiting for the first event.
+	try await channel.writeAndFlush(HTTPPart<HTTPResponseHead, ByteBuffer>.head(head)).get()
+
+	// a mid-stream disconnect is only observable if the socket keeps
+	// reading: nio's http pipeline swallows `read()` while a response is in
+	// flight, so the client's fin would otherwise sit unseen until the
+	// connection is reused or reaped. the keeper below re-arms the socket's
+	// reads from the head of the pipeline — past that gate — on demand.
+	try await channel.pipeline.addHandler(StreamingReadKeeper(), position: .first).get()
+	channel.pipeline.fireUserInboundEventTriggered(KeepReading())
+
+	// the iterate task owns the chunk consumption. it is cancelled from the
+	// channel's close future and from outer cancellation; both paths end the
+	// `for await`, which lets the producer's termination hook fire.
+	let iteration = Task { () -> Void in
+		do {
+			for await chunk in chunks {
+				try Task.checkCancellation()
+				var buffer = channel.allocator.buffer(capacity: chunk.count)
+				buffer.writeBytes(chunk)
+				try await channel.writeAndFlush(HTTPPart<HTTPResponseHead, ByteBuffer>.body(buffer)).get()
+				// keep the read armed across read cycles: the eof observed
+				// here is what cancels the producing stream.
+				channel.pipeline.fireUserInboundEventTriggered(KeepReading())
+			}
+		} catch {
+			// the channel died or the task was cancelled mid-write: every
+			// byte after the failure is lost, so there is no terminator to
+			// write and nothing to unwind.
+		}
+	}
+	channel.closeFuture.whenComplete { _ in iteration.cancel() }
+	try await withTaskCancellationHandler {
+		await iteration.value
+	} onCancel: {
+		iteration.cancel()
+	}
+	// the stream ended on its own: close the chunked framing with the
+	// zero-length terminal chunk.
+	try await channel.writeAndFlush(HTTPPart<HTTPResponseHead, ByteBuffer>.end(nil)).get()
+}
 
 	private func respond(
 		channel: Channel,
@@ -1354,6 +1491,29 @@ private func hexValue(_ byte: UInt8) -> UInt8? {
 }
 
 // MARK: - pipeline helpers
+
+/// a marker fired through the pipeline to ask `StreamingReadKeeper` to
+/// re-arm the socket's read interest.
+private struct KeepReading: Hashable {}
+
+/// sits at the head of the pipeline and starts a socket read on demand.
+///
+/// nio's http pipeline deliberately swallows `read()` while a response is in
+/// flight (`HTTPServerPipelineHandler` parks it until the response ends), so
+/// a client that vanishes mid-stream would otherwise never be noticed. a
+/// read begun from this handler's position reaches the socket without
+/// crossing that gate, so the peer's fin is seen as an eof, the close future
+/// completes, and the producing stream is cancelled (see `respondStream`).
+final class StreamingReadKeeper: ChannelInboundHandler {
+	typealias InboundIn = Never
+	func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
+		if event is KeepReading {
+			context.read()
+		} else {
+			context.fireUserInboundEventTriggered(event)
+		}
+	}
+}
 
 /// close the channel when the read-idle window elapses (guards plain http
 /// keep-alive, slow readers, and websockets alike).

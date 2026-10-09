@@ -19,6 +19,7 @@ private extension HTTPResponse {
 		case .bytes(let bytes, _): String(decoding: bytes, as: UTF8.self)
 		case .empty: ""
 		case .redirect(let to, _): "redirect:\(to)"
+		case .stream(_, _): "<stream>"
 		}
 	}
 }

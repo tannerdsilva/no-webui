@@ -59,6 +59,13 @@ public struct HTTPResponse: Sendable {
 		case empty
 		/// `Location` + status; defaults to 303 see-other.
 		case redirect(to: String, status: HTTPStatus = .redirect)
-		// case stream(HTTPStream)  // w3.5
+		/// a chunked body: the server writes `Transfer-Encoding: chunked`, flushes
+		/// per chunk, and cancels the producing stream when the connection closes.
+		/// `contentType` mirrors the `Content-Type` header so the wire type rides
+		/// with the body (the header is still applied on top).
+		///
+		/// the chunk carrier is `WebUIServer.HTTPStream`; the shared leaf cannot
+		/// name that type, so it carries the stream's two parts directly.
+		case stream(AsyncStream<[UInt8]>, contentType: String)
 	}
 }
