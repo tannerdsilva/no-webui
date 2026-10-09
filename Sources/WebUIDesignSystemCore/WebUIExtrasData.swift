@@ -520,11 +520,13 @@ public struct WebUIQr: View {
 // MARK: WebUI Pay Card
 /// a payment card preview.
 public struct WebUIPayCard: View {
-    public enum Brand: String, Sendable { case visa, mc, amex }
+    @available(*, deprecated, renamed: "WebUIDesignSystemCore.Brand")
+    public typealias Brand = WebUIDesignSystemCore.Brand
+
     public let number: String
     public let holder: String
-    public let brand: Brand
-    public init(number: String, holder: String, brand: Brand = .visa) { self.number = number; self.holder = holder; self.brand = brand }
+    public let brand: WebUIDesignSystemCore.Brand
+    public init(number: String, holder: String, brand: WebUIDesignSystemCore.Brand = .visa) { self.number = number; self.holder = holder; self.brand = brand }
 
     public func render() -> String {
         var html = "<div class=\"paycard\">"

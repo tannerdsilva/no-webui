@@ -586,11 +586,14 @@ public struct WebUIBottomSheet: View {
 // MARK: WebUI Drawer
 /// edge-anchored sliding surface.
 public struct WebUIDrawer: View {
-    public enum Edge: String, Sendable { case left = " drawer--left", right = " drawer--right", top = " drawer--top", bottom = " drawer--bottom" }
+    @available(*, deprecated, renamed: "DrawerEdge")
+    public typealias Edge = DrawerEdge
+
     @available(*, deprecated, renamed: "ControlSize")
     public typealias Size = ControlSize
+
     public let title: String?
-    public let edge: Edge
+    public let edge: DrawerEdge
     public let size: ControlSize
     public let children: [any View]
     public let footer: [any View]
@@ -598,6 +601,16 @@ public struct WebUIDrawer: View {
     /// self-wires (`targetId == "<id>-close"`).
     public let id: String?
     public let onDismiss: EventHandler?
+    /// this component's own class for a shared edge — same four values, same bytes.
+    private static func classFor(_ edge: DrawerEdge) -> String {
+        switch edge {
+            case .left: return " drawer--left"
+            case .right: return " drawer--right"
+            case .top: return " drawer--top"
+            case .bottom: return " drawer--bottom"
+        }
+    }
+
     /// this component's own class for a shared size — the sheet's bytes are
     /// unchanged for sm/md/lg; xl forwards the same pattern (a theme can honor it).
     private static func classFor(_ size: ControlSize) -> String {
@@ -609,7 +622,7 @@ public struct WebUIDrawer: View {
         }
     }
 
-    public init(title: String? = nil, edge: Edge = .right, size: ControlSize = .md, id: String? = nil, onDismiss: EventHandler? = nil,
+    public init(title: String? = nil, edge: DrawerEdge = .right, size: ControlSize = .md, id: String? = nil, onDismiss: EventHandler? = nil,
                 @ViewBuilder content: () -> [any View], @ViewBuilder footer: () -> [any View] = { [] }) {
         self.title = title; self.edge = edge; self.size = size; self.id = id; self.onDismiss = onDismiss
         self.children = content(); self.footer = footer()
@@ -622,7 +635,7 @@ public struct WebUIDrawer: View {
         } else {
             attrs = ""
         }
-        var html = "<div class=\"drawer\(edge.rawValue)\(Self.classFor(size))\"\(attrs) role=\"dialog\" aria-modal=\"true\">"
+        var html = "<div class=\"drawer\(Self.classFor(edge))\(Self.classFor(size))\"\(attrs) role=\"dialog\" aria-modal=\"true\">"
         html += "<div class=\"drawer__panel\">"
         if let title {
             let closeID = id.map { " id=\"\(htmlEscape("\($0)-close"))\"" } ?? ""
@@ -644,18 +657,34 @@ public struct WebUIDrawer: View {
 // MARK: WebUI Popover
 /// an anchored floating popover with arrow.
 public struct WebUIPopover: View {
-    public enum Side: String, Sendable { case top = " popover--top", bottom = " popover--bottom", left = " popover--left", right = " popover--right" }
+    @available(*, deprecated, renamed: "Placement")
+    public typealias Side = Placement
+
     public let title: String?
     public let text: String?
-    public let side: Side
+    public let side: Placement
     public let children: [any View]
-    public init(title: String? = nil, text: String? = nil, side: Side = .bottom,
+
+    /// this component's own class for a shared placement — the four 1.x anchors
+    /// keep their bytes; `leading`/`trailing` forward the pattern.
+    private static func classFor(_ side: Placement) -> String {
+        switch side {
+            case .top: return " popover--top"
+            case .bottom: return " popover--bottom"
+            case .left: return " popover--left"
+            case .right: return " popover--right"
+            case .leading: return " popover--leading"
+            case .trailing: return " popover--trailing"
+        }
+    }
+
+    public init(title: String? = nil, text: String? = nil, side: Placement = .bottom,
                 @ViewBuilder content: () -> [any View] = { [] }) {
         self.title = title; self.text = text; self.side = side; self.children = content()
     }
 
     public func render() -> String {
-        var html = "<div class=\"popover\(side.rawValue)\">"
+        var html = "<div class=\"popover\(Self.classFor(side))\">"
         html += "<span class=\"popover__arrow\"></span>"
         if let title { html += "<div class=\"popover__title\">\(htmlEscape(title))</div>" }
         if let text { html += "<div class=\"popover__text\">\(htmlEscape(text))</div>" }

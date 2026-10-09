@@ -389,24 +389,31 @@ public struct WebUIComposer: View {
 public struct WebUIPanel: View {
 
     /// which side carries the divider against an adjacent pane.
-    public enum Edge: String, Sendable {
-        case none
-        case leading  = "panel panel--leading"
-        case trailing = "panel panel--trailing"
-    }
+    @available(*, deprecated, renamed: "PanelEdge")
+    public typealias Edge = PanelEdge
 
     public let title: String
     public let subtitle: String?
     public let actions: [any View]
     public let content: [any View]
     public let id: String?
-    public let edge: Edge
+    public let edge: PanelEdge
+
+    /// this component's own class for a shared panel edge — the 1.x raw values
+    /// carried the base class too, so the map does; `none` is the empty string.
+    private static func classFor(_ edge: PanelEdge) -> String {
+        switch edge {
+            case .none: return ""
+            case .leading: return "panel panel--leading"
+            case .trailing: return "panel panel--trailing"
+        }
+    }
 
     public init(
         title: String,
         subtitle: String? = nil,
         id: String? = nil,
-        edge: Edge = .leading,
+        edge: PanelEdge = .leading,
         actions: [any View] = [],
         @ViewBuilder content: () -> [any View]
     ) {
@@ -419,7 +426,7 @@ public struct WebUIPanel: View {
     }
 
     public func render() -> String {
-        var html = "<section class=\"\(edge.rawValue)\""
+        var html = "<section class=\"\(Self.classFor(edge))\""
         if let id { html += " id=\"\(htmlEscape(id))\"" }
         html += ">"
         html += "<header class=\"panel__header\">"

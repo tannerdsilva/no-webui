@@ -586,16 +586,30 @@ public struct WebUIChipInput: View {
 // MARK: WebUI Card Input
 /// a payment-card input with brand detection and preview.
 public struct WebUICardInput: View {
-    public enum Brand: String, Sendable { case visa = " card-input__brand-icon--visa", mc = " card-input__brand-icon--mc", amex = " card-input__brand-icon--amex" }
+    @available(*, deprecated, renamed: "WebUIDesignSystemCore.Brand")
+    public typealias Brand = WebUIDesignSystemCore.Brand
+
     public let number: String
     public let holder: String
-    public let brand: Brand?
-    public init(number: String, holder: String, brand: Brand? = nil) { self.number = number; self.holder = holder; self.brand = brand }
+    public let brand: WebUIDesignSystemCore.Brand?
+
+    /// this component's own class for a shared brand — the 1.x raw values were
+    /// class fragments, so the map carries them; `discover` forwards the pattern.
+    private static func classFor(_ brand: WebUIDesignSystemCore.Brand) -> String {
+        switch brand {
+            case .visa: return " card-input__brand-icon--visa"
+            case .mc: return " card-input__brand-icon--mc"
+            case .amex: return " card-input__brand-icon--amex"
+            case .discover: return " card-input__brand-icon--discover"
+        }
+    }
+
+    public init(number: String, holder: String, brand: WebUIDesignSystemCore.Brand? = nil) { self.number = number; self.holder = holder; self.brand = brand }
 
     public func render() -> String {
         var html = "<div class=\"card-input\">"
         html += "<div class=\"card-input__row\"><div class=\"card-input__preview\"><span class=\"card-input__chip\"></span><span class=\"card-input__number\">\(htmlEscape(number))</span><span class=\"card-input__holder\">\(htmlEscape(holder))</span>"
-        if let brand { html += "<span class=\"card-input__brand-icon\(brand.rawValue)\"></span>" }
+        if let brand { html += "<span class=\"card-input__brand-icon\(Self.classFor(brand))\"></span>" }
         html += "</div></div>"
         html += "<div class=\"card-input__row\"><div class=\"card-input__field\"><label>Card number</label><input class=\"input\" value=\"\(htmlEscape(number))\"></div></div>"
         html += "<div class=\"card-input__row\"><div class=\"card-input__field\"><label>Card holder</label><input class=\"input\" value=\"\(htmlEscape(holder))\"></div></div>"

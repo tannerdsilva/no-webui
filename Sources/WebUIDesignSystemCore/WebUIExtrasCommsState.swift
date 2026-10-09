@@ -758,10 +758,16 @@ public struct WebUIAttachment: View, Dismissible {
 /// `--own` pair for the same idea; this component uses the side pair and
 /// `WebUIMessage` uses the owned pair inside a thread.
 public struct WebUIChatBubble: View {
-    public enum Side: String, Sendable {
+    /// the bubble's own axis, named for what it is: `Side` meant two unrelated
+    /// things across the framework (this, and a popover's anchor), so neither
+    /// keeps the bare name.
+    public enum BubbleSide: String, Sendable {
         case sent = "chat__bubble--sent"
         case received = "chat__bubble--received"
     }
+
+    @available(*, deprecated, renamed: "BubbleSide")
+    public typealias Side = BubbleSide
 
     /// delivery state of an outgoing bubble.
     public enum Receipt: String, Sendable {
@@ -782,7 +788,7 @@ public struct WebUIChatBubble: View {
     }
 
     public let text: String
-    public let side: Side
+    public let side: BubbleSide
     /// timestamp shown at the bubble's trailing edge.
     public let time: String?
     /// only meaningful for `.sent`; renders a glyph with an accessible name.
@@ -792,7 +798,7 @@ public struct WebUIChatBubble: View {
 
     public init(
         _ text: String,
-        side: Side = .received,
+        side: BubbleSide = .received,
         time: String? = nil,
         receipt: Receipt? = nil,
         reactions: [Reaction] = [],
