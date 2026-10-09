@@ -1,3 +1,5 @@
+import WebUICore
+
 // Vocabulary.swift — the framework's semantic slots, declared once.
 //
 // before this file every component carried its own nested enums for the same
@@ -204,9 +206,12 @@ public enum Brand: String, Sendable, CaseIterable {
 }
 
 /// the document's writing direction.
-public enum Directionality: String, Sendable, CaseIterable {
-    case ltr, rtl
-}
+///
+/// declared in `WebUICore` (see `Markup.swift`) because `HTMLDocument` needs it
+/// and the core-facing module cannot see this one. re-exported here so the
+/// vocabulary still names every slot in one place, and so `Directionality`
+/// keeps reading the same from either import.
+public typealias Directionality = WebUICore.Directionality
 
 // MARK: - the stringly-typed slots, typed (W1.6)
 

@@ -46,26 +46,6 @@ public struct Text: View {
     }
 }
 
-// MARK: - Raw
-public struct Raw: View {
-    public let content: String
-    public init(_ content: String) {
-        self.content = content
-    }
-
-    public func render() -> String {
-        content
-    }
-
-    /// the buffer route appends the caller's bytes verbatim — `Raw`'s contract —
-    /// and `render()` stays direct for the same reason as `Text`: no element is
-    /// framed, so a round trip would buy nothing. a modifier wrapping `Raw`
-    /// settles against this fragment (its own scan, never the page).
-    public func render(into buffer: inout HTMLBuffer) {
-        buffer.append(content)
-    }
-}
-
 // MARK: - Div
 public struct Div: View {
     public let id: String?

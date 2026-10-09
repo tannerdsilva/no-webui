@@ -6,12 +6,18 @@ public struct WebUIDocument: View {
     public let title: String
     public let body: String
     public let scripts: String
+    /// Raw `<head>` markup, verbatim — the escape hatch; prefer ``headContent``.
     public let head: String
+    /// typed head content (metas, open-graph, JSON-LD, links, scripts) — carried
+    /// to `HTMLDocument`, which renders it with the render nonce.
+    public let headContent: HeadContent?
     public let bodyAttributes: String
     public let devMode: Bool
     public let lang: String
     /// the document's base direction (`ltr` / `rtl`); nil omits the attribute.
     public let dir: String?
+    /// the typed base direction; wins over ``dir`` when both are set.
+    public let direction: Directionality?
     public let includeRuntime: Bool
     public let runtimeConfig: RuntimeConfig?
     public let contentSecurityPolicy: String?
@@ -42,11 +48,13 @@ public struct WebUIDocument: View {
         body: String,
         scripts: String = "",
         head: String = "",
+        headContent: HeadContent? = nil,
         bodyAttributes: String = "",
         clientMode: ClientBoot? = nil,
         devMode: Bool = false,
         lang: String = "en",
         dir: String? = nil,
+        direction: Directionality? = nil,
         includeRuntime: Bool = true,
         runtimeConfig: RuntimeConfig? = nil,
         contentSecurityPolicy: String? = nil,
@@ -61,11 +69,13 @@ public struct WebUIDocument: View {
         self.body = body
         self.scripts = scripts
         self.head = head
+        self.headContent = headContent
         self.bodyAttributes = bodyAttributes
         self.clientMode = clientMode
         self.devMode = devMode
         self.lang = lang
         self.dir = dir
+        self.direction = direction
         self.includeRuntime = includeRuntime
         self.runtimeConfig = runtimeConfig
         self.contentSecurityPolicy = contentSecurityPolicy
@@ -110,11 +120,13 @@ public struct WebUIDocument: View {
             rawStyles: rawStyles,
             scripts: scripts,
             head: head,
+            headContent: headContent,
             bodyAttributes: bodyAttributes,
             clientMode: clientMode,
             devMode: devMode,
             lang: lang,
             dir: dir,
+            direction: direction,
             includeRuntime: includeRuntime,
             runtimeConfig: runtimeConfig,
             contentSecurityPolicy: contentSecurityPolicy,

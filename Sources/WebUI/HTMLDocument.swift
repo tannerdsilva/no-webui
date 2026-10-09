@@ -41,7 +41,17 @@ public struct HTMLDocument: Sendable {
     public let styles: CSSStylesheet
     public let rawStyles: [String]
     public let scripts: String
+    /// Raw `<head>` markup, verbatim — the escape hatch.
+    ///
+    /// prefer ``headContent``: it escapes what it can and makes what it cannot an
+    /// explicit `UnsafeMarkup`. this stays for 1.x call sites and for the rare
+    /// host that genuinely needs a tag the builder does not model.
     public let head: String
+    /// Typed head content: metas, open-graph, JSON-LD, links and scripts.
+    ///
+    /// rendered after ``head`` and before the client-mode boot markup, and it
+    /// carries the render nonce into every script it emits.
+    public let headContent: HeadContent?
     public let bodyAttributes: String
     /// Attributes for the `<html>` element, verbatim — the mirror of ``bodyAttributes``.
     ///
@@ -60,6 +70,8 @@ public struct HTMLDocument: Sendable {
     /// the document's base direction (`ltr` / `rtl`). nil omits the
     /// attribute entirely, so the default document stays byte-identical.
     public let dir: String?
+    /// the typed base direction. wins over ``dir`` when both are set.
+    public let direction: Directionality?
     public let includeRuntime: Bool
     /// Emit a pre-paint theme prelude: a one-line inline script that applies the stored
     /// scheme and mode to `<html>` before the first paint.
@@ -139,6 +151,9 @@ public struct HTMLDocument: Sendable {
     /// ` dir="rtl"` when a base direction is set. only `ltr`/`rtl` are ever
     /// emitted: anything else is dropped rather than written into the page.
     private var dirAttribute: String {
+        // the typed slot wins. the raw string stays for 1.x call sites and is
+        // still validated, so an unusable value is dropped rather than written.
+        if let direction { return " dir=\"\(direction.rawValue)\"" }
         guard let dir else { return "" }
         let value = dir.lowercased()
         guard value == "ltr" || value == "rtl" else { return "" }
@@ -172,12 +187,14 @@ public struct HTMLDocument: Sendable {
         rawStyles: [String] = [],
         scripts: String = "",
         head: String = "",
+        headContent: HeadContent? = nil,
         bodyAttributes: String = "",
         htmlAttributes: String = "",
         clientMode: ClientBoot? = nil,
         devMode: Bool = false,
         lang: String = "en",
         dir: String? = nil,
+        direction: Directionality? = nil,
         includeRuntime: Bool = true,
         themePrelude: Bool = true,
         runtimeConfig: RuntimeConfig? = nil,
@@ -195,12 +212,14 @@ public struct HTMLDocument: Sendable {
         self.rawStyles = rawStyles
         self.scripts = scripts
         self.head = head
+        self.headContent = headContent
         self.bodyAttributes = bodyAttributes
         self.htmlAttributes = htmlAttributes
         self.clientMode = clientMode
         self.devMode = devMode
         self.lang = lang
         self.dir = dir
+        self.direction = direction
         self.includeRuntime = includeRuntime
         self.themePrelude = themePrelude
         self.runtimeConfig = runtimeConfig
@@ -273,7 +292,10 @@ public struct HTMLDocument: Sendable {
         let cspValue = effectiveCSP(nonce: nonce, clientMode: boot)
         // the boot head (webui-config meta + engine/chamber scripts) is
         // appended to the caller's head slot when a runtime is present.
-        let resolvedHead = head + (boot.map { "\n" + $0.headMarkup() } ?? "")
+        // the typed head sits after the raw one and before the boot markup: it
+        // needs the render nonce, which does not exist until now.
+        let typedHead = headContent.map { $0.render(nonce: nonce) } ?? ""
+        let resolvedHead = head + typedHead + (boot.map { "\n" + $0.headMarkup() } ?? "")
 
         if devMode {
             styleTag = "<link rel=\"stylesheet\" href=\"/ui/styles.css\">"
@@ -341,7 +363,7 @@ public struct HTMLDocument: Sendable {
         // warns unconditionally rather than only in debug builds.
         for diagnostic in Self.diagnostics(
             body: body,
-            head: head,
+            head: head + typedHead,
             stylesheetURL: stylesheetURL,
             inlinedComponentStyles: inlinedComponentStyles
         ) {
