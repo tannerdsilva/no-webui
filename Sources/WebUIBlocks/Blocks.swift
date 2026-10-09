@@ -69,7 +69,7 @@ public enum WebUIBlocks {
  dir: dir,
  includeRuntime: true,
  checkClasses: true
-).render()
+).renderThroughBuffer()
 	}
 
 	/// The block's page body (no document chrome).
@@ -108,11 +108,11 @@ public enum WebUIBlocks {
 				}
 			}
 			.padding(24)
-			.render(),
+			.renderThroughBuffer(),
  dir: dir,
  includeRuntime: true,
  checkClasses: true
-).render()
+).renderThroughBuffer()
 	}
 
 	// MARK: Shared chrome
@@ -201,7 +201,7 @@ public enum WebUIBlocks {
 			}
 		}
 		.padding(24)
-		.render()
+		.renderThroughBuffer()
 	}
 
 	// MARK: Auth
@@ -243,7 +243,7 @@ public enum WebUIBlocks {
 )
 		}
 		.padding(24)
-		.render()
+		.renderThroughBuffer()
 	}
 
 	private static func signupBody() -> String {
@@ -275,7 +275,7 @@ public enum WebUIBlocks {
 )
 		}
 		.padding(24)
-		.render()
+		.renderThroughBuffer()
 	}
 
 // MARK: Patterns (p7 long tail)
@@ -354,7 +354,7 @@ public enum WebUIBlocks {
 			}
 		}
 		.padding(24)
-		.render()
+		.renderThroughBuffer()
 	}
 
 	// MARK: Sidebar family
@@ -413,8 +413,8 @@ public enum WebUIBlocks {
 				}
 			}
 			.padding(16)
-			.render()
+			.renderThroughBuffer()
 		}
-		return shell.render()
+		return shell.renderThroughBuffer()
 	}
 }

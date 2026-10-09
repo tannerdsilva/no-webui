@@ -8,19 +8,19 @@ import WebUIDesignSystem
 @Test("Text renders escaped HTML")
 func textRendersEscaped() {
     let view = Text("<script>alert('xss')</script>")
-    #expect(view.render() == "&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;")
+    #expect(view.renderThroughBuffer() == "&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;")
 }
 
 @Test("Raw renders unescaped HTML")
 func rawRendersUnescaped() {
     let view = Raw("<strong>Bold</strong>")
-    #expect(view.render() == "<strong>Bold</strong>")
+    #expect(view.renderThroughBuffer() == "<strong>Bold</strong>")
 }
 
 @Test("EmptyView renders nothing")
 func emptyViewRendersNothing() {
     let view = EmptyView()
-    #expect(view.render() == "")
+    #expect(view.renderThroughBuffer() == "")
 }
 
 // MARK: - Primitives Tests
@@ -31,7 +31,7 @@ func divRendersWithClass() {
         Text("Hello")
         Text("World")
     }
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("<div class=\"container\">"))
     #expect(html.contains("Hello"))
     #expect(html.contains("World"))
@@ -41,7 +41,7 @@ func divRendersWithClass() {
 @Test("Button renders with type attribute")
 func buttonRendersWithType() {
     let view = Button("Click me")
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("type=\"submit\""))
     #expect(!html.contains("class="))
 }
@@ -49,7 +49,7 @@ func buttonRendersWithType() {
 @Test("Button renders with custom id and class")
 func buttonRendersWithCustomAttributes() {
     let view = Button("Send", id: "send-btn", class: "btn-primary")
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("id=\"send-btn\""))
     #expect(html.contains("class=\"btn-primary\""))
 }
@@ -57,28 +57,28 @@ func buttonRendersWithCustomAttributes() {
 @Test("Button renders disabled state")
 func buttonRendersDisabled() {
     let view = Button("Delete", disabled: true)
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("disabled"))
 }
 
 @Test("Button renders with button type")
 func buttonRendersButtonType() {
     let view = Button("Cancel", type: .button)
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("type=\"button\""))
 }
 
 @Test("Button renders with name attribute")
 func buttonRendersWithName() {
     let view = Button("Submit", name: "action")
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("name=\"action\""))
 }
 
 @Test("Input renders with placeholder and type")
 func inputRendersWithAttributes() {
     let view = Input(id: "email", placeholder: "Enter email", type: .email)
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("id=\"email\""))
     #expect(html.contains("placeholder=\"Enter email\""))
     #expect(html.contains("type=\"email\""))
@@ -87,14 +87,14 @@ func inputRendersWithAttributes() {
 @Test("Input renders with name attribute")
 func inputRendersWithName() {
     let view = Input(name: "username")
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("name=\"username\""))
 }
 
 @Test("Input renders disabled and required")
 func inputRendersDisabledRequired() {
     let view = Input(disabled: true, required: true)
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("disabled"))
     #expect(html.contains("required"))
 }
@@ -102,7 +102,7 @@ func inputRendersDisabledRequired() {
 @Test("Input escapes attribute keys to prevent XSS")
 func inputEscapesAttributeKeys() {
     let view = Input(attributes: [("\" onclick=\"alert(1)", "x")])
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     // the key should be escaped, preventing attribute injection
     #expect(html.contains("&quot;"))
     // the key value is escaped, so onclick is inside an attribute value, not a new attribute
@@ -112,7 +112,7 @@ func inputEscapesAttributeKeys() {
 @Test("Link renders with href")
 func linkRendersWithHref() {
     let view = Link("Home", href: "/")
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("href=\"/\""))
     #expect(html.contains("Home"))
 }
@@ -120,7 +120,7 @@ func linkRendersWithHref() {
 @Test("Link renders with target and rel")
 func linkRendersWithTargetRel() {
     let view = Link("External", href: "https://example.com", target: .blank, rel: [.noopener])
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("target=\"_blank\""))
     #expect(html.contains("rel=\"noopener\""))
 }
@@ -129,14 +129,14 @@ func linkRendersWithTargetRel() {
 func headingRendersCorrectLevel() {
     let h1 = Heading("Title", level: .h1)
     let h3 = Heading("Subtitle", level: .h3)
-    #expect(h1.render().hasPrefix("<h1"))
-    #expect(h3.render().hasPrefix("<h3"))
+    #expect(h1.renderThroughBuffer().hasPrefix("<h1"))
+    #expect(h3.renderThroughBuffer().hasPrefix("<h3"))
 }
 
 @Test("Image renders with src and alt")
 func imageRendersWithAttributes() {
     let view = Image(src: "/logo.svg", alt: "Logo")
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("src=\"/logo.svg\""))
     #expect(html.contains("alt=\"Logo\""))
 }
@@ -144,7 +144,7 @@ func imageRendersWithAttributes() {
 @Test("Image renders with loading and decoding")
 func imageRendersWithLoadingDecoding() {
     let view = Image(src: "/photo.jpg", alt: "Photo", loading: .lazy, decoding: .async)
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("loading=\"lazy\""))
     #expect(html.contains("decoding=\"async\""))
 }
@@ -152,7 +152,7 @@ func imageRendersWithLoadingDecoding() {
 @Test("TextArea renders with value content")
 func textAreaRendersWithValue() {
     let view = TextArea(name: "bio", value: "Hello world")
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("name=\"bio\""))
     #expect(html.contains(">Hello world</textarea>"))
 }
@@ -160,7 +160,7 @@ func textAreaRendersWithValue() {
 @Test("Select renders with name attribute")
 func selectRendersWithName() {
     let view = Select(name: "country", options: [SelectOption(value: "us", label: "USA"), SelectOption(value: "ca", label: "Canada")])
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("name=\"country\""))
 }
 
@@ -172,7 +172,7 @@ func vstackRendersWithClasses() {
         Text("A")
         Text("B")
     }
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("class=\"vstack spacing-16 align-center\""))
 }
 
@@ -182,7 +182,7 @@ func hstackRendersWithClasses() {
         Text("Left")
         Text("Right")
     }
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("class=\"hstack spacing-12 align-flex-start\""))
 }
 
@@ -192,14 +192,14 @@ func zstackRendersWithGrid() {
         Text("Back")
         Text("Front")
     }
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("style=\"display:grid;"))
 }
 
 @Test("Spacer renders with flex:1")
 func spacerRendersWithFlex() {
     let view = Spacer(minSize: 8)
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("flex:1"))
     #expect(html.contains("min-width:8px"))
 }
@@ -209,7 +209,7 @@ func scrollViewRendersWithClass() {
     let view = ScrollView {
         Text("Content")
     }
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("class=\"scrollview\""))
 }
 
@@ -220,7 +220,7 @@ func gridRendersWithCSSGrid() {
         Text("B")
         Text("C")
     }
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("grid-template-columns:repeat(3, 1fr)"))
     #expect(html.contains("gap:20px"))
 }
@@ -230,7 +230,7 @@ func gridRendersWithCSSGrid() {
 @Test("backgroundColor modifier injects inline style into root element")
 func backgroundColorModifier() {
     let view = Div { Text("Hello") }.backgroundColor("#ff0")
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     // style should be injected into the <div>, not wrapped in a <span>
     #expect(html.contains("<div style=\"background-color: #ff0;\">"))
     #expect(!html.hasPrefix("<span"))
@@ -239,7 +239,7 @@ func backgroundColorModifier() {
 @Test("foregroundColor modifier on Text wraps in span (no root tag)")
 func foregroundColorModifierOnText() {
     let view = Text("Hello").foregroundColor("red")
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     // Text has no HTML tag, so it wraps in span
     #expect(html.contains("<span style=\"color: red;\">"))
     #expect(html.contains("Hello"))
@@ -248,7 +248,7 @@ func foregroundColorModifierOnText() {
 @Test("font modifier composes size and weight")
 func fontModifierComposes() {
     let view = Text("Hello").font(size: 18, weight: "bold")
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("font-size: 18px"))
     #expect(html.contains("font-weight: bold"))
 }
@@ -256,35 +256,35 @@ func fontModifierComposes() {
 @Test("padding modifier")
 func paddingModifier() {
     let view = Text("Hello").padding(12)
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("padding: 12px"))
 }
 
 @Test("padding with axis")
 func paddingAxisModifier() {
     let view = Text("Hello").padding(horizontal: 16, vertical: 8)
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("padding: 8px 16px"))
 }
 
 @Test("showIf hides when false")
 func showIfHides() {
     let view = Text("Secret").showIf(false)
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("display: none"))
 }
 
 @Test("showIf shows when true")
 func showIfShows() {
     let view = Text("Visible").showIf(true)
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html == "Visible")
 }
 
 @Test("id modifier injects into root element")
 func idModifier() {
     let view = Div { Text("Hello") }.id("greeting")
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     // id should be on the div, not a wrapping span
     #expect(html.contains("<div id=\"greeting\""))
 }
@@ -292,7 +292,7 @@ func idModifier() {
 @Test("class modifier injects into root element")
 func classModifier() {
     let view = Div { Text("Hello") }.class("highlight")
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("<div class=\"highlight\""))
 }
 
@@ -302,7 +302,7 @@ func multipleModifiersChainOnDiv() {
         .font(size: 16, weight: "600")
         .foregroundColor("var(--color-text)")
         .padding(8)
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     // all styles should be on the div
     #expect(html.contains("<div style=\""))
     #expect(html.contains("font-size: 16px"))
@@ -340,7 +340,7 @@ func viewBuilderOptionalSome() {
 @Test("CSSRule renders correctly")
 func cssRuleRenders() {
     let rule = CSSRule(".button", [CSSDeclaration("color", "red"), CSSDeclaration("font-size", "14px")])
-    let rendered = CSSStylesheet([rule]).render()
+    let rendered = CSSStylesheet([rule]).renderedString()
     #expect(rendered.contains(".button {"))
     #expect(rendered.contains("color: red;"))
     #expect(rendered.contains("font-size: 14px;"))
@@ -352,7 +352,7 @@ func cssStylesheetRendersMultiple() {
         CSSRule("body", [CSSDeclaration("margin", "0")]),
         CSSRule("p", [CSSDeclaration("color", "#333")]),
     ])
-    let rendered = sheet.render()
+    let rendered = sheet.renderedString()
     #expect(rendered.contains("body {"))
     #expect(rendered.contains("p {"))
 }
@@ -362,7 +362,7 @@ func cssMediaQueryRenders() {
     let mq = CSSMediaQuery("prefers-color-scheme: dark", rules: [
         CSSRule(":root", [CSSDeclaration("--color-bg", "#000")])
     ])
-    let rendered = mq.render()
+    let rendered = mq.renderedString()
     #expect(rendered.contains("@media (prefers-color-scheme: dark)"))
     #expect(rendered.contains("--color-bg: #000;"))
 }
@@ -373,7 +373,7 @@ func cssKeyframesRenders() {
         ("from", [CSSDeclaration("opacity", "0")]),
         ("to", [CSSDeclaration("opacity", "1")]),
     ])
-    let rendered = kf.render()
+    let rendered = kf.renderedString()
     #expect(rendered.contains("@keyframes fadeIn"))
     #expect(rendered.contains("from {"))
     #expect(rendered.contains("to {"))
@@ -382,7 +382,7 @@ func cssKeyframesRenders() {
 @Test("LayoutStyles provides vstack and hstack CSS")
 func layoutStylesProvidesLayoutCSS() {
     let styles = LayoutStyles.all
-    let rendered = CSSStylesheet(styles).render()
+    let rendered = CSSStylesheet(styles).renderedString()
     #expect(rendered.contains(".vstack {"))
     #expect(rendered.contains(".hstack {"))
     #expect(rendered.contains(".zstack {"))
@@ -393,7 +393,7 @@ func layoutStylesProvidesLayoutCSS() {
 
 @Test("LayoutStyles.complete includes spacing and alignment classes")
 func layoutStylesComplete() {
-    let rendered = CSSStylesheet(LayoutStyles.complete).render()
+    let rendered = CSSStylesheet(LayoutStyles.complete).renderedString()
     #expect(rendered.contains(".spacing-8 {"))
     #expect(rendered.contains(".spacing-16 {"))
     #expect(rendered.contains(".align-flex-start {"))
@@ -405,7 +405,7 @@ func layoutStylesComplete() {
 func generateSpacingClassesTest() {
     let rules = generateSpacingClasses([4, 8, 16])
     #expect(rules.count == 3)
-    let rendered = CSSStylesheet(rules).render()
+    let rendered = CSSStylesheet(rules).renderedString()
     #expect(rendered.contains(".spacing-4 {") && rendered.contains("gap: 4px;"))
     #expect(rendered.contains(".spacing-8 {") && rendered.contains("gap: 8px;"))
     #expect(rendered.contains(".spacing-16 {") && rendered.contains("gap: 16px;"))
@@ -415,7 +415,7 @@ func generateSpacingClassesTest() {
 func generateAlignmentClassesTest() {
     let rules = generateAlignmentClasses(["flex-start", "center"])
     #expect(rules.count == 2)
-    let rendered = CSSStylesheet(rules).render()
+    let rendered = CSSStylesheet(rules).renderedString()
     #expect(rendered.contains(".align-flex-start {") && rendered.contains("align-items: flex-start;"))
     #expect(rendered.contains(".align-center {") && rendered.contains("align-items: center;"))
 }
@@ -430,7 +430,7 @@ func htmlDocumentRenders() {
         styles: CSSStylesheet([CSSRule("p", [CSSDeclaration("color", "red")])]),
         scripts: "console.log('hello');"
     )
-    let html = doc.render()
+    let html = doc.renderedString()
     #expect(html.hasPrefix("<!DOCTYPE html>"))
     #expect(html.contains("<title>Test Page</title>"))
     #expect(html.contains("<p>Hello</p>"))
@@ -450,7 +450,7 @@ func htmlDocumentDevMode() {
         scripts: "console.log('dev');",
         devMode: true
     )
-    let html = doc.render()
+    let html = doc.renderedString()
     #expect(html.contains("<link rel=\"stylesheet\" href=\"/ui/styles.css\">"))
     #expect(html.contains("<script src=\"/ui/webui-engine.js\">"))
     #expect(!html.contains("<script src=\"/ui/scripts.js\">"))
@@ -569,7 +569,7 @@ func webuiShippedCssIncludesDarkMode() {
 @Test("WebUIButton renders with BEM classes")
 func webuiButtonRenders() {
     let view = WebUIButton("Submit", variant: .primary, size: .lg)
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("class=\"button button--primary button--lg\""))
     #expect(html.contains("Submit"))
 }
@@ -577,7 +577,7 @@ func webuiButtonRenders() {
 @Test("WebUIButton disabled adds attribute")
 func webuiButtonDisabled() {
     let view = WebUIButton("Disabled", disabled: true)
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("disabled"))
 }
 
@@ -586,7 +586,7 @@ func webuiCardRenders() {
     let view = WebUICard(variant: .elevated) {
         Text("Card content")
     }
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("class=\"card card--elevated\""))
     // content is wrapped in the padded interior so `.card__body`'s token
     // padding (an overridable CSS default) actually applies.
@@ -597,7 +597,7 @@ func webuiCardRenders() {
 @Test("WebUIBadge renders with variant and size")
 func webuiBadgeRenders() {
     let view = WebUIBadge("New", variant: .primary, size: .sm)
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("class=\"badge badge--primary badge--sm\""))
     #expect(html.contains("New"))
 }
@@ -605,7 +605,7 @@ func webuiBadgeRenders() {
 @Test("WebUIAlert renders with role and variant")
 func webuiAlertRenders() {
     let view = WebUIAlert(variant: .danger, title: "Error", message: "Something went wrong")
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("class=\"alert alert--danger\""))
     #expect(html.contains("role=\"alert\""))
     #expect(html.contains("Error"))
@@ -615,7 +615,7 @@ func webuiAlertRenders() {
 @Test("WebUIAlert renders a semantic icon by default")
 func webuiAlertOmitsIcon() {
     let view = WebUIAlert(message: "Info")
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     // an info alert now carries its default `.info` glyph as inline SVG
     #expect(html.contains("alert__icon"))
     #expect(html.contains("<svg"))
@@ -625,7 +625,7 @@ func webuiAlertOmitsIcon() {
 @Test("WebUIAlert renders icon when provided")
 func webuiAlertRendersIcon() {
     let view = WebUIAlert(message: "Info", icon: .info)
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("alert__icon"))
     #expect(html.contains("<svg"))
     #expect(!html.contains("ℹ️"))
@@ -634,7 +634,7 @@ func webuiAlertRendersIcon() {
 @Test("WebUITabs renders with active tab")
 func webuiTabsRenders() {
     let view = WebUITabs(tabs: [TabItem(id: "tab1", label: "Tab 1"), TabItem(id: "tab2", label: "Tab 2")], activeTab: "tab1")
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("class=\"tabs__tab tabs__tab--active\""))
     #expect(html.contains("aria-selected=\"true\""))
 }
@@ -642,7 +642,7 @@ func webuiTabsRenders() {
 @Test("WebUIAvatar renders with initials")
 func webuiAvatarRenders() {
     let view = WebUIAvatar(initials: "JD", size: .lg)
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("class=\"avatar avatar--lg\""))
     #expect(html.contains("JD"))
 }
@@ -650,7 +650,7 @@ func webuiAvatarRenders() {
 @Test("WebUIProgress renders with correct width")
 func webuiProgressRenders() {
     let view = WebUIProgress(value: 0.45, showLabel: true)
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("style=\"width: 45%\""))
     #expect(html.contains("45%"))
     #expect(html.contains("role=\"progressbar\""))
@@ -659,7 +659,7 @@ func webuiProgressRenders() {
 @Test("WebUIProgress uses typed enums for variant and size")
 func webuiProgressTypedEnums() {
     let view = WebUIProgress(value: 0.5, variant: .success, size: .lg)
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("progress--success"))
     #expect(html.contains("progress--lg"))
 }
@@ -667,7 +667,7 @@ func webuiProgressTypedEnums() {
 @Test("WebUISkeleton renders with variant")
 func webuiSkeletonRenders() {
     let view = WebUISkeleton(variant: .title)
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("class=\"skeleton skeleton--title\""))
     #expect(html.contains("aria-hidden=\"true\""))
 }
@@ -675,7 +675,7 @@ func webuiSkeletonRenders() {
 @Test("WebUISkeleton renders multiple items")
 func webuiSkeletonMultiple() {
     let view = WebUISkeleton(variant: .text, count: 3)
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     let count = html.components(separatedBy: "skeleton--text").count - 1
     #expect(count == 3)
 }
@@ -686,7 +686,7 @@ func webuiTableRenders() {
         headers: ["Name", "Age"],
         rows: [[Text("Alice"), Text("30")], [Text("Bob"), Text("25")]]
     )
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("<table class=\"table table--striped table--hoverable\">"))
     #expect(html.contains("<th>Name</th>"))
     #expect(html.contains("<td>Alice</td>"))
@@ -695,7 +695,7 @@ func webuiTableRenders() {
 @Test("WebUIChip renders with removable button")
 func webuiChipRemovable() {
     let view = WebUIChip("Tag", variant: .info, removable: true)
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("class=\"chip chip--info\""))
     #expect(html.contains("class=\"chip__remove\""))
 }
@@ -708,7 +708,7 @@ func webuiEmptyStateWithAction() {
         message: "Get started by adding an item.",
         action: ("Add Item", "add-btn")
     )
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("No items"))
     #expect(html.contains("Add Item"))
     #expect(html.contains("id=\"add-btn\""))
@@ -719,7 +719,7 @@ func webuiEmptyStateWithAction() {
 @Test("WebUISpinner renders with size")
 func webuiSpinnerRenders() {
     let view = WebUISpinner(size: .lg, label: "Loading...")
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("class=\"spinner spinner--lg\""))
     #expect(html.contains("Loading..."))
     #expect(html.contains("role=\"status\""))
@@ -730,7 +730,7 @@ func webuiTooltipRenders() {
     let view = WebUITooltip("Helpful info", position: .bottom) {
         Text("Hover me")
     }
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("class=\"tooltip tooltip--bottom\""))
     #expect(html.contains("Hover me"))
     #expect(html.contains("Helpful info"))
@@ -741,7 +741,7 @@ func webuiModalRenders() {
     let view = WebUIModal(title: "Confirm") {
         Text("Are you sure?")
     }
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("class=\"modal\""))
     #expect(html.contains("role=\"dialog\""))
     #expect(html.contains("Confirm"))
@@ -753,7 +753,7 @@ func webuiModalOmitsFooter() {
     let view = WebUIModal(title: "Confirm") {
         Text("Are you sure?")
     }
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(!html.contains("modal__footer"))
 }
 
@@ -764,7 +764,7 @@ func webuiModalRendersFooter() {
     } footer: {
         WebUIButton("OK")
     }
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("modal__footer"))
     #expect(html.contains("OK"))
 }
@@ -772,14 +772,14 @@ func webuiModalRendersFooter() {
 @Test("WebUIToast renders with dismissible close button")
 func webuiToastRenders() {
     let view = WebUIToast(message: "Saved")
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("toast__close"))
 }
 
 @Test("WebUIToast hides close button when not dismissible")
 func webuiToastNotDismissible() {
     let view = WebUIToast(message: "Saved", dismissible: false)
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(!html.contains("toast__close"))
 }
 
@@ -806,7 +806,7 @@ func composePage() {
         }
     }
 
-    let html = page.render()
+    let html = page.renderThroughBuffer()
     #expect(html.contains("class=\"page\""))
     #expect(html.contains("class=\"page-header\""))
     #expect(html.contains("class=\"page-content\""))
@@ -821,7 +821,7 @@ func composePage() {
 func htmlDocumentWithTheme() {
     let body = Div(class: "app") {
         WebUIButton("Get Started", variant: .primary)
-    }.render()
+    }.renderThroughBuffer()
 
     let doc = HTMLDocument(
         title: "WebUI App",
@@ -830,7 +830,7 @@ func htmlDocumentWithTheme() {
         head: "<meta name=\"theme-color\" content=\"#6366f1\">"
     )
 
-    let html = doc.render()
+    let html = doc.renderedString()
     #expect(html.contains("<title>WebUI App</title>"))
     #expect(html.contains("--color-primary-500"))
     #expect(html.contains("Get Started"))
@@ -842,21 +842,21 @@ func htmlDocumentWithTheme() {
 @Test("Input renders with value attribute")
 func inputWithValue() {
     let view = Input(id: "name", value: "John")
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("value=\"John\""))
 }
 
 @Test("Input omits value when empty")
 func inputOmitsEmptyValue() {
     let view = Input(placeholder: "Enter name")
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(!html.contains("value="))
 }
 
 @Test("Input omits placeholder when empty")
 func inputOmitsEmptyPlaceholder() {
     let view = Input(value: "John")
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(!html.contains("placeholder="))
 }
 
@@ -865,7 +865,7 @@ func forEachRendersCollection() {
     let view = ForEach(["A", "B", "C"]) { item in
         Text(item)
     }
-    #expect(view.render() == "ABC")
+    #expect(view.renderThroughBuffer() == "ABC")
 }
 
 @Test("ForEach renders integer range")
@@ -873,7 +873,7 @@ func forEachRendersRange() {
     let view = ForEach(0..<3) { i in
         Text("\(i)")
     }
-    #expect(view.render() == "012")
+    #expect(view.renderThroughBuffer() == "012")
 }
 
 @Test("ForEach with complex content")
@@ -883,7 +883,7 @@ func forEachComplex() {
             Text(item)
         }
     }
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html == "<span>X</span><span>Y</span>")
 }
 
@@ -896,7 +896,7 @@ func forEachNonHashable() {
     let view = ForEach(items) { item in
         Text(item.name)
     }
-    #expect(view.render() == "AB")
+    #expect(view.renderThroughBuffer() == "AB")
 }
 
 @Test("Group renders children without wrapper")
@@ -905,7 +905,7 @@ func groupRendersWithoutWrapper() {
         Text("A")
         Text("B")
     }
-    #expect(view.render() == "AB")
+    #expect(view.renderThroughBuffer() == "AB")
 }
 
 @Test("Form renders with action and method")
@@ -914,7 +914,7 @@ func formRendersWithAction() {
         Input(id: "name", placeholder: "Name")
         Button("Submit")
     }
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.hasPrefix("<form"))
     #expect(html.contains("action=\"/submit\""))
     #expect(html.contains("method=\"post\""))
@@ -926,7 +926,7 @@ func formEmptyAction() {
     let view = Form {
         Text("No action")
     }
-    let html = view.render()
+    let html = view.renderThroughBuffer()
     #expect(html.contains("action=\"\""))
 }
 
@@ -934,9 +934,9 @@ func formEmptyAction() {
 func webuiDocumentRenders() {
     let doc = WebUIDocument(
         title: "Test",
-        body: WebUIButton("Go").render()
+        body: WebUIButton("Go").renderThroughBuffer()
     )
-    let html = doc.render()
+    let html = doc.renderThroughBuffer()
     #expect(html.hasPrefix("<!DOCTYPE html>"))
     #expect(html.contains("<title>Test</title>"))
     #expect(html.contains("href=\"\(DesignSystemAssets.stylesheetURL)\""))
@@ -951,7 +951,7 @@ func webuiDocumentDevMode() {
         body: "<p>Dev</p>",
         devMode: true
     )
-    let html = doc.render()
+    let html = doc.renderThroughBuffer()
     #expect(html.contains("<link rel=\"stylesheet\" href=\"/ui/styles.css\">"))
     #expect(!html.contains("<style>"))
 }
@@ -1185,7 +1185,7 @@ func htmlDocumentWithCSP() {
         body: "<p>Content</p>",
         contentSecurityPolicy: "default-src 'self'; script-src 'self'"
     )
-    let html = doc.render()
+    let html = doc.renderedString()
     #expect(html.contains("Content-Security-Policy"))
     #expect(html.contains("default-src 'self'"))
     #expect(html.contains("script-src 'self'"))
@@ -1194,7 +1194,7 @@ func htmlDocumentWithCSP() {
 @Test("HTMLDocument without CSP omits meta tag when disabled")
 func htmlDocumentWithoutCSP() {
     let doc = HTMLDocument(title: "Plain", body: "<p>Content</p>", contentSecurityPolicy: "")
-    let html = doc.render()
+    let html = doc.renderedString()
     #expect(!html.contains("Content-Security-Policy"))
 }
 
@@ -1205,7 +1205,7 @@ func webuiDocumentWithCSP() {
         body: "<p>Content</p>",
         contentSecurityPolicy: "default-src 'self'"
     )
-    let html = doc.render()
+    let html = doc.renderThroughBuffer()
     #expect(html.contains("Content-Security-Policy"))
     #expect(html.contains("default-src 'self'"))
 }
@@ -1305,7 +1305,7 @@ func eventHandlerModifierEmitsComponentID() {
     let html = RenderContext.$current.withValue(context) {
         Text("Hello")
             .onClick { _ in [] }
-            .render()
+            .renderThroughBuffer()
     }
 
     #expect(html.contains("data-component-id"))
@@ -1321,7 +1321,7 @@ func eventHandlerModifierEmitsRawComponentID() {
     let html = RenderContext.$current.withValue(context) {
         Text("Hello")
             .onClick { _ in [] }
-            .render()
+            .renderThroughBuffer()
     }
 
     // The attribute must carry the bare id (c0), never the Swift struct's
@@ -1335,7 +1335,7 @@ func eventHandlerModifierEmitsRawComponentID() {
 func eventHandlerModifierWithoutContext() {
     let html = Text("Hello")
         .onClick { _ in [] }
-        .render()
+        .renderThroughBuffer()
 
     // Without RenderContext, the modifier passes content through unchanged
     #expect(html == "Hello")
@@ -1349,7 +1349,7 @@ func eventHandlerModifierOnBlockView() {
     let html = RenderContext.$current.withValue(context) {
         Div { Text("Click me") }
             .onClick { _ in [FragmentUpdate(id: "result", html: "<span>Clicked</span>")] }
-            .render()
+            .renderThroughBuffer()
     }
 
     // data-component-id should be on the div, not a wrapping span
@@ -1369,7 +1369,7 @@ func handlerRegistrationMatchesRenderedComponents() async {
                 .onClick { _ in counter.clicks -= 1; return [] }
             Input(id: "echo-field", name: "echo")
                 .onInput { _ in [] }
-        }.render()
+        }.renderThroughBuffer()
     }
     let renderedHandlers = html.components(separatedBy: "data-component-id=").count - 1
     #expect(renderedHandlers == 3, "render should emit one data-component-id per handler")
@@ -1388,7 +1388,7 @@ func optimisticClickModifierWiring() async {
                 predict: { [FragmentUpdate(id: "counter-value", html: "<div>0</div>")] },
                 perform: { _ in counter.resets += 1; return [] }
             )
-            .render()
+            .renderThroughBuffer()
     }
     #expect(html.contains("data-optimistic="), "prediction attribute missing: \(html)")
     #expect(html.contains("&quot;counter-value&quot;"), "prediction json not attribute-escaped: \(html)")
@@ -1407,10 +1407,10 @@ func tokenModifiersEmitVarReferences() {
     let html = Text("Hi")
         .padding(.four)
         .foregroundColor(.primary)
-        .render()
+        .renderThroughBuffer()
     #expect(html.contains("padding: var(--space-4);"), "got: \(html)")
     #expect(html.contains("color: var(--color-primary-500);"), "got: \(html)")
-    let raw = Text("Hi").padding(16).render()
+    let raw = Text("Hi").padding(16).renderThroughBuffer()
     #expect(raw.contains("padding: 16px;"), "raw Int overload must still exist: \(raw)")
 }
 
@@ -1426,7 +1426,7 @@ func expandedEventModifiersEmitDataEvent() {
             Button("mo").onMouseOver { _ in [] }
             Button("mu").onMouseUp { _ in [] }
             Button("mout").onMouseOut { _ in [] }
-        }.render()
+        }.renderThroughBuffer()
     }
     for event in ["keydown", "keyup", "keypress", "mousedown", "mouseup", "mouseover", "mouseout"] {
         #expect(html.contains("data-event=\"\(event)\""), "missing \(event) in: \(html)")

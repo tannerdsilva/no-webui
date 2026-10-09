@@ -58,14 +58,14 @@ func renderShowcase() -> String {
     // entirely — no script tag, no config meta — so a bare file host 404s
     // nothing. for real interactivity open the live WebUIShowcaseServer.
     let snapshot = RenderContext.$current.withValue(RenderContext(router: EventRouter())) {
-        ShowcasePage(state: ShowcaseState()).render()
+        ShowcasePage(state: ShowcaseState()).renderedString()
     }
     let doc = WebUIDocument(
         title: "WebUI Showcase",
         body: snapshot,
         includeRuntime: false
     )
-    return doc.render()
+    return doc.renderThroughBuffer()
 }
 
 // MARK: - HTTP Handler

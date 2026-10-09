@@ -13,10 +13,6 @@ public struct VStack: View {
         self.children = content()
     }
 
-    public func render() -> String {
-        renderThroughBuffer()
-    }
-
     public func render(into buffer: inout HTMLBuffer) {
         let alignClass = "align-\(alignment.cssValue)"
         buffer.beginElement("div", " class=\"vstack spacing-\(spacing) \(alignClass)\"")
@@ -43,10 +39,6 @@ public struct HStack: View {
         self.alignment = alignment
         self.spacing = spacing
         self.children = content()
-    }
-
-    public func render() -> String {
-        renderThroughBuffer()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -77,10 +69,6 @@ public struct ZStack: View {
         self.children = content()
     }
 
-    public func render() -> String {
-        renderThroughBuffer()
-    }
-
     public func render(into buffer: inout HTMLBuffer) {
         let hAlign = alignment.cssValue
         let vAlign = verticalAlignment.cssValue
@@ -102,10 +90,6 @@ public struct Spacer: View {
         self.minSize = minSize
     }
 
-    public func render() -> String {
-        renderThroughBuffer()
-    }
-
     public func render(into buffer: inout HTMLBuffer) {
         buffer.beginElement("div", " class=\"spacer\" style=\"flex:1;min-width:\(minSize)px;min-height:\(minSize)px\"")
         buffer.endOpenTag()
@@ -118,10 +102,6 @@ public struct ScrollView: View {
     public let children: [any View]
     public init(@ViewBuilder content: () -> [any View]) {
         self.children = content()
-    }
-
-    public func render() -> String {
-        renderThroughBuffer()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -178,10 +158,6 @@ public struct Grid: View {
         self.children = content()
     }
 
-    public func render() -> String {
-        renderThroughBuffer()
-    }
-
     public func render(into buffer: inout HTMLBuffer) {
         buffer.beginElement("div", " class=\"grid\" style=\"display:grid;grid-template-columns:\(columns.cssValue);gap:\(spacing)px;\"")
         buffer.endOpenTag()
@@ -210,10 +186,6 @@ public struct Section: View {
         self.children = content()
     }
 
-    public func render() -> String {
-        renderThroughBuffer()
-    }
-
     public func render(into buffer: inout HTMLBuffer) {
         var attributes = ""
         if let id { attributes += " id=\"\(htmlEscape(id))\"" }
@@ -238,10 +210,6 @@ public struct Navigation: View {
     ) {
         self.class = `class`
         self.children = content()
-    }
-
-    public func render() -> String {
-        renderThroughBuffer()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -269,10 +237,6 @@ public struct Header: View {
         self.children = content()
     }
 
-    public func render() -> String {
-        renderThroughBuffer()
-    }
-
     public func render(into buffer: inout HTMLBuffer) {
         var attributeText = ""
         if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
@@ -296,10 +260,6 @@ public struct Footer: View {
     ) {
         self.class = `class`
         self.children = content()
-    }
-
-    public func render() -> String {
-        renderThroughBuffer()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -327,10 +287,6 @@ public struct Main: View {
         self.children = content()
     }
 
-    public func render() -> String {
-        renderThroughBuffer()
-    }
-
     public func render(into buffer: inout HTMLBuffer) {
         var attributeText = ""
         if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
@@ -354,10 +310,6 @@ public struct Aside: View {
     ) {
         self.class = `class`
         self.children = content()
-    }
-
-    public func render() -> String {
-        renderThroughBuffer()
     }
 
     public func render(into buffer: inout HTMLBuffer) {

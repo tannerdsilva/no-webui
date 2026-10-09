@@ -25,7 +25,7 @@ struct CSPExtrasTests {
 			clientMode: ClientBoot(),
 			contentSecurityPolicy: policy,
 			contentSecurityPolicyExtras: extras
-		).render()
+		).renderedString()
 	}
 
 	private func policyLine(_ html: String) -> String {
@@ -77,7 +77,7 @@ struct CSPExtrasTests {
 			body: "<p>x</p>",
 			includeRuntime: false,
 			contentSecurityPolicyExtras: "img-src 'self' data: https:"
-		).render()
+		).renderedString()
 		let policy = policyLine(html)
 		#expect(policy.contains("img-src 'self' data: https:"))
 		#expect(!policy.contains("wasm-unsafe-eval"))

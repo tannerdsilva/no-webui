@@ -20,7 +20,7 @@ public struct HydrationView: View {
 		self.model = model
 	}
 
-	public func render() -> String {
+	public func render(into buffer: inout HTMLBuffer) {
 		Div(class: "smoke") {
 			Header(class: "smoke__header") {
 				Heading("Hydration Gate — client render core", level: .h1)
@@ -55,6 +55,6 @@ public struct HydrationView: View {
 				}
 			}
 		}
-		.render()
+		.render(into: &buffer)
 	}
 }

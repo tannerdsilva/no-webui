@@ -40,7 +40,7 @@ public struct ElementRef: Sendable, Hashable {
     /// a fragment update that replaces the referenced element with a freshly
     /// rendered view.
     public func update<V: View>(_ view: V) -> FragmentUpdate {
-        FragmentUpdate(id: id, html: view.render())
+        FragmentUpdate(id: id, html: view.renderThroughBuffer())
     }
 }
 

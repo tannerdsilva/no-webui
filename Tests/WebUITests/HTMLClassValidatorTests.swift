@@ -70,9 +70,9 @@ struct HTMLClassValidatorTests {
 			WebUIInput(placeholder: "type")
 		}
 		.padding(24)
-		.render()
+		.renderThroughBuffer()
 
-		let html = WebUIDocument(title: "Clean", body: body, checkClasses: true).render()
+		let html = WebUIDocument(title: "Clean", body: body, checkClasses: true).renderThroughBuffer()
 		#expect(seen.value.isEmpty)
 		#expect(html.contains("<button"))
 	}
@@ -84,7 +84,7 @@ struct HTMLClassValidatorTests {
 		// structural wrapper. anything else is a typo that renders silently
 		// unstyled — so the pin fails.
 		let allowlist: Set<String> = ["demo-section"]
-		let html = ShowcasePage(state: ShowcaseState()).render()
+		let html = ShowcasePage(state: ShowcaseState()).renderedString()
 		let undefined = HTMLClassValidator.undefinedClasses(in: html, extra: allowlist)
 		#expect(undefined.isEmpty, "undefined classes were: \(undefined)")
 	}
@@ -96,7 +96,7 @@ struct HTMLClassValidatorTests {
 		defer { HTMLClassValidator.onUndefined = nil }
 
 		let html = #"<div class="totally-bogus-42">x</div>"#
-		let doc = WebUIDocument(title: "Bogus", body: html, checkClasses: true).render()
+		let doc = WebUIDocument(title: "Bogus", body: html, checkClasses: true).renderThroughBuffer()
 		#expect(seen.value == ["totally-bogus-42"])
 		#expect(doc.contains("totally-bogus-42"))
 	}
@@ -132,7 +132,7 @@ struct HTMLClassValidatorTests {
 	///
 	/// signal 1 must not be used in the other direction — see `measuredUnemitted()`.
 	private func measuredOrphans() throws -> Set<String> {
-		let html = ShowcasePage(state: ShowcaseState()).render()
+		let html = ShowcasePage(state: ShowcaseState()).renderedString()
 		let extra = try swiftTokens().union(Self.jsOnlyClasses)
 		return Set(HTMLClassValidator.orphanClasses(in: [html], extra: extra))
 	}
@@ -150,7 +150,7 @@ struct HTMLClassValidatorTests {
 	/// mention is not an emitter, so tightness measures emissions: rendered pages,
 	/// plus the js-only names the engine writes.
 	private func measuredUnemitted() throws -> Set<String> {
-		let html = ShowcasePage(state: ShowcaseState()).render()
+		let html = ShowcasePage(state: ShowcaseState()).renderedString()
 		return Set(HTMLClassValidator.orphanClasses(in: [html], extra: Self.jsOnlyClasses))
 	}
 

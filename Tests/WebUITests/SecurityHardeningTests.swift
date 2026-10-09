@@ -43,23 +43,23 @@ struct URLSanitizationHardeningTests {
 
 	@Test("Link with a padded javascript: href renders text-only")
 	func linkDropsUnsafeHref() {
-		let html = Link("click", href: " \tjava\nscript:alert(1)").render()
+		let html = Link("click", href: " \tjava\nscript:alert(1)").renderThroughBuffer()
 		#expect(html == "click")
 		#expect(!html.contains("href="))
 	}
 
 	@Test("Image with a padded javascript: src omits the src attribute")
 	func imageDropsUnsafeSrc() {
-		let html = Image(src: " java\tscript:alert(1)", alt: "img").render()
+		let html = Image(src: " java\tscript:alert(1)", alt: "img").renderThroughBuffer()
 		#expect(html == "<img alt=\"img\">")
 		#expect(!html.contains("src="))
 	}
 
 	@Test("Form action still sanitizes and retains safe actions")
 	func formActionSanitizes() {
-		let safe = Form(action: "https://ok.example/submit") { Text("") }.render()
+		let safe = Form(action: "https://ok.example/submit") { Text("") }.renderThroughBuffer()
 		#expect(safe.contains("action=\"https://ok.example/submit\""))
-		let unsafe = Form(action: " javascript:alert(1)") { Text("") }.render()
+		let unsafe = Form(action: " javascript:alert(1)") { Text("") }.renderThroughBuffer()
 		#expect(unsafe.contains("action=\"\""))
 	}
 }
@@ -69,21 +69,21 @@ struct AttributeEscapingHardeningTests {
 
 	@Test("Div class payload cannot break the attribute boundary")
 	func divClassPayload() {
-		let html = Div(class: "x\" autofocus onfocus=alert(1)") { Text("") }.render()
+		let html = Div(class: "x\" autofocus onfocus=alert(1)") { Text("") }.renderThroughBuffer()
 		#expect(html.contains("&quot;"))
 		#expect(!html.contains("\" autofocus"))
 	}
 
 	@Test("Button name payload cannot inject an attribute")
 	func buttonNamePayload() {
-		let html = Button("go", name: "\" onmouseover=\"alert(1)").render()
+		let html = Button("go", name: "\" onmouseover=\"alert(1)").renderThroughBuffer()
 		#expect(html.contains("&quot;"))
 		#expect(!html.contains("\" onmouseover=\""))
 	}
 
 	@Test("Input id payload cannot inject an attribute")
 	func inputIDPayload() {
-		let html = Input(id: "x\" onfocus=\"alert(1)").render()
+		let html = Input(id: "x\" onfocus=\"alert(1)").renderThroughBuffer()
 		#expect(html.contains("&quot;"))
 		#expect(!html.contains("\" onfocus="))
 	}
@@ -96,7 +96,7 @@ struct AttributeEscapingHardeningTests {
 		// reason the stringly slots were worth the break.
 		// the attribute-escaping path stays exercised by the sibling tests and by
 		// this component's `src`, which is still a free string.
-		let html = WebUIAvatar(initials: "A", size: .md, src: "\" onload=\"alert(1)", status: .online).render()
+		let html = WebUIAvatar(initials: "A", size: .md, src: "\" onload=\"alert(1)", status: .online).renderThroughBuffer()
 		#expect(html.contains("&quot;"))
 		#expect(!html.contains("\" onload=\""))
 		#expect(html.contains("data-status=\"online\""))
@@ -104,26 +104,26 @@ struct AttributeEscapingHardeningTests {
 
 	@Test("Form method payload cannot inject an attribute")
 	func formMethodPayload() {
-		let html = Form(method: "post\" onsubmit=\"alert(1)") { Text("") }.render()
+		let html = Form(method: "post\" onsubmit=\"alert(1)") { Text("") }.renderThroughBuffer()
 		#expect(html.contains("&quot;"))
 		#expect(!html.contains("\" onsubmit="))
 	}
 
 	@Test("Modal title id payload cannot inject an attribute")
 	func modalTitlePayload() {
-		let html = WebUIModal(title: "T", id: "m\" onfocus=\"alert(1)") { Text("") }.render()
+		let html = WebUIModal(title: "T", id: "m\" onfocus=\"alert(1)") { Text("") }.renderThroughBuffer()
 		#expect(html.contains("&quot;"))
 		#expect(!html.contains("\" onfocus="))
 	}
 
 	@Test("clean attribute values still render exactly as before")
 	func cleanValuesUnaffected() {
-		let div = Div(class: "app container") { Text("") }.render()
+		let div = Div(class: "app container") { Text("") }.renderThroughBuffer()
 		#expect(div.hasPrefix("<div class=\"app container\">"))
-		let input = Input(id: "email", name: "email", placeholder: "Enter email").render()
+		let input = Input(id: "email", name: "email", placeholder: "Enter email").renderThroughBuffer()
 		#expect(input.contains("id=\"email\""))
 		#expect(input.contains("name=\"email\""))
-		let label = Label("Name", for: "name-input").render()
+		let label = Label("Name", for: "name-input").renderThroughBuffer()
 		#expect(label == "<label for=\"name-input\">Name</label>")
 	}
 }
@@ -242,7 +242,7 @@ struct CSSMinificationTests {
 		let sheet = DesignSystemAssets.minifiedCss
 		#expect(!sheet.contains("/*"))
 		#expect(!sheet.contains("*/"))
-		let page = WebUIDocument(title: "t", body: "<p>hi</p>").render()
+		let page = WebUIDocument(title: "t", body: "<p>hi</p>").renderThroughBuffer()
 		#expect(page.contains("href=\"\(DesignSystemAssets.stylesheetURL)\""))
 	}
 
@@ -252,7 +252,7 @@ struct CSSMinificationTests {
 		#expect(sheet.contains(".vstack"))
 		#expect(sheet.contains(".zstack"))
 		#expect(sheet.contains("grid-area: 1 / 1"))
-		let page = WebUIDocument(title: "t", body: "<p>hi</p>").render()
+		let page = WebUIDocument(title: "t", body: "<p>hi</p>").renderThroughBuffer()
 		#expect(page.contains("href=\"\(DesignSystemAssets.stylesheetURL)\""))
 	}
 
@@ -265,7 +265,7 @@ struct CSSMinificationTests {
 		// primitives wrapped in `webui.utilities`, then the layered sheet.
 		let expected = minifyCSS(
 			"@layer webui, webui.utilities;\n\n@layer webui.utilities {\n"
-				+ CSSStylesheet(LayoutStyles.complete).render()
+				+ CSSStylesheet(LayoutStyles.complete).renderedString()
 				+ "\n}\n\n" + WebUIAssets.css
 		)
 		#expect(DesignSystemAssets.minifiedCss == expected)
@@ -284,7 +284,7 @@ struct RuntimeConfigTests {
 
 	@Test("default bootstrap is unchanged")
 	func defaultBootstrap() {
-		let page = HTMLDocument(title: "t", body: "").render()
+		let page = HTMLDocument(title: "t", body: "").renderedString()
 		#expect(page.contains("<meta name=\"webui-config\""))
 		#expect(!page.contains("WebUIRuntime"))
 	}
@@ -292,7 +292,7 @@ struct RuntimeConfigTests {
 	@Test("runtime config emits a bootstrap object with only set keys")
 	func configEmitsInitObject() {
 		let config = RuntimeConfig(wsUrl: "wss://example.com/ws", debounceInputMs: 150, logLevel: "debug")
-		let page = HTMLDocument(title: "t", body: "", runtimeConfig: config).render()
+		let page = HTMLDocument(title: "t", body: "", runtimeConfig: config).renderedString()
 		#expect(page.contains("webui-config"))
 		#expect(page.contains("wss://example.com/ws"))
 		#expect(page.contains("debounceInputMs"))
@@ -302,7 +302,7 @@ struct RuntimeConfigTests {
 
 	@Test("empty config falls back to the plain bootstrap")
 	func emptyConfigDefaults() {
-		let page = HTMLDocument(title: "t", body: "", runtimeConfig: RuntimeConfig()).render()
+		let page = HTMLDocument(title: "t", body: "", runtimeConfig: RuntimeConfig()).renderedString()
 		#expect(page.contains("<meta name=\"webui-config\""))
 		#expect(!page.contains("WebUIRuntime"))
 	}
@@ -312,7 +312,7 @@ struct RuntimeConfigTests {
 		let config = RuntimeConfig(renderToken: "tok-123")
 		let json = config.encodedJSON()
 		#expect(json.contains("\"renderToken\":\"tok-123\""))
-		let page = HTMLDocument(title: "t", body: "", runtimeConfig: config).render()
+		let page = HTMLDocument(title: "t", body: "", runtimeConfig: config).renderedString()
 		#expect(page.contains("renderToken"))
 		#expect(page.contains("tok-123"))
 		// a token-only config is still non-empty (must emit the config meta).
@@ -322,7 +322,7 @@ struct RuntimeConfigTests {
 
 	@Test("WebUIDocument passes runtime config through")
 	func webuiDocumentPassesConfig() {
-		let page = WebUIDocument(title: "t", body: "", runtimeConfig: RuntimeConfig(optimisticSettleMs: 1234)).render()
+		let page = WebUIDocument(title: "t", body: "", runtimeConfig: RuntimeConfig(optimisticSettleMs: 1234)).renderThroughBuffer()
 		#expect(page.contains("optimisticSettleMs"))
 		#expect(page.contains("1234"))
 	}
@@ -342,7 +342,7 @@ struct RuntimeConfigTests {
 struct GridColumnsTests {
 
 	private func renderGrid(_ columns: GridColumns) -> String {
-		Grid(columns: columns) { Text("") }.render()
+		Grid(columns: columns) { Text("") }.renderThroughBuffer()
 	}
 
 	@Test("fixed tracks are grid-safe and distinct from fraction")
@@ -373,21 +373,21 @@ struct TypedTypographyTests {
 
 	@Test("FontWeight overload emits the numeric weight")
 	func fontWeightOverload() {
-		let html = Text("x").font(size: 14, weight: .semibold).render()
+		let html = Text("x").font(size: 14, weight: .semibold).renderThroughBuffer()
 		#expect(html.contains("font-weight: 600"))
 	}
 
 	@Test("TextAlignment overload emits the css alignment")
 	func textAlignmentOverload() {
-		let html = Text("x").textAlign(.center).render()
+		let html = Text("x").textAlign(.center).renderThroughBuffer()
 		#expect(html.contains("text-align: center"))
 	}
 
 	@Test("custom escape hatches pass through")
 	func customEscapeHatches() {
-		let html = Text("x").font(size: 12, weight: .custom("425")).render()
+		let html = Text("x").font(size: 12, weight: .custom("425")).renderThroughBuffer()
 		#expect(html.contains("font-weight: 425"))
-		let right = Text("x").textAlign(.right).render()
+		let right = Text("x").textAlign(.right).renderThroughBuffer()
 		#expect(right.contains("text-align: right"))
 	}
 }
@@ -397,19 +397,19 @@ struct DismissMarkerTests {
 
 	@Test("dismissible components emit data-dismiss markers")
 	func dismissMarkers() {
-		#expect(WebUIAlert(variant: .info, message: "m", dismissible: true).render().contains("data-dismiss"))
-		#expect(WebUIToast(message: "m", dismissible: true).render().contains("data-dismiss"))
-		#expect(WebUIModal(title: "t") { Text("") }.render().contains("data-dismiss"))
+		#expect(WebUIAlert(variant: .info, message: "m", dismissible: true).renderThroughBuffer().contains("data-dismiss"))
+		#expect(WebUIToast(message: "m", dismissible: true).renderThroughBuffer().contains("data-dismiss"))
+		#expect(WebUIModal(title: "t") { Text("") }.renderThroughBuffer().contains("data-dismiss"))
 	}
 
 	@Test("chip remove emits data-remove")
 	func removeMarker() {
-		#expect(WebUIChip("t", removable: true).render().contains("data-remove"))
+		#expect(WebUIChip("t", removable: true).renderThroughBuffer().contains("data-remove"))
 	}
 
 	@Test("attribute modifier exposes arbitrary attributes")
 	func attributeModifier() {
-		let html = Text("x").attribute("data-prevent-enter", "false").render()
+		let html = Text("x").attribute("data-prevent-enter", "false").renderThroughBuffer()
 		#expect(html == "<span data-prevent-enter=\"false\">x</span>")
 	}
 }
@@ -421,7 +421,7 @@ struct FocusEventModifierTests {
 		let router = EventRouter()
 		let context = RenderContext(router: router)
 		return RenderContext.$current.withValue(context) {
-			modifier(Text("x")).render()
+			modifier(Text("x")).renderThroughBuffer()
 		}
 	}
 

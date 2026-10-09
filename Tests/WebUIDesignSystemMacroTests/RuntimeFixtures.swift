@@ -53,7 +53,7 @@ struct ThemeCompiledRuntimeTests {
 			title: "t",
 			body: "<p class=\"chat-bubble\">hi</p>",
 			theme: NexusDark.theme
-		).render()
+		).renderThroughBuffer()
 		#expect(html.contains("color-scheme: dark;"))
 		#expect(html.contains("--color-primary-solid: #6c8cff;"))
 		#expect(html.contains("--chat-user-bubble: #2a2a2e;"))

@@ -4,7 +4,7 @@ import WebUICore
 
 // W2.1's invariant, enforced where it cannot be argued with: at compile time.
 //
-// `BareView` conforms to `View` and implements rendering, nothing else. every
+// `BareView` conforms to `View` and implements `render(into:)`, nothing else. every
 // capability in `Capabilities.swift` conforms the same way — one word, no
 // members. if anyone gives `View` another requirement, or gives a capability
 // protocol a requirement without a default, this file stops compiling.
@@ -16,29 +16,29 @@ import WebUICore
 
 /// the minimal view: rendering and nothing else.
 private struct BareView: View {
-    func render() -> String { "bare" }
+    func render(into buffer: inout HTMLBuffer) { buffer.append("bare") }
 }
 
 /// each capability, conformed in one word — no members, no ceremony.
 private struct BareInteractive: View, Interactive {
-    func render() -> String { "i" }
+    func render(into buffer: inout HTMLBuffer) { buffer.append("i") }
 }
 
 private struct BareStreaming: View, StreamingContent {
-    func render() -> String { "s" }
+    func render(into buffer: inout HTMLBuffer) { buffer.append("s") }
 }
 
 private struct BareAsync: View, AsyncContent {
-    func render() -> String { "a" }
+    func render(into buffer: inout HTMLBuffer) { buffer.append("a") }
 }
 
 /// `Identified` and `Recoverable` do have requirements; the defaults answer them.
 private struct BareIdentified: View, Identified {
-    func render() -> String { "id" }
+    func render(into buffer: inout HTMLBuffer) { buffer.append("id") }
 }
 
 private struct BareRecoverable: View, Recoverable {
-    func render() -> String { "r" }
+    func render(into buffer: inout HTMLBuffer) { buffer.append("r") }
 }
 
 @Suite("capabilities never add a View requirement")
@@ -46,22 +46,22 @@ struct CapabilityProtocolTests {
 
     @Test("a view that implements rendering alone conforms to View")
     func bareViewConforms() {
-        #expect(BareView().render() == "bare")
+        #expect(BareView().renderThroughBuffer() == "bare")
     }
 
     @Test("every capability conforms in one word")
     func capabilitiesAreOneWord() {
-        #expect(BareInteractive().render() == "i")
-        #expect(BareStreaming().render() == "s")
-        #expect(BareAsync().render() == "a")
-        #expect(BareIdentified().render() == "id")
-        #expect(BareRecoverable().render() == "r")
+        #expect(BareInteractive().renderThroughBuffer() == "i")
+        #expect(BareStreaming().renderThroughBuffer() == "s")
+        #expect(BareAsync().renderThroughBuffer() == "a")
+        #expect(BareIdentified().renderThroughBuffer() == "id")
+        #expect(BareRecoverable().renderThroughBuffer() == "r")
     }
 
     @Test("the defaulted capability requirements answer without work")
     func defaultsAnswer() {
         #expect(BareIdentified().stableID == nil)
-        #expect(BareRecoverable().fallback.render() == "")
+        #expect(BareRecoverable().fallback.renderThroughBuffer() == "")
     }
 
     @Test("a capability is a distinct thing a caller can ask for")

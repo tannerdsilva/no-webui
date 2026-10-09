@@ -4,7 +4,7 @@ import WebUIDesignSystem
 import WebUIChart
 
 // MARK: - Showcase Page
-public struct ShowcasePage: Sendable {
+public struct ShowcasePage: Sendable, BufferRendering {
 	/// the live demo state. the page renders FROM this state and every wired
 	/// handler mutates it — serve through `WebUIServer` (which injects its own
 	/// router as the render context) or wrap a `RenderContext` yourself for
@@ -16,7 +16,7 @@ public struct ShowcasePage: Sendable {
 		self.state = state
 	}
 
-	public func render() -> String {
+	public func render(into buffer: inout HTMLBuffer) {
 		VStack(spacing: 0) {
 			topBar()
 			Div(class: "showcase-shell") {
@@ -25,7 +25,7 @@ public struct ShowcasePage: Sendable {
 					mainContent()
 				}
 			}
-		}.render()
+		}.render(into: &buffer)
 	}
 
     // MARK: - Top Bar
@@ -1089,7 +1089,7 @@ public struct ShowcasePage: Sendable {
                                     let text = event.string("message") ?? ""
                                     guard !text.isEmpty else { return [] }
                                     state.appendChat(text)
-                                    return [FragmentUpdate(id: "live-chat", html: liveChat(state: state).render())]
+                                    return [FragmentUpdate(id: "live-chat", html: liveChat(state: state).renderThroughBuffer())]
                                 }
                             }
                         }

@@ -1,30 +1,33 @@
 // MARK: - View Protocol
 public protocol View: Sendable {
-    func render() -> String
-
     /// write this view into a shared render buffer.
     ///
-    /// this is a protocol *requirement* with a default below — deliberately not
-    /// a plain extension method. an extension method resolves statically, so a
-    /// migrated view's override would never run through `any View` or a generic
-    /// call and the migration would silently be dead code (pinned by the
-    /// dispatch probes in `RenderIntoBufferTests`). the default is what keeps
-    /// the requirement additive: a view that implements only `render()` keeps
-    /// rendering its string.
+    /// the one requirement, since the 2.0 flip: a view writes bytes, and a
+    /// caller that wants a string asks for one (``renderThroughBuffer()`` inside
+    /// this package, the deprecated ``render()`` outside it).
+    ///
+    /// a requirement rather than a plain extension method, deliberately: an
+    /// extension method resolves statically, so a view's own implementation would
+    /// never run through `any View` or a generic call, and the work would be
+    /// silently dead code (pinned by the dispatch probes in
+    /// `RenderIntoBufferTests`).
     func render(into buffer: inout HTMLBuffer)
 }
 
 extension View {
-    /// the fallback for a view that has not migrated: its string render.
-    public func render(into buffer: inout HTMLBuffer) {
-        buffer.append(render())
+    /// the 1.x spelling: render into a buffer and materialize the string.
+    ///
+    /// deprecated. implement `render(into:)` and let the caller choose the shape
+    /// — the requirement is the contract, this is the migration signal. it stays
+    /// through 1.x so existing call sites keep compiling and rendering
+    /// byte-identically.
+    @available(*, deprecated, message: "implement render(into:) instead — render() is materialized from the buffer")
+    public func render() -> String {
+        renderThroughBuffer()
     }
 
-    /// render through the buffer and materialize the string — the transition
-    /// body a migrated view's `render()` uses until the 2.0 flip makes
-    /// `render(into:)` the requirement and deprecates `render()`. the
-    /// conforming type's own `render(into:)` wins here because the call below
-    /// is a requirement.
+    /// render through the buffer and materialize the string — for callers inside
+    /// this package that want the string without tripping the deprecation.
     package func renderThroughBuffer() -> String {
         var buffer = HTMLBuffer()
         render(into: &buffer)
@@ -47,5 +50,5 @@ public protocol ViewModifier: Sendable {
 // MARK: - EmptyView
 public struct EmptyView: View {
     public init() {}
-    public func render() -> String { "" }
+    public func render(into buffer: inout HTMLBuffer) { buffer.append("") }
 }

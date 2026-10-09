@@ -18,14 +18,15 @@ struct ChartRenderer {
 	/// HTML5 ids may not contain spaces — sanitize before emitting.
 	private var safeId: String? { id.map { String($0.filter { $0 != " " }) } }
 
-	func render() -> String {
+	func render(into buffer: inout HTMLBuffer) {
 		guard !marks.isEmpty else {
-			return emptyState
+			buffer.append(emptyState)
+			return
 		}
 		let hasPolar = marks.contains { $0.spec.kind == .sector }
-		if marks.contains(where: { $0.spec.kind == .radar }) { return renderRadar() }
-		if marks.contains(where: { $0.spec.kind == .radial }) { return renderRadial() }
-		return hasPolar ? renderPolar() : renderCartesian()
+		if marks.contains(where: { $0.spec.kind == .radar }) { buffer.append(renderRadar()); return }
+		if marks.contains(where: { $0.spec.kind == .radial }) { buffer.append(renderRadial()); return }
+		buffer.append(hasPolar ? renderPolar() : renderCartesian())
 	}
 
 	// MARK: Layout metrics

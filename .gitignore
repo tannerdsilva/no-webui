@@ -19,3 +19,4 @@ node_modules/
 # design-audit / generated preview screenshots
 .audit/
 designer/previews/screenshots/
+.worktrees/

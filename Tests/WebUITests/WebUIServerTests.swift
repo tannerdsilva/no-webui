@@ -25,8 +25,8 @@ struct WebUIServerTests {
 				WebUIButton("Go", variant: .primary)
 			}
 			.padding(24)
-			.render()
-			return WebUIDocument(title: "WebUI Server Test", body: body).render()
+			.renderThroughBuffer()
+			return WebUIDocument(title: "WebUI Server Test", body: body).renderThroughBuffer()
 		}
 
 		for offset in 0..<10 {

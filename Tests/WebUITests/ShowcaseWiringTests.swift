@@ -11,7 +11,7 @@ struct ShowcaseWiringTests {
 	@Test func showcaseInteractiveControlsAreWired() {
 		let router = EventRouter()
 		let html = RenderContext.$current.withValue(RenderContext(router: router)) {
-			ShowcasePage(state: ShowcaseState()).render()
+			ShowcasePage(state: ShowcaseState()).renderedString()
 		}
 
 		// stable control ids: typed self-wired controls (WebUIButton onTap,

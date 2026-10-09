@@ -19,72 +19,76 @@ public struct CSSRule: Sendable, Equatable, Codable {
 }
 
 // MARK: - CSSStylesheet
-public struct CSSStylesheet: Sendable {
+public struct CSSStylesheet: Sendable, BufferRendering {
     public let rules: [CSSRule]
     public init(_ rules: [CSSRule]) {
         self.rules = rules
     }
-    public func render() -> String {
-        rules.map { rule in
+    public func render(into buffer: inout HTMLBuffer) {
+        buffer.append(rules.map { rule in
             let declarations = rule.declarations.map { "  \($0.property): \($0.value);" }.joined(separator: "\n")
             return "\(rule.selector) {\n\(declarations)\n}"
-        }.joined(separator: "\n\n")
+        }.joined(separator: "\n\n"))
     }
 }
 
 // MARK: - CSSMediaQuery
-public struct CSSMediaQuery: Sendable {
+public struct CSSMediaQuery: Sendable, BufferRendering {
     public let condition: String
     public let rules: [CSSRule]
     public init(_ condition: String, rules: [CSSRule]) {
         self.condition = condition
         self.rules = rules
     }
-    public func render() -> String {
-        let inner = CSSStylesheet(rules).render()
-        return """
+    public func render(into buffer: inout HTMLBuffer) {
+        // `CSSStylesheet` is a stylesheet, not a `View`, so it has no
+        // `renderThroughBuffer` helper: it renders into its own buffer.
+        var innerBuffer = HTMLBuffer()
+        CSSStylesheet(rules).render(into: &innerBuffer)
+        let inner = String(decoding: innerBuffer.bytes, as: UTF8.self)
+        buffer.append("""
         @media (\(condition)) {
         \(inner.split(separator: "\n").map { "  \($0)" }.joined(separator: "\n"))
         }
-        """
+        """)
     }
 }
 
 // MARK: - CSSKeyframes
-public struct CSSKeyframes: Sendable {
+public struct CSSKeyframes: Sendable, BufferRendering {
     public let name: String
     public let keyframes: [(String, [CSSDeclaration])]
     public init(_ name: String, _ keyframes: [(String, [CSSDeclaration])]) {
         self.name = name
         self.keyframes = keyframes
     }
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let stops = keyframes.map { (selector, declarations) in
             let decls = declarations.map { "    \($0.property): \($0.value);" }.joined(separator: "\n")
             return "  \(selector) {\n\(decls)\n  }"
         }.joined(separator: "\n")
-        return """
+        buffer.append("""
         @keyframes \(name) {
         \(stops)
         }
-        """
+        """)
     }
 }
 
 // MARK: - CSSFontFace
-public struct CSSFontFace: Sendable {
+public struct CSSFontFace: Sendable, BufferRendering {
     public let declarations: [CSSDeclaration]
 
     public init(_ declarations: [CSSDeclaration]) {
         self.declarations = declarations
     }
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let decls = declarations.map { "  \($0.property): \($0.value);" }.joined(separator: "\n")
-        return """
+        buffer.append("""
         @font-face {
         \(decls)
         }
-        """
+        """)
     }
 }
 

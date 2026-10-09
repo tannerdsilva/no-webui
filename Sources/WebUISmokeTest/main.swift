@@ -116,7 +116,7 @@ func smokeColumnMenuHTML(state: SmokeState) -> String {
 		},
 		header: "Columns",
 		panel: true
-	).render()
+	).renderThroughBuffer()
 }
 
 func interactiveTableHTML(state: SmokeState) -> String {
@@ -175,7 +175,7 @@ func interactiveTableHTML(state: SmokeState) -> String {
 		else { state.tableExpanded.insert(rowID) }
 		return [me.replace(with: interactiveTableHTML(state: state))]
 	}
-	.render()
+	.renderThroughBuffer()
 }
 
 // MARK: - Display-element renderers (stable ids, no event handlers)
@@ -185,7 +185,7 @@ func counterValueHTML(_ n: Int) -> String {
 }
 
 func progressValueHTML(_ value: Double) -> String {
-	let bar = WebUIProgress(value: value, variant: .primary, showLabel: true, size: .md).render()
+	let bar = WebUIProgress(value: value, variant: .primary, showLabel: true, size: .md).renderThroughBuffer()
 	return "<div id=\"progress-value\">\(bar)</div>"
 }
 
@@ -220,7 +220,7 @@ func smokeChartHTML(state: SmokeState) -> String {
 			state.chartSelected = (state.chartSelected == category) ? nil : category
 			return [me.replace(with: smokeChartHTML(state: state))]
 		}
-		.render()
+		.renderThroughBuffer()
 }
 
 // MARK: - Page shell
@@ -433,13 +433,13 @@ func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
 			head: smokePageStyle,
 			clientMode: ClientBoot(config: RuntimeConfig(capabilities: ["validate", "never-built", "offline"])),
 			dir: smokeDir,
-		).render()
+		).renderThroughBuffer()
 	}
 
 // small helper to run a builder under a RenderContext value
 extension RenderContext {
 	func withValueBody<V: View>(_ build: () -> V) -> String {
-		RenderContext.$current.withValue(self) { build().render() }
+		RenderContext.$current.withValue(self) { build().renderThroughBuffer() }
 	}
 }
 
@@ -845,7 +845,7 @@ extension SmokeApp {
 // hydration byte-identity mode: print the shared hydration view's SSR bytes
 // and stop (the wasm client's --verify-render must produce the same bytes).
 if CommandLine.arguments.contains("--print-hydration-ssr") {
-	print(HydrationView().render())
+	print(HydrationView().renderThroughBuffer())
 } else {
 	try await SmokeApp.main()
 }

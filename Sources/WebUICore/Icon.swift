@@ -57,7 +57,7 @@ public struct WebUIIcon: View {
 		self.title = title
 	}
 
-	public func render() -> String {
+	public func render(into buffer: inout HTMLBuffer) {
 		let classes = iconClass(for: size)
 		var aria: String
 		if let title, !title.isEmpty {
@@ -65,7 +65,7 @@ public struct WebUIIcon: View {
 		} else {
 			aria = " aria-hidden=\"true\""
 		}
-		return "<svg class=\"\(classes)\" viewBox=\"0 0 24 24\"\(iconDimensionAttributes(for: size)) fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\"\(aria)>\(name.body)</svg>"
+		buffer.append("<svg class=\"\(classes)\" viewBox=\"0 0 24 24\"\(iconDimensionAttributes(for: size)) fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\"\(aria)>\(name.body)</svg>")
 	}
 }
 
@@ -113,7 +113,7 @@ public struct WebUIIconCustom: View {
 		self.title = title
 	}
 
-	public func render() -> String {
+	public func render(into buffer: inout HTMLBuffer) {
 		let classes = iconClass(for: size)
 		var aria: String
 		if let title, !title.isEmpty {
@@ -122,7 +122,7 @@ public struct WebUIIconCustom: View {
 			aria = " aria-hidden=\"true\""
 		}
 		let dataIcon = " data-icon=\"\(htmlEscape(name))\""
-		return "<svg class=\"\(classes)\" viewBox=\"0 0 24 24\"\(iconDimensionAttributes(for: size)) fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\"\(dataIcon)\(aria)>\(body)</svg>"
+		buffer.append("<svg class=\"\(classes)\" viewBox=\"0 0 24 24\"\(iconDimensionAttributes(for: size)) fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\"\(dataIcon)\(aria)>\(body)</svg>")
 	}
 }
 

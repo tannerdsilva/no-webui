@@ -19,7 +19,7 @@ import WebUIServer
 // (the `WebUIChart` product is pinned by its own `ChartTests`.)
 
 private func rendered(_ view: some View) -> String {
-	view.render()
+	view.renderThroughBuffer()
 }
 
 // MARK: - the asset toolkit
@@ -200,7 +200,7 @@ func eventModifierSurfacePins() {
 	_ = Text("x").onFocusOut(perform: handler)
 	_ = Text("x").onOptimisticClick(predict: { [] }, perform: handler)
 	let attrs = controlAttributes(id: "evt-click", event: .click, handler: handler)
-	let injected = injectAttributes(into: Text("x").render(), attrs)
+	let injected = injectAttributes(into: Text("x").renderThroughBuffer(), attrs)
 	#expect(injected.contains("data-component-id=\"evt-click\""))
 	#expect(injected.contains("data-event=\"click\""))
 }
@@ -701,14 +701,14 @@ func authSurfacePins() throws {
 func documentSurfacePins() {
 	let doc = WebUIDocument(
 		title: "T",
-		body: Text("hi").render(),
+		body: Text("hi").renderThroughBuffer(),
 		runtimeConfig: RuntimeConfig(renderToken: "rt-1")
-	).render()
+	).renderThroughBuffer()
 	#expect(doc.contains("<title>T</title>"))
 	#expect(doc.contains("<meta name=\"webui-config\""))
 	#expect(doc.contains("renderToken"))
 
-	let themed = WebUIDocument(body: Text("x").render(), theme: WebUITheme(defaultMode: .dark)).render()
+	let themed = WebUIDocument(body: Text("x").renderThroughBuffer(), theme: WebUITheme(defaultMode: .dark)).renderThroughBuffer()
 	#expect(themed.contains("color-scheme: dark"))
 }
 
@@ -749,13 +749,13 @@ func renderBufferAdditionsPin() {
 	Text("y").padding(2).render(into: &styled)
 	#expect(styled.finish() == "<span style=\"padding: 2px;\">y</span>")
 
-	// a conformer implementing only the string requirements still works through
-	// the buffer: that is the defaulted requirement's additive promise
-	struct StringOnly: View {
-		func render() -> String { "s" }
+	// the requirement is what dispatches: a conformer's render(into:) runs, and
+	// since the 2.0 flip it is the only way to conform at all
+	struct BufferOnly: View {
+		func render(into buffer: inout HTMLBuffer) { buffer.append("s") }
 	}
 	var fallback = HTMLBuffer()
-	StringOnly().render(into: &fallback)
+	BufferOnly().render(into: &fallback)
 	#expect(fallback.finish() == "s")
 
 	struct ModifierOnly: ViewModifier {

@@ -36,22 +36,22 @@ import WebUIDesignSystem
 private func sugar(for event: HTMLEvent, _ handler: @escaping EventHandler) -> String {
     RenderContext.$current.withValue(RenderContext(router: EventRouter())) {
         switch event {
-        case .click:     return Text("x").onClick(perform: handler).render()
-        case .submit:    return Text("x").onSubmit(perform: handler).render()
-        case .input:     return Text("x").onInput(perform: handler).render()
-        case .change:    return Text("x").onChange(perform: handler).render()
-        case .mouseover: return Text("x").onMouseOver(perform: handler).render()
-        case .mouseout:  return Text("x").onMouseOut(perform: handler).render()
-        case .mousedown: return Text("x").onMouseDown(perform: handler).render()
-        case .mouseup:   return Text("x").onMouseUp(perform: handler).render()
-        case .keydown:   return Text("x").onKeyDown(perform: handler).render()
-        case .keyup:     return Text("x").onKeyUp(perform: handler).render()
-        case .keypress:  return Text("x").onKeyPress(perform: handler).render()
-        case .focus:     return Text("x").onFocus(perform: handler).render()
-        case .blur:      return Text("x").onBlur(perform: handler).render()
-        case .focusin:   return Text("x").onFocusIn(perform: handler).render()
-        case .focusout:  return Text("x").onFocusOut(perform: handler).render()
-        case .custom:    return Text("x").on(event, perform: handler).render()
+        case .click:     return Text("x").onClick(perform: handler).renderThroughBuffer()
+        case .submit:    return Text("x").onSubmit(perform: handler).renderThroughBuffer()
+        case .input:     return Text("x").onInput(perform: handler).renderThroughBuffer()
+        case .change:    return Text("x").onChange(perform: handler).renderThroughBuffer()
+        case .mouseover: return Text("x").onMouseOver(perform: handler).renderThroughBuffer()
+        case .mouseout:  return Text("x").onMouseOut(perform: handler).renderThroughBuffer()
+        case .mousedown: return Text("x").onMouseDown(perform: handler).renderThroughBuffer()
+        case .mouseup:   return Text("x").onMouseUp(perform: handler).renderThroughBuffer()
+        case .keydown:   return Text("x").onKeyDown(perform: handler).renderThroughBuffer()
+        case .keyup:     return Text("x").onKeyUp(perform: handler).renderThroughBuffer()
+        case .keypress:  return Text("x").onKeyPress(perform: handler).renderThroughBuffer()
+        case .focus:     return Text("x").onFocus(perform: handler).renderThroughBuffer()
+        case .blur:      return Text("x").onBlur(perform: handler).renderThroughBuffer()
+        case .focusin:   return Text("x").onFocusIn(perform: handler).renderThroughBuffer()
+        case .focusout:  return Text("x").onFocusOut(perform: handler).renderThroughBuffer()
+        case .custom:    return Text("x").on(event, perform: handler).renderThroughBuffer()
         }
     }
 }
@@ -104,7 +104,7 @@ struct InteractivityIdiomTests {
         // modifier path registers through the context, so with no context there is
         // nothing to route to. it warns rather than failing, which is why a silent
         // dead control is possible at all.
-        let html = Text("x").onClick { _ in [] }.render()
+        let html = Text("x").onClick { _ in [] }.renderThroughBuffer()
         #expect(!html.contains("data-event="), "outside a context there is nothing to emit: \(html)")
     }
 
@@ -120,7 +120,7 @@ struct InteractivityIdiomTests {
         let componentHTML = await RenderContext.$current.withValue(context) {
             WebUIInput(placeholder: "p", id: "field").onInput { _ in
                 [FragmentUpdate(id: "out", html: "ok")]
-            }.render()
+            }.renderThroughBuffer()
         }
 
         #expect(modifierHTML.contains("data-event=\"input\""))

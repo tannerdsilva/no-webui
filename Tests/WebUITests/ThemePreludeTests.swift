@@ -17,7 +17,7 @@ struct ThemePreludeTests {
 			body: "<p>x</p>",
 			includeRuntime: includeRuntime,
 			themePrelude: themePrelude
-		).render()
+		).renderedString()
 	}
 
 	@Test("is emitted, inline, carrying the nonce, and free of comments")
@@ -120,7 +120,7 @@ struct ThemePreludeTests {
 			title: "t",
 			body: "<p>x</p>",
 			contentSecurityPolicy: "default-src 'self'; script-src 'self';"
-		).render()
+		).renderedString()
 		#expect(!html.contains("localStorage.getItem('webui-theme')"),
 			"a prelude the browser will refuse is payload plus a console error")
 		#expect(!html.contains("<script nonce="), "no inline script is emitted at all")

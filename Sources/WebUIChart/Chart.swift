@@ -41,8 +41,10 @@ public struct Chart: View {
 		self.ariaLabel = ariaLabel
 	}
 
-	public func render() -> String {
-		ChartRenderer(marks: marks, config: config, id: id, ariaLabel: ariaLabel).render()
+	public func render(into buffer: inout HTMLBuffer) {
+		// the renderer writes straight into the buffer: no intermediate string,
+		// same bytes.
+		ChartRenderer(marks: marks, config: config, id: id, ariaLabel: ariaLabel).render(into: &buffer)
 	}
 
 	/// Extract marks from a view in the chart builder: a styled mark, a raw
@@ -175,6 +177,6 @@ extension ForEach: ChartIterableMark {
 /// A styled mark renders nothing on its own — it only has meaning inside a
 /// `Chart`. (Matches how a `ChartMark` is not a standalone SwiftUI view.)
 extension ChartMark: View, ChartContent {
-	public func render() -> String { "" }
+	public func render(into buffer: inout HTMLBuffer) { buffer.append("") }
 	public func makeMark() -> ChartMark { self }
 }

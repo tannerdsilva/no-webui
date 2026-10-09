@@ -40,7 +40,7 @@ public struct WebUISlider: View {
         self.id = id; self.onChange = onChange
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let range = Swift.max(self.max - self.min, 1e-9)
         let pct = Swift.min(Swift.max((self.max - self.min) / range * 100.0, 0), 100)
         let inputID = id.map { htmlEscape("\($0)-input") } ?? ""
@@ -56,7 +56,7 @@ public struct WebUISlider: View {
             html += "<div class=\"slider__labels\"><span>\(htmlEscape(minLabel.isEmpty ? "\(min)" : minLabel))</span><span>\(htmlEscape(maxLabel.isEmpty ? "\(max)" : maxLabel))</span></div>"
         }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -94,7 +94,7 @@ public struct WebUIToggle: View {
         self.id = id; self.onChange = onChange
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var classes = "toggle\(Self.classFor(size))"
         if labelLeft { classes += " toggle--label-left" }
         if loading { classes += " toggle--loading" }
@@ -108,7 +108,7 @@ public struct WebUIToggle: View {
         html += "<span class=\"toggle__track\"><span class=\"toggle__thumb\"></span></span>"
         if !labelLeft && !label.isEmpty { html += "<span class=\"toggle__label\">\(htmlEscape(label))</span>" }
         html += "</label>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -138,7 +138,7 @@ public struct WebUIStepper: View {
         self.value = value; self.size = size; self.id = id; self.onChange = onChange
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let attrs: String
         if let id, let onChange {
             attrs = controlAttributes(id: id, event: .click, handler: onChange)
@@ -152,7 +152,7 @@ public struct WebUIStepper: View {
         html += "<span class=\"stepper__value\">\(value)</span>"
         html += "<button class=\"stepper__btn\"\(incID) aria-label=\"Increase\">+</button>"
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -186,7 +186,7 @@ public struct WebUIOTP: View {
         self.id = id; self.onChange = onChange
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let digits = value ?? []
         var html = "<div class=\"otp\(Self.classFor(size))\(error ? " otp--error" : "")\" aria-label=\"One-time code\">"
         for i in 0..<length {
@@ -196,7 +196,7 @@ public struct WebUIOTP: View {
             html += "<input class=\"otp__cell\(filled ? " otp__cell--filled" : "")\(i == digits.count ? " otp__cell--active" : "")\"\(cellID) type=\"text\" inputmode=\"numeric\" maxlength=\"1\" value=\"\(filled ? "\(digits[i])" : "")\" aria-label=\"Digit \(i + 1)\"\(cellAttrs)>"
         }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -208,7 +208,7 @@ public struct WebUIMFA: View {
     public let recoveryCodes: [Recovery]
     public init(recoveryCodes: [Recovery] = []) { self.recoveryCodes = recoveryCodes }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"mfa\">"
         html += "<div class=\"mfa__qr\"><div class=\"qr\"><div class=\"qr__code\">"
         for _ in 0..<(11 * 11) { html += "<span class=\"qr__cell\"></span>" }
@@ -225,7 +225,7 @@ public struct WebUIMFA: View {
             html += "</div>"
         }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -247,7 +247,7 @@ public struct WebUIRecurrence: View {
         self.id = id; self.onChange = onChange
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let rootAttrs = id.map { controlAttributes(id: $0, event: .click, handler: onChange) } ?? ""
         var html = "<div class=\"recurrence\"\(rootAttrs)>"
         html += "<div class=\"recurrence__options\">"
@@ -262,7 +262,7 @@ public struct WebUIRecurrence: View {
             html += "<button class=\"recurrence__day\(i < 5 ? " recurrence__day--active" : "")\"\(dayID)>\(htmlEscape(d))</button>"
         }
         html += "</div></div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -284,7 +284,7 @@ public struct WebUIMultiSelect: View {
         self.id = id; self.onChange = onChange
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let sel = options.filter(\.selected)
         let rootAttrs = id.map { controlAttributes(id: $0, event: .click, handler: onChange) } ?? ""
         var html = "<div class=\"multiselect\"\(rootAttrs)>"
@@ -302,7 +302,7 @@ public struct WebUIMultiSelect: View {
             html += "<div class=\"multiselect__option\(option.selected ? " multiselect__option--selected" : "")\"\(optID)>\(htmlEscape(option.label))</div>"
         }
         html += "</div></div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -338,12 +338,12 @@ public struct WebUIValidation: View {
 
     public init(_ message: String, state: ValidationState = .error) { self.message = message; self.state = state }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"validation\(Self.classFor(state))\" role=\"status\">"
         html += "<span class=\"validation__icon\" aria-hidden=\"true\">\(Self.icon(for: state))</span>"
         html += "<span class=\"validation__text\">\(htmlEscape(message))</span>"
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -355,14 +355,14 @@ public struct WebUIDropZone: View {
     public let hover: Bool
     public init(_ title: String, hint: String = "", hover: Bool = false) { self.title = title; self.hint = hint; self.hover = hover }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"dropzone\(hover ? " dropzone--hover" : "")\" role=\"button\" tabindex=\"0\">"
         html += "<div class=\"file-drop__icon\" aria-hidden=\"true\">⇪</div>"
         html += "<div class=\"file-drop__title\">\(htmlEscape(title))</div>"
         if !hint.isEmpty { html += "<div class=\"file-drop__hint\">\(htmlEscape(hint))</div>" }
         html += "<input type=\"file\" style=\"display:none\">"
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -372,12 +372,12 @@ public struct WebUISignature: View {
     public let label: String
     public init(_ label: String = "Sign here") { self.label = label }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"sigpad\">"
         html += "<div class=\"sigpad__canvas\" role=\"img\" aria-label=\"\(htmlEscape(label))\"></div>"
         html += "<div class=\"sigpad__tools\"><button class=\"button button--ghost button--sm\">Clear</button></div>"
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -412,7 +412,7 @@ public struct WebUIInlineEdit: View {
         self.id = id; self.onSave = onSave
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let rootAttrs = id.map { controlAttributes(id: $0, event: .click, handler: onSave) } ?? ""
         let saveID = id.map { " id=\"\(htmlEscape("\($0)-save"))\"" } ?? ""
         let cancelID = id.map { " id=\"\(htmlEscape("\($0)-cancel"))\"" } ?? ""
@@ -423,7 +423,7 @@ public struct WebUIInlineEdit: View {
             html += "<div class=\"inline-edit__actions\"><button class=\"inline-edit__check\"\(saveID) aria-label=\"Save\">✓</button><button class=\"inline-edit__pencil\"\(cancelID) aria-label=\"Cancel\">✕</button></div></div>"
         }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -435,14 +435,14 @@ public struct WebUIMasked: View {
     public let masked: Bool
     public init(_ value: String, prefix: String? = nil, masked: Bool = true) { self.value = value; self.prefix = prefix; self.masked = masked }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let display = masked ? String(repeating: "•", count: value.count) : value
         var html = "<div class=\"masked\">"
         if let prefix { html += "<span class=\"masked__prefix\">\(htmlEscape(prefix))</span>" }
         html += "<input type=\"text\" value=\"\(htmlEscape(display))\" aria-label=\"masked value\">"
         html += "<span class=\"masked__caret\" aria-hidden=\"true\"></span>"
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -478,7 +478,7 @@ public struct WebUIRating: View {
         self.id = id; self.onChange = onChange
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let full = Int(value)
         var classes = "rating\(Self.classFor(size))"
         if heart { classes += " rating--heart" }
@@ -493,7 +493,7 @@ public struct WebUIRating: View {
         }
         if showValue { html += "<span class=\"rating__value\">\(value)</span>" }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -539,18 +539,18 @@ public struct WebUITag: View {
                   count: count, icon: icon, id: id, onRemove: onRemove)
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var classes = "tag\(appearance.rawValue)"
         if clickable { classes += " tag--clickable" }
         let rootAttrs = id.map { controlAttributes(id: $0, event: .click, handler: onRemove) } ?? ""
         let removeID = id.map { " id=\"\(htmlEscape("\($0)-remove"))\"" } ?? ""
         var html = "<span class=\"\(classes)\"\(rootAttrs)>"
-        if let icon { html += "<span class=\"tag__icon\">\(WebUIIcon(icon, size: .small).render())</span>" }
+        if let icon { html += "<span class=\"tag__icon\">\(WebUIIcon(icon, size: .small).renderThroughBuffer())</span>" }
         html += "<span class=\"tag__label\">\(htmlEscape(label))</span>"
         if let count { html += "<span class=\"tag__count\">\(count)</span>" }
         if removable { html += "<button class=\"tag__remove\"\(removeID) aria-label=\"Remove \(htmlEscape(label))\">×</button>" }
         html += "</span>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -570,7 +570,7 @@ public struct WebUIChipInput: View {
         self.id = id; self.onChange = onChange
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let rootAttrs = id.map { controlAttributes(id: $0, event: .click, handler: onChange) } ?? ""
         var html = "<div class=\"chip-input\"\(rootAttrs)>"
         for (i, chip) in chips.enumerated() {
@@ -579,7 +579,7 @@ public struct WebUIChipInput: View {
         }
         html += "<input type=\"text\" placeholder=\"\(htmlEscape(placeholder))\">"
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -606,7 +606,7 @@ public struct WebUICardInput: View {
 
     public init(number: String, holder: String, brand: WebUIDesignSystemCore.Brand? = nil) { self.number = number; self.holder = holder; self.brand = brand }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"card-input\">"
         html += "<div class=\"card-input__row\"><div class=\"card-input__preview\"><span class=\"card-input__chip\"></span><span class=\"card-input__number\">\(htmlEscape(number))</span><span class=\"card-input__holder\">\(htmlEscape(holder))</span>"
         if let brand { html += "<span class=\"card-input__brand-icon\(Self.classFor(brand))\"></span>" }
@@ -614,7 +614,7 @@ public struct WebUICardInput: View {
         html += "<div class=\"card-input__row\"><div class=\"card-input__field\"><label>Card number</label><input class=\"input\" value=\"\(htmlEscape(number))\"></div></div>"
         html += "<div class=\"card-input__row\"><div class=\"card-input__field\"><label>Card holder</label><input class=\"input\" value=\"\(htmlEscape(holder))\"></div></div>"
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -677,13 +677,13 @@ public struct WebUIInputGroup: View {
         self.disabled = disabled
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"input input--with-affix"
         let stateClass = Self.classFor(state)
         if !stateClass.isEmpty { html += " \(stateClass)" }
         html += "\">"
         if let icon {
-            html += "<span class=\"input__affix input__affix--left\">" + WebUIIcon(icon, size: .small).render() + "</span>"
+            html += "<span class=\"input__affix input__affix--left\">" + WebUIIcon(icon, size: .small).renderThroughBuffer() + "</span>"
         }
         if let prefix {
             html += "<span class=\"input__prefix\">\(htmlEscape(prefix))</span>"
@@ -701,7 +701,7 @@ public struct WebUIInputGroup: View {
             html += "<span class=\"\(suffixClass)\">\(htmlEscape(suffix))</span>"
         }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -753,7 +753,7 @@ public struct WebUIField: View {
         self.children = content()
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"field\">"
         if label != nil || note != nil || count != nil {
             html += "<div class=\"field__row\">"
@@ -770,12 +770,12 @@ public struct WebUIField: View {
             }
             html += "</div>"
         }
-        for child in children { html += child.render() }
+        for child in children { html += child.renderThroughBuffer() }
         if let helper {
             html += "<span class=\"field__helper\(helperIsError ? " field__helper--error" : "")\">\(htmlEscape(helper))</span>"
         }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -808,7 +808,7 @@ public struct WebUIToggleGroup: View {
         self.onToggle = onToggle
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let attrs: String
         if let id, let onToggle {
             attrs = controlAttributes(id: id, event: .click, handler: onToggle)
@@ -827,6 +827,6 @@ public struct WebUIToggleGroup: View {
             html += ">\(htmlEscape(option.label))</button>"
         }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }

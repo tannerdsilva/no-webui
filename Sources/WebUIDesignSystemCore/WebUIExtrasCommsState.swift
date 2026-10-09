@@ -17,10 +17,11 @@ public struct WebUIMention: View {
         self.text = text; self.options = options; self.id = id; self.onSelect = onSelect
     }
 
-    public func render() -> String {
-        if options.isEmpty {
-            return "<span class=\"mention\">@\(htmlEscape(text))</span>"
-        }
+    public func render(into buffer: inout HTMLBuffer) {
+            if options.isEmpty {
+                buffer.append("<span class=\"mention\">@\(htmlEscape(text))</span>")
+                return
+            }
         let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onSelect) } ?? ""
         var html = "<div class=\"mention-dropdown\"\(attrs)>"
         for (i, option) in options.enumerated() {
@@ -29,7 +30,7 @@ public struct WebUIMention: View {
             html += "><span class=\"mention-option__avatar\"></span><span class=\"mention-option__name\">\(htmlEscape(option.name))</span><span class=\"mention-option__handle\">\(htmlEscape(option.handle))</span></div>"
         }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -45,7 +46,7 @@ public struct WebUIReactions: View {
         self.reactions = reactions; self.id = id; self.onChange = onChange
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onChange) } ?? ""
         var html = "<div class=\"reactions\"\(attrs)>"
         for (i, r) in reactions.enumerated() {
@@ -55,7 +56,7 @@ public struct WebUIReactions: View {
         }
         html += "<button class=\"reactions__more\" aria-label=\"Add reaction\">＋</button>"
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -65,11 +66,11 @@ public struct WebUITypingIndicator: View {
     public let inline: Bool
     public init(inline: Bool = false) { self.inline = inline }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"typing\(inline ? " typing--inline" : "")\" role=\"status\" aria-label=\"Someone is typing\">"
         html += "<span class=\"typing__dot\"></span><span class=\"typing__dot\"></span><span class=\"typing__dot\"></span>"
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -92,17 +93,17 @@ public struct WebUINotification: View {
         self.title = title; self.text = text; self.time = time; self.read = read; self.icon = icon; self.id = id; self.onTap = onTap
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onTap) } ?? ""
         var html = "<div class=\"notification\(read ? " notification--read" : "")\"\(attrs)>"
-        if let icon { html += "<span class=\"notification__icon\">\(WebUIIcon(icon, size: .medium).render())</span>" }
+        if let icon { html += "<span class=\"notification__icon\">\(WebUIIcon(icon, size: .medium).renderThroughBuffer())</span>" }
         else { html += "<span class=\"notification__icon\"><span class=\"notification__unread\"></span></span>" }
         html += "<div class=\"notification__body\">"
         if let title { html += "<div class=\"notification__title\">\(htmlEscape(title))</div>" }
         html += "<div class=\"notification__text\">\(htmlEscape(text))</div>"
         if !time.isEmpty { html += "<div class=\"notification__time\">\(htmlEscape(time))</div>" }
         html += "</div></div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -112,11 +113,11 @@ public struct WebUIToastStack: View {
     public let children: [any View]
     public init(@ViewBuilder content: () -> [any View]) { self.children = content() }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"toast-stack\" aria-live=\"polite\">"
-        for c in children { html += c.render() }
+        for c in children { html += c.renderThroughBuffer() }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -131,13 +132,13 @@ public struct WebUIBell: View {
         self.count = count; self.icon = icon; self.id = id; self.onTap = onTap
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onTap) } ?? ""
         var html = "<button class=\"bell\"\(attrs) aria-label=\"Notifications\(count > 0 ? ", \(count) unread" : "")\">"
-        html += "<span class=\"bell__icon\">\(WebUIIcon(icon, size: .medium).render())</span>"
+        html += "<span class=\"bell__icon\">\(WebUIIcon(icon, size: .medium).renderThroughBuffer())</span>"
         if count > 0 { html += "<span class=\"bell__badge\">\(count)</span>" }
         html += "</button>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -157,7 +158,7 @@ public struct WebUIStatCard: View {
         self.label = label; self.value = value; self.delta = delta; self.trend = trend; self.accent = accent
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"stat-card\(accent ? " stat-card--accent" : "")\">"
         html += "<div class=\"stat-card__label\">\(htmlEscape(label))</div>"
         html += "<div class=\"stat-card__value\">\(htmlEscape(value))</div>"
@@ -166,7 +167,7 @@ public struct WebUIStatCard: View {
             html += "<div class=\"stat-card__delta delta \(up ? "delta--up" : "delta--down")\">\(htmlEscape(delta))</div>"
         }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -180,7 +181,7 @@ public struct WebUIDelta: View {
     public let direction: Trend
     public init(_ text: String, direction: Trend = .up) { self.text = text; self.direction = direction }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         // the shared Trend offers `flat`, which Delta never did: it forwards the
         // component's own class pattern and a neutral bar glyph.
         let cls: String
@@ -190,7 +191,7 @@ public struct WebUIDelta: View {
             case .down: cls = " delta--down"; glyph = "▼"
             case .flat: cls = " delta--flat"; glyph = "▬"
         }
-        return "<span class=\"delta\(cls)\">\(glyph) \(htmlEscape(text))</span>"
+        buffer.append("<span class=\"delta\(cls)\">\(glyph) \(htmlEscape(text))</span>")
     }
 }
 
@@ -202,13 +203,13 @@ public struct WebUICelebrate: View {
     public let text: String?
     public init(emoji: String, title: String, text: String? = nil) { self.emoji = emoji; self.title = title; self.text = text }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"celebrate\">"
         html += "<div class=\"celebrate__emoji\">\(htmlEscape(emoji))</div>"
         html += "<div class=\"celebrate__title\">\(htmlEscape(title))</div>"
         if let text { html += "<div class=\"celebrate__text\">\(htmlEscape(text))</div>" }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -218,11 +219,11 @@ public struct WebUIConfetti: View {
     public let round: Bool
     public init(round: Bool = true) { self.round = round }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"confetti-stage\"><div class=\"confetti\(round ? " confetti--round" : "")\" aria-hidden=\"true\">"
         for _ in 0..<24 { html += "<span class=\"confetti__piece\"></span>" }
         html += "</div></div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -236,7 +237,7 @@ public struct WebUICountdown: View {
     public let urgent: Bool
     public init(label: String = "", units: [Unit], urgent: Bool = false) { self.label = label; self.units = units; self.urgent = urgent }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"countdown\(urgent ? " countdown--urgent" : "")\">"
         if !label.isEmpty { html += "<div class=\"countdown__label\">\(htmlEscape(label))</div>" }
         html += "<div class=\"countdown__units\">"
@@ -244,7 +245,7 @@ public struct WebUICountdown: View {
             html += "<div class=\"countdown__unit\"><span class=\"countdown__value\">\(webuiZeroPad(u.value, width: 2))</span><span class=\"countdown__unit-label\">\(htmlEscape(u.label))</span></div>"
         }
         html += "</div></div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -261,16 +262,16 @@ public struct WebUICookieConsent: View {
         self.title = title; self.text = text; self.children = content(); self.id = id; self.onSelect = onSelect
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onSelect) } ?? ""
         var html = "<div class=\"cookie-consent\"\(attrs) role=\"dialog\" aria-modal=\"false\">"
         html += "<div class=\"cookie-consent__body\">"
         if let title { html += "<div class=\"cookie-consent__title\">\(htmlEscape(title))</div>" }
         html += "<div class=\"cookie-consent__text\">\(htmlEscape(text))</div>"
         html += "<div class=\"cookie-consent__actions\">"
-        for c in children { html += c.render() }
+        for c in children { html += c.renderThroughBuffer() }
         html += "</div></div></div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -300,13 +301,13 @@ public struct WebUIPullRefresh: View {
         self.state = state; self.text = text; self.id = id; self.onRefresh = onRefresh
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onRefresh) } ?? ""
         var html = "<div class=\"pull-refresh\(Self.classFor(state))\"\(attrs) role=\"status\">"
         html += "<div class=\"pull-refresh__indicator\"><span class=\"pull-refresh__spinner\"></span>"
         if let text { html += "<span class=\"pull-refresh__text\">\(htmlEscape(text))</span>" }
         html += "</div></div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -316,13 +317,13 @@ public struct WebUISkeletonCard: View {
     public let withMedia: Bool
     public init(withMedia: Bool = true) { self.withMedia = withMedia }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"skeleton-card\">"
         if withMedia { html += "<div class=\"skeleton-card__media skeleton skeleton--rect\"></div>" }
         html += "<div class=\"skeleton__text skeleton__text--w100 skeleton\"></div>"
         html += "<div class=\"skeleton__text skeleton__text--w60 skeleton\"></div>"
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -333,9 +334,9 @@ public struct WebUIAppletCard: View {
     public let value: String
     public init(title: String, value: String) { self.title = title; self.value = value }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let html = "<div class=\"applet-card\"><div class=\"applet-card__label\">\(htmlEscape(title))</div><div class=\"applet-card__value\">\(htmlEscape(value))</div></div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -346,14 +347,14 @@ public struct WebUIAvatarStack: View {
     public let more: Int
     public init(initials: [String], more: Int = 0) { self.initials = initials; self.more = more }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"avatar-stack\">"
         for initi in initials {
             html += "<span class=\"avatar avatar--md avatar--initials\">\(htmlEscape(initi))</span>"
         }
         if more > 0 { html += "<span class=\"avatar avatar--md avatar--more\">+\(more)</span>" }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -380,8 +381,8 @@ public struct WebUIBadgeStatus: View {
 
     public init(_ label: String, status: Presence = .online) { self.label = label; self.status = status }
 
-    public func render() -> String {
-        return "<span class=\"badge-status\"><span class=\"badge-status__dot \(Self.classFor(status))\"></span>\(htmlEscape(label))</span>"
+    public func render(into buffer: inout HTMLBuffer) {
+        buffer.append("<span class=\"badge-status\"><span class=\"badge-status__dot \(Self.classFor(status))\"></span>\(htmlEscape(label))</span>")
     }
 }
 
@@ -392,12 +393,12 @@ public struct WebUIBadgeCount: View {
     public let icon: IconName
     public init(count: Int, icon: IconName) { self.count = count; self.icon = icon }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<span class=\"badge-count\">"
-        html += "<span class=\"badge-count__icon\">\(WebUIIcon(icon, size: .medium).render())</span>"
+        html += "<span class=\"badge-count__icon\">\(WebUIIcon(icon, size: .medium).renderThroughBuffer())</span>"
         html += "<span class=\"badge-count__num\">\(count)</span>"
         html += "</span>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -411,7 +412,7 @@ public struct WebUIRadioGroup: View {
     public let inline: Bool
     public init(options: [Option], selected: String? = nil, inline: Bool = false) { self.options = options; self.selected = selected; self.inline = inline }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"radio-group\(inline ? " radio-group--inline" : "")\" role=\"radiogroup\">"
         for option in options {
             let checked = option.value == selected
@@ -421,7 +422,7 @@ public struct WebUIRadioGroup: View {
             html += "</label>"
         }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -434,7 +435,7 @@ public struct WebUICheckboxGroup: View {
     public let inline: Bool
     public init(options: [Option], inline: Bool = false) { self.options = options; self.inline = inline }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"checkbox-group\(inline ? " checkbox-group--inline" : "")\">"
         for option in options {
             html += "<label class=\"checkbox\">"
@@ -443,7 +444,7 @@ public struct WebUICheckboxGroup: View {
             html += "</label>"
         }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -527,14 +528,14 @@ public struct WebUIBanner: View, Dismissible {    @available(*, deprecated, rena
     public var dismissMarker: String { "data-dismiss" }
     public var dismissRootIdentifier: String? { id }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let dismissal = makeDismissal(ariaLabel: "Dismiss")
         var html = "<div class=\"banner \(Self.classFor(tone))\" role=\"status\""
         if let elementID = dismissal.elementID ?? id {
             html += " id=\"\(htmlEscape(elementID))\""
         }
         html += ">"
-        html += "<div class=\"banner__icon fill-slot\">" + WebUIIcon(icon, size: .slot).render() + "</div>"
+        html += "<div class=\"banner__icon fill-slot\">" + WebUIIcon(icon, size: .slot).renderThroughBuffer() + "</div>"
         html += "<div class=\"banner__body\">"
         if let title {
             html += "<span class=\"banner__title\">\(htmlEscape(title))</span>"
@@ -545,7 +546,7 @@ public struct WebUIBanner: View, Dismissible {    @available(*, deprecated, rena
             html += dismissal.buttonHTML
         }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -580,13 +581,13 @@ public struct WebUIActivityFeed: View {
         self.groups = groups
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"activity\">"
         for group in groups {
             html += "<div class=\"activity__group\">\(htmlEscape(group.title))</div>"
             for item in group.items {
                 html += "<div class=\"activity__item\">"
-                html += "<div class=\"activity__icon fill-slot\">" + WebUIIcon(item.icon, size: .slot).render() + "</div>"
+                html += "<div class=\"activity__icon fill-slot\">" + WebUIIcon(item.icon, size: .slot).renderThroughBuffer() + "</div>"
                 html += "<div class=\"activity__text\">\(htmlEscape(item.text))</div>"
                 if let time = item.time {
                     html += "<span class=\"activity__time\">\(htmlEscape(time))</span>"
@@ -595,7 +596,7 @@ public struct WebUIActivityFeed: View {
             }
         }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -630,7 +631,7 @@ public struct WebUIMessageScroller: View {
         self.children = content()
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"scroll-area scroll-area--reverse"
         if fade { html += " scroll-area--fade-y" }
         html += "\""
@@ -639,10 +640,10 @@ public struct WebUIMessageScroller: View {
         html += " style=\"height: \(size); max-height: \(size)\""
         html += " role=\"log\" aria-live=\"polite\" aria-label=\"\(htmlEscape(ariaLabel))\" tabindex=\"0\">"
         for child in children.reversed() {
-            html += child.render()
+            html += child.renderThroughBuffer()
         }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -663,16 +664,16 @@ public struct WebUIMarker: View {
         self.spread = spread
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"marker\(sticky ? " marker--sticky" : "")\" role=\"separator\">"
         if spread { html += "<span class=\"marker__rule\"></span>" }
         if let icon {
-            html += "<span class=\"marker__glyph\">" + WebUIIcon(icon, size: .slot).render() + "</span>"
+            html += "<span class=\"marker__glyph\">" + WebUIIcon(icon, size: .slot).renderThroughBuffer() + "</span>"
         }
         html += "<span class=\"marker__label\">\(htmlEscape(label))</span>"
         if spread { html += "<span class=\"marker__rule\"></span>" }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -726,7 +727,7 @@ public struct WebUIAttachment: View, Dismissible {
     public var dismissMarker: String { "data-dismiss" }
     public var dismissRootIdentifier: String? { id }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let dismissal = makeDismissal(ariaLabel: "Remove attachment")
         let stateClass = Self.classFor(state)
         var html = "<div class=\"attachment"
@@ -736,7 +737,7 @@ public struct WebUIAttachment: View, Dismissible {
             html += " id=\"\(htmlEscape(elementID))\""
         }
         html += ">"
-        html += "<span class=\"attachment__icon\">" + WebUIIcon(icon, size: .small).render() + "</span>"
+        html += "<span class=\"attachment__icon\">" + WebUIIcon(icon, size: .small).renderThroughBuffer() + "</span>"
         html += "<span class=\"attachment__body\">"
         html += "<span class=\"attachment__name\">\(htmlEscape(name))</span>"
         if let meta {
@@ -747,7 +748,7 @@ public struct WebUIAttachment: View, Dismissible {
             html += dismissal.buttonHTML
         }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -831,10 +832,10 @@ public struct WebUIChatBubble: View {
             extraClass = " chat__receipt--read"
         }
         return "<span class=\"chat__receipt\(extraClass)\" role=\"img\" aria-label=\"\(label)\">"
-            + WebUIIcon(icon, size: .small).render() + "</span>"
+            + WebUIIcon(icon, size: .small).renderThroughBuffer() + "</span>"
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"chat__bubble \(side.rawValue)\""
         if let id { html += " id=\"\(htmlEscape(id))\"" }
         html += ">"
@@ -858,7 +859,7 @@ public struct WebUIChatBubble: View {
             row += "</div>"
             html += row
         }
-        return html
+        buffer.append(html)
     }
 }
 
@@ -888,7 +889,7 @@ public struct WebUIMessage: View {
         self.reactions = reactions
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"chat__thread\(own ? " chat__thread--own" : "")\">"
         html += "<div class=\"chat__meta\"><span>\(htmlEscape(name))</span>"
         if let time { html += "<span>\(htmlEscape(time))</span>" }
@@ -908,6 +909,6 @@ public struct WebUIMessage: View {
             html += row
         }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }

@@ -266,7 +266,7 @@ public protocol ChartContent: View {
 extension ChartContent {
 	/// Marks render nothing outside a `Chart` — they are resolved into the
 	/// chart's SVG by the `Chart` itself.
-	public func render() -> String { "" }
+	public func render(into buffer: inout HTMLBuffer) { buffer.append("") }
 
 	/// An explicit color for this mark: a CSS variable reference such as
 	/// `"var(--color-danger)"` or a literal hex such as `"#6366f1"`.

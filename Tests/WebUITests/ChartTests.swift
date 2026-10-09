@@ -150,7 +150,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 
 @Suite struct ChartBarTests {
 	@Test func emptyChartRendersEmptyState() {
-		let html = Chart([]).render()
+		let html = Chart([]).renderThroughBuffer()
 		#expect(html.contains("chart--empty"))
 		#expect(html.contains("No data"))
 		#expect(!html.contains("<svg"))
@@ -162,7 +162,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 				BarMark(x: .value("M", d.0), y: .value("V", d.1))
 			}
 		}
-		let out = chart.render()
+		let out = chart.renderThroughBuffer()
 		#expect(out.contains("chart__bar"))
 		#expect(occ(out, "chart__bar\"") == 2, "one bar rect per datum (tips add rects of their own)")
 		// two bars, both inside the plot (viewBox 0 0 640 320, plot x 44…624)
@@ -185,7 +185,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 				BarMark(x: .value("M", d.0), y: .value("V", d.1)).foregroundStyle(by: d.0).stacking(.unstacked)
 			}
 		}
-		let out = c2.render()
+		let out = c2.renderThroughBuffer()
 		#expect(out.contains("chart__c1"))
 		#expect(out.contains("chart__c2"))
 		#expect(out.contains("chart__legend"))
@@ -199,7 +199,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 			}
 		}
 		.chartLegend(position: .hidden)
-		#expect(!chart.render().contains("chart__legend"))
+		#expect(!chart.renderThroughBuffer().contains("chart__legend"))
 	}
 
 	@Test func stackedBarsSumPerCategory() {
@@ -209,7 +209,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 			}
 		}
 		.chartYScale(.linear(domain: 0...40))
-		let out = chart.render()
+		let out = chart.renderThroughBuffer()
 		#expect(occ(out, "chart__bar") >= 4)
 		#expect(occ(out, "<title>") >= 4)
 		// the Feb "B" segment (20…35) sits directly on the Feb "A" segment (0…20):
@@ -232,7 +232,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 				BarMark(x: .value("Q", d.0), y: .value("V", d.1))
 			}
 		}
-		let out = chart.render()
+		let out = chart.renderThroughBuffer()
 		#expect(occ(out, "chart__bar\"") == 3, "one bar rect per datum")
 	}
 
@@ -243,7 +243,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 			}
 		}
 		.chartYScale(.linear(domain: 0...10))
-		let out = chart.render()
+		let out = chart.renderThroughBuffer()
 		// domain 0…10 maps to y 280 (bottom) … 20 (top):
 		// value 9 → 280 − 0.9·260 = 46, value 1 → 280 − 0.1·260 = 254
 		let barRects = out.components(separatedBy: "<g").filter { $0.contains("chart__bar") }
@@ -271,7 +271,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 				}
 			}
 		}
-		let out = chart.render()
+		let out = chart.renderThroughBuffer()
 		#expect(out.contains("chart__area"))
 		#expect(out.contains("chart__line"))
 		#expect(occ(out, "chart__point") >= 2)
@@ -288,7 +288,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 		let chart = Chart(marks)
 			.chartXScale(.linear(domain: 0...5))
 			.chartYScale(.linear(domain: 0...12))
-		let out = chart.render()
+		let out = chart.renderThroughBuffer()
 		#expect(out.contains("chart__line"))
 		#expect(out.contains("<path"))
 		#expect(occ(out, "chart__point") >= 4)
@@ -300,7 +300,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 		}
 		.chartXScale(.linear(domain: 0...4))
 		.chartYScale(.linear(domain: 0...12))
-		.render()
+		.renderThroughBuffer()
 		#expect(out.contains("chart__line"))
 	}
 
@@ -312,7 +312,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 		}
 		.chartXScale(.linear(domain: 0...4))
 		.chartYScale(.linear(domain: 0...8))
-		let out = chart.render()
+		let out = chart.renderThroughBuffer()
 		#expect(out.contains("chart__area"))
 		#expect(out.contains("Z\""))  // closed path
 	}
@@ -323,13 +323,13 @@ func capture(_ regex: String, in haystack: String) -> String? {
 				LineMark(x: .value("X", d.0), y: .value("Y", d.1)).interpolation(.catmullRom)
 			}
 		}
-		#expect(c.render().contains(" C"))
+		#expect(c.renderThroughBuffer().contains(" C"))
 		let s = Chart {
 			ForEach([(1.0, 2.0), (2.0, 9.0), (3.0, 4.0)]) { d in
 				LineMark(x: .value("X", d.0), y: .value("Y", d.1)).interpolation(.stepEnd)
 			}
 		}
-		let d = capture("d=\"([^\"]+)\"", in: s.render())!
+		let d = capture("d=\"([^\"]+)\"", in: s.renderThroughBuffer())!
 		// stepEnd (data units → viewBox): horizontal to the next x, then a
 		// vertical jump AT that x: x domain 1…3 → x=2 sits at viewBox 334
 		#expect(d.range(of: "L334,280 L334,") != nil)
@@ -341,7 +341,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 				LineMark(x: .value("X", d.0), y: .value("Y", d.1)).lineStyle(ChartLineStyle(width: 3, dash: [4, 2]))
 			}
 		}
-		let out = c.render()
+		let out = c.renderThroughBuffer()
 		#expect(out.contains("stroke-width=\"3\""))
 		#expect(out.contains("stroke-dasharray=\"4 2\""))
 	}
@@ -357,7 +357,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 			}
 		}
 		.chartXScale(.linear(domain: 0...6))
-		let out = c.render()
+		let out = c.renderThroughBuffer()
 		#expect(out.contains("<rect"))
 		#expect(occ(out, "<polygon") >= 2)
 		#expect(out.contains("<circle"))
@@ -376,7 +376,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 	}
 
 	@Test func pieRendersThreeSectorsFromTwelveOClock() {
-		let out = Chart(pieMarks).render()
+		let out = Chart(pieMarks).renderThroughBuffer()
 		#expect(out.contains("chart--pie"))
 		#expect(occ(out, "chart__sector") >= 3)
 		// the first sector's outer arc starts at 12 o'clock (top of the circle):
@@ -393,7 +393,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 			s.innerRadiusRatio = 0.62
 			return ChartMark(spec: s)
 		}
-		let out = Chart(donut).render()
+		let out = Chart(donut).renderThroughBuffer()
 		#expect(out.contains("chart__donut-center"))
 		#expect(out.contains("100"))
 		#expect(out.contains("Total"))
@@ -401,19 +401,19 @@ func capture(_ regex: String, in haystack: String) -> String? {
 	}
 
 	@Test func sectorSelectionHighlightsTheMark() {
-		let out = Chart(pieMarks).chartSelection(axis: .x, value: .category("Y")).render()
+		let out = Chart(pieMarks).chartSelection(axis: .x, value: .category("Y")).renderThroughBuffer()
 		#expect(out.contains("chart__mark--selected"))
 		#expect(occ(out, "chart__mark--selected") == 1)
 	}
 
 	@Test func zeroTotalPieIsSafe() {
-		let out = Chart([ChartMark(spec: MarkSpec(kind: .sector, angle: .value("V", 0), series: "X"))]).render()
+		let out = Chart([ChartMark(spec: MarkSpec(kind: .sector, angle: .value("V", 0), series: "X"))]).renderThroughBuffer()
 		#expect(out.contains("chart--pie"))
 		#expect(!out.contains("chart__sector"))
 	}
 
 	@Test func singleSectorPieIsFullCircle() {
-		let out = Chart([ChartMark(spec: MarkSpec(kind: .sector, angle: .value("V", 10), series: "Only"))]).render()
+		let out = Chart([ChartMark(spec: MarkSpec(kind: .sector, angle: .value("V", 10), series: "Only"))]).renderThroughBuffer()
 		#expect(out.contains("chart__sector"))
 	}
 }
@@ -431,7 +431,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 		}
 		.chartXScale(.linear(domain: 0...6))
 		.chartYScale(.linear(domain: 0...10))
-		let out = c.render()
+		let out = c.renderThroughBuffer()
 		#expect(out.contains("chart__rule"))
 		#expect(occ(out, "chart__rule--v") == 0)
 	}
@@ -445,7 +445,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 		}
 		.chartXScale(.linear(domain: 0...6))
 		.chartYScale(.linear(domain: 0...10))
-		let out = c.render()
+		let out = c.renderThroughBuffer()
 		#expect(out.contains("chart__rule--v"))
 	}
 
@@ -463,7 +463,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 		let c = Chart(marks)
 			.chartXScale(.linear(domain: 0...4))
 			.chartYScale(.linear(domain: 0...3))
-		let out = c.render()
+		let out = c.renderThroughBuffer()
 		#expect(occ(out, "chart__rect") >= 12)
 		// every cell rect sits inside the plot
 		for g in out.components(separatedBy: "<g") where g.contains("chart__rect") {
@@ -487,7 +487,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 			RectangleMark(xStart: .value("C", 2.0), xEnd: .value("C", 3.0),
 			             yStart: .value("R", 0.0), yEnd: .value("R", 1.0)).makeMark(),
 		]
-		let out = Chart(marks).render()
+		let out = Chart(marks).renderThroughBuffer()
 		#expect(out.contains("fill-opacity: 0.25"))
 		#expect(out.contains("fill-opacity: 1"))
 		// the valueless cell stays solid (no inline fill-opacity)
@@ -508,7 +508,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 		}
 		.chartYScale(.linear(domain: 0...1))
 		.chartYAxis(AxisConfig(labelFormat: .percent))
-		let out = c.render()
+		let out = c.renderThroughBuffer()
 		#expect(out.contains("0%"))
 		#expect(out.contains("20%"))
 		#expect(out.contains("100%"))
@@ -522,7 +522,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 		}
 		.chartXScale(.linear(domain: 0...4))
 		.chartXAxis(AxisConfig(explicitValues: [0, 1, 2, 3, 4]))
-		let out = c.render()
+		let out = c.renderThroughBuffer()
 		#expect(out.contains(">0<"))
 		#expect(out.contains(">4<"))
 	}
@@ -534,7 +534,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 			}
 		}
 		.chartXScale(.linear(domain: 0.5...3.5))
-		let out = c.render()
+		let out = c.renderThroughBuffer()
 		// collect the x-axis tick label texts
 		var labels = [String]()
 		var search: Substring = out[...]
@@ -560,7 +560,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 		}
 		.chartXAxis(AxisConfig(showsAxisLabel: true, axisLabel: "Month"))
 		.chartYAxis(AxisConfig(showsAxisLabel: true, axisLabel: "Units"))
-		let out = c.render()
+		let out = c.renderThroughBuffer()
 		#expect(out.contains("chart__axis-title"))
 		#expect(out.contains("Month"))
 		#expect(out.contains("Units"))
@@ -573,7 +573,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 					.annotation(d.0 == "A" ? "<i>1</i>" : "2")
 			}
 		}
-		let out = c.render()
+		let out = c.renderThroughBuffer()
 		#expect(out.contains("chart__annotation"))
 		#expect(out.contains("&lt;i&gt;1&lt;/i&gt;"))
 		#expect(!out.contains("<i>1</i>"))
@@ -587,7 +587,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 		}
 		.chartXScale(.linear(domain: 0...4))
 		.chartXAxis(AxisConfig(labelFormat: .hidden))
-		let out = c.render()
+		let out = c.renderThroughBuffer()
 		#expect(!out.contains("chart__axis-label--x"))  // x labels suppressed
 		#expect(out.contains("chart__axis-label\""))     // y labels still render
 	}
@@ -603,7 +603,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 			}
 		}
 		.chartID("sales")
-		let out = c.render()
+		let out = c.renderThroughBuffer()
 		#expect(out.contains("id=\"sales\""))
 		#expect(out.contains("id=\"sales-mark-Jan-s\""))
 		#expect(out.contains("id=\"sales-mark-Feb-s\""))
@@ -615,7 +615,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 				BarMark(x: .value("M", d.0), y: .value("V", d.1))
 			}
 		}
-		.render()
+		.renderThroughBuffer()
 		#expect(!out.contains("-mark-"))
 	}
 
@@ -626,7 +626,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 			}
 		}
 		.chartSelection(axis: .x, value: .category("Feb"))
-		#expect(c.render().contains("chart__selection"))
+		#expect(c.renderThroughBuffer().contains("chart__selection"))
 	}
 
 	@Test func ariaLabelAndTitle() {
@@ -637,7 +637,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 		}
 		.chartTitle("Title")
 		.chartAccessibilityLabel("Custom accessible name")
-		let out = c.render()
+		let out = c.renderThroughBuffer()
 		#expect(out.contains("aria-label=\"Custom accessible name\""))
 		#expect(out.contains("chart__title"))
 		#expect(out.contains("Title"))
@@ -649,7 +649,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 				BarMark(x: .value("M", d.0), y: .value("V", d.1)).foregroundStyle(by: "s")
 			}
 		}
-		let out = c2.render()
+		let out = c2.renderThroughBuffer()
 		#expect(out.contains("chart__sr"))
 		#expect(out.contains("12"))
 		#expect(out.contains("7"))
@@ -665,7 +665,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 		.chartTitle(payload)
 		.chartAccessibilityLabel(payload)
 		.chartID("x-" + payload)
-		let out = c.render()
+		let out = c.renderThroughBuffer()
 		#expect(!out.contains("<img"))                    // no raw tag
 		#expect(out.contains("&lt;img"))                   // payload is escaped
 		#expect(!out.contains("alert(1)\">"))              // the `>` is neutralized: the
@@ -677,7 +677,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 		// caller aria-label raw into `aria-label="..."`, emitting
 		// `<figure ... aria-label="x" onload="alert(1)">`.
 		let payload = "x\" onload=\"alert(1)"
-		let out = Chart([]).chartAccessibilityLabel(payload).render()
+		let out = Chart([]).chartAccessibilityLabel(payload).renderThroughBuffer()
 		#expect(!out.contains("onload=\"alert(1)\""))
 		#expect(out.contains("aria-label=\"x&quot; onload=&quot;alert(1)\""))
 	}
@@ -688,7 +688,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 				BarMark(x: .value("M", d.0), y: .value("V", d.1)).foregroundStyle("var(--color-danger)")
 			}
 		}
-		#expect(c.render().contains("--chart-mark-color:var(--color-danger)"))
+		#expect(c.renderThroughBuffer().contains("--chart-mark-color:var(--color-danger)"))
 	}
 
 	@Test func opacityEmitsPresentationAttribute() {
@@ -697,7 +697,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 				BarMark(x: .value("M", d.0), y: .value("V", d.1)).opacity(0.5)
 			}
 		}
-		#expect(c.render().contains("opacity=\"0.5\""))
+		#expect(c.renderThroughBuffer().contains("opacity=\"0.5\""))
 	}
 
 	@Test func renderingIsDeterministic() {
@@ -706,7 +706,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 				BarMark(x: .value("M", d.0), y: .value("V", d.1)).foregroundStyle(by: "s")
 			}
 		}
-		#expect(c.render() == c.render())
+		#expect(c.renderThroughBuffer() == c.renderThroughBuffer())
 	}
 }
 
@@ -723,7 +723,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 			}
 		}
 		.chartTitle("Revenue by quarter")
-		.render()
+		.renderThroughBuffer()
 		#expect(out.contains("aria-label=\"Revenue by quarter\""))
 	}
 
@@ -735,7 +735,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 		}
 		.chartTitle("Revenue by quarter")
 		.chartAccessibilityLabel("Custom accessible name")
-		.render()
+		.renderThroughBuffer()
 		#expect(out.contains("aria-label=\"Custom accessible name\""))
 		#expect(!out.contains("aria-label=\"Revenue by quarter\""))
 	}
@@ -746,7 +746,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 				BarMark(x: .value("M", d.0), y: .value("V", d.1))
 			}
 		}
-		.render()
+		.renderThroughBuffer()
 		#expect(one.contains("aria-label=\"Chart with 1 mark\""))
 
 		let two = Chart {
@@ -754,7 +754,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 				BarMark(x: .value("M", d.0), y: .value("V", d.1))
 			}
 		}
-		.render()
+		.renderThroughBuffer()
 		#expect(two.contains("aria-label=\"Chart with 2 marks\""))
 	}
 
@@ -765,12 +765,12 @@ func capture(_ regex: String, in haystack: String) -> String? {
 			}
 		}
 		.chartTitle("   ")
-		.render()
+		.renderThroughBuffer()
 		#expect(out.contains("aria-label=\"Chart with 1 mark\""))
 	}
 
 	@Test func emptyChartUsesTitleAsAccessibleName() {
-		let out = Chart([]).chartTitle("No data yet").render()
+		let out = Chart([]).chartTitle("No data yet").renderThroughBuffer()
 		#expect(out.contains("chart--empty"))
 		#expect(out.contains("aria-label=\"No data yet\""))
 	}
@@ -778,7 +778,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 	@Test func polarFigureUsesTitleAsAccessibleName() {
 		let out = Chart([SectorMark(angle: .value("share", 30), category: "web").makeMark()], id: "pie")
 			.chartTitle("Platform share")
-			.render()
+			.renderThroughBuffer()
 		#expect(out.contains("aria-label=\"Platform share\""))
 	}
 
@@ -790,7 +790,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 			}
 		}
 		.chartTitle(payload)
-		.render()
+		.renderThroughBuffer()
 		#expect(!out.contains("onload=\"alert(1)\""))
 		#expect(out.contains("aria-label=\"x&quot; onload=&quot;alert(1)\""))
 	}
@@ -808,7 +808,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 				BarMark(x: .value("M", d.0), y: .value("V", d.1))
 			}
 		}
-		.render()
+		.renderThroughBuffer()
 		#expect(out.contains("style=\"--chart-w:640px\""))
 	}
 
@@ -819,7 +819,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 			}
 		}
 		.chartHeight(180)
-		.render()
+		.renderThroughBuffer()
 		#expect(out.contains("style=\"--chart-w:360px\""))
 	}
 
@@ -831,12 +831,12 @@ func capture(_ regex: String, in haystack: String) -> String? {
 				BarMark(x: .value("M", d.0), y: .value("V", d.1))
 			}
 		}
-		.render()
-		let pie = Chart([SectorMark(angle: .value("share", 30), category: "web").makeMark()], id: "pie").render()
+		.renderThroughBuffer()
+		let pie = Chart([SectorMark(angle: .value("share", 30), category: "web").makeMark()], id: "pie").renderThroughBuffer()
 		let radar = Chart([RadarMark([("speed", 3.0), ("cost", 5.0), ("reach", 4.0)], series: "s").makeMark()],
-			id: "radar").render()
+			id: "radar").renderThroughBuffer()
 		let radial = Chart([RadialMark(value: 72, of: 100, series: "cpu").makeMark()],
-			id: "gauge").render()
+			id: "gauge").renderThroughBuffer()
 		#expect(occ(bar, "class=\"chart__plot\"") == 1, "bar plot is wrapped")
 		#expect(occ(pie, "class=\"chart__plot\"") == 1, "pie plot is wrapped")
 		#expect(occ(radar, "class=\"chart__plot\"") == 1, "radar plot is wrapped")
@@ -844,7 +844,7 @@ func capture(_ regex: String, in haystack: String) -> String? {
 	}
 
 	@Test func emptyStateRendersNoPlot() {
-		let out = Chart([]).render()
+		let out = Chart([]).renderThroughBuffer()
 		#expect(out.contains("chart--empty"))
 		#expect(!out.contains("chart__plot"))
 	}

@@ -35,7 +35,7 @@ public enum HTMLDocumentDiagnostic: String, Sendable, CaseIterable {
 }
 
 // MARK: - HTMLDocument
-public struct HTMLDocument: Sendable {
+public struct HTMLDocument: Sendable, BufferRendering {
     public let title: String
     public let body: String
     public let styles: CSSStylesheet
@@ -267,7 +267,7 @@ public struct HTMLDocument: Sendable {
         + "if(m)r.setAttribute('data-theme',m);if(s)r.setAttribute('data-scheme',s);}"
         + "catch(e){}})();"
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let boot: ClientBoot?
         if let clientMode {
             // an explicit client-mode wins regardless of includeRuntime (its
@@ -303,7 +303,7 @@ public struct HTMLDocument: Sendable {
             scriptTag = appSrc
         } else {
             var cssParts: [String] = []
-            let cssContent = styles.render()
+            let cssContent = styles.renderedString()
             if !cssContent.isEmpty { cssParts.append(cssContent) }
             cssParts.append(contentsOf: rawStyles)
             let combinedCSS = cssParts.joined(separator: "\n\n")
@@ -370,7 +370,7 @@ public struct HTMLDocument: Sendable {
             Self.documentLogger.warning("\(diagnostic.message)")
         }
 
-        return """
+        buffer.append("""
         <!DOCTYPE html>
         <html lang="\(lang)"\(htmlAttributes.isEmpty ? "" : " " + htmlAttributes)\(dirAttribute)>
         <head>
@@ -385,6 +385,6 @@ public struct HTMLDocument: Sendable {
           \(scriptTag)
         </body>
         </html>
-        """
+        """)
     }
 }

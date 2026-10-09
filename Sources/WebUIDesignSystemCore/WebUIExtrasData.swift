@@ -32,7 +32,7 @@ public struct WebUICalendar: View {
         self.id = id; self.onChange = onChange
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onChange) } ?? ""
         var html = "<div class=\"calendar\"\(attrs)>"
         html += "<div class=\"calendar__header\">"
@@ -58,7 +58,7 @@ public struct WebUICalendar: View {
             html += "</button>"
         }
         html += "</div></div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -92,7 +92,7 @@ public struct WebUIDatePicker: View {
         self.id = id; self.onChange = onChange
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onChange) } ?? ""
         var html = "<div class=\"date-picker\"\(attrs)>"
         html += "<div class=\"date-picker__header\"><button class=\"date-picker__nav\" aria-label=\"Previous\">‹</button>"
@@ -113,7 +113,7 @@ public struct WebUIDatePicker: View {
             html += "<button class=\"\(cls)\"\(dayID)\(day.disabled ? " disabled" : "")>\(day.num)</button>"
         }
         html += "</div></div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -130,7 +130,7 @@ public struct WebUITimeZonePicker: View {
         self.entries = entries; self.id = id; self.onSelect = onSelect
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onSelect) } ?? ""
         var html = "<div class=\"tz-picker\"\(attrs)>"
         html += "<div class=\"tz-picker__search\"><input type=\"search\" placeholder=\"Find a timezone…\"></div>"
@@ -140,7 +140,7 @@ public struct WebUITimeZonePicker: View {
             html += "<div class=\"tz\(e.selected ? " tz--selected" : "")\"\(entryID)><span class=\"tz__city\">\(htmlEscape(e.city))</span><span class=\"tz__offset\">\(htmlEscape(e.offset))</span></div>"
         }
         html += "</div></div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -157,7 +157,7 @@ public struct WebUICountryPicker: View {
         self.entries = entries; self.id = id; self.onSelect = onSelect
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onSelect) } ?? ""
         var html = "<div class=\"country-picker\"\(attrs)>"
         html += "<div class=\"country-picker__search\"><input type=\"search\" placeholder=\"Search countries…\"></div>"
@@ -170,7 +170,7 @@ public struct WebUICountryPicker: View {
             html += "<span class=\"country-picker__offset\">\(htmlEscape(e.offset))</span></div>"
         }
         html += "</div></div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -194,7 +194,7 @@ public struct WebUIGantt: View {
         }
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"gantt\">"
         html += "<div class=\"gantt__header\"><div class=\"gantt__label-col\">Tasks</div><div class=\"gantt__week\"></div></div>"
         for row in rows {
@@ -206,7 +206,7 @@ public struct WebUIGantt: View {
             html += "</div></div>"
         }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -220,7 +220,7 @@ public struct WebUIKanban: View {
     public let columns: [Column]
     public init(columns: [Column]) { self.columns = columns }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"kanban\">"
         for column in columns {
             html += "<div class=\"kanban__column\"><div class=\"kanban__header\">\(htmlEscape(column.title))<span class=\"kanban__count\">\(column.cards.count)</span></div><div class=\"kanban__body\">"
@@ -240,7 +240,7 @@ public struct WebUIKanban: View {
             html += "</div></div>"
         }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -252,7 +252,7 @@ public struct WebUIDataSheet: View {
     public let cells: [Cell]
     public init(cells: [Cell]) { self.cells = cells }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"sheet\">"
         html += "<div class=\"sheet__formula\"><span class=\"sheet__cellref\">Fx</span><span class=\"sheet__formula-input\"></span></div>"
         html += "<div class=\"sheet__grid\">"
@@ -263,7 +263,7 @@ public struct WebUIDataSheet: View {
             html += "<div class=\"sheet__cell\(cell.num ? " sheet__cell--num" : "")\(cell.selected ? " sheet__cell--selected" : "")\" data-ref=\"\(htmlEscape(cell.ref))\">\(htmlEscape(cell.value))</div>"
         }
         html += "</div></div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -286,11 +286,11 @@ public struct WebUIJsonTree: View {
         }
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"json-tree\">"
         for node in nodes { html += renderNode(node) }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 
     private func renderNode(_ node: Node) -> String {
@@ -334,7 +334,7 @@ public struct WebUIDiff: View {
         }
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"diff\">"
         html += "<div class=\"diff__header\"><span class=\"diff__file\">\(htmlEscape(file))</span>"
         if !stats.isEmpty { html += "<span class=\"diff__stats\">\(htmlEscape(stats))</span>" }
@@ -344,7 +344,7 @@ public struct WebUIDiff: View {
             html += "<div class=\"\(cls)\"><span class=\"diff__lineno\">\(line.num)</span><span class=\"diff__content\">\(htmlEscape(line.text))</span></div>"
         }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -368,7 +368,7 @@ public struct WebUITerminal: View {
         }
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"terminal\">"
         html += "<div class=\"terminal__bar\"><span class=\"terminal__dot terminal__dot--r\"></span><span class=\"terminal__dot terminal__dot--y\"></span><span class=\"terminal__dot terminal__dot--g\"></span><span class=\"terminal__title\">\(htmlEscape(title))</span></div>"
         html += "<div class=\"terminal__body\">"
@@ -378,7 +378,7 @@ public struct WebUITerminal: View {
         }
         html += "<div class=\"terminal__line\"><span class=\"terminal__prompt\">$ </span><span class=\"terminal__cmd\"></span></div>"
         html += "</div></div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -389,12 +389,12 @@ public struct WebUICodeBlock: View {
     public let code: String
     public init(_ code: String, language: String = "swift") { self.code = code; self.language = language }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"codeblock\">"
         html += "<div class=\"codeblock__bar\"><span class=\"codeblock__lang\">\(htmlEscape(language))</span><button class=\"code__copy\" aria-label=\"Copy\">copy</button></div>"
         html += "<pre class=\"codeblock__code\"><code>\(htmlEscape(code))</code></pre>"
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -406,7 +406,7 @@ public struct WebUIBarChart: View {
     public let series: [Series]
     public init(series: [Series]) { self.series = series }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let maxV = series.map(\.value).max() ?? 1
         var html = "<div class=\"bar-chart\">"
         for s in series {
@@ -414,7 +414,7 @@ public struct WebUIBarChart: View {
             html += "<div class=\"bar-chart__col\"><div class=\"bar-chart__bar\(s.accent ? " bar-chart__bar--accent" : "")\" style=\"height:\(h)%\"></div><span class=\"bar-chart__label\">\(htmlEscape(s.label))</span></div>"
         }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -426,11 +426,12 @@ public struct WebUILineChart: View {
     public let points: [Point]
     public init(points: [Point]) { self.points = points }
 
-    public func render() -> String {
-        let w = 320.0, h = 120.0, pad = 8.0
-        guard points.count > 1 else {
-            return "<div class=\"line-chart\"><svg viewBox=\"0 0 \(Int(w)) \(Int(h))\"></svg></div>"
-        }
+    public func render(into buffer: inout HTMLBuffer) {
+            let w = 320.0, h = 120.0, pad = 8.0
+            guard points.count > 1 else {
+                buffer.append("<div class=\"line-chart\"><svg viewBox=\"0 0 \(Int(w)) \(Int(h))\"></svg></div>")
+                return
+            }
         let xs = points.map(\.x); let ys = points.map(\.y)
         let minX = xs.min() ?? 0, maxX = xs.max() ?? 1
         let minY = ys.min() ?? 0, maxY = ys.max() ?? 1
@@ -444,7 +445,7 @@ public struct WebUILineChart: View {
         html += "<polyline class=\"line-chart__line\" points=\"\(lineStr)\"></polyline>"
         for c in coords { html += "<circle class=\"line-chart__dot\" cx=\"\(Int(c.0))\" cy=\"\(Int(c.1))\" r=\"3\"></circle>" }
         html += "</svg></div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -476,7 +477,7 @@ public struct WebUIDonut: View {
         self.slices = slices; self.centerValue = centerValue; self.centerLabel = centerLabel
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let total = max(slices.map(\.value).reduce(0, +), 1e-9)
         var segments: [String] = []
         var acc = 0.0
@@ -491,7 +492,7 @@ public struct WebUIDonut: View {
         html += "<div class=\"donut__center\"><div class=\"donut__center-value\">\(htmlEscape(centerValue))</div>"
         if !centerLabel.isEmpty { html += "<div class=\"donut__center-label\">\(htmlEscape(centerLabel))</div>" }
         html += "</div></div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -503,7 +504,7 @@ public struct WebUIMasonry: View {
     public let items: [Item]
     public init(items: [Item]) { self.items = items }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"masonry\">"
         for item in items {
             html += "<div class=\"masonry__item\(item.accent ? " masonry__item--accent" : "")\">"
@@ -512,7 +513,7 @@ public struct WebUIMasonry: View {
             html += "</div>"
         }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -524,7 +525,7 @@ public struct WebUIMap: View {
     public let pins: [Pin]
     public init(pins: [Pin]) { self.pins = pins }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"map\">"
         html += "<div class=\"map__grid\"></div>"
         for i in 0..<3 { html += "<div class=\"map__road map__road--h\" style=\"top:\(25 + i * 25)%\"></div>" }
@@ -537,7 +538,7 @@ public struct WebUIMap: View {
         }
         html += "<div class=\"map__attribution\">map</div>"
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -548,7 +549,7 @@ public struct WebUIQr: View {
     public let label: String?
     public init(_ data: String, label: String? = nil) { self.data = data; self.label = label }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var seed = 0
         for b in data.utf8 { seed = seed &* 31 &+ Int(b) }
         var html = "<div class=\"qr\"><div class=\"qr__code\">"
@@ -561,7 +562,7 @@ public struct WebUIQr: View {
         html += "</div>"
         if let label { html += "<div class=\"qr__label\">\(htmlEscape(label))</div>" }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -576,12 +577,12 @@ public struct WebUIPayCard: View {
     public let brand: WebUIDesignSystemCore.Brand
     public init(number: String, holder: String, brand: WebUIDesignSystemCore.Brand = .visa) { self.number = number; self.holder = holder; self.brand = brand }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"paycard\">"
         html += "<div class=\"paycard__top\"><span class=\"paycard__brand\">\(htmlEscape(brand.rawValue.uppercased()))</span><span class=\"paycard__chip\"></span></div>"
         html += "<div class=\"paycard__number\">\(htmlEscape(number))</div>"
         html += "<div class=\"paycard__row\"><div class=\"paycard__label\">Card holder</div><div class=\"paycard__value\">\(htmlEscape(holder))</div></div>"
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }

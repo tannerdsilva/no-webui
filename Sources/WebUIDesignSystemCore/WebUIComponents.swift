@@ -158,10 +158,6 @@ public struct WebUIButton: View {
         self.init(label, appearance: variant, size: size, disabled: disabled, id: id, fullWidth: fullWidth, loading: loading, onTap: onTap)
     }
 
-    public func render() -> String {
-        renderThroughBuffer()
-    }
-
     public func render(into buffer: inout HTMLBuffer) {
         var classes = "button \(appearance.rawValue) \(Self.classFor(size))"
         if fullWidth { classes += " button--full" }
@@ -241,10 +237,6 @@ public struct WebUIInput: View {
         self.type = type
         self.label = label
         self.helpText = helpText
-    }
-
-    public func render() -> String {
-        renderThroughBuffer()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -424,10 +416,6 @@ public struct WebUICard: View {
         )
     }
 
-    public func render() -> String {
-        renderThroughBuffer()
-    }
-
     public func render(into buffer: inout HTMLBuffer) {
         var classes = "card"
         if let elevation { classes += " \(Self.classFor(elevation))" }
@@ -443,7 +431,7 @@ public struct WebUICard: View {
         if let media {
             buffer.append("<div class=\"card__media\">")
             if let mediaBadge { buffer.append("<span class=\"card__media-badge\">\(htmlEscape(mediaBadge))</span>") }
-            buffer.append(WebUIIcon(media, size: .extraLarge).render())
+            WebUIIcon(media, size: .extraLarge).render(into: &buffer)
             buffer.append("</div>")
         }
         if eyebrow != nil || title != nil || headerIcon != nil {
@@ -452,7 +440,7 @@ public struct WebUICard: View {
             if let title { buffer.append("<div class=\"card__title\">\(htmlEscape(title))</div>") }
             buffer.append("</div>")
             if let headerIcon {
-                buffer.append("<span class=\"card__icon\">" + WebUIIcon(headerIcon, size: .medium).render() + "</span>")
+                buffer.append("<span class=\"card__icon\">" + WebUIIcon(headerIcon, size: .medium).renderThroughBuffer() + "</span>")
             }
             buffer.append("</div>")
         }
@@ -541,10 +529,6 @@ public struct WebUIBadge: View {    @available(*, deprecated, renamed: "Tone")
         self.tone = tone
         self.size = size
         self.dot = dot
-    }
-
-    public func render() -> String {
-        renderThroughBuffer()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -649,10 +633,6 @@ public struct WebUIAlert: View, Dismissible {    @available(*, deprecated, renam
     public var dismissMarker: String { "data-dismiss" }
     public var dismissRootIdentifier: String? { id }
 
-    public func render() -> String {
-        renderThroughBuffer()
-    }
-
     public func render(into buffer: inout HTMLBuffer) {
         let dismissal = makeDismissal(ariaLabel: "Dismiss")
         var attributeText = " class=\"alert \(Self.classFor(tone))\" role=\"alert\""
@@ -662,7 +642,7 @@ public struct WebUIAlert: View, Dismissible {    @available(*, deprecated, renam
         if dismissible || onDismiss != nil { attributeText += " data-dismissible" }
         buffer.beginElement("div", attributeText)
         buffer.endOpenTag()
-        buffer.append("<div class=\"alert__icon fill-slot\">" + WebUIIcon(icon, size: .slot).render() + "</div>")
+        buffer.append("<div class=\"alert__icon fill-slot\">" + WebUIIcon(icon, size: .slot).renderThroughBuffer() + "</div>")
         buffer.append("<div class=\"alert__body\">")
         if let title {
             buffer.append("<div class=\"alert__title\">\(htmlEscape(title))</div>")
@@ -708,7 +688,7 @@ public struct WebUITabs: View {
         self.onSelect = onSelect
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let base = id
         let wired = onSelect != nil && base != nil
         let me = base.map { ElementRef.stable($0) } ?? ElementRef.stable("webui-tabs")
@@ -727,7 +707,7 @@ public struct WebUITabs: View {
             html += "<button class=\"tabs__tab\(active)\" role=\"tab\" aria-selected=\"\(tab.id == activeTab ? "true" : "false")\" data-tab=\"\(htmlEscape(tab.id))\"\(idAttr)\(route)>\(htmlEscape(tab.label))</button>"
         }
         html += "</nav>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -772,10 +752,6 @@ public struct WebUIAvatar: View {
         self.size = size
         self.src = src
         self.status = status
-    }
-
-    public func render() -> String {
-        renderThroughBuffer()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -861,10 +837,6 @@ public struct WebUIProgress: View {    @available(*, deprecated, renamed: "Tone"
         self.size = size
     }
 
-    public func render() -> String {
-        renderThroughBuffer()
-    }
-
     public func render(into buffer: inout HTMLBuffer) {
         let classes = "progress \(Self.classFor(tone)) \(Self.classFor(size))"
 
@@ -927,7 +899,7 @@ public struct WebUISkeleton: View {
         self.init(shape: variant, width: width, height: height, count: count)
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var result = ""
         for _ in 0..<count {
             var html = "<div class=\"skeleton \(Self.classFor(shape))\""
@@ -936,7 +908,7 @@ public struct WebUISkeleton: View {
             html += " aria-hidden=\"true\"></div>"
             result += html
         }
-        return result
+        buffer.append(result)
     }
 }
 
@@ -999,10 +971,6 @@ public struct WebUIToast: View, Dismissible {    @available(*, deprecated, renam
     public var dismissMarker: String { "data-dismiss" }
     public var dismissRootIdentifier: String? { id }
 
-    public func render() -> String {
-        renderThroughBuffer()
-    }
-
     public func render(into buffer: inout HTMLBuffer) {
         let dismissal = makeDismissal(ariaLabel: "Dismiss")
         var attributeText = " class=\"toast \(Self.classFor(tone))\" role=\"alert\""
@@ -1046,10 +1014,6 @@ public struct WebUIModal: View, Dismissible {
     public var dismissButtonClass: String { "modal__close" }
     public var dismissMarker: String { "data-dismiss" }
     public var dismissRootIdentifier: String? { id }
-
-    public func render() -> String {
-        renderThroughBuffer()
-    }
 
     public func render(into buffer: inout HTMLBuffer) {
         let dismissal = makeDismissal(ariaLabel: "Close")
@@ -1223,7 +1187,7 @@ public struct WebUITable: View {
         self.onToggleExpand = nil
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var classes = "table"
         if striped { classes += " table--striped" }
         if hoverable { classes += " table--hoverable" }
@@ -1317,7 +1281,7 @@ public struct WebUITable: View {
         if rows.isEmpty, let empty = emptyState {
             let colspan = totalColumns > 0 ? totalColumns : 1
             html += "<tr><td colspan=\"\(colspan)\" class=\"table__empty\">"
-            html += "<div class=\"table__empty-icon fill-slot\">" + WebUIIcon(empty.icon, size: .slot).render() + "</div>"
+            html += "<div class=\"table__empty-icon fill-slot\">" + WebUIIcon(empty.icon, size: .slot).renderThroughBuffer() + "</div>"
             html += "<div class=\"table__empty-title\">\(htmlEscape(empty.title))</div>"
             if !empty.message.isEmpty {
                 html += "<div class=\"table__empty-message\">\(htmlEscape(empty.message))</div>"
@@ -1374,11 +1338,11 @@ public struct WebUITable: View {
                         }
                     }
                     let tdAttrs = attrs.isEmpty ? "" : " " + attrs
-                    html += "<td\(tdAttrs)>\(cell.render())</td>"
+                    html += "<td\(tdAttrs)>\(cell.renderThroughBuffer())</td>"
                 }
                 html += "</tr>"
                 if hasExpand, expanded, let detail = rowDetails?[rowId] {
-                    html += "<tr class=\"table__detail-row\"><td colspan=\"\(totalColumns)\"><div class=\"table__detail\">\(detail.render())</div></td></tr>"
+                    html += "<tr class=\"table__detail-row\"><td colspan=\"\(totalColumns)\"><div class=\"table__detail\">\(detail.renderThroughBuffer())</div></td></tr>"
                 }
             }
         }
@@ -1387,9 +1351,9 @@ public struct WebUITable: View {
             html += "<tfoot><tr>"
             for (i, cell) in footer.enumerated() {
                 if let a = alignmentClass(i) {
-                    html += "<td class=\"\(a)\">\(cell.render())</td>"
+                    html += "<td class=\"\(a)\">\(cell.renderThroughBuffer())</td>"
                 } else {
-                    html += "<td>\(cell.render())</td>"
+                    html += "<td>\(cell.renderThroughBuffer())</td>"
                 }
             }
             html += "</tr></tfoot>"
@@ -1398,7 +1362,7 @@ public struct WebUITable: View {
         if wrapped {
             html = "<div class=\"table-wrap\">" + html + "</div>"
         }
-        return html
+        buffer.append(html)
     }
 }
 
@@ -1494,10 +1458,6 @@ public struct WebUIChip: View, Dismissible {    @available(*, deprecated, rename
     public var dismissMarker: String { "data-remove" }
     public var dismissRootIdentifier: String? { id }
 
-    public func render() -> String {
-        renderThroughBuffer()
-    }
-
     public func render(into buffer: inout HTMLBuffer) {
         let dismissal = makeDismissal(ariaLabel: "Remove")
         var attributeText = " class=\"chip \(Self.classFor(tone))\""
@@ -1533,15 +1493,11 @@ public struct WebUIEmptyState: View {
         self.action = action
     }
 
-    public func render() -> String {
-        renderThroughBuffer()
-    }
-
     public func render(into buffer: inout HTMLBuffer) {
         let attributeText = " class=\"empty-state\""
         buffer.beginElement("div", attributeText)
         buffer.endOpenTag()
-        buffer.append("<div class=\"empty-state__icon fill-slot\">" + WebUIIcon(icon, size: .slot).render() + "</div>")
+        buffer.append("<div class=\"empty-state__icon fill-slot\">" + WebUIIcon(icon, size: .slot).renderThroughBuffer() + "</div>")
         buffer.append("<h3 class=\"empty-state__title\">\(htmlEscape(title))</h3>")
         buffer.append("<p class=\"empty-state__message\">\(htmlEscape(message))</p>")
         if let (label, actionId) = action {
@@ -1573,10 +1529,6 @@ public struct WebUISpinner: View {
     public init(size: ControlSize = .md, label: String? = nil) {
         self.size = size
         self.label = label
-    }
-
-    public func render() -> String {
-        renderThroughBuffer()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -1613,10 +1565,6 @@ public struct WebUITooltip: View {
         self.text = text
         self.position = position
         self.children = content()
-    }
-
-    public func render() -> String {
-        renderThroughBuffer()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -1684,10 +1632,6 @@ public struct WebUIStat: View {
         self.trendDirection = trendDirection
         self.compare = compare
         self.spark = spark
-    }
-
-    public func render() -> String {
-        renderThroughBuffer()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -1779,10 +1723,6 @@ public struct WebUIPagination: View {
         self.rowsPerPageOptions = rowsPerPageOptions
         self.onPageChange = nil
         self.onRowsPerPageChange = nil
-    }
-
-    public func render() -> String {
-        renderThroughBuffer()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -1965,10 +1905,6 @@ public struct WebUITimeline: View {
         self.orientation = orientation
     }
 
-    public func render() -> String {
-        renderThroughBuffer()
-    }
-
     public func render(into buffer: inout HTMLBuffer) {
         let attributeText = " class=\"\(Self.classFor(orientation))\""
         buffer.beginElement("div", attributeText)
@@ -2023,7 +1959,7 @@ public struct WebUITree: View {
         self.onToggle = onToggle
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let interactive = onToggle != nil && id != nil
         var html = interactive
             ? "<div class=\"tree tree--interactive\" role=\"tree\""
@@ -2037,7 +1973,7 @@ public struct WebUITree: View {
         html += ">"
         for node in nodes { html += renderNode(node, level: 1, interactive: interactive) }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 
     private func renderNode(_ node: Node, level: Int, interactive: Bool) -> String {
@@ -2066,7 +2002,7 @@ public struct WebUITree: View {
         html += "<div class=\"" + rowCls + "\"" + rowAttrs + ">"
         html += "<span class=\"" + caretCls + "\"></span>"
         if let icon = node.icon {
-            html += "<span class=\"tree__icon fill-slot\">" + WebUIIcon(icon, size: .slot).render() + "</span>"
+            html += "<span class=\"tree__icon fill-slot\">" + WebUIIcon(icon, size: .slot).renderThroughBuffer() + "</span>"
         }
         html += "<span class=\"tree__label\">" + htmlEscape(node.label) + "</span>"
         html += "</div>"
@@ -2118,10 +2054,6 @@ public struct WebUIBreadcrumb: View {
         self.id = id
         self.collapse = collapse
         self.maxItems = maxItems
-    }
-
-    public func render() -> String {
-        renderThroughBuffer()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -2195,10 +2127,6 @@ public struct WebUIDescriptionList: View {
         self.items = items.map { (term: $0.0, detail: $0.1) }
     }
 
-    public func render() -> String {
-        renderThroughBuffer()
-    }
-
     public func render(into buffer: inout HTMLBuffer) {
         let attributeText = " class=\"list--desc\""
         buffer.beginElement("dl", attributeText)
@@ -2235,10 +2163,6 @@ public struct WebUIAspectRatio: View {
     public init(_ ratio: Ratio = .standard, label: String? = nil) {
         self.ratio = ratio
         self.label = label
-    }
-
-    public func render() -> String {
-        renderThroughBuffer()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -2319,10 +2243,6 @@ public struct WebUICircularProgress: View {
         self.size = size
         self.indeterminate = indeterminate
         self.ariaLabel = ariaLabel
-    }
-
-    public func render() -> String {
-        renderThroughBuffer()
     }
 
     public func render(into buffer: inout HTMLBuffer) {

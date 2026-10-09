@@ -26,27 +26,27 @@ struct ModifierDecorateTests {
 
 	@Test("a contribution lands in the first tag of buffer-native content")
 	func contributionLandsInElement() {
-		#expect(Div { Text("x") }.id("i").render() == "<div id=\"i\">x</div>")
-		#expect(Div { Text("x") }.id("i").class("c").render() == "<div id=\"i\" class=\"c\">x</div>")
+		#expect(Div { Text("x") }.id("i").renderThroughBuffer() == "<div id=\"i\">x</div>")
+		#expect(Div { Text("x") }.id("i").class("c").renderThroughBuffer() == "<div id=\"i\" class=\"c\">x</div>")
 	}
 
 	@Test("a contribution lands in the first tag of string-rendered content")
 	func contributionLandsInStringContent() {
-		#expect(Raw("<p>t</p>").attribute("data-x", "1").render() == "<p data-x=\"1\">t</p>")
-		#expect(Div { Raw("<p>t</p>") }.class("c").render() == "<div class=\"c\"><p>t</p></div>")
+		#expect(Raw("<p>t</p>").attribute("data-x", "1").renderThroughBuffer() == "<p data-x=\"1\">t</p>")
+		#expect(Div { Raw("<p>t</p>") }.class("c").renderThroughBuffer() == "<div class=\"c\"><p>t</p></div>")
 	}
 
 	@Test("content with no tag is wrapped in a span carrying the contribution")
 	func noTagWrapsInSpan() {
-		#expect(Text("just text").class("x").render() == "<span class=\"x\">just text</span>")
-		#expect(Text("just text").attribute("id", "i").render() == "<span id=\"i\">just text</span>")
+		#expect(Text("just text").class("x").renderThroughBuffer() == "<span class=\"x\">just text</span>")
+		#expect(Text("just text").attribute("id", "i").renderThroughBuffer() == "<span id=\"i\">just text</span>")
 	}
 
 	@Test("a declaration or closing tag first leaves the content untouched")
 	func declarationFirstLeavesContentAlone() {
-		#expect(Raw("<!-- c -->text").class("x").render() == "<!-- c -->text")
-		#expect(Raw("<!doctype html><p>t</p>").class("x").render() == "<!doctype html><p>t</p>")
-		#expect(Raw("</div>tail").class("x").render() == "</div>tail")
+		#expect(Raw("<!-- c -->text").class("x").renderThroughBuffer() == "<!-- c -->text")
+		#expect(Raw("<!doctype html><p>t</p>").class("x").renderThroughBuffer() == "<!doctype html><p>t</p>")
+		#expect(Raw("</div>tail").class("x").renderThroughBuffer() == "</div>tail")
 	}
 
 	// MARK: chained contributions
@@ -56,19 +56,19 @@ struct ModifierDecorateTests {
 		// two style contributions must not ship as two style attributes: the
 		// string path created the span with the first, then merged the second
 		// into it. the buffer folds them in the same pass.
-		let html = Text("Hello").foregroundColor("red").backgroundColor("blue").render()
+		let html = Text("Hello").foregroundColor("red").backgroundColor("blue").renderThroughBuffer()
 		#expect(html == "<span style=\"color: red; background-color: blue;\">Hello</span>")
 	}
 
 	@Test("chained styles keep declaration order, innermost first")
 	func chainedStylesKeepOrder() {
-		let html = Text("Box").padding(8).margin(2).foregroundColor("red").render()
+		let html = Text("Box").padding(8).margin(2).foregroundColor("red").renderThroughBuffer()
 		#expect(html == "<span style=\"padding: 8px; margin: 2px; color: red;\">Box</span>")
 	}
 
 	@Test("chained contributions keep their order inside an element's tag")
 	func chainedStylesInsideElement() {
-		let html = Div { Text("x") }.padding(8).margin(2).render()
+		let html = Div { Text("x") }.padding(8).margin(2).renderThroughBuffer()
 		#expect(html == "<div style=\"padding: 8px; margin: 2px;\">x</div>")
 	}
 
@@ -81,10 +81,10 @@ struct ModifierDecorateTests {
 		// mangles the output. this migration's contract is byte-identity, so the
 		// buffer reproduces it; a fix must therefore be one deliberate decision
 		// covering both paths at once.
-		#expect(Raw("hi<div></div>").class("x").render() == "<i <div class=\"x\"></div>")
-		#expect(Raw("hello world <div></div>").class("x").render() == "<ello world <div class=\"x\"></div>")
+		#expect(Raw("hi<div></div>").class("x").renderThroughBuffer() == "<i <div class=\"x\"></div>")
+		#expect(Raw("hello world <div></div>").class("x").renderThroughBuffer() == "<ello world <div class=\"x\"></div>")
 		// a one-character preamble falls into the legacy append, which is right
-		#expect(Raw("a<div></div>").class("x").render() == "a<div class=\"x\"></div>")
+		#expect(Raw("a<div></div>").class("x").renderThroughBuffer() == "a<div class=\"x\"></div>")
 	}
 
 	// MARK: apply and decorate agree
@@ -98,26 +98,26 @@ struct ModifierDecorateTests {
 	@Test("a migrated modifier's string path and buffer path agree")
 	func applyDecorateParity() {
 		let style = InlineStyle(.padding, "4px")
-		#expect(bufferOutput(style, over: Div { Text("x") }) == style.apply(to: Div { Text("x") }.render()))
-		#expect(bufferOutput(style, over: Text("t")) == style.apply(to: Text("t").render()))
+		#expect(bufferOutput(style, over: Div { Text("x") }) == style.apply(to: Div { Text("x") }.renderThroughBuffer()))
+		#expect(bufferOutput(style, over: Text("t")) == style.apply(to: Text("t").renderThroughBuffer()))
 		let attribute = HTMLAttribute("data-x", "1")
-		#expect(bufferOutput(attribute, over: Div { Text("x") }) == attribute.apply(to: Div { Text("x") }.render()))
-		#expect(bufferOutput(attribute, over: Text("t")) == attribute.apply(to: Text("t").render()))
+		#expect(bufferOutput(attribute, over: Div { Text("x") }) == attribute.apply(to: Div { Text("x") }.renderThroughBuffer()))
+		#expect(bufferOutput(attribute, over: Text("t")) == attribute.apply(to: Text("t").renderThroughBuffer()))
 	}
 
 	// MARK: composition and no-ops
 
 	@Test("a noop modifier contributes nothing")
 	func noopContributesNothing() {
-		#expect(ModifiedView(content: Div { Text("x") }, modifier: NoopModifier()).render() == "<div>x</div>")
+		#expect(ModifiedView(content: Div { Text("x") }, modifier: NoopModifier()).renderThroughBuffer() == "<div>x</div>")
 	}
 
 	@Test("andThen composes in the same order on both paths")
 	func composedOrder() {
 		let composed = InlineStyle(.padding, "4px").andThen(HTMLAttribute("id", "i"))
 		let expected = "<span style=\"padding: 4px;\" id=\"i\">t</span>"
-		#expect(composed.apply(to: Text("t").render()) == expected)
-		#expect(ModifiedView(content: Text("t"), modifier: composed).render() == expected)
+		#expect(composed.apply(to: Text("t").renderThroughBuffer()) == expected)
+		#expect(ModifiedView(content: Text("t"), modifier: composed).renderThroughBuffer() == expected)
 	}
 
 	// MARK: the deferred families, pinned
@@ -125,21 +125,21 @@ struct ModifierDecorateTests {
 	@Test("the string-rewriting icon size modifier keeps its bytes")
 	func iconSizeStaysStringPath() {
 		let content = Raw("<svg class=\"icon icon--md\"></svg>")
-		let html = ModifiedView(content: content, modifier: IconSizeModifier(size: .large)).render()
+		let html = ModifiedView(content: content, modifier: IconSizeModifier(size: .large)).renderThroughBuffer()
 		#expect(html == "<svg class=\"icon icon--lg\"></svg>")
 	}
 
 	@Test("the eraser keeps the string path and agrees with the direct modifier")
 	func eraserKeepsStringPath() {
-		let direct = ModifiedView(content: Text("t"), modifier: InlineStyle(.padding, "4px")).render()
-		let erased = ModifiedView(content: Text("t"), modifier: AnyViewModifier(InlineStyle(.padding, "4px"))).render()
+		let direct = ModifiedView(content: Text("t"), modifier: InlineStyle(.padding, "4px")).renderThroughBuffer()
+		let erased = ModifiedView(content: Text("t"), modifier: AnyViewModifier(InlineStyle(.padding, "4px"))).renderThroughBuffer()
 		#expect(erased == direct)
 		#expect(erased == "<span style=\"padding: 4px;\">t</span>")
 	}
 
 	private func renderIn<R: View>(_ router: EventRouter, _ build: () -> R) -> String {
 		let ctx = RenderContext(router: router)
-		return RenderContext.$current.withValue(ctx) { build().render() }
+		return RenderContext.$current.withValue(ctx) { build().renderThroughBuffer() }
 	}
 
 	@Test("an auto-minting modifier still mints after its content renders (inner first)")
@@ -169,6 +169,6 @@ struct ModifierDecorateTests {
 
 	@Test("a stable-id modifier outside a render context passes the content through")
 	func stableIDWithoutContext() {
-		#expect(Div { Text("x") }.onClick(id: "s1", perform: { _ in [] }).render() == "<div>x</div>")
+		#expect(Div { Text("x") }.onClick(id: "s1", perform: { _ in [] }).renderThroughBuffer() == "<div>x</div>")
 	}
 }

@@ -81,7 +81,7 @@ struct TableTypedHandlerTests {
             .onSelectAll { _ in box.selectAllCalls += 1; return [] }
             .onSelect { _, rowID in box.selectCalls.append(rowID); return [] }
             .onToggleExpand { _, rowID in box.expandCalls.append(rowID); return [] }
-            .render()
+            .renderThroughBuffer()
         }
         return (html, router)
     }
@@ -122,7 +122,7 @@ struct TableTypedHandlerTests {
                 sortableColumns: [0]
             )
             .onSort { _, _ in [] }
-            .render()
+            .renderThroughBuffer()
         }
         // no stable id → no routing attributes (the warning path);
         // the sort span still renders (static) with the fallback base id.
@@ -132,7 +132,7 @@ struct TableTypedHandlerTests {
 
     @Test("typed handlers are not required: plain table renders as before")
     func plainTableNoRoutingAttrs() {
-        let html = WebUITable(headers: ["Name"], rows: [[Text("Alice")]]).render()
+        let html = WebUITable(headers: ["Name"], rows: [[Text("Alice")]]).renderThroughBuffer()
         #expect(!html.contains("data-component-id"))
         #expect(html.contains("<th>Name</th>"))
     }
@@ -156,7 +156,7 @@ struct PaginationTypedHandlerTests {
         let html = RenderContext.$current.withValue(context) {
             WebUIPagination(page: 5, pages: 12, id: "pg")
                 .onPageChange { _, page in box.pages.append(page); return [] }
-                .render()
+                .renderThroughBuffer()
         }
 
         #expect(html.contains("data-component-id=\"pg-prev\""), "emitted: \(html)")
@@ -179,7 +179,7 @@ struct PaginationTypedHandlerTests {
         let html = RenderContext.$current.withValue(context) {
             WebUIPagination(page: 1, pages: 4, id: "pg", rowsPerPage: 25, rowsPerPageOptions: [10, 25, 50])
                 .onRowsPerPageChange { _, size in box.rows.append(size); return [] }
-                .render()
+                .renderThroughBuffer()
         }
 
         #expect(html.contains("data-component-id=\"pg-rows\""), "emitted: \(html)")
@@ -196,7 +196,7 @@ struct PaginationTypedHandlerTests {
         let html = RenderContext.$current.withValue(context) {
             WebUIPagination(page: 1, pages: 4)
                 .onPageChange { _, _ in [] }
-                .render()
+                .renderThroughBuffer()
         }
         #expect(!html.contains("data-component-id"), "emitted: \(html)")
     }
@@ -227,7 +227,7 @@ struct ChartTypedHandlerTests {
             Chart(makeBars())
                 .chartID("chart-1")
                 .onSelectMark { _, category in box.categories.append(category); return [] }
-                .render()
+                .renderThroughBuffer()
         }
 
         #expect(html.contains("data-component-id=\"chart-1-mark-Jan-A\""), "emitted: \(html)")
@@ -239,7 +239,7 @@ struct ChartTypedHandlerTests {
 
     @Test("chart without onSelectMark renders marks statically")
     func noHandlerStatic() {
-        let html = Chart(makeBars()).chartID("chart-1").render()
+        let html = Chart(makeBars()).chartID("chart-1").renderThroughBuffer()
         #expect(!html.contains("data-component-id"), "emitted: \(html)")
     }
 }

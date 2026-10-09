@@ -166,7 +166,7 @@ enum WebUIAssetTool {
             // same order — a repeat is a no-op).
             let cssMinified = minifyCSS(
                 "@layer webui, webui.utilities;\n\n@layer webui.utilities {\n"
-                    + CSSStylesheet(LayoutStyles.complete).render()
+                    + CSSStylesheet(LayoutStyles.complete).renderedString()
                     + "\n}\n\n" + cssContent
             )
             // the compression helpers live in WebUIBuild now: the tool is a CLI over the

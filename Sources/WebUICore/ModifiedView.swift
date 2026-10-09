@@ -5,7 +5,7 @@ extension ViewModifier {
     /// content's string render, which re-parses that html — the cost S2
     /// removes for the migrated modifier set.
     public func decorate<C: View>(_ content: C, into buffer: inout HTMLBuffer) {
-        buffer.append(apply(to: content.render()))
+        buffer.append(apply(to: content.renderThroughBuffer()))
     }
 }
 
@@ -25,9 +25,6 @@ public struct ModifiedView<Content: View, M: ViewModifier>: View {
         modifier.decorate(content, into: &buffer)
     }
 
-    public func render() -> String {
-        renderThroughBuffer()
-    }
 }
 
 // MARK: - AnyViewModifier (type eraser for conditional modifier use)

@@ -119,8 +119,8 @@ struct WebUIDocumentThemeTests {
 
 	@Test("standard theme renders byte-identical to no theme")
 	func standardIsByteIdentical() {
-		let plain = WebUIDocument(title: "t", body: "<p>hi</p>").render()
-		let themed = WebUIDocument(title: "t", body: "<p>hi</p>", theme: .standard).render()
+		let plain = WebUIDocument(title: "t", body: "<p>hi</p>").renderThroughBuffer()
+		let themed = WebUIDocument(title: "t", body: "<p>hi</p>", theme: .standard).renderThroughBuffer()
 		// the csp nonce is random per render; scrub both spellings (the
 		// `'nonce-…'` inside the csp meta and `nonce="…"` on the script tag)
 		// so the comparison isolates the theme's contribution.
@@ -147,7 +147,7 @@ struct WebUIDocumentThemeTests {
 			defaultMode: .dark,
 			rules: [CSSRule(".user-bubble", [CSSDeclaration("border-radius", "var(--radius-lg)")])]
 		)
-		let html = WebUIDocument(title: "t", body: "<p>hi</p>", theme: theme).render()
+		let html = WebUIDocument(title: "t", body: "<p>hi</p>", theme: theme).renderThroughBuffer()
 		#expect(html.contains("color-scheme: dark;"))
 		#expect(html.contains("--color-primary-solid: #6c8cff;"))
 		#expect(html.contains("--chat-user-bubble: #2a2a2e;"))
@@ -167,7 +167,7 @@ struct WebUIDocumentThemeTests {
 
 	@Test("themed document keeps the design sheet and runtime intact")
 	func themedDocumentKeepsSheet() {
-		let html = WebUIDocument(body: "<p>x</p>", theme: WebUITheme(defaultMode: .dark)).render()
+		let html = WebUIDocument(body: "<p>x</p>", theme: WebUITheme(defaultMode: .dark)).renderThroughBuffer()
 		#expect(html.contains("<meta name=\"webui-config\""))
 		#expect(html.contains("href=\"\(DesignSystemAssets.stylesheetURL)\""))
 		#expect(DesignSystemAssets.minifiedCss.contains("--color-neutral-50:"))

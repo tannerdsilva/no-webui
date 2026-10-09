@@ -281,7 +281,7 @@ func htmlDocumentWithRawStyles() {
         body: "<p>Hello</p>",
         rawStyles: [".custom { color: red; }"]
     )
-    let html = doc.render()
+    let html = doc.renderedString()
     #expect(html.contains(".custom { color: red; }"))
     #expect(validateTagBalance(html))
 }
@@ -296,7 +296,7 @@ func htmlDocumentWithMultipleRawStyles() {
             ".b { color: blue; }",
         ]
     )
-    let html = doc.render()
+    let html = doc.renderedString()
     #expect(html.contains(".a { color: red; }"))
     #expect(html.contains(".b { color: blue; }"))
     #expect(validateTagBalance(html))
@@ -310,7 +310,7 @@ func htmlDocumentRawStylesDevMode() {
         rawStyles: [".custom { color: red; }"],
         devMode: true
     )
-    let html = doc.render()
+    let html = doc.renderedString()
     #expect(!html.contains(".custom { color: red; }"))
     #expect(html.contains("<link rel=\"stylesheet\""))
 }
@@ -323,7 +323,7 @@ func webuiDocumentIncludesFullCSS() {
         title: "Test",
         body: "<p>Hello</p>"
     )
-    let html = doc.render()
+    let html = doc.renderThroughBuffer()
     // the design sheet is linked (cacheable) now — the same bytes serve on
     // the content-addressed /__assets/css.<sha256>, so the sheet assertions
     // live on the asset, not the page.
@@ -341,7 +341,7 @@ func webuiDocumentIncludesRuntime() {
         title: "Test",
         body: "<p>Hello</p>"
     )
-    let html = doc.render()
+    let html = doc.renderThroughBuffer()
     #expect(html.contains("<meta name=\"webui-config\""))
     #expect(!html.contains("WebUIRuntime"))
 }
@@ -363,7 +363,7 @@ func layoutStylesAll() {
 @Test("LayoutStyles.complete generates spacing and alignment rules")
 func layoutStylesCompleteGeneratesRules() {
     let rules = LayoutStyles.complete
-    let rendered = CSSStylesheet(rules).render()
+    let rendered = CSSStylesheet(rules).renderedString()
     #expect(rendered.contains(".spacing-8"))
     #expect(rendered.contains(".spacing-16"))
     #expect(rendered.contains(".align-flex-start"))
@@ -397,14 +397,14 @@ func fullPipelineRender() {
         WebUICard(variant: .elevated) {
             Text("Card content")
         }
-    }.render()
+    }.renderThroughBuffer()
 
     let doc = WebUIDocument(
         title: "Pipeline Test",
         body: body
     )
 
-    let html = doc.render()
+    let html = doc.renderThroughBuffer()
 
     // structural checks
     #expect(html.hasPrefix("<!DOCTYPE html>"))

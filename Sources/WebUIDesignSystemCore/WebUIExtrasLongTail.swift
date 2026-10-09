@@ -29,12 +29,12 @@ public struct WebUICarousel: View {
         self.slides = slides
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"carousel\" id=\"\(htmlEscape(id))\">"
         html += "<div class=\"carousel__track\" tabindex=\"0\" role=\"group\" aria-label=\"\(htmlEscape(label))\">"
         for (i, slide) in slides.enumerated() {
             html += "<div class=\"carousel__slide\" id=\"\(htmlEscape(id))-\(i)\">"
-            html += slide.render()
+            html += slide.renderThroughBuffer()
             html += "</div>"
         }
         html += "</div>"
@@ -46,7 +46,7 @@ public struct WebUICarousel: View {
             html += "</div>"
         }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -89,7 +89,7 @@ public struct WebUIMenubar: View {
         self.id = id
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<nav class=\"menubar\""
         if let id { html += " id=\"\(htmlEscape(id))\"" }
         html += " aria-label=\"Main\">"
@@ -113,6 +113,6 @@ public struct WebUIMenubar: View {
             html += "</div>"
         }
         html += "</nav>"
-        return html
+        buffer.append(html)
     }
 }

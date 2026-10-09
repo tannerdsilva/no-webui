@@ -21,7 +21,7 @@ struct HostStylesheetContractTests {
 
 	@Test("an icon carries a fallback size without any stylesheet")
 	func iconCarriesFallbackSize() {
-		let html = WebUIIcon(.check, size: .large).render()
+		let html = WebUIIcon(.check, size: .large).renderThroughBuffer()
 		#expect(html.contains("width=\"1.25em\""), "no fallback width: \(html)")
 		#expect(html.contains("height=\"1.25em\""), "no fallback height: \(html)")
 		#expect(html.contains("class=\"icon icon--lg\""), "the class contract must survive")
@@ -33,7 +33,7 @@ struct HostStylesheetContractTests {
 			(.small, "0.75em"), (.medium, "1em"), (.large, "1.25em"), (.extraLarge, "1.5em"),
 		]
 		for (size, em) in expected {
-			let html = WebUIIcon(.check, size: size).render()
+			let html = WebUIIcon(.check, size: size).renderThroughBuffer()
 			#expect(
 				html.contains("width=\"\(em)\" height=\"\(em)\""),
 				"\(size) should emit \(em) twice: \(html)"
@@ -43,7 +43,7 @@ struct HostStylesheetContractTests {
 
 	@Test("slot icons stay container-sized")
 	func slotIconEmitsNoDimension() {
-		let html = WebUIIcon(.check, size: .slot).render()
+		let html = WebUIIcon(.check, size: .slot).renderThroughBuffer()
 		// ` width="` is space-anchored so the root `stroke-width="2"` never matches
 		#expect(!html.contains(" width=\""), "a slot icon must not name its own width")
 		#expect(!html.contains(" height=\""), "a slot icon must not name its own height")
@@ -51,7 +51,7 @@ struct HostStylesheetContractTests {
 
 	@Test("a custom icon carries the fallback too")
 	func customIconCarriesFallback() {
-		let html = WebUIIconCustom(name: "ok", body: "<path d=\"M1 1h10\"/>", size: .small).render()
+		let html = WebUIIconCustom(name: "ok", body: "<path d=\"M1 1h10\"/>", size: .small).renderThroughBuffer()
 		#expect(html.contains("width=\"0.75em\" height=\"0.75em\""), "no fallback on custom geometry: \(html)")
 	}
 
@@ -59,15 +59,15 @@ struct HostStylesheetContractTests {
 	func iconSizeRetargetsDimensions() {
 		// the modifier is part of the size contract: a retargeted class with a
 		// stale attribute is exactly the mismatch the fallback exists to bound.
-		let shrunk = WebUIIcon(.heart).iconSize(.small).render()
+		let shrunk = WebUIIcon(.heart).iconSize(.small).renderThroughBuffer()
 		#expect(shrunk.contains("class=\"icon icon--sm\""))
 		#expect(shrunk.contains("width=\"0.75em\" height=\"0.75em\""), "stale fallback: \(shrunk)")
 		#expect(!shrunk.contains("width=\"1em\""), "the old size lingers: \(shrunk)")
 
-		let slotted = WebUIIcon(.heart, size: .large).iconSize(.slot).render()
+		let slotted = WebUIIcon(.heart, size: .large).iconSize(.slot).renderThroughBuffer()
 		#expect(!slotted.contains(" width=\"") && !slotted.contains(" height=\""), "slot keeps no dimension: \(slotted)")
 
-		let grown = WebUIIcon(.heart, size: .slot).iconSize(.large).render()
+		let grown = WebUIIcon(.heart, size: .slot).iconSize(.large).renderThroughBuffer()
 		#expect(grown.contains("width=\"1.25em\" height=\"1.25em\""), "no dimension added: \(grown)")
 	}
 
@@ -75,7 +75,7 @@ struct HostStylesheetContractTests {
 	func fallbackIsAPresentationAttribute() {
 		// the property the repair relies on: specificity 0 loses to every rule.
 		// a `style="width:…"` would win against them and break consumer css.
-		let html = WebUIIcon(.check, size: .large).render()
+		let html = WebUIIcon(.check, size: .large).renderThroughBuffer()
 		#expect(html.contains("\"0 0 24 24\" width=\"1.25em\" height=\"1.25em\" fill=\"none\""), "unexpected emission shape: \(html)")
 		#expect(!html.contains("style=\""), "a style attribute outranks author css")
 	}
@@ -85,10 +85,10 @@ struct HostStylesheetContractTests {
 		// the exact configuration that shipped broken: a core `HTMLDocument`
 		// whose body carries framework icons and no `stylesheetURL`. this is the
 		// test whose absence let 55 oversized glyphs reach a live page.
-		let body = WebUIIcon(.search, size: .small).render()
-			+ WebUIIcon(.trash, size: .large).render()
-			+ VStack(spacing: 8) { Text("hi"); WebUIIcon(.inbox, size: .extraLarge) }.render()
-		let doc = HTMLDocument(title: "no sheet", body: body).render()
+		let body = WebUIIcon(.search, size: .small).renderThroughBuffer()
+			+ WebUIIcon(.trash, size: .large).renderThroughBuffer()
+			+ VStack(spacing: 8) { Text("hi"); WebUIIcon(.inbox, size: .extraLarge) }.renderThroughBuffer()
+		let doc = HTMLDocument(title: "no sheet", body: body).renderedString()
 		let icons = doc.components(separatedBy: "<svg class=\"icon").count - 1
 		let bounded = doc.components(separatedBy: "\"0 0 24 24\" width=\"").count - 1
 		#expect(icons == 3, "expected 3 icons in the fixture, saw \(icons)")
@@ -172,14 +172,14 @@ struct DocumentStylesheetDiagnosticTests {
 
 	@Test("framework icon markup without a base sheet is reported")
 	func markupWithoutBase() {
-		let found = HTMLDocument.diagnostics(body: WebUIIcon(.check).render(), head: "", stylesheetURL: nil)
+		let found = HTMLDocument.diagnostics(body: WebUIIcon(.check).renderThroughBuffer(), head: "", stylesheetURL: nil)
 		#expect(found == [.frameworkMarkupWithoutStylesheet])
 	}
 
 	@Test("both misconfigurations report together")
 	func bothReport() {
 		let found = HTMLDocument.diagnostics(
-			body: WebUIIcon(.check).render(),
+			body: WebUIIcon(.check).renderThroughBuffer(),
 			head: "<link rel=\"stylesheet\" href=\"/ui/style.css\">",
 			stylesheetURL: nil
 		)
@@ -190,7 +190,7 @@ struct DocumentStylesheetDiagnosticTests {
 	func wiredIsQuiet() {
 		#expect(
 			HTMLDocument.diagnostics(
-				body: WebUIIcon(.check).render(),
+				body: WebUIIcon(.check).renderThroughBuffer(),
 				head: "<link rel=\"stylesheet\" href=\"/ui/style.css\">",
 				stylesheetURL: "/__assets/css.abc"
 			).isEmpty
@@ -203,19 +203,19 @@ struct DocumentStylesheetDiagnosticTests {
 		// the sheet in `rawStyles`; that is a supplied sheet, not a missing one.
 		#expect(
 			HTMLDocument.diagnostics(
-				body: WebUIIcon(.check).render(),
+				body: WebUIIcon(.check).renderThroughBuffer(),
 				head: "",
 				stylesheetURL: nil,
 				inlinedComponentStyles: true
 			).isEmpty
 		)
-		let doc = WebUIDocument(title: "inline", body: WebUIIcon(.check).render(), stylesheetURL: nil).render()
+		let doc = WebUIDocument(title: "inline", body: WebUIIcon(.check).renderThroughBuffer(), stylesheetURL: nil).renderThroughBuffer()
 		#expect(doc.contains("--color-primary-500"), "the fixture must carry the inlined sheet")
 	}
 
 	@Test("the warnings are log-only: the served bytes carry no diagnostic prose")
 	func warningsDoNotChangeThePayload() {
-		let html = HTMLDocument(title: "t", body: WebUIIcon(.check).render()).render()
+		let html = HTMLDocument(title: "t", body: WebUIIcon(.check).renderThroughBuffer()).renderedString()
 		#expect(html.contains("<svg class=\"icon"), "the fixture must exercise the warning path")
 		#expect(!html.contains("stylesheetURL:"), "diagnostic prose reached the served bytes")
 		#expect(!html.contains(HTMLDocumentDiagnostic.frameworkMarkupWithoutStylesheet.message))

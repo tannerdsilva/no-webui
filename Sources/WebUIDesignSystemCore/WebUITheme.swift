@@ -259,13 +259,13 @@ public struct WebUITheme: Sendable, Equatable, Codable {
 			rootDeclarations.append(contentsOf: palette.declarations())
 			rootDeclarations.append(contentsOf: aliasDeclarations)
 			if !rootDeclarations.isEmpty {
-				parts.append(CSSStylesheet([CSSRule(":root", rootDeclarations)]).render())
+				parts.append(CSSStylesheet([CSSRule(":root", rootDeclarations)]).renderedString())
 			}
 			if !dark.isEmpty {
 				parts.append(CSSMediaQuery(
 					"prefers-color-scheme: dark",
 					rules: [CSSRule(":root", dark.declarations())]
-				).render())
+				).renderedString())
 			}
 
 		case .attribute(let id):
@@ -282,23 +282,23 @@ public struct WebUITheme: Sendable, Equatable, Codable {
 				parts.append(CSSStylesheet([
 					CSSRule(scoped("light"), base),
 					CSSRule(scoped("system"), base),
-				]).render())
+				]).renderedString())
 			}
 			if !dark.isEmpty {
 				// a client that explicitly chose dark, and a client on `system` whose OS is
 				// dark. both declare `color-scheme: dark` so the browser's own chrome follows.
 				let darkDeclarations = [CSSDeclaration("color-scheme", "dark")]
 					+ dark.declarations() + aliasDeclarations
-				parts.append(CSSStylesheet([CSSRule(scoped("dark"), darkDeclarations)]).render())
+				parts.append(CSSStylesheet([CSSRule(scoped("dark"), darkDeclarations)]).renderedString())
 				parts.append(CSSMediaQuery(
 					"prefers-color-scheme: dark",
 					rules: [CSSRule(scoped("system"), darkDeclarations)]
-				).render())
+				).renderedString())
 			}
 		}
 
 		if !rules.isEmpty {
-			parts.append(CSSStylesheet(rules).render())
+			parts.append(CSSStylesheet(rules).renderedString())
 		}
 		return parts.joined(separator: "\n\n")
 	}

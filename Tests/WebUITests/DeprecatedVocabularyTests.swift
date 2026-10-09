@@ -15,7 +15,7 @@ import WebUIDesignSystem
 // at a host's call site.
 
 private func render(_ view: some View) -> String {
-    RenderContext.$current.withValue(RenderContext(router: EventRouter())) { view.render() }
+    RenderContext.$current.withValue(RenderContext(router: EventRouter())) { view.renderThroughBuffer() }
 }
 
 @Suite("every 1.x slot spelling still compiles")

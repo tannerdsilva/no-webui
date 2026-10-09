@@ -31,16 +31,10 @@ public struct Text: View {
         self.content = content
     }
 
-    public func render() -> String {
-        htmlEscape(content)
-    }
-
     /// the buffer route writes the escaped bytes straight in. text frames no
-    /// element, so there is nothing for a buffer round trip to buy and
-    /// `render()` stays the direct call — a text node under a not-yet-migrated
-    /// parent (the design system, until S4) would otherwise pay an allocation
-    /// pair around the same escape work. a modifier wrapping text still
-    /// settles against it through the string-path fallback.
+    /// element, so there is nothing for a buffer round trip to buy: escaping
+    /// once beats materializing a string and re-scanning it. a modifier wrapping
+    /// text still settles against the fragment it wrote.
     public func render(into buffer: inout HTMLBuffer) {
         buffer.appendEscaped(content)
     }
@@ -59,10 +53,6 @@ public struct Div: View {
         self.id = id
         self.class = `class`
         self.children = content()
-    }
-
-    public func render() -> String {
-        renderThroughBuffer()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -91,10 +81,6 @@ public struct Span: View {
         self.id = id
         self.class = `class`
         self.children = content()
-    }
-
-    public func render() -> String {
-        renderThroughBuffer()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -137,10 +123,6 @@ public struct Button: View {
         self.type = type
         self.disabled = disabled
         self.name = name
-    }
-
-    public func render() -> String {
-        renderThroughBuffer()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -213,10 +195,6 @@ public struct Input: View {
         self.attributes = attributes
     }
 
-    public func render() -> String {
-        renderThroughBuffer()
-    }
-
     public func render(into buffer: inout HTMLBuffer) {
         var attributeText = ""
         if let id { attributeText += " id=\"\(htmlEscape(id))\"" }
@@ -263,10 +241,6 @@ public struct Image: View {
         self.class = `class`
         self.loading = loading
         self.decoding = decoding
-    }
-
-    public func render() -> String {
-        renderThroughBuffer()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -343,10 +317,6 @@ public struct Link: View {
         self.rel = rel
     }
 
-    public func render() -> String {
-        renderThroughBuffer()
-    }
-
     public func render(into buffer: inout HTMLBuffer) {
         guard let safeHref = sanitizeURL(href) else {
             buffer.appendEscaped(text)
@@ -380,10 +350,6 @@ public struct Heading: View {
         self.class = `class`
     }
 
-    public func render() -> String {
-        renderThroughBuffer()
-    }
-
     public func render(into buffer: inout HTMLBuffer) {
         let lvl = level.rawValue
         var attributeText = ""
@@ -401,10 +367,6 @@ public struct Paragraph: View {
     public init(_ text: String, class: String? = nil) {
         self.text = text
         self.class = `class`
-    }
-
-    public func render() -> String {
-        renderThroughBuffer()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -425,10 +387,6 @@ public struct UnorderedList: View {
     public init(class: String? = nil, @ViewBuilder items: () -> [any View]) {
         self.class = `class`
         self.items = items()
-    }
-
-    public func render() -> String {
-        renderThroughBuffer()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -452,10 +410,6 @@ public struct OrderedList: View {
     public init(class: String? = nil, @ViewBuilder items: () -> [any View]) {
         self.class = `class`
         self.items = items()
-    }
-
-    public func render() -> String {
-        renderThroughBuffer()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -482,10 +436,6 @@ public struct Table: View {
         self.headers = headers
         self.rows = rows
         self.class = `class`
-    }
-
-    public func render() -> String {
-        renderThroughBuffer()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -549,10 +499,6 @@ public struct Label: View {
         self.class = `class`
     }
 
-    public func render() -> String {
-        renderThroughBuffer()
-    }
-
     public func render(into buffer: inout HTMLBuffer) {
         var attributeText = ""
         if let forVal = `for` { attributeText += " for=\"\(htmlEscape(forVal))\"" }
@@ -585,10 +531,6 @@ public struct TextArea: View {
         self.value = value
         self.rows = rows
         self.class = `class`
-    }
-
-    public func render() -> String {
-        renderThroughBuffer()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -625,10 +567,6 @@ public struct Select: View {
         self.class = `class`
     }
 
-    public func render() -> String {
-        renderThroughBuffer()
-    }
-
     public func render(into buffer: inout HTMLBuffer) {
         var attributeText = ""
         if let id { attributeText += " id=\"\(htmlEscape(id))\"" }
@@ -656,10 +594,6 @@ public struct ForEach<Data: RandomAccessCollection & Sendable>: View {
         self.content = content
     }
 
-    public func render() -> String {
-        renderThroughBuffer()
-    }
-
     public func render(into buffer: inout HTMLBuffer) {
         for element in data {
             for child in content(element) {
@@ -680,10 +614,6 @@ public struct Group: View {
     public let children: [any View]
     public init(@ViewBuilder content: () -> [any View]) {
         self.children = content()
-    }
-
-    public func render() -> String {
-        renderThroughBuffer()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -763,10 +693,6 @@ public struct Form: View {
 
     /// the exact `method` attribute value this form emits.
     private var emittedMethod: String { rawMethod ?? method.rawValue }
-
-    public func render() -> String {
-        renderThroughBuffer()
-    }
 
     public func render(into buffer: inout HTMLBuffer) {
         // the framework's own default is the one its own server refuses: a POST

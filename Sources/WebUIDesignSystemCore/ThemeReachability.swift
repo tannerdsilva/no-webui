@@ -54,7 +54,7 @@ public enum ThemeReachability {
 	/// fallback only applies if the token is missing, and pruning it away is exactly what would
 	/// make the fallback fire.
 	public static func referencedTokens(in rules: [CSSRule]) -> Set<DesignToken> {
-		referencedTokens(in: CSSStylesheet(rules).render())
+		referencedTokens(in: CSSStylesheet(rules).renderedString())
 	}
 
 	/// The tokens named as `var(--name)` in a css string.

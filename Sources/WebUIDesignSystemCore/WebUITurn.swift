@@ -18,10 +18,10 @@ public struct WebUIReasoningBlock: View {
         self.reasoning = reasoning
     }
 
-    public func render() -> String {
-        "<details class=\"turn-reasoning\"><summary>Reasoning</summary><pre>"
+    public func render(into buffer: inout HTMLBuffer) {
+        buffer.append("<details class=\"turn-reasoning\"><summary>Reasoning</summary><pre>"
             + htmlEscape(reasoning)
-            + "</pre></details>"
+            + "</pre></details>")
     }
 }
 
@@ -50,7 +50,7 @@ public struct WebUIToolStep: View {
         self.meta = meta
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var classes = "turn-tool"
         if isError { classes += " turn-tool--error" }
 
@@ -63,7 +63,7 @@ public struct WebUIToolStep: View {
         html += "<pre class=\"turn-tool__args\">" + htmlEscape(arguments) + "</pre>"
         html += "<pre class=\"turn-tool__result\">" + htmlEscape(result) + "</pre>"
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -76,7 +76,7 @@ public struct WebUITurnSummary: View {
         self.text = text
     }
 
-    public func render() -> String {
-        "<div class=\"turn-summary\">" + htmlEscape(text) + "</div>"
+    public func render(into buffer: inout HTMLBuffer) {
+        buffer.append("<div class=\"turn-summary\">" + htmlEscape(text) + "</div>")
     }
 }

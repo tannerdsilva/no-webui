@@ -52,7 +52,7 @@ public struct WebUINavbar: View {
         self.id = id; self.onNavigate = onNavigate; self.actions = actions()
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let attrs: String
         if let id, let onNavigate {
             attrs = controlAttributes(id: id, event: .click, handler: onNavigate)
@@ -81,7 +81,7 @@ public struct WebUINavbar: View {
         }
         if !actions.isEmpty {
             html += "<div class=\"navbar__actions\">"
-            for a in actions { html += a.render() }
+            for a in actions { html += a.renderThroughBuffer() }
             html += "</div>"
         }
         if mobileMenu {
@@ -90,7 +90,7 @@ public struct WebUINavbar: View {
             html += "</button>"
         }
         html += "</nav>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -115,7 +115,7 @@ public struct WebUIBottomNav: View {
         self.items = items; self.id = id; self.onSelect = onSelect
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let attrs: String
         if let id, let onSelect {
             attrs = controlAttributes(id: id, event: .click, handler: onSelect)
@@ -126,14 +126,14 @@ public struct WebUIBottomNav: View {
         for (index, item) in items.enumerated() {
             let itemID = id.map { " id=\"\(htmlEscape("\($0)-item-\(index)"))\"" } ?? ""
             html += "<a class=\"bottom-nav__item\(item.active ? " bottom-nav__item--active" : "")\"\(itemID) href=\"#\">"
-            html += "<span class=\"bottom-nav__icon\">\(WebUIIcon(item.icon, size: .medium).render())</span>"
+            html += "<span class=\"bottom-nav__icon\">\(WebUIIcon(item.icon, size: .medium).renderThroughBuffer())</span>"
             if let badge = item.badge {
                 html += "<span class=\"bottom-nav__badge\">\(htmlEscape(badge))</span>"
             }
             html += "<span class=\"bottom-nav__label\">\(htmlEscape(item.label))</span></a>"
         }
         html += "</nav>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -190,7 +190,7 @@ public struct WebUIFab: View {    @available(*, deprecated, renamed: "Tone")
         self.size = size; self.extended = extended; self.id = id; self.onTap = onTap
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var classes = "fab\(Self.classFor(tone))\(Self.classFor(size))"
         if extended { classes += " fab--extended" }
         let tapAttrs = id.map { controlAttributes(id: $0, event: .click, handler: onTap) } ?? ""
@@ -198,12 +198,12 @@ public struct WebUIFab: View {    @available(*, deprecated, renamed: "Tone")
         if let id { html += " id=\"\(htmlEscape(id))\"" }
         html += "\(tapAttrs)"
         html += " aria-label=\"\(htmlEscape(label ?? ""))\">"
-        html += "<span class=\"fab__icon\">\(WebUIIcon(icon, size: .medium).render())</span>"
+        html += "<span class=\"fab__icon\">\(WebUIIcon(icon, size: .medium).renderThroughBuffer())</span>"
         if let label {
             html += "<span class=\"fab__label\">\(htmlEscape(label))</span>"
         }
         html += "</button>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -213,11 +213,11 @@ public struct WebUISpeedDial: View {
     public let children: [any View]
     public init(@ViewBuilder content: () -> [any View]) { self.children = content() }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"fab-stage fab-stage--dial\">"
-        for c in children { html += c.render() }
+        for c in children { html += c.renderThroughBuffer() }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -252,7 +252,7 @@ public struct WebUIWizard: View {
         }
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<ol class=\"wizard\(vertical ? " wizard--vertical" : "")\">"
         for step in steps {
             html += "<li class=\"wizard__step\(Self.classFor(step.status))\">"
@@ -264,7 +264,7 @@ public struct WebUIWizard: View {
             html += "</li>"
         }
         html += "</ol>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -286,7 +286,7 @@ public struct WebUITransfer: View {
         self.title = title; self.options = options; self.searchPlaceholder = searchPlaceholder
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"transfer\">"
         html += "<div class=\"transfer__head\"><span class=\"transfer__title\">\(htmlEscape(title))</span><span class=\"transfer__count\">\(options.count)</span></div>"
         html += "<div class=\"transfer__search\"><input type=\"search\" placeholder=\"\(htmlEscape(searchPlaceholder))\"></div>"
@@ -302,7 +302,7 @@ public struct WebUITransfer: View {
         html += "</div>"
         html += "<div class=\"transfer__controls\"><button class=\"transfer__btn\" aria-label=\"Add\">→</button><button class=\"transfer__btn\" aria-label=\"Remove\">←</button></div>"
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -312,11 +312,11 @@ public struct WebUIButtonGroup: View {
     public let children: [any View]
     public init(@ViewBuilder content: () -> [any View]) { self.children = content() }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"button-group\" role=\"group\">"
-        for c in children { html += c.render() }
+        for c in children { html += c.renderThroughBuffer() }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -333,7 +333,7 @@ public struct WebUISplitButton: View {
         self.label = label; self.caret = caret; self.id = id; self.onSelect = onSelect
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let attrs: String
         if let id, let onSelect {
             attrs = controlAttributes(id: id, event: .click, handler: onSelect)
@@ -348,7 +348,7 @@ public struct WebUISplitButton: View {
             html += "<button class=\"button button--primary button--caret\"\(caretID) aria-label=\"Options\">▾</button>"
         }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -368,7 +368,7 @@ public struct WebUIToc: View {
     public let title: String
     public init(title: String = "On this page", entries: [Entry]) { self.title = title; self.entries = entries }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<nav class=\"toc-rail\" aria-label=\"Table of contents\">"
         html += "<div class=\"toc-rail__title\">\(htmlEscape(title))</div>"
         for entry in entries {
@@ -378,7 +378,7 @@ public struct WebUIToc: View {
             html += "<a class=\"\(cls)\" href=\"\(htmlEscape(entry.href))\">\(htmlEscape(entry.label))</a>"
         }
         html += "</nav>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -402,7 +402,7 @@ public struct WebUIAccordion: View {
         public let open: Bool
         public let children: String
         public init(_ title: String, open: Bool = false, @ViewBuilder content: () -> [any View]) {
-            self.title = title; self.open = open; self.children = content().map { $0.render() }.joined()
+            self.title = title; self.open = open; self.children = content().map { $0.renderThroughBuffer() }.joined()
         }
     }
     public let items: [Item]
@@ -423,7 +423,7 @@ public struct WebUIAccordion: View {
         self.init(items: items, appearance: variant, id: id, onToggle: onToggle)
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let attrs: String
         if let id, let onToggle {
             attrs = controlAttributes(id: id, event: .click, handler: onToggle)
@@ -439,7 +439,7 @@ public struct WebUIAccordion: View {
             html += "</div>"
         }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -458,7 +458,7 @@ public struct WebUICollapse: View {
         self.header = header; self.open = open; self.id = id; self.onToggle = onToggle; self.children = content()
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let attrs: String
         if let id, let onToggle {
             attrs = controlAttributes(id: id, event: .click, handler: onToggle)
@@ -469,9 +469,9 @@ public struct WebUICollapse: View {
         let headerID = id.map { " id=\"\(htmlEscape($0))\"" } ?? ""
         html += "<button class=\"collapse__header\"\(headerID) aria-expanded=\"\(open)\"><span class=\"collapse__chevron\"></span>\(htmlEscape(header))</button>"
         html += "<div class=\"collapse__content\"><div class=\"collapse__inner\">"
-        for c in children { html += c.render() }
+        for c in children { html += c.renderThroughBuffer() }
         html += "</div></div></div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -497,7 +497,7 @@ public struct WebUIActionSheet: View {
         self.id = id; self.onSelect = onSelect
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let attrs: String
         if let id, let onSelect {
             attrs = controlAttributes(id: id, event: .click, handler: onSelect)
@@ -516,7 +516,7 @@ public struct WebUIActionSheet: View {
         let cancelID = id.map { " id=\"\(htmlEscape("\($0)-cancel"))\"" } ?? ""
         html += "<button class=\"action-sheet__cancel\"\(cancelID)>\(htmlEscape(cancel))</button>"
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -557,7 +557,7 @@ public struct WebUIBottomSheet: View {
         self.init(title: title, position: variant, id: id, onDismiss: onDismiss, content: content, footer: footer)
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let attrs: String
         if let id, let onDismiss {
             attrs = controlAttributes(id: id, event: .click, handler: onDismiss)
@@ -571,15 +571,15 @@ public struct WebUIBottomSheet: View {
             html += "<div class=\"bottom-sheet__header\"><div class=\"bottom-sheet__title\">\(htmlEscape(title))</div><button class=\"bottom-sheet__close\"\(closeID) aria-label=\"Close\">×</button></div>"
         }
         html += "<div class=\"bottom-sheet__body\">"
-        for c in children { html += c.render() }
+        for c in children { html += c.renderThroughBuffer() }
         html += "</div>"
         if !footer.isEmpty {
             html += "<div class=\"bottom-sheet__footer\">"
-            for f in footer { html += f.render() }
+            for f in footer { html += f.renderThroughBuffer() }
             html += "</div>"
         }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -628,7 +628,7 @@ public struct WebUIDrawer: View {
         self.children = content(); self.footer = footer()
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let attrs: String
         if let id, let onDismiss {
             attrs = controlAttributes(id: id, event: .click, handler: onDismiss)
@@ -642,15 +642,15 @@ public struct WebUIDrawer: View {
             html += "<div class=\"drawer__header\"><div class=\"drawer__title\">\(htmlEscape(title))</div><button class=\"drawer__close\"\(closeID) aria-label=\"Close\">×</button></div>"
         }
         html += "<div class=\"drawer__content\">"
-        for c in children { html += c.render() }
+        for c in children { html += c.renderThroughBuffer() }
         html += "</div>"
         if !footer.isEmpty {
             html += "<div class=\"drawer__footer\">"
-            for f in footer { html += f.render() }
+            for f in footer { html += f.renderThroughBuffer() }
             html += "</div>"
         }
         html += "</div></div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -683,18 +683,18 @@ public struct WebUIPopover: View {
         self.title = title; self.text = text; self.side = side; self.children = content()
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"popover\(Self.classFor(side))\">"
         html += "<span class=\"popover__arrow\"></span>"
         if let title { html += "<div class=\"popover__title\">\(htmlEscape(title))</div>" }
         if let text { html += "<div class=\"popover__text\">\(htmlEscape(text))</div>" }
         if !children.isEmpty {
             html += "<div class=\"popover__actions\">"
-            for c in children { html += c.render() }
+            for c in children { html += c.renderThroughBuffer() }
             html += "</div>"
         }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -713,7 +713,7 @@ public struct WebUIHoverCard: View {
         self.domain = domain; self.children = content()
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"hovercard\"><div class=\"hovercard__body\">"
         html += "<div class=\"hovercard__name\">\(htmlEscape(name))</div>"
         html += "<div class=\"hovercard__handle\">\(htmlEscape(handle))</div>"
@@ -726,11 +726,11 @@ public struct WebUIHoverCard: View {
         if !domain.isEmpty { html += "<div class=\"hovercard__domain\">\(htmlEscape(domain))</div>" }
         if !children.isEmpty {
             html += "<div class=\"hovercard__actions\">"
-            for c in children { html += c.render() }
+            for c in children { html += c.renderThroughBuffer() }
             html += "</div>"
         }
         html += "</div></div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -746,7 +746,7 @@ public struct WebUILinkPreview: View {
         self.url = url; self.domain = domain ?? url; self.title = title; self.desc = desc; self.image = image
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<a class=\"link-preview\" href=\"\(htmlEscape(url))\" target=\"_blank\" rel=\"noopener noreferrer\">"
         if let image = image {
             html += "<img class=\"link-preview__img\" src=\"\(htmlEscape(image))\" alt=\"\" loading=\"lazy\">"
@@ -757,7 +757,7 @@ public struct WebUILinkPreview: View {
         if let desc { html += "<div class=\"link-preview__desc\">\(htmlEscape(desc))</div>" }
         html += "<button class=\"link-preview__close\" aria-label=\"Close\">×</button>"
         html += "</div></a>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -777,7 +777,7 @@ public struct WebUILightbox: View {
         self.id = id; self.onNavigate = onNavigate
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let attrs: String
         if let id, let onNavigate {
             attrs = controlAttributes(id: id, event: .click, handler: onNavigate)
@@ -797,7 +797,7 @@ public struct WebUILightbox: View {
         html += "</div>"
         if let caption { html += "<div class=\"lightbox__caption\">\(htmlEscape(caption))</div>" }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -874,7 +874,7 @@ public struct WebUIMenu: View {
         self.items = items; self.id = id; self.onSelect = onSelect
         self.header = header; self.search = search; self.panel = panel
     }
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let attrs: String
         if let id, let onSelect {
             attrs = controlAttributes(id: id, event: .click, handler: onSelect)
@@ -904,14 +904,14 @@ public struct WebUIMenu: View {
             if let avatar = item.avatar {
                 html += "<span class=\"menu__avatar\"><span class=\"avatar avatar--initials avatar--sm\">\(htmlEscape(avatar))</span></span>"
             }
-            if let icon = item.icon { html += "<span class=\"menu__icon\">\(WebUIIcon(icon, size: .small).render())</span>" }
+            if let icon = item.icon { html += "<span class=\"menu__icon\">\(WebUIIcon(icon, size: .small).renderThroughBuffer())</span>" }
             html += "<span class=\"menu__label\">\(htmlEscape(item.label))</span>"
             if let hint = item.hint { html += "<span class=\"menu__hint\">\(htmlEscape(hint))</span>" }
             if let shortcut = item.shortcut { html += "<span class=\"menu__shortcut\">\(htmlEscape(shortcut))</span>" }
             html += "</button>"
         }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -927,12 +927,12 @@ public struct WebUIContextMenu: View {
         self.items = items; self.id = id; self.onSelect = onSelect
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"context-menu\">"
-        let menu = WebUIMenu(items: items, id: id, onSelect: onSelect).render()
+        let menu = WebUIMenu(items: items, id: id, onSelect: onSelect).renderThroughBuffer()
         html += menu
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -950,7 +950,7 @@ public struct WebUIDropdown: View {
         self.trigger = trigger; self.id = id; self.onSelect = onSelect; self.children = content()
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let attrs: String
         if let id, let onSelect {
             attrs = controlAttributes(id: id, event: .click, handler: onSelect)
@@ -961,9 +961,9 @@ public struct WebUIDropdown: View {
         let triggerID = id.map { " id=\"\(htmlEscape("\($0)-trigger"))\"" } ?? ""
         html += "<button class=\"dropdown__trigger\"\(triggerID)>\(htmlEscape(trigger))<span class=\"dropdown__chevron\">▾</span></button>"
         html += "<div class=\"dropdown__panel\">"
-        for c in children { html += c.render() }
+        for c in children { html += c.renderThroughBuffer() }
         html += "</div></div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -991,7 +991,7 @@ public struct WebUIComboBox: View {
         self.id = id; self.onChange = onChange
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let attrs: String
         if let id, let onChange {
             attrs = controlAttributes(id: id, event: .click, handler: onChange)
@@ -1011,7 +1011,7 @@ public struct WebUIComboBox: View {
             html += "<div class=\"\(cls)\"\(optID) role=\"option\" aria-selected=\"\(option.selected)\">\(htmlEscape(option.label))</div>"
         }
         html += "</div></div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -1039,7 +1039,7 @@ public struct WebUICommandPalette: View {
         self.id = id; self.onSelect = onSelect
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let attrs: String
         if let id, let onSelect {
             attrs = controlAttributes(id: id, event: .click, handler: onSelect)
@@ -1066,7 +1066,7 @@ public struct WebUICommandPalette: View {
         html += "</div>"
         if let footer { html += "<div class=\"command-palette__footer\">\(htmlEscape(footer))</div>" }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -1106,18 +1106,21 @@ public struct WebUISeparator: View {
         self.strong = strong
     }
 
-    public func render() -> String {
-        if orientation == .vertical {
-            return "<div class=\"divider divider--vertical\" role=\"separator\" aria-orientation=\"vertical\"></div>"
-        }
-        if let icon {
-            let glyph = WebUIIcon(icon, size: .slot).render()
-            return "<div class=\"divider divider--icon\(strong ? " divider--strong" : "")\" role=\"separator\"><span class=\"divider__label\">\(glyph)</span></div>"
-        }
-        if let label {
-            return "<div class=\"divider-divider\" role=\"separator\"><span class=\"divider-divider__label\">\(htmlEscape(label))</span></div>"
-        }
-        return "<div class=\"divider\(strong ? " divider--strong" : "")\" role=\"separator\"></div>"
+    public func render(into buffer: inout HTMLBuffer) {
+            if orientation == .vertical {
+                buffer.append("<div class=\"divider divider--vertical\" role=\"separator\" aria-orientation=\"vertical\"></div>")
+                return
+            }
+            if let icon {
+                let glyph = WebUIIcon(icon, size: .slot).renderThroughBuffer()
+                buffer.append("<div class=\"divider divider--icon\(strong ? " divider--strong" : "")\" role=\"separator\"><span class=\"divider__label\">\(glyph)</span></div>")
+                return
+            }
+            if let label {
+                buffer.append("<div class=\"divider-divider\" role=\"separator\"><span class=\"divider-divider__label\">\(htmlEscape(label))</span></div>")
+                return
+            }
+            buffer.append("<div class=\"divider\(strong ? " divider--strong" : "")\" role=\"separator\"></div>")
     }
 }
 
@@ -1165,8 +1168,11 @@ public struct WebUIKbd: View {
         return "<kbd class=\"kbd\(sizeClass)\">\(htmlEscape(key))</kbd>"
     }
 
-    public func render() -> String {
-        guard keys.count > 1 else { return keyHTML(keys.first ?? "") }
+    public func render(into buffer: inout HTMLBuffer) {
+        guard keys.count > 1 else {
+            buffer.append(keyHTML(keys.first ?? ""))
+            return
+        }
         var html = "<span class=\"kbd-combo\">"
         for (index, key) in keys.enumerated() {
             if index > 0, let separator, !separator.isEmpty {
@@ -1175,7 +1181,7 @@ public struct WebUIKbd: View {
             html += keyHTML(key)
         }
         html += "</span>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -1206,7 +1212,7 @@ public struct WebUIScrollTop: View {
         self.onTap = onTap
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let attrs: String
         if let id, let onTap {
             attrs = controlAttributes(id: id, event: .click, handler: onTap)
@@ -1224,8 +1230,8 @@ public struct WebUIScrollTop: View {
             html += "<circle class=\"ring__fill\" cx=\"18\" cy=\"18\" r=\"15.915\" stroke-dasharray=\"100\" stroke-dashoffset=\"\(offset)\"/>"
             html += "</svg>"
         }
-        html += "<span class=\"scroll-top__icon\">" + WebUIIcon(icon, size: .medium).render() + "</span>"
+        html += "<span class=\"scroll-top__icon\">" + WebUIIcon(icon, size: .medium).renderThroughBuffer() + "</span>"
         html += "</button>"
-        return html
+        buffer.append(html)
     }
 }

@@ -93,7 +93,7 @@ public struct WebUIDocument: View {
     /// inlining is byte-equivalent.
     public static let minifiedDesignStyles: String = DesignSystemAssets.minifiedCss
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         // the theme block lands after the base sheet, so its `:root`
         // overrides win the cascade. `.standard` contributes nothing and the
         // document stays byte-identical to the unthemed one.
@@ -138,10 +138,10 @@ public struct WebUIDocument: View {
             // block above) — the missing-sheet diagnostics must stay quiet
             inlinedComponentStyles: stylesheetURL == nil
         )
-        let html = doc.render()
+        let html = doc.renderedString()
         if checkClasses {
             HTMLClassValidator.report(html: html)
         }
-        return html
+        buffer.append(html)
     }
 }

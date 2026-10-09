@@ -59,7 +59,7 @@ public struct WebUISidebar: View {
         self.onSelect = onSelect
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let cls = style == .rail ? "sidebar sidebar--collapsed" : "sidebar"
         let attrs = controlAttributes(id: id, event: .click, handler: onSelect)
         var html = "<nav class=\"\(cls)\"\(attrs)>"
@@ -79,7 +79,7 @@ public struct WebUISidebar: View {
             }
             html += ">"
             html += "<span class=\"sidebar__icon fill-slot\">"
-            html += WebUIIcon(item.icon, size: .slot).render()
+            html += WebUIIcon(item.icon, size: .slot).renderThroughBuffer()
             html += "</span>"
             html += "<span class=\"sidebar__item-label\">\(htmlEscape(item.label))</span>"
             if let badge = item.badge {
@@ -89,7 +89,7 @@ public struct WebUISidebar: View {
         }
         html += "</div>"
         html += "</nav>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -133,7 +133,7 @@ public struct WebUISegmentedControl: View {
         self.onSelect = onSelect
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var cls = "segmented"
         if let size { cls += " \(size.rawValue)" }
         let attrs = controlAttributes(id: id, event: .click, handler: onSelect)
@@ -149,7 +149,7 @@ public struct WebUISegmentedControl: View {
             html += "</div>"
         }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -183,11 +183,11 @@ public struct WebUISearchField: View {
         self.onInput = onInput
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let attrs = controlAttributes(id: id, event: .input, handler: onInput)
         var html = "<div class=\"search-field\"\(attrs)>"
         html += "<span class=\"search-field__icon\">"
-        html += WebUIIcon(.search, size: .slot).render()
+        html += WebUIIcon(.search, size: .slot).renderThroughBuffer()
         html += "</span>"
         html += "<input class=\"search-field__input\" type=\"search\" placeholder=\"\(htmlEscape(placeholder))\""
         if let value, !value.isEmpty {
@@ -195,7 +195,7 @@ public struct WebUISearchField: View {
         }
         html += ">"
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -224,7 +224,7 @@ public struct WebUISelect: View {
         self.onChange = onChange
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let attrs = controlAttributes(id: id, event: .change, handler: onChange)
         var html = ""
         if let label {
@@ -236,7 +236,7 @@ public struct WebUISelect: View {
             html += "<option value=\"" + htmlEscape(opt.value) + "\"" + sel + ">" + htmlEscape(opt.label) + "</option>"
         }
         html += "</select>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -282,7 +282,7 @@ public struct WebUIListView: View {
         self.onSelect = onSelect
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let attrs = controlAttributes(id: id, event: .click, handler: onSelect)
         var html = "<ul class=\"list\" id=\"\(htmlEscape(id))\"\(attrs)>"
         for item in items {
@@ -290,7 +290,7 @@ public struct WebUIListView: View {
             html += "<li class=\"list__item\(selected)\" id=\"\(htmlEscape(item.id))\">"
             if let icon = item.icon {
                 html += "<span class=\"list__icon fill-slot\">"
-                html += WebUIIcon(icon, size: .slot).render()
+                html += WebUIIcon(icon, size: .slot).renderThroughBuffer()
                 html += "</span>"
             }
             html += "<span class=\"list__body\">"
@@ -305,7 +305,7 @@ public struct WebUIListView: View {
             html += "</li>"
         }
         html += "</ul>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -353,7 +353,7 @@ public struct WebUIComposer: View {
         self.hint = hint
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let attrs = controlAttributes(id: id, event: .submit, handler: onSubmit)
         var html = "<form class=\"composer\" id=\"\(htmlEscape(id))\"\(attrs)>"
         html += "<div class=\"composer__input-row\">"
@@ -364,20 +364,20 @@ public struct WebUIComposer: View {
             : " disabled aria-disabled=\"true\""
         let toolClass = onAttach != nil ? "composer__tool" : "composer__tool composer__tool--disabled"
         html += "<button type=\"button\" class=\"\(toolClass)\" aria-label=\"attach\"\(attachAttrs)>"
-        html += WebUIIcon(.paperclip, size: .slot).render()
+        html += WebUIIcon(.paperclip, size: .slot).renderThroughBuffer()
         html += "</button>"
         html += "</div>"
         html += "<button type=\"submit\" class=\"composer__send\" aria-label=\"send\""
         if disabled { html += " disabled" }
         html += ">"
-        html += WebUIIcon(.send, size: .slot).render()
+        html += WebUIIcon(.send, size: .slot).renderThroughBuffer()
         html += "</button>"
         html += "</div>"
         if let hint {
             html += "<div class=\"composer__hint\">\(htmlEscape(hint))</div>"
         }
         html += "</form>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -425,7 +425,7 @@ public struct WebUIPanel: View {
         self.content = content()
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<section class=\"\(Self.classFor(edge))\""
         if let id { html += " id=\"\(htmlEscape(id))\"" }
         html += ">"
@@ -438,18 +438,18 @@ public struct WebUIPanel: View {
         if !actions.isEmpty {
             html += "<div class=\"panel__actions\">"
             for action in actions {
-                html += action.render()
+                html += action.renderThroughBuffer()
             }
             html += "</div>"
         }
         html += "</header>"
         html += "<div class=\"panel__body\">"
         for child in content {
-            html += child.render()
+            html += child.renderThroughBuffer()
         }
         html += "</div>"
         html += "</section>"
-        return html
+        buffer.append(html)
     }
 }
 
@@ -464,14 +464,14 @@ public struct WebUIPanel: View {
 public struct WebUIEngineStatus: View {
     public init() {}
 
-    public func render() -> String {
-        """
+    public func render(into buffer: inout HTMLBuffer) {
+        buffer.append("""
         <span class="engine-status-mirror" data-webui-status data-webui-state="reconnecting" role="status">
           <span class="engine-status-mirror__dot"></span>
           <span class="engine-status-mirror__state engine-status-mirror__state--connected">connected</span>
           <span class="engine-status-mirror__state engine-status-mirror__state--reconnecting">reconnecting…</span>
         </span>
-        """
+        """)
     }
 }
 
@@ -486,14 +486,14 @@ public struct WebUIEngineStatus: View {
 public struct WebUIThemeToggle: View {
     public init() {}
 
-    public func render() -> String {
-        """
+    public func render(into buffer: inout HTMLBuffer) {
+        buffer.append("""
         <div class="theme-toggle" role="group" aria-label="Theme">
           <button type="button" class="theme-toggle__btn" data-theme-choice="system" aria-pressed="false">System</button>
           <button type="button" class="theme-toggle__btn" data-theme-choice="light" aria-pressed="false">Light</button>
           <button type="button" class="theme-toggle__btn" data-theme-choice="dark" aria-pressed="false">Dark</button>
         </div>
-        """
+        """)
     }
 }
 
@@ -531,12 +531,12 @@ public struct WebUIItem: View {
         self.actions = actions()
     }
 
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"list__item\(selected ? " list__item--selected" : "")\""
         if let id { html += " id=\"\(htmlEscape(id))\"" }
         html += ">"
         if let icon {
-            html += "<span class=\"list__icon\">" + WebUIIcon(icon, size: .small).render() + "</span>"
+            html += "<span class=\"list__icon\">" + WebUIIcon(icon, size: .small).renderThroughBuffer() + "</span>"
         }
         html += "<span class=\"list__body\"><span class=\"list__title\">\(htmlEscape(title))</span>"
         if let subtitle { html += "<span class=\"list__sub\">\(htmlEscape(subtitle))</span>" }
@@ -544,10 +544,10 @@ public struct WebUIItem: View {
         if let meta { html += "<span class=\"list__meta\">\(htmlEscape(meta))</span>" }
         if !actions.isEmpty {
             html += "<span class=\"list__actions\">"
-            for action in actions { html += "<span class=\"list__action\">" + action.render() + "</span>" }
+            for action in actions { html += "<span class=\"list__action\">" + action.renderThroughBuffer() + "</span>" }
             html += "</span>"
         }
         html += "</div>"
-        return html
+        buffer.append(html)
     }
 }

@@ -87,12 +87,12 @@ func renderExamplePage(state: ExampleState, router: EventRouter) -> String {
 		".app__content { display: flex; flex-direction: column; gap: var(--space-4); }",
 		".app__footer { padding-top: var(--space-4); color: var(--color-text-muted); }",
 		".app__actions { display: flex; align-items: center; gap: var(--space-2); }",
-	]).render()
+	]).renderThroughBuffer()
 }
 
 extension RenderContext {
 	func withValueBody<V: View>(_ build: () -> V) -> String {
-		RenderContext.$current.withValue(self) { build().render() }
+		RenderContext.$current.withValue(self) { build().renderThroughBuffer() }
 	}
 }
 

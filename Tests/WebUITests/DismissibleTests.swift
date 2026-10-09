@@ -19,7 +19,7 @@ struct DismissibleTests {
         let html = RenderContext.$current.withValue(context) {
             WebUIToast(message: "Saved")
                 .onDismiss { _, _ in [] }
-                .render()
+                .renderThroughBuffer()
         }
 
         // the close button becomes a routed component
@@ -47,7 +47,7 @@ struct DismissibleTests {
                     // target the same stable id, no string matching anywhere.
                     [me.remove(), me.replace(with: "<div>gone</div>")]
                 }
-                .render()
+                .renderThroughBuffer()
         }
 
         // stable caller id is used as the element id
@@ -74,7 +74,7 @@ struct DismissibleTests {
                 WebUIToast(message: "Two", id: "toast-2")
                     .onDismiss { me, _ in [me.remove()] }
             }
-            .render()
+            .renderThroughBuffer()
         }
 
         // each close button is its own routed component
@@ -94,7 +94,7 @@ struct DismissibleTests {
     func onDismissWithoutContextStaticFallback() {
         let html = WebUIToast(message: "Saved")
             .onDismiss { _, _ in [] }
-            .render()
+            .renderThroughBuffer()
 
         // no component id, no minted element id — byte-identical to un-wired output
         #expect(!html.contains("data-component-id"), "emitted: \(html)")
@@ -105,35 +105,35 @@ struct DismissibleTests {
 
     @Test("unwired dismissible toast keeps the legacy static marker")
     func toastStaticMarkerUnchanged() {
-        let html = WebUIToast(message: "Saved", dismissible: true).render()
+        let html = WebUIToast(message: "Saved", dismissible: true).renderThroughBuffer()
         #expect(html == "<div class=\"toast toast--info\" role=\"alert\"><span class=\"toast__icon\"></span><span class=\"toast__message\">Saved</span><button class=\"toast__close\" data-dismiss aria-label=\"Dismiss\">&times;</button></div>")
         #expect(!html.contains("data-component-id"))
     }
 
     @Test("unwired modal close button keeps the legacy static marker")
     func modalStaticMarkerUnchanged() {
-        let html = WebUIModal(title: "Confirm") { Text("body") }.render()
+        let html = WebUIModal(title: "Confirm") { Text("body") }.renderThroughBuffer()
         #expect(html.contains("<button class=\"modal__close\" data-dismiss aria-label=\"Close\">&times;</button>"))
         #expect(!html.contains("data-component-id"))
     }
 
     @Test("unwired removable chip keeps the legacy static marker")
     func chipStaticMarkerUnchanged() {
-        let html = WebUIChip("Tag", removable: true).render()
+        let html = WebUIChip("Tag", removable: true).renderThroughBuffer()
         #expect(html.contains("<button class=\"chip__remove\" data-remove aria-label=\"Remove\">&times;</button>"))
         #expect(!html.contains("data-component-id"))
     }
 
     @Test("unwired alert close button keeps the legacy static marker")
     func alertStaticMarkerUnchanged() {
-        let html = WebUIAlert(message: "notice", dismissible: true).render()
+        let html = WebUIAlert(message: "notice", dismissible: true).renderThroughBuffer()
         #expect(html.contains("<button class=\"alert__close\" data-dismiss aria-label=\"Dismiss\">&times;</button>"))
         #expect(!html.contains("data-component-id"))
     }
 
     @Test("non-dismissible components render no close button even with static marker support")
     func nonDismissibleRendersNoButton() {
-        let html = WebUIToast(message: "Saved", dismissible: false).render()
+        let html = WebUIToast(message: "Saved", dismissible: false).renderThroughBuffer()
         #expect(!html.contains("toast__close"))
     }
 
@@ -147,7 +147,7 @@ struct DismissibleTests {
         let html = RenderContext.$current.withValue(context) {
             WebUIChip("Tag", id: "chip-1")
                 .onDismiss { me, _ in [me.remove()] }
-                .render()
+                .renderThroughBuffer()
         }
 
         #expect(html.contains("data-component-id=\"c0\""), "emitted: \(html)")
@@ -166,7 +166,7 @@ struct DismissibleTests {
         let html = RenderContext.$current.withValue(context) {
             WebUIModal(title: "Confirm", id: "modal-1") { Text("body") }
                 .onDismiss { me, _ in [me.remove()] }
-                .render()
+                .renderThroughBuffer()
         }
 
         #expect(html.contains("data-component-id=\"c0\""), "emitted: \(html)")
@@ -184,7 +184,7 @@ struct DismissibleTests {
         let html = RenderContext.$current.withValue(context) {
             WebUIAlert(message: "notice")
                 .onDismiss { me, _ in [me.remove()] }
-                .render()
+                .renderThroughBuffer()
         }
 
         // alert has no caller id → framework mints e0
@@ -208,7 +208,7 @@ struct DismissibleTests {
                 WebUIToast(message: "A").onDismiss { me, _ in [me.remove()] }
                 WebUIToast(message: "B").onDismiss { me, _ in [me.remove()] }
             }
-            .render()
+            .renderThroughBuffer()
         }
 
         // component ids: c0, c1 — element ids: e0, e1 (never colliding)

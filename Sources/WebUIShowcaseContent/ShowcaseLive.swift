@@ -207,8 +207,8 @@ func columnMenu(state: ShowcaseState) -> WebUIMenu {
 				state.hiddenColumns.insert(index)
 			}
 			return [
-				FragmentUpdate(id: "column-menu", html: columnMenu(state: state).render()),
-				FragmentUpdate(id: "demo-interactive", html: interactiveTable(state: state).render()),
+				FragmentUpdate(id: "column-menu", html: columnMenu(state: state).renderThroughBuffer()),
+				FragmentUpdate(id: "demo-interactive", html: interactiveTable(state: state).renderThroughBuffer()),
 			]
 		},
 		header: "Columns",
@@ -341,7 +341,7 @@ func treeDemo(state: ShowcaseState) -> WebUITree {
 			} else {
 				state.treeSelected = nodeID
 			}
-			return [FragmentUpdate(id: "demo-tree", html: treeDemo(state: state).render())]
+			return [FragmentUpdate(id: "demo-tree", html: treeDemo(state: state).renderThroughBuffer())]
 		}
 	)
 }

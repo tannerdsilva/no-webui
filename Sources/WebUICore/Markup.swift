@@ -45,12 +45,9 @@ public struct Raw: View {
     @available(*, deprecated, renamed: "markup")
     public var content: String { markup.html }
 
-    public func render() -> String { markup.html }
-
-    /// the buffer route appends the caller's bytes verbatim — `Raw`'s contract —
-    /// and `render()` stays direct for the same reason as `Text`: no element is
-    /// framed, so a round trip would buy nothing. a modifier wrapping `Raw`
-    /// settles against this fragment (its own scan, never the page).
+    /// the buffer route appends the caller's bytes verbatim — `Raw`'s contract.
+    /// no element is framed, so there is nothing for a modifier to settle
+    /// against on the page: a modifier wrapping `Raw` scans this fragment alone.
     public func render(into buffer: inout HTMLBuffer) { buffer.append(markup.html) }
 }
 

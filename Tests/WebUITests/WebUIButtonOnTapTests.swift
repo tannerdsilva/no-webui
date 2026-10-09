@@ -59,10 +59,10 @@ struct WebUIButtonOnTapTests {
 	// helpers
 	private func renderIn<R: View>(_ router: EventRouter, _ build: () -> R) -> String {
 		let ctx = RenderContext(router: router)
-		return RenderContext.$current.withValue(ctx) { build().render() }
+		return RenderContext.$current.withValue(ctx) { build().renderThroughBuffer() }
 	}
 
 	private func renderSansContext<R: View>(_ build: () -> R) -> String {
-		build().render()
+		build().renderThroughBuffer()
 	}
 }
