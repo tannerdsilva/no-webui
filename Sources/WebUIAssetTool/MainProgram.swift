@@ -487,6 +487,10 @@ enum WebUIAssetTool {
         }
         let cases = caseLines.joined(separator: "\n")
         let count = names.count
+        // the (a) side of the completeness check, emitted verbatim: the exact
+        // names `rootTokens(in:)` found, so the two-way check's generated half
+        // and the test's independent read of the same file must agree.
+        let namesArray = names.map { name in "\t\t\"\(name)\"," }.joined(separator: "\n")
         return """
         /// design tokens declared on `:root` in `design-system.css`, generated
         /// by `WebUIAssetPlugin`. exactly the custom properties that respond to
@@ -499,6 +503,77 @@ enum WebUIAssetTool {
         \tpublic var cssVariable: String { "--\\(rawValue)" }
         \t/// number of tokens enumerated from the shipped stylesheet.
         \tpublic static let tokenCount = \(count)
+        }
+
+        // MARK: - MissingToken
+
+        /// a token the completeness check could not reconcile.
+        ///
+        /// a ``MissingToken`` names exactly one thing — the token — and says
+        /// how it is missing. the generated ``DesignToken.verify(_:)`` and the
+        /// token-completeness test suite both report these, so a hole in
+        /// either direction is a named failure, not a muddle.
+        public struct MissingToken: Sendable, Equatable {
+        \t/// how the token is missing.
+        \tpublic enum Kind: String, Sendable, Equatable {
+        \t\t/// the stylesheet declares `--<name>` but no ``DesignToken`` reader exists.
+        \t\tcase notInVocabulary
+        \t\t/// a ``DesignToken`` reader names `--<name>` but the stylesheet does not declare it.
+        \t\tcase notInStylesheet
+        \t\t/// a theme reads the token on an axis its name does not allow.
+        \t\tcase misplacedAxis
+        \t}
+        \t/// the css custom-property name, without the leading `--`.
+        \tpublic let name: String
+        \t/// the failure mode.
+        \tpublic let kind: Kind
+
+        \tpublic init(name: String, kind: Kind) {
+        \t\tself.name = name
+        \t\tself.kind = kind
+        \t}
+        }
+
+        // MARK: - completeness (generated with the vocabulary)
+
+        extension DesignToken {
+        \t/// the names declared on `:root` in the shipped stylesheet, in
+        \t/// first-declaration order. this is the (a) side of the completeness
+        \t/// check: the vocabulary must read exactly these names.
+        \tpublic static let stylesheetTokenNames: [String] = [
+        \(namesArray)
+        \t]
+
+        \t/// the theme audit: every token a theme reads on one of its five
+        \t/// axes must be a real stylesheet token, read on the axis its name
+        \t/// declares (``MissingToken/Kind/notInStylesheet`` and
+        \t/// ``MissingToken/Kind/misplacedAxis``).
+        \t///
+        \t/// returns one ``MissingToken`` per violation, sorted by token name.
+        \t/// a token a theme places on the wrong axis is read as a value the
+        \t/// author never wrote (the later axis wins on a duplicate), so a
+        \t/// hand-written ``DesignTheme`` conformance that routes `space4`
+        \t/// through `motion` is exactly the kind of silent precedence
+        \t/// surprise this catches.
+        \tpublic static func verify(_ theme: any DesignTheme.Type) -> [MissingToken] {
+        \t\tlet declared = Set(stylesheetTokenNames)
+        \t\tvar findings: [MissingToken] = []
+        \t\tfunc audit(_ axis: DesignTokenAxis, _ tokens: [DesignToken]) {
+        \t\t\tfor token in tokens {
+        \t\t\t\tif !declared.contains(token.rawValue) {
+        \t\t\t\t\tfindings.append(MissingToken(name: token.rawValue, kind: .notInStylesheet))
+        \t\t\t\t} else if token.axis != axis {
+        \t\t\t\t\tfindings.append(MissingToken(name: token.rawValue, kind: .misplacedAxis))
+        \t\t\t\t}
+        \t\t\t}
+        \t\t}
+        \t\taudit(.palette, Array(theme.palette.tokens.keys))
+        \t\taudit(.spacing, Array(theme.spacing.tokens.keys))
+        \t\taudit(.radii, Array(theme.radii.tokens.keys))
+        \t\taudit(.typography, Array(theme.typography.tokens.keys))
+        \t\taudit(.motion, Array(theme.motion.tokens.keys))
+        \t\treturn findings.sorted { $0.name < $1.name }
+        \t}
         }
         """
     }
