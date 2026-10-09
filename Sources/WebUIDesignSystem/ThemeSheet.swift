@@ -35,6 +35,12 @@ public struct ThemeSheet: Sendable, Equatable {
 		self.init(css: T.stylesheet())
 	}
 
+	/// render one design theme into a sheet: the theme's folded axes at the
+	/// given mode, content-addressed like any catalog sheet.
+	public init<T: DesignTheme>(theme: T.Type, mode: ThemeMode = .automatic) {
+		self.init(css: WebUITheme(mode: mode, theme: T.self).stylesheet())
+	}
+
 	/// true when the catalog rendered nothing (an empty catalog, or every theme `.standard`).
 	public var isEmpty: Bool { css.isEmpty }
 }

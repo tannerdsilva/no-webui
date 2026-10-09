@@ -199,6 +199,15 @@ public struct WebUITheme: Sendable, Equatable, Codable {
 		)
 	}
 
+	/// a theme from a ``DesignTheme`` type: the five axes folded into the base
+	/// palette (``DesignTheme.resolvedPalette``), at the given mode.
+	///
+	/// a `.standard`-equivalent — no overrides on ``DefaultDesignTheme`` — keeps
+	/// the emitted bytes identical to the unthemed document.
+	public init(mode: ThemeMode = .automatic, theme: any DesignTheme.Type) {
+		self.init(palette: theme.resolvedPalette, defaultMode: mode)
+	}
+
 	/// The default theme: no overrides, no mode, no rules. A document rendered with
 	/// `.standard` is byte-identical to one rendered without a theme.
 	public static let standard = WebUITheme()
