@@ -749,7 +749,7 @@ public struct WebUIAvatar: View {
     public let initials: String
     public let size: ControlSize
     public let src: String?
-    public let status: String?
+    public let status: AvatarStatus?
 
     /// this component's own class for a shared size — the sheet's bytes are
     /// unchanged for sm/md/lg; xl forwards the same pattern (a theme can honor it).
@@ -766,7 +766,7 @@ public struct WebUIAvatar: View {
         initials: String,
         size: ControlSize = .md,
         src: String? = nil,
-        status: String? = nil
+        status: AvatarStatus? = nil
     ) {
         self.initials = initials
         self.size = size
@@ -781,7 +781,7 @@ public struct WebUIAvatar: View {
     public func render(into buffer: inout HTMLBuffer) {
         var attributeText = " class=\"avatar \(Self.classFor(size))\""
         if let status {
-            attributeText += " data-status=\"\(htmlEscape(status))\""
+            attributeText += " data-status=\"\(htmlEscape(status.rawValue))\""
         }
         buffer.beginElement("div", attributeText)
         buffer.endOpenTag()

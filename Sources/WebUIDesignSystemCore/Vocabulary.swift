@@ -207,3 +207,56 @@ public enum Brand: String, Sendable, CaseIterable {
 public enum Directionality: String, Sendable, CaseIterable {
     case ltr, rtl
 }
+
+// MARK: - the stringly-typed slots, typed (W1.6)
+
+/// an avatar's presence badge — the `data-status` token, not a class.
+///
+/// the sheet colours the badge by this token, so the raw value *is* the
+/// contract: `online`, `away`, `busy`, `offline`.
+public enum AvatarStatus: String, Sendable, CaseIterable {
+    case online, away, busy, offline
+}
+
+/// a gantt bar's progress state.
+///
+/// the sheet ships exactly three modifier classes (`.gantt__bar--active`,
+/// `--done`, `--warn`), so the vocabulary carries exactly those; an unstyled
+/// bar is `nil` at the call site, which is what the 1.x empty-string default
+/// rendered.
+public enum GanttBarState: String, Sendable, CaseIterable {
+    case active, done, warn
+}
+
+/// a json leaf's type.
+///
+/// the sheet ships four leaf classes (`json-tree__str`, `__num`, `__bool`,
+/// `__null`); containers draw no type class, which is why there is no
+/// `object`/`array` case.
+public enum JsonNodeType: String, Sendable, CaseIterable {
+    case string, number, boolean, null
+}
+
+/// a unified diff line.
+///
+/// the sheet ships `.diff__line--add`, `--del`, `--hunk`, `--ctx` — one case
+/// per shipped class, named for what the line is rather than for its fragment.
+public enum DiffLineKind: String, Sendable, CaseIterable {
+    case context, added, removed, header
+}
+
+/// a terminal output line.
+///
+/// `plain` is the unstyled line — the sheet defines no base modifier class,
+/// which is what the 1.x `default:` branch rendered.
+public enum TerminalLineKind: String, Sendable, CaseIterable {
+    case plain, ok, warn, error
+}
+
+/// a chart series colour, drawn from the sheet's own palette.
+///
+/// the slots name `--color-chart-1` … `--color-chart-8`. a host that needs a
+/// different colour defines a token; raw css never rides a call site.
+public enum ChartColorSlot: String, Sendable, CaseIterable {
+    case c1, c2, c3, c4, c5, c6, c7, c8
+}

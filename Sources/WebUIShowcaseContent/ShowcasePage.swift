@@ -704,9 +704,9 @@ public struct ShowcasePage: Sendable {
                         }
                         demoCard("WebUIAvatar — with status indicator") {
                             HStack(spacing: 16) {
-                                WebUIAvatar(initials: "JD", size: .lg, status: "online")
-                                WebUIAvatar(initials: "AS", size: .lg, status: "away")
-                                WebUIAvatar(initials: "MK", size: .lg, status: "busy")
+                                WebUIAvatar(initials: "JD", size: .lg, status: .online)
+                                WebUIAvatar(initials: "AS", size: .lg, status: .away)
+                                WebUIAvatar(initials: "MK", size: .lg, status: .busy)
                             }
                         }
                         demoCard("WebUIProgress — all variants") {

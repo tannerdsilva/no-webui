@@ -177,12 +177,22 @@ public struct WebUICountryPicker: View {
 // MARK: WebUI Gantt
 /// a timeline gantt view with task bars.
 public struct WebUIGantt: View {
-    public struct Bar: Sendable { public let label: String; public let start: Int; public let span: Int; public let state: String
-        public init(_ label: String, start: Int, span: Int, state: String = "") { self.label = label; self.start = start; self.span = span; self.state = state } }
+    public struct Bar: Sendable { public let label: String; public let start: Int; public let span: Int; public let state: GanttBarState?
+        public init(_ label: String, start: Int, span: Int, state: GanttBarState? = nil) { self.label = label; self.start = start; self.span = span; self.state = state } }
     public struct Row: Sendable { public let label: String; public let bars: [Bar]
         public init(_ label: String, bars: [Bar]) { self.label = label; self.bars = bars } }
     public let rows: [Row]
     public init(rows: [Row]) { self.rows = rows }
+
+    /// this component's own class for a shared bar state — the sheet ships these
+    /// three fragments; `nil` is the unstyled bar the 1.x empty default rendered.
+    private static func classFor(_ state: GanttBarState) -> String {
+        switch state {
+            case .active: return "gantt__bar--active"
+            case .done: return "gantt__bar--done"
+            case .warn: return "gantt__bar--warn"
+        }
+    }
 
     public func render() -> String {
         var html = "<div class=\"gantt\">"
@@ -190,7 +200,8 @@ public struct WebUIGantt: View {
         for row in rows {
             html += "<div class=\"gantt__row\"><div class=\"gantt__label-col gantt__label\">\(htmlEscape(row.label))</div><div class=\"gantt__track\">"
             for bar in row.bars {
-                html += "<div class=\"gantt__bar \(bar.state)\" style=\"margin-left:\(bar.start * 10)%;width:\(bar.span)px\"><span class=\"gantt__bar-label\">\(htmlEscape(bar.label))</span></div>"
+                let stateClass = bar.state.map { Self.classFor($0) } ?? ""
+                html += "<div class=\"gantt__bar \(stateClass)\" style=\"margin-left:\(bar.start * 10)%;width:\(bar.span)px\"><span class=\"gantt__bar-label\">\(htmlEscape(bar.label))</span></div>"
             }
             html += "</div></div>"
         }
@@ -259,10 +270,21 @@ public struct WebUIDataSheet: View {
 // MARK: WebUI Json Tree
 /// a collapsible JSON viewer.
 public struct WebUIJsonTree: View {
-    public struct Node: Sendable { public let key: String; public let value: String; public let type: String; public let open: Bool; public let children: [Node]
-        public init(_ key: String, value: String, type: String = "str", open: Bool = false, children: [Node] = []) { self.key = key; self.value = value; self.type = type; self.open = open; self.children = children } }
+    public struct Node: Sendable { public let key: String; public let value: String; public let type: JsonNodeType; public let open: Bool; public let children: [Node]
+        public init(_ key: String, value: String, type: JsonNodeType = .string, open: Bool = false, children: [Node] = []) { self.key = key; self.value = value; self.type = type; self.open = open; self.children = children } }
     public let nodes: [Node]
     public init(nodes: [Node]) { self.nodes = nodes }
+
+    /// this component's own class for a shared leaf type — the sheet's four leaf
+    /// fragments, which is also why there is no `object`/`array` case to map.
+    private static func classFor(_ type: JsonNodeType) -> String {
+        switch type {
+            case .string: return "json-tree__str"
+            case .number: return "json-tree__num"
+            case .boolean: return "json-tree__bool"
+            case .null: return "json-tree__null"
+        }
+    }
 
     public func render() -> String {
         var html = "<div class=\"json-tree\">"
@@ -278,7 +300,7 @@ public struct WebUIJsonTree: View {
         if !node.children.isEmpty { html += "<span class=\"json-tree__toggle\"></span>" }
         html += "<span class=\"json-tree__key\">\(htmlEscape(node.key))</span><span class=\"json-tree__punct\">: </span>"
         if node.children.isEmpty {
-            html += "<span class=\"json-tree__\(node.type)\">\(htmlEscape(node.value))</span>"
+            html += "<span class=\"\(Self.classFor(node.type))\">\(htmlEscape(node.value))</span>"
         }
         html += "</div>"
         if !node.children.isEmpty {
@@ -294,12 +316,23 @@ public struct WebUIJsonTree: View {
 // MARK: WebUI Diff
 /// a unified diff view.
 public struct WebUIDiff: View {
-    public struct Line: Sendable { public let kind: String; public let num: Int; public let text: String
-        public init(_ kind: String, num: Int, text: String) { self.kind = kind; self.num = num; self.text = text } }
+    public struct Line: Sendable { public let kind: DiffLineKind; public let num: Int; public let text: String
+        public init(_ kind: DiffLineKind, num: Int, text: String) { self.kind = kind; self.num = num; self.text = text } }
     public let file: String
     public let stats: String
     public let lines: [Line]
     public init(file: String, stats: String = "", lines: [Line]) { self.file = file; self.stats = stats; self.lines = lines }
+
+    /// this component's own class for a shared line kind — same four bytes,
+    /// `context` included (the 1.x `default:` branch).
+    private static func classFor(_ kind: DiffLineKind) -> String {
+        switch kind {
+            case .context: return " diff__line--ctx"
+            case .added: return " diff__line--add"
+            case .removed: return " diff__line--del"
+            case .header: return " diff__line--hunk"
+        }
+    }
 
     public func render() -> String {
         var html = "<div class=\"diff\">"
@@ -307,13 +340,7 @@ public struct WebUIDiff: View {
         if !stats.isEmpty { html += "<span class=\"diff__stats\">\(htmlEscape(stats))</span>" }
         html += "</div>"
         for line in lines {
-            var cls = "diff__line"
-            switch line.kind {
-            case "add": cls += " diff__line--add"
-            case "del": cls += " diff__line--del"
-            case "hunk": cls += " diff__line--hunk"
-            default: cls += " diff__line--ctx"
-            }
+            let cls = "diff__line" + Self.classFor(line.kind)
             html += "<div class=\"\(cls)\"><span class=\"diff__lineno\">\(line.num)</span><span class=\"diff__content\">\(htmlEscape(line.text))</span></div>"
         }
         html += "</div>"
@@ -324,24 +351,29 @@ public struct WebUIDiff: View {
 // MARK: WebUI Terminal
 /// a terminal window with a title bar and output lines.
 public struct WebUITerminal: View {
-    public struct Line: Sendable { public let kind: String; public let text: String
-        public init(_ kind: String, text: String) { self.kind = kind; self.text = text } }
+    public struct Line: Sendable { public let kind: TerminalLineKind; public let text: String
+        public init(_ kind: TerminalLineKind, text: String) { self.kind = kind; self.text = text } }
     public let title: String
     public let lines: [Line]
     public init(title: String = "terminal", lines: [Line]) { self.title = title; self.lines = lines }
+
+    /// this component's own class for a shared line kind — `plain` is the empty
+    /// fragment the 1.x `default:` branch rendered.
+    private static func classFor(_ kind: TerminalLineKind) -> String {
+        switch kind {
+            case .plain: return ""
+            case .ok: return " terminal__line--ok"
+            case .warn: return " terminal__line--warn"
+            case .error: return " terminal__line--err"
+        }
+    }
 
     public func render() -> String {
         var html = "<div class=\"terminal\">"
         html += "<div class=\"terminal__bar\"><span class=\"terminal__dot terminal__dot--r\"></span><span class=\"terminal__dot terminal__dot--y\"></span><span class=\"terminal__dot terminal__dot--g\"></span><span class=\"terminal__title\">\(htmlEscape(title))</span></div>"
         html += "<div class=\"terminal__body\">"
         for line in lines {
-            var cls = "terminal__line"
-            switch line.kind {
-            case "ok": cls += " terminal__line--ok"
-            case "warn": cls += " terminal__line--warn"
-            case "err": cls += " terminal__line--err"
-            default: break
-            }
+            let cls = "terminal__line" + Self.classFor(line.kind)
             html += "<div class=\"\(cls)\">\(htmlEscape(line.text))</div>"
         }
         html += "<div class=\"terminal__line\"><span class=\"terminal__prompt\">$ </span><span class=\"terminal__cmd\"></span></div>"
@@ -419,11 +451,27 @@ public struct WebUILineChart: View {
 // MARK: WebUI Donut
 /// a donut chart with a center value.
 public struct WebUIDonut: View {
-    public struct Slice: Sendable { public let label: String; public let value: Double; public let color: String
-        public init(_ label: String, value: Double, color: String) { self.label = label; self.value = value; self.color = color } }
+    public struct Slice: Sendable { public let label: String; public let value: Double; public let color: ChartColorSlot
+        public init(_ label: String, value: Double, color: ChartColorSlot) { self.label = label; self.value = value; self.color = color } }
     public let slices: [Slice]
     public let centerValue: String
     public let centerLabel: String
+
+    /// this component's own token for a shared colour slot — the sheet's chart
+    /// palette. this is the one W1.6 slot whose bytes *change*: the 1.x surface
+    /// took raw css, which is exactly what a token slot exists to stop.
+    private static func token(_ color: ChartColorSlot) -> String {
+        switch color {
+            case .c1: return "var(--color-chart-1)"
+            case .c2: return "var(--color-chart-2)"
+            case .c3: return "var(--color-chart-3)"
+            case .c4: return "var(--color-chart-4)"
+            case .c5: return "var(--color-chart-5)"
+            case .c6: return "var(--color-chart-6)"
+            case .c7: return "var(--color-chart-7)"
+            case .c8: return "var(--color-chart-8)"
+        }
+    }
     public init(slices: [Slice], centerValue: String, centerLabel: String = "") {
         self.slices = slices; self.centerValue = centerValue; self.centerLabel = centerLabel
     }
@@ -435,7 +483,7 @@ public struct WebUIDonut: View {
         for s in slices {
             let start = acc / total * 360.0
             let end = (acc + s.value) / total * 360.0
-            segments.append("\(htmlEscape(s.color)) \(webuiFixedPoint(start, places: 1))deg \(webuiFixedPoint(end, places: 1))deg")
+            segments.append("\(Self.token(s.color)) \(webuiFixedPoint(start, places: 1))deg \(webuiFixedPoint(end, places: 1))deg")
             acc += s.value
         }
         let conic = "conic-gradient(\(segments.joined(separator: ", ")))"

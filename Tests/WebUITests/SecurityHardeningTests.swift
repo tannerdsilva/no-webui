@@ -88,11 +88,18 @@ struct AttributeEscapingHardeningTests {
 		#expect(!html.contains("\" onfocus="))
 	}
 
-	@Test("Avatar data-status payload cannot inject an attribute")
+	@Test("Avatar's data-status slot is typed, so a payload is not expressible")
 	func avatarStatusPayload() {
-		let html = WebUIAvatar(initials: "A", status: "\" onload=\"alert(1)").render()
+		// the 1.x surface took `status: String` and relied on escaping at the
+		// attribute boundary. the slot is typed now (W1.6), so the payload cannot
+		// be written at all — a stronger guarantee than escaping it, and the
+		// reason the stringly slots were worth the break.
+		// the attribute-escaping path stays exercised by the sibling tests and by
+		// this component's `src`, which is still a free string.
+		let html = WebUIAvatar(initials: "A", size: .md, src: "\" onload=\"alert(1)", status: .online).render()
 		#expect(html.contains("&quot;"))
-		#expect(!html.contains("\" onload="))
+		#expect(!html.contains("\" onload=\""))
+		#expect(html.contains("data-status=\"online\""))
 	}
 
 	@Test("Form method payload cannot inject an attribute")

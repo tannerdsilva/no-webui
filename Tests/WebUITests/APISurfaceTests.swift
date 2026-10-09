@@ -222,7 +222,7 @@ func componentSurfacePins() {
 	let badge = rendered(WebUIBadge("New", variant: .success, size: .sm, dot: true))
 	#expect(badge.contains("badge badge--success badge--sm badge--dot"))
 
-	let avatar = rendered(WebUIAvatar(initials: "JD", size: .md, src: nil, status: "online"))
+	let avatar = rendered(WebUIAvatar(initials: "JD", size: .md, src: nil, status: .online))
 	#expect(avatar.contains("avatar avatar--md"))
 	#expect(avatar.contains("avatar__status"))
 	#expect(avatar.contains("data-status=\"online\""))

@@ -218,7 +218,7 @@ func countryPicker() {
 
 @Test("WebUIGantt renders rows and bars")
 func gantt() {
-    let v = WebUIGantt(rows: [.init("Build", bars: [.init("compile", start: 0, span: 5, state: "gantt__bar--done")])])
+    let v = WebUIGantt(rows: [.init("Build", bars: [.init("compile", start: 0, span: 5, state: .done)])])
     let h = v.render()
     #expect(h.contains("class=\"gantt\""))
     #expect(h.contains("gantt__bar"))
@@ -242,7 +242,7 @@ func dataSheet() {
 
 @Test("WebUIJsonTree renders nested nodes")
 func jsonTree() {
-    let v = WebUIJsonTree(nodes: [.init("user", value: "", type: "num", open: true, children: [.init("name", value: "a", type: "str")])])
+    let v = WebUIJsonTree(nodes: [.init("user", value: "", type: .number, open: true, children: [.init("name", value: "a", type: .string)])])
     let h = v.render()
     #expect(h.contains("class=\"json-tree\""))
     #expect(h.contains("json-tree__children"))
@@ -250,7 +250,7 @@ func jsonTree() {
 
 @Test("WebUIDiff renders unified diff")
 func diff() {
-    let v = WebUIDiff(file: "a.swift", stats: "+2 −1", lines: [.init("add", num: 1, text: "x"), .init("del", num: 2, text: "y"), .init("hunk", num: 3, text: "@@")])
+    let v = WebUIDiff(file: "a.swift", stats: "+2 −1", lines: [.init(.added, num: 1, text: "x"), .init(.removed, num: 2, text: "y"), .init(.header, num: 3, text: "@@")])
     let h = v.render()
     #expect(h.contains("class=\"diff\""))
     #expect(h.contains("diff__line--add"))
@@ -258,7 +258,7 @@ func diff() {
 
 @Test("WebUITerminal renders shell window")
 func terminal() {
-    let v = WebUITerminal(title: "build", lines: [.init("ok", text: "done"), .init("err", text: "boom")])
+    let v = WebUITerminal(title: "build", lines: [.init(.ok, text: "done"), .init(.error, text: "boom")])
     let h = v.render()
     #expect(h.contains("class=\"terminal\""))
     #expect(h.contains("terminal__line--err"))
@@ -290,7 +290,7 @@ func lineChart() {
 
 @Test("WebUIDonut renders with center value")
 func donut() {
-    let v = WebUIDonut(slices: [.init("iOS", value: 44, color: "#6366f1")], centerValue: "10", centerLabel: "total")
+    let v = WebUIDonut(slices: [.init("iOS", value: 44, color: .c1)], centerValue: "10", centerLabel: "total")
     let h = v.render()
     #expect(h.contains("class=\"donut\""))
     #expect(h.contains("donut__center-value"))
