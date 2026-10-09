@@ -242,3 +242,35 @@ extension View {
         ModifiedView(content: self, modifier: OptimisticClickModifier(prediction: predict(), handler: perform))
     }
 }
+
+// MARK: - Class Names
+
+/// a class name, as distinct from any other string that can appear in a view
+/// expression.
+///
+/// `.class(_:)` and its siblings merge into the content's own classes (2.0).
+/// this type exists so a call site says what it means — an id, a label and an
+/// event handler are different things from a class, and only one of the four
+/// merges.
+public struct ClassName: Sendable, ExpressibleByStringLiteral, Hashable {
+    public let value: String
+    public init(_ value: String) { self.value = value }
+    public init(stringLiteral value: String) { self.value = value }
+}
+
+extension View {
+    /// add class names to the content's own, keeping both.
+    ///
+    /// the merge is what changed in 2.0: before, a modifier's `class` replaced
+    /// whatever the content rendered, so `WebUIButton("x").class("mine")`
+    /// erased `button button--primary button--md`. now both survive, and a name
+    /// already present is not repeated.
+    public func classes(_ names: ClassName...) -> ModifiedView<Self, HTMLAttribute> {
+        ModifiedView(content: self, modifier: HTMLAttribute("class", names.map(\.value).joined(separator: " ")))
+    }
+
+    /// add one class name — the singular reading of `classes(_:)`.
+    public func addClass(_ name: ClassName) -> ModifiedView<Self, HTMLAttribute> {
+        ModifiedView(content: self, modifier: HTMLAttribute("class", name.value))
+    }
+}

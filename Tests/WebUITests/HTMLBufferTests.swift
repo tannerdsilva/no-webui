@@ -175,7 +175,7 @@ struct HTMLBufferTests {
 		b.beginElement("div", "class=\"a\" class=\"b\" style=\"x:1\"")
 		b.endOpenTag()
 		b.endElement()
-		#expect(b.finish() == "<div class=\"a\" style=\"x:1; y:2\"></div>")
+		#expect(b.finish() == "<div class=\"a b\" style=\"x:1; y:2\"></div>")
 	}
 
 	@Test("addAttributeValue escapes both halves")

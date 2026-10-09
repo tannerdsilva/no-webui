@@ -1,5 +1,6 @@
 import Testing
 @testable import WebUI
+import WebUIDesignSystem
 
 // the attribute-merge contract behind `injectAttributes`. this is the spec the
 // render-buffer work (`.hermes/plans/2026-09-28_123131-render-buffer-v2.md`) must
@@ -17,10 +18,10 @@ struct AttributeMergeTests {
 
 	@Test("a duplicate before the merged key no longer indexes past the end")
 	func duplicateBeforeTarget() {
-		// `class` appears twice (the second is dropped), so `style`'s first
-		// occurrence sits after a tombstone.
+		// `class` appears twice, so it folds into its first occurrence; `style`'s
+		// first occurrence then sits after no tombstone at all.
 		let out = injectAttributes(into: "<div class=\"a\" class=\"b\" style=\"x:1\">t</div>", "style=\"y:2\"")
-		#expect(out == "<div class=\"a\" style=\"x:1; y:2\">t</div>")
+		#expect(out == "<div class=\"a b\" style=\"x:1; y:2\">t</div>")
 	}
 
 	@Test("two duplicated keys before the merged key")
@@ -29,19 +30,19 @@ struct AttributeMergeTests {
 			into: "<div class=\"a\" id=\"i\" class=\"b\" id=\"j\" style=\"x:1\">t</div>",
 			"style=\"y:2\""
 		)
-		#expect(out == "<div class=\"a\" id=\"i\" style=\"x:1; y:2\">t</div>")
+		#expect(out == "<div class=\"a b\" id=\"i\" style=\"x:1; y:2\">t</div>")
 	}
 
 	@Test("a duplicated key hit directly by a non-style incoming value")
 	func duplicateKeyNonStyleIncoming() {
 		let out = injectAttributes(into: "<div class=\"a\" class=\"b\" style=\"x:1\">t</div>", "class=\"c\"")
-		#expect(out == "<div class=\"c\" style=\"x:1\">t</div>")
+		#expect(out == "<div class=\"a b c\" style=\"x:1\">t</div>")
 	}
 
 	@Test("a duplicate after the merged key keeps the earlier position")
 	func duplicateAfterTarget() {
 		let out = injectAttributes(into: "<div style=\"x:1\" class=\"a\" class=\"b\">t</div>", "style=\"y:2\"")
-		#expect(out == "<div style=\"x:1; y:2\" class=\"a\">t</div>")
+		#expect(out == "<div style=\"x:1; y:2\" class=\"a b\">t</div>")
 	}
 
 	// MARK: - the documented merge semantics
@@ -97,5 +98,46 @@ struct AttributeMergeTests {
 	func quotedAngleBracket() {
 		let out = injectAttributes(into: "<div title=\"a>b\" class=\"card\">t</div>", "id=\"i\"")
 		#expect(out == "<div title=\"a>b\" class=\"card\" id=\"i\">t</div>")
+	}
+
+	// MARK: - 2.0: class merges instead of replacing
+
+	@Test("a primitive's own class survives a caller's added class")
+	func primitiveOwnClassSurvives() {
+		// before 2.0 the modifier replaced the attribute, so this rendered
+		// class="mine" and the element silently lost its styling.
+		let out = Div(class: "own") { Text("x") }.class("mine").render()
+		#expect(out.contains("class=\"own mine\""))
+	}
+
+	@Test("a component's own classes survive a caller's added class")
+	func componentOwnClassesSurvive() {
+		let html = WebUIButton("b", appearance: .primary).class("mine").render()
+		#expect(html.contains("button--primary"))
+		#expect(html.contains("mine"))
+		#expect(!html.contains("class=\"mine\""), "the component's own classes were replaced, not merged")
+	}
+
+	@Test("chained classes keep both, in call order")
+	func chainedClassesMerge() {
+		let out = Div(class: "own") { Text("x") }.class("a").class("b").render()
+		#expect(out.contains("class=\"own a b\""))
+	}
+
+	@Test("a repeated class name is not emitted twice")
+	func repeatedClassNameIsFolded() {
+		let out = Div(class: "own") { Text("x") }.class("own").render()
+		#expect(out.contains("class=\"own\""))
+		#expect(!out.contains("own own"))
+	}
+
+	@Test("classes(_:) and addClass(_:) are the typed spelling")
+	func typedClassHelpers() {
+		#expect(Div { Text("x") }.classes("a", "b").render().contains("class=\"a b\""))
+		#expect(Div { Text("x") }.addClass("a").render().contains("class=\"a\""))
+		// ClassName is a string literal, so a call site reads exactly as before.
+		let literal: ClassName = "c"
+		#expect(literal.value == "c")
+		#expect(Div { Text("x") }.classes("a").addClass("b").render().contains("class=\"a b\""))
 	}
 }

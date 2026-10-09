@@ -236,14 +236,34 @@ package func appendStyleDeclaration(existing: String, declaration: String) -> St
 	return e + "; " + d
 }
 
+/// Joins an incoming class list onto an existing one, space-separated, without
+/// repeating a name the existing list already has.
+///
+/// the join is what makes `.class("mine")` *add* to a component's own classes
+/// instead of erasing them. skipping repeats is what keeps `.class("x")`
+/// written twice from emitting `x x`: the browser would not care, but a
+/// duplicate in the markup is a fact a reader has to reason about.
+package func appendClassList(existing: String, incoming: String) -> String {
+	let separators: (Character) -> Bool = { $0 == " " || $0 == "\t" || $0 == "\n" || $0 == "\r" }
+	var names = existing.split(whereSeparator: separators).map(String.init)
+	var seen = Set(names)
+	for name in incoming.split(whereSeparator: separators).map(String.init) where seen.insert(name).inserted {
+		names.append(name)
+	}
+	return names.joined(separator: " ")
+}
+
 /// Merge `incoming` attribute occurrences into `base`, by the rules html and
 /// the browser agree on:
 ///
 /// - a key that already exists keeps its first source position;
 /// - a *duplicated* `style` appends its declarations to the first occurrence,
+///   a duplicated `class` appends its names (skipping ones already present),
 ///   and any other duplicated key keeps the first value (the browser drops the
 ///   rest, so shipping them would be a dead attribute);
-/// - an incoming `style` appends its declarations (the chained-style case);
+/// - an incoming `style` appends its declarations (the chained-style case), and
+///   an incoming `class` appends its names — the 2.0 rule, so a caller's
+///   `.class(…)` adds to a component's own classes instead of replacing them;
 /// - any other incoming key REPLACES the first occurrence — a later value is
 ///   the newer intent;
 /// - a key that does not exist yet is appended.
@@ -259,6 +279,8 @@ package func mergeAttributes(base: [ParsedAttr], incoming: [ParsedAttr]) -> [Par
 		guard let first = firstIndex[a.keyLower], first != idx else { continue }
 		if a.hadValue, !a.value.isEmpty, a.keyLower == "style" {
 			merged[first].value = appendStyleDeclaration(existing: merged[first].value, declaration: a.value)
+		} else if a.hadValue, !a.value.isEmpty, a.keyLower == "class" {
+			merged[first].value = appendClassList(existing: merged[first].value, incoming: a.value)
 		}
 		merged[idx] = ParsedAttr(key: "\0", keyLower: a.keyLower, value: "", hadValue: false, sourceQuote: nil) // tombstone
 	}
@@ -280,6 +302,9 @@ package func mergeAttributes(base: [ParsedAttr], incoming: [ParsedAttr]) -> [Par
 			if inc.hadValue, !inc.value.isEmpty {
 				if inc.keyLower == "style" {
 					merged[first].value = appendStyleDeclaration(existing: merged[first].value, declaration: inc.value)
+				} else if inc.keyLower == "class" {
+					// class merges: a component's own classes survive a caller's added ones
+					merged[first].value = appendClassList(existing: merged[first].value, incoming: inc.value)
 				} else {
 					merged[first] = inc // the newer value replaces the older
 				}
