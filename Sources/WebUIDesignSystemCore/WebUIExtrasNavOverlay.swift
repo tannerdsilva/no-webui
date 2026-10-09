@@ -64,10 +64,10 @@ public struct WebUINavbar: View {
             html += "<a class=\"navbar__brand\" href=\"/\"><span class=\"navbar__brand-mark\"></span>\(htmlEscape(brand))</a>"
         }
         if let search {
-            html += "<label class=\"navbar__search\" role=\"search\">"
+            html += "<label class=\"navbar__search\"" + AriaRole.search.render() + ">"
             html += "<input type=\"search\""
             if let sid = search.id { html += " id=\"\(htmlEscape(sid))\"" }
-            html += " placeholder=\"\(htmlEscape(search.placeholder))\" aria-label=\"\(htmlEscape(search.placeholder))\">"
+            html += " placeholder=\"\(htmlEscape(search.placeholder))\"" + Aria.label(search.placeholder).render() + ">"
             if let shortcut = search.shortcut { html += "<kbd>\(htmlEscape(shortcut))</kbd>" }
             html += "</label>"
         }
@@ -85,7 +85,7 @@ public struct WebUINavbar: View {
             html += "</div>"
         }
         if mobileMenu {
-            html += "<button class=\"navbar__hamburger\" type=\"button\" aria-label=\"\(htmlEscape(mobileMenuLabel))\">"
+            html += "<button class=\"navbar__hamburger\" type=\"button\"" + Aria.label(mobileMenuLabel).render() + ">"
             html += "<span></span><span></span><span></span>"
             html += "</button>"
         }
@@ -122,7 +122,7 @@ public struct WebUIBottomNav: View {
         } else {
             attrs = ""
         }
-        var html = "<nav class=\"bottom-nav\"\(attrs) aria-label=\"\(RenderContext.currentStrings.primary)\">"
+        var html = "<nav class=\"bottom-nav\"\(attrs)" + Aria.label(RenderContext.currentStrings.primary).render() + ">"
         for (index, item) in items.enumerated() {
             let itemID = id.map { " id=\"\(htmlEscape("\($0)-item-\(index)"))\"" } ?? ""
             html += "<a class=\"bottom-nav__item\(item.active ? " bottom-nav__item--active" : "")\"\(itemID) href=\"#\">"
@@ -197,7 +197,7 @@ public struct WebUIFab: View {    @available(*, deprecated, renamed: "Tone")
         var html = "<button class=\"\(classes)\""
         if let id { html += " id=\"\(htmlEscape(id))\"" }
         html += "\(tapAttrs)"
-        html += " aria-label=\"\(htmlEscape(label ?? ""))\">"
+        html += Aria.label(label ?? "").render() + ">"
         html += "<span class=\"fab__icon\">\(WebUIIcon(icon, size: .medium).renderThroughBuffer())</span>"
         if let label {
             html += "<span class=\"fab__label\">\(htmlEscape(label))</span>"
@@ -295,12 +295,12 @@ public struct WebUITransfer: View {
             let cls = "transfer__item\(option.selected ? " transfer__item--selected" : "")\(option.moved ? " transfer__row--moved" : "")"
             html += "<div class=\"\(cls)\"><span class=\"transfer__row-label\">\(htmlEscape(option.label))</span>"
             if option.moved {
-                html += "<button class=\"transfer__remove\" aria-label=\"\(RenderContext.currentStrings.remove)\">×</button>"
+                html += "<button class=\"transfer__remove\"" + Aria.label(RenderContext.currentStrings.remove).render() + ">×</button>"
             }
             html += "</div>"
         }
         html += "</div>"
-        html += "<div class=\"transfer__controls\"><button class=\"transfer__btn\" aria-label=\"\(RenderContext.currentStrings.add)\">→</button><button class=\"transfer__btn\" aria-label=\"\(RenderContext.currentStrings.remove)\">←</button></div>"
+        html += "<div class=\"transfer__controls\"><button class=\"transfer__btn\"" + Aria.label(RenderContext.currentStrings.add).render() + ">→</button><button class=\"transfer__btn\"" + Aria.label(RenderContext.currentStrings.remove).render() + ">←</button></div>"
         html += "</div>"
         buffer.append(html)
     }
@@ -313,7 +313,7 @@ public struct WebUIButtonGroup: View {
     public init(@ViewBuilder content: () -> [any View]) { self.children = content() }
 
     public func render(into buffer: inout HTMLBuffer) {
-        var html = "<div class=\"button-group\" role=\"group\">"
+        var html = "<div class=\"button-group\"" + AriaRole.group.render() + ">"
         for c in children { html += c.renderThroughBuffer() }
         html += "</div>"
         buffer.append(html)
@@ -345,7 +345,7 @@ public struct WebUISplitButton: View {
         html += "<button class=\"button button--primary\"\(mainID)>\(htmlEscape(label))</button>"
         if caret {
             let caretID = id.map { " id=\"\(htmlEscape("\($0)-caret"))\"" } ?? ""
-            html += "<button class=\"button button--primary button--caret\"\(caretID) aria-label=\"\(RenderContext.currentStrings.options)\">▾</button>"
+            html += "<button class=\"button button--primary button--caret\"\(caretID)" + Aria.label(RenderContext.currentStrings.options).render() + ">▾</button>"
         }
         html += "</div>"
         buffer.append(html)
@@ -369,7 +369,7 @@ public struct WebUIToc: View {
     public init(title: String = WebUIStrings.english.onThisPage, entries: [Entry]) { self.title = title; self.entries = entries }
 
     public func render(into buffer: inout HTMLBuffer) {
-        var html = "<nav class=\"toc-rail\" aria-label=\"\(RenderContext.currentStrings.tableOfContents)\">"
+        var html = "<nav class=\"toc-rail\"" + Aria.label(RenderContext.currentStrings.tableOfContents).render() + ">"
         html += "<div class=\"toc-rail__title\">\(htmlEscape(title))</div>"
         for entry in entries {
             var cls = "toc-rail__item"
@@ -434,7 +434,7 @@ public struct WebUIAccordion: View {
         for (index, item) in items.enumerated() {
             html += "<div class=\"accordion__item\(item.open ? " accordion__item--open" : "")\">"
             let headerID = id.map { " id=\"\(htmlEscape("\($0)-item-\(index)"))\"" } ?? ""
-            html += "<button class=\"accordion__header\"\(headerID) aria-expanded=\"\(item.open)\"><span class=\"accordion__chevron\"></span>\(htmlEscape(item.title))</button>"
+            html += "<button class=\"accordion__header\"\(headerID)" + Aria.expanded(item.open ? .yes : .no).render() + "><span class=\"accordion__chevron\"></span>\(htmlEscape(item.title))</button>"
             html += "<div class=\"accordion__body\">\(item.children)</div>"
             html += "</div>"
         }
@@ -467,7 +467,7 @@ public struct WebUICollapse: View {
         }
         var html = "<div class=\"collapse\(open ? " collapse--open" : "")\"\(attrs)>"
         let headerID = id.map { " id=\"\(htmlEscape($0))\"" } ?? ""
-        html += "<button class=\"collapse__header\"\(headerID) aria-expanded=\"\(open)\"><span class=\"collapse__chevron\"></span>\(htmlEscape(header))</button>"
+        html += "<button class=\"collapse__header\"\(headerID)" + Aria.expanded(open ? .yes : .no).render() + "><span class=\"collapse__chevron\"></span>\(htmlEscape(header))</button>"
         html += "<div class=\"collapse__content\"><div class=\"collapse__inner\">"
         for c in children { html += c.renderThroughBuffer() }
         html += "</div></div></div>"
@@ -504,13 +504,13 @@ public struct WebUIActionSheet: View {
         } else {
             attrs = ""
         }
-        var html = "<div class=\"action-sheet\"\(attrs) role=\"menu\">"
+        var html = "<div class=\"action-sheet\"\(attrs)" + AriaRole.menu.render() + ">"
         if let title { html += "<div class=\"action-sheet__header\"><div class=\"action-sheet__title\">\(htmlEscape(title))</div>" }
         if let sub { html += "<div class=\"action-sheet__sub\">\(htmlEscape(sub))</div>" }
         if title != nil { html += "</div>" }
         for (index, action) in actions.enumerated() {
             let itemID = id.map { " id=\"\(htmlEscape("\($0)-item-\(index)"))\"" } ?? ""
-            html += "<button class=\"action-sheet__item\(action.destructive ? " action-sheet__item--destructive" : "")\"\(itemID) role=\"menuitem\">\(htmlEscape(action.label))</button>"
+            html += "<button class=\"action-sheet__item\(action.destructive ? " action-sheet__item--destructive" : "")\"\(itemID)" + AriaRole.menuitem.render() + ">\(htmlEscape(action.label))</button>"
         }
         html += "<div class=\"action-sheet__divider\"></div>"
         let cancelID = id.map { " id=\"\(htmlEscape("\($0)-cancel"))\"" } ?? ""
@@ -564,11 +564,11 @@ public struct WebUIBottomSheet: View {
         } else {
             attrs = ""
         }
-        var html = "<div class=\"bottom-sheet\(Self.classFor(position))\"\(attrs) role=\"dialog\" aria-modal=\"true\">"
+        var html = "<div class=\"bottom-sheet\(Self.classFor(position))\"\(attrs)" + Aria.attributes([.modal(.yes)], role: .dialog) + ">"
         html += "<div class=\"bottom-sheet__handle\"></div>"
         if let title {
             let closeID = id.map { " id=\"\(htmlEscape("\($0)-close"))\"" } ?? ""
-            html += "<div class=\"bottom-sheet__header\"><div class=\"bottom-sheet__title\">\(htmlEscape(title))</div><button class=\"bottom-sheet__close\"\(closeID) aria-label=\"\(RenderContext.currentStrings.close)\">×</button></div>"
+            html += "<div class=\"bottom-sheet__header\"><div class=\"bottom-sheet__title\">\(htmlEscape(title))</div><button class=\"bottom-sheet__close\"\(closeID)" + Aria.label(RenderContext.currentStrings.close).render() + ">×</button></div>"
         }
         html += "<div class=\"bottom-sheet__body\">"
         for c in children { html += c.renderThroughBuffer() }
@@ -635,11 +635,11 @@ public struct WebUIDrawer: View {
         } else {
             attrs = ""
         }
-        var html = "<div class=\"drawer\(Self.classFor(edge))\(Self.classFor(size))\"\(attrs) role=\"dialog\" aria-modal=\"true\">"
+        var html = "<div class=\"drawer\(Self.classFor(edge))\(Self.classFor(size))\"\(attrs)" + Aria.attributes([.modal(.yes)], role: .dialog) + ">"
         html += "<div class=\"drawer__panel\">"
         if let title {
             let closeID = id.map { " id=\"\(htmlEscape("\($0)-close"))\"" } ?? ""
-            html += "<div class=\"drawer__header\"><div class=\"drawer__title\">\(htmlEscape(title))</div><button class=\"drawer__close\"\(closeID) aria-label=\"\(RenderContext.currentStrings.close)\">×</button></div>"
+            html += "<div class=\"drawer__header\"><div class=\"drawer__title\">\(htmlEscape(title))</div><button class=\"drawer__close\"\(closeID)" + Aria.label(RenderContext.currentStrings.close).render() + ">×</button></div>"
         }
         html += "<div class=\"drawer__content\">"
         for c in children { html += c.renderThroughBuffer() }
@@ -755,7 +755,7 @@ public struct WebUILinkPreview: View {
         html += "<div class=\"link-preview__domain\">\(htmlEscape(domain))</div>"
         if let title { html += "<div class=\"link-preview__title\">\(htmlEscape(title))</div>" }
         if let desc { html += "<div class=\"link-preview__desc\">\(htmlEscape(desc))</div>" }
-        html += "<button class=\"link-preview__close\" aria-label=\"\(RenderContext.currentStrings.close)\">×</button>"
+        html += "<button class=\"link-preview__close\"" + Aria.label(RenderContext.currentStrings.close).render() + ">×</button>"
         html += "</div></a>"
         buffer.append(html)
     }
@@ -784,16 +784,16 @@ public struct WebUILightbox: View {
         } else {
             attrs = ""
         }
-        var html = "<div class=\"lightbox\"\(attrs) role=\"dialog\" aria-modal=\"true\">"
+        var html = "<div class=\"lightbox\"\(attrs)" + Aria.attributes([.modal(.yes)], role: .dialog) + ">"
         html += "<div class=\"lightbox__stage\"><img class=\"lightbox__img\" src=\"\(htmlEscape(image))\" alt=\"\(htmlEscape(caption ?? ""))\"></div>"
         html += "<div class=\"lightbox__toolbar\">"
         if let count { html += "<div class=\"lightbox__counter\">\(htmlEscape(count))</div>" }
         let prevID = id.map { " id=\"\(htmlEscape("\($0)-prev"))\"" } ?? ""
         let nextID = id.map { " id=\"\(htmlEscape("\($0)-next"))\"" } ?? ""
         let closeID = id.map { " id=\"\(htmlEscape("\($0)-close"))\"" } ?? ""
-        html += "<button class=\"lightbox__tool\"\(prevID) aria-label=\"\(RenderContext.currentStrings.previous)\">‹</button>"
-        html += "<button class=\"lightbox__tool\"\(nextID) aria-label=\"\(RenderContext.currentStrings.next)\">›</button>"
-        html += "<button class=\"lightbox__close\"\(closeID) aria-label=\"\(RenderContext.currentStrings.close)\">×</button>"
+        html += "<button class=\"lightbox__tool\"\(prevID)" + Aria.label(RenderContext.currentStrings.previous).render() + ">‹</button>"
+        html += "<button class=\"lightbox__tool\"\(nextID)" + Aria.label(RenderContext.currentStrings.next).render() + ">›</button>"
+        html += "<button class=\"lightbox__close\"\(closeID)" + Aria.label(RenderContext.currentStrings.close).render() + ">×</button>"
         html += "</div>"
         if let caption { html += "<div class=\"lightbox__caption\">\(htmlEscape(caption))</div>" }
         html += "</div>"
@@ -883,11 +883,11 @@ public struct WebUIMenu: View {
         }
         var html = "<div class=\"menu\(panel ? " menu__panel" : "")\""
         if let id { html += " id=\"\(htmlEscape(id))\"" }
-        html += "\(attrs) role=\"menu\">"
+        html += "\(attrs)" + AriaRole.menu.render() + ">"
         if let header { html += "<div class=\"menu__header\">\(htmlEscape(header))</div>" }
         if let search {
             html += "<div class=\"menu__search\">"
-            html += "<input type=\"search\" placeholder=\"\(htmlEscape(search))\" aria-label=\"\(htmlEscape(search))\">"
+            html += "<input type=\"search\" placeholder=\"\(htmlEscape(search))\"" + Aria.label(search).render() + ">"
             html += "</div>"
         }
         for (index, item) in items.enumerated() {
@@ -900,7 +900,7 @@ public struct WebUIMenu: View {
             if item.active { cls += " menu__item--active" }
             if item.submenu { cls += " menu__item--has-sub" }
             let itemID = id.map { " id=\"\(htmlEscape("\($0)-item-\(index)"))\"" } ?? ""
-            html += "<button class=\"\(cls)\"\(itemID) role=\"menuitem\"\(item.disabled ? " disabled" : "")>"
+            html += "<button class=\"\(cls)\"\(itemID)" + AriaRole.menuitem.render() + "\(item.disabled ? " disabled" : "")>"
             if let avatar = item.avatar {
                 html += "<span class=\"menu__avatar\"><span class=\"avatar avatar--initials avatar--sm\">\(htmlEscape(avatar))</span></span>"
             }
@@ -1008,7 +1008,7 @@ public struct WebUIComboBox: View {
             var cls = "combo__option"
             if option.selected { cls += " combo__option--selected" }
             let optID = id.map { " id=\"\(htmlEscape("\($0)-opt-\(index)"))\"" } ?? ""
-            html += "<div class=\"\(cls)\"\(optID) role=\"option\" aria-selected=\"\(option.selected)\">\(htmlEscape(option.label))</div>"
+            html += "<div class=\"\(cls)\"\(optID)" + Aria.attributes([.selected(option.selected ? .yes : .no)], role: .option) + ">\(htmlEscape(option.label))</div>"
         }
         html += "</div></div>"
         buffer.append(html)
@@ -1046,7 +1046,7 @@ public struct WebUICommandPalette: View {
         } else {
             attrs = ""
         }
-        var html = "<div class=\"command-palette\"\(attrs) role=\"dialog\" aria-modal=\"true\">"
+        var html = "<div class=\"command-palette\"\(attrs)" + Aria.attributes([.modal(.yes)], role: .dialog) + ">"
         html += "<div class=\"command-palette__input\"><input type=\"text\" placeholder=\"\(htmlEscape(placeholder))\"></div>"
         html += "<div class=\"command-palette__results\">"
         let groupsOrdered = commands.map(\.group).filter { !$0.isEmpty }.uniquePreservingOrder
@@ -1108,19 +1108,19 @@ public struct WebUISeparator: View {
 
     public func render(into buffer: inout HTMLBuffer) {
             if orientation == .vertical {
-                buffer.append("<div class=\"divider divider--vertical\" role=\"separator\" aria-orientation=\"vertical\"></div>")
+                buffer.append("<div class=\"divider divider--vertical\"" + Aria.attributes([.orientation(.vertical)], role: .separator) + "></div>")
                 return
             }
             if let icon {
                 let glyph = WebUIIcon(icon, size: .slot).renderThroughBuffer()
-                buffer.append("<div class=\"divider divider--icon\(strong ? " divider--strong" : "")\" role=\"separator\"><span class=\"divider__label\">\(glyph)</span></div>")
+                buffer.append("<div class=\"divider divider--icon\(strong ? " divider--strong" : "")\"" + AriaRole.separator.render() + "><span class=\"divider__label\">\(glyph)</span></div>")
                 return
             }
             if let label {
-                buffer.append("<div class=\"divider-divider\" role=\"separator\"><span class=\"divider-divider__label\">\(htmlEscape(label))</span></div>")
+                buffer.append("<div class=\"divider-divider\"" + AriaRole.separator.render() + "><span class=\"divider-divider__label\">\(htmlEscape(label))</span></div>")
                 return
             }
-            buffer.append("<div class=\"divider\(strong ? " divider--strong" : "")\" role=\"separator\"></div>")
+            buffer.append("<div class=\"divider\(strong ? " divider--strong" : "")\"" + AriaRole.separator.render() + "></div>")
     }
 }
 
@@ -1219,13 +1219,13 @@ public struct WebUIScrollTop: View {
         } else {
             attrs = ""
         }
-        var html = "<button class=\"scroll-top\(progress != nil ? " scroll-top--ring" : "")\" type=\"button\" aria-label=\"\(htmlEscape(label))\""
+        var html = "<button class=\"scroll-top\(progress != nil ? " scroll-top--ring" : "")\" type=\"button\"" + Aria.label(label).render()
         if let id { html += " id=\"\(htmlEscape(id))\"" }
         html += attrs + ">"
         if let progress {
             let clamped = progress < 0 ? 0 : (progress > 1 ? 1 : progress)
             let offset = webuiFixedPoint((1 - clamped) * 100, places: 1)
-            html += "<svg class=\"scroll-top__ring\" viewBox=\"0 0 36 36\" aria-hidden=\"true\">"
+            html += "<svg class=\"scroll-top__ring\" viewBox=\"0 0 36 36\"" + Aria.hidden(.yes).render() + ">"
             html += "<circle class=\"ring__track\" cx=\"18\" cy=\"18\" r=\"15.915\"/>"
             html += "<circle class=\"ring__fill\" cx=\"18\" cy=\"18\" r=\"15.915\" stroke-dasharray=\"100\" stroke-dashoffset=\"\(offset)\"/>"
             html += "</svg>"

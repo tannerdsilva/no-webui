@@ -52,9 +52,9 @@ public struct WebUIReactions: View {
         for (i, r) in reactions.enumerated() {
             html += "<button class=\"reactions__emoji\(r.active ? " reactions__emoji--active" : "")\""
             if let id { html += " id=\"\(htmlEscape(id))-r-\(i)\"" }
-            html += "><span aria-hidden=\"true\">\(htmlEscape(r.emoji))</span><span class=\"reactions__count\">\(r.count)</span></button>"
+            html += "><span" + Aria.hidden(.yes).render() + ">\(htmlEscape(r.emoji))</span><span class=\"reactions__count\">\(r.count)</span></button>"
         }
-        html += "<button class=\"reactions__more\" aria-label=\"\(RenderContext.currentStrings.addReaction)\">＋</button>"
+        html += "<button class=\"reactions__more\"" + Aria.label(RenderContext.currentStrings.addReaction).render() + ">＋</button>"
         html += "</div>"
         buffer.append(html)
     }
@@ -67,7 +67,7 @@ public struct WebUITypingIndicator: View {
     public init(inline: Bool = false) { self.inline = inline }
 
     public func render(into buffer: inout HTMLBuffer) {
-        var html = "<div class=\"typing\(inline ? " typing--inline" : "")\" role=\"status\" aria-label=\"\(RenderContext.currentStrings.someoneIsTyping)\">"
+        var html = "<div class=\"typing\(inline ? " typing--inline" : "")\"" + Aria.attributes([.label(RenderContext.currentStrings.someoneIsTyping)], role: .status) + ">"
         html += "<span class=\"typing__dot\"></span><span class=\"typing__dot\"></span><span class=\"typing__dot\"></span>"
         html += "</div>"
         buffer.append(html)
@@ -114,7 +114,7 @@ public struct WebUIToastStack: View {
     public init(@ViewBuilder content: () -> [any View]) { self.children = content() }
 
     public func render(into buffer: inout HTMLBuffer) {
-        var html = "<div class=\"toast-stack\" aria-live=\"polite\">"
+        var html = "<div class=\"toast-stack\"" + Aria.live(.polite).render() + ">"
         for c in children { html += c.renderThroughBuffer() }
         html += "</div>"
         buffer.append(html)
@@ -134,7 +134,7 @@ public struct WebUIBell: View {
 
     public func render(into buffer: inout HTMLBuffer) {
         let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onTap) } ?? ""
-        var html = "<button class=\"bell\"\(attrs) aria-label=\"\(RenderContext.currentStrings.notifications)\(count > 0 ? RenderContext.currentStrings.unreadCount(count) : "")\">"
+        var html = "<button class=\"bell\"\(attrs)" + Aria.label(RenderContext.currentStrings.notifications + (count > 0 ? RenderContext.currentStrings.unreadCount(count) : "")).render() + ">"
         html += "<span class=\"bell__icon\">\(WebUIIcon(icon, size: .medium).renderThroughBuffer())</span>"
         if count > 0 { html += "<span class=\"bell__badge\">\(count)</span>" }
         html += "</button>"
@@ -220,7 +220,7 @@ public struct WebUIConfetti: View {
     public init(round: Bool = true) { self.round = round }
 
     public func render(into buffer: inout HTMLBuffer) {
-        var html = "<div class=\"confetti-stage\"><div class=\"confetti\(round ? " confetti--round" : "")\" aria-hidden=\"true\">"
+        var html = "<div class=\"confetti-stage\"><div class=\"confetti\(round ? " confetti--round" : "")\"" + Aria.hidden(.yes).render() + ">"
         for _ in 0..<24 { html += "<span class=\"confetti__piece\"></span>" }
         html += "</div></div>"
         buffer.append(html)
@@ -264,7 +264,7 @@ public struct WebUICookieConsent: View {
 
     public func render(into buffer: inout HTMLBuffer) {
         let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onSelect) } ?? ""
-        var html = "<div class=\"cookie-consent\"\(attrs) role=\"dialog\" aria-modal=\"false\">"
+        var html = "<div class=\"cookie-consent\"\(attrs)" + Aria.attributes([.modal(.no)], role: .dialog) + ">"
         html += "<div class=\"cookie-consent__body\">"
         if let title { html += "<div class=\"cookie-consent__title\">\(htmlEscape(title))</div>" }
         html += "<div class=\"cookie-consent__text\">\(htmlEscape(text))</div>"
@@ -303,7 +303,7 @@ public struct WebUIPullRefresh: View {
 
     public func render(into buffer: inout HTMLBuffer) {
         let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onRefresh) } ?? ""
-        var html = "<div class=\"pull-refresh\(Self.classFor(state))\"\(attrs) role=\"status\">"
+        var html = "<div class=\"pull-refresh\(Self.classFor(state))\"\(attrs)" + AriaRole.status.render() + ">"
         html += "<div class=\"pull-refresh__indicator\"><span class=\"pull-refresh__spinner\"></span>"
         if let text { html += "<span class=\"pull-refresh__text\">\(htmlEscape(text))</span>" }
         html += "</div></div>"
@@ -413,7 +413,7 @@ public struct WebUIRadioGroup: View {
     public init(options: [Option], selected: String? = nil, inline: Bool = false) { self.options = options; self.selected = selected; self.inline = inline }
 
     public func render(into buffer: inout HTMLBuffer) {
-        var html = "<div class=\"radio-group\(inline ? " radio-group--inline" : "")\" role=\"radiogroup\">"
+        var html = "<div class=\"radio-group\(inline ? " radio-group--inline" : "")\"" + AriaRole.radioGroup.render() + ">"
         for option in options {
             let checked = option.value == selected
             html += "<label class=\"radio\">"
@@ -530,7 +530,7 @@ public struct WebUIBanner: View, Dismissible {    @available(*, deprecated, rena
 
     public func render(into buffer: inout HTMLBuffer) {
         let dismissal = makeDismissal(ariaLabel: RenderContext.currentStrings.dismiss)
-        var html = "<div class=\"banner \(Self.classFor(tone))\" role=\"status\""
+        var html = "<div class=\"banner \(Self.classFor(tone))\"" + AriaRole.status.render()
         if let elementID = dismissal.elementID ?? id {
             html += " id=\"\(htmlEscape(elementID))\""
         }
@@ -638,7 +638,7 @@ public struct WebUIMessageScroller: View {
         if let id { html += " id=\"\(htmlEscape(id))\"" }
         let size = htmlEscape(height)
         html += " style=\"height: \(size); max-height: \(size)\""
-        html += " role=\"log\" aria-live=\"polite\" aria-label=\"\(htmlEscape(ariaLabel))\" tabindex=\"0\">"
+        html += Aria.attributes([.live(.polite), .label(ariaLabel)], role: .log) + " tabindex=\"0\">"
         for child in children.reversed() {
             html += child.renderThroughBuffer()
         }
@@ -665,7 +665,7 @@ public struct WebUIMarker: View {
     }
 
     public func render(into buffer: inout HTMLBuffer) {
-        var html = "<div class=\"marker\(sticky ? " marker--sticky" : "")\" role=\"separator\">"
+        var html = "<div class=\"marker\(sticky ? " marker--sticky" : "")\"" + AriaRole.separator.render() + ">"
         if spread { html += "<span class=\"marker__rule\"></span>" }
         if let icon {
             html += "<span class=\"marker__glyph\">" + WebUIIcon(icon, size: .slot).renderThroughBuffer() + "</span>"
@@ -831,7 +831,7 @@ public struct WebUIChatBubble: View {
             label = RenderContext.currentStrings.read
             extraClass = " chat__receipt--read"
         }
-        return "<span class=\"chat__receipt\(extraClass)\" role=\"img\" aria-label=\"\(label)\">"
+        return "<span class=\"chat__receipt\(extraClass)\"" + Aria.attributes([.label(label)], role: .img) + ">"
             + WebUIIcon(icon, size: .small).renderThroughBuffer() + "</span>"
     }
 
@@ -852,7 +852,7 @@ public struct WebUIChatBubble: View {
             var row = "<div class=\"chat__reactions\">"
             for reaction in reactions {
                 row += "<span class=\"chat__reaction\(reaction.active ? " chat__reaction--active" : "")\">"
-                row += "<span aria-hidden=\"true\">\(htmlEscape(reaction.label))</span>"
+                row += "<span" + Aria.hidden(.yes).render() + ">\(htmlEscape(reaction.label))</span>"
                 row += "<span>\(reaction.count)</span>"
                 row += "</span>"
             }
@@ -901,7 +901,7 @@ public struct WebUIMessage: View {
             var row = "<div class=\"chat__reactions\">"
             for reaction in reactions {
                 row += "<span class=\"chat__reaction\(reaction.active ? " chat__reaction--active" : "")\">"
-                row += "<span aria-hidden=\"true\">\(htmlEscape(reaction.label))</span>"
+                row += "<span" + Aria.hidden(.yes).render() + ">\(htmlEscape(reaction.label))</span>"
                 row += "<span>\(reaction.count)</span>"
                 row += "</span>"
             }

@@ -166,6 +166,10 @@ public enum Aria: Sendable, Equatable {
 	case valuemin(Int)
 	case valuemax(Int)
 	case valuenow(Int)
+	/// fractional `aria-valuenow` for controls whose value is a `Double`
+	/// (the slider's native value carries its decimal point, so the aria
+	/// copy must too).
+	case valuenowDouble(Double)
 
 	/// the attribute name, e.g. `aria-label`.
 	public var key: String {
@@ -191,7 +195,7 @@ public enum Aria: Sendable, Equatable {
 		case .level: return "aria-level"
 		case .valuemin: return "aria-valuemin"
 		case .valuemax: return "aria-valuemax"
-		case .valuenow: return "aria-valuenow"
+		case .valuenow, .valuenowDouble: return "aria-valuenow"
 		}
 	}
 
@@ -216,6 +220,7 @@ public enum Aria: Sendable, Equatable {
 		case .disabled(let v), .invalid(let v): return v ? "true" : "false"
 		case .level(let v): return String(v)
 		case .valuemin(let v), .valuemax(let v), .valuenow(let v): return String(v)
+		case .valuenowDouble(let v): return String(v)
 		}
 	}
 

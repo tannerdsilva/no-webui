@@ -140,8 +140,7 @@ public struct WebUISegmentedControl: View {
         var html = "<div class=\"\(cls)\"\(attrs)>"
         for item in items {
             let active = item.id == selectedID ? " segmented__item--active" : ""
-            let selected = item.id == selectedID ? "true" : "false"
-            html += "<div class=\"segmented__item\(active)\" id=\"\(htmlEscape(item.id))\" role=\"tab\" aria-selected=\"\(selected)\">"
+            html += "<div class=\"segmented__item\(active)\" id=\"\(htmlEscape(item.id))\"" + Aria.attributes([.selected(item.id == selectedID ? .yes : .no)], role: .tab) + ">"
             html += "<span class=\"segmented__label\">\(htmlEscape(item.label))</span>"
             if let count = item.count {
                 html += "<span class=\"segmented__count\">\(count)</span>"
@@ -371,13 +370,13 @@ public struct WebUIComposer: View {
         html += "<div class=\"composer__tools\">"
         let attachAttrs = onAttach != nil
             ? controlAttributes(id: id + "-attach", event: .click, handler: onAttach)
-            : " disabled aria-disabled=\"true\""
+            : " disabled" + Aria.disabled(true).render()
         let toolClass = onAttach != nil ? "composer__tool" : "composer__tool composer__tool--disabled"
-        html += "<button type=\"button\" class=\"\(toolClass)\" aria-label=\"attach\"\(attachAttrs)>"
+        html += "<button type=\"button\" class=\"\(toolClass)\"" + Aria.label("attach").render() + "\(attachAttrs)>"
         html += WebUIIcon(.paperclip, size: .slot).renderThroughBuffer()
         html += "</button>"
         html += "</div>"
-        html += "<button type=\"submit\" class=\"composer__send\" aria-label=\"send\""
+        html += "<button type=\"submit\" class=\"composer__send\"" + Aria.label("send").render()
         if disabled { html += " disabled" }
         html += ">"
         html += WebUIIcon(.send, size: .slot).renderThroughBuffer()
@@ -476,10 +475,10 @@ public struct WebUIEngineStatus: View {
 
     public func render(into buffer: inout HTMLBuffer) {
         buffer.append("""
-        <span class="engine-status-mirror" data-webui-status data-webui-state="reconnecting" role="status">
+        <span class="engine-status-mirror" data-webui-status data-webui-state="reconnecting"\(AriaRole.status.render())>
           <span class="engine-status-mirror__dot"></span>
-          <span class="engine-status-mirror__state engine-status-mirror__state--connected">connected</span>
-          <span class="engine-status-mirror__state engine-status-mirror__state--reconnecting">reconnecting…</span>
+          <span class="engine-status-mirror__state engine-status-mirror__state--connected">\(RenderContext.currentStrings.connected)</span>
+          <span class="engine-status-mirror__state engine-status-mirror__state--reconnecting">\(RenderContext.currentStrings.reconnecting)</span>
         </span>
         """)
     }
@@ -497,11 +496,12 @@ public struct WebUIThemeToggle: View {
     public init() {}
 
     public func render(into buffer: inout HTMLBuffer) {
+        let attrs = AriaRole.group.render() + Aria.label("Theme").render()
         buffer.append("""
-        <div class="theme-toggle" role="group" aria-label="Theme">
-          <button type="button" class="theme-toggle__btn" data-theme-choice="system" aria-pressed="false">System</button>
-          <button type="button" class="theme-toggle__btn" data-theme-choice="light" aria-pressed="false">Light</button>
-          <button type="button" class="theme-toggle__btn" data-theme-choice="dark" aria-pressed="false">Dark</button>
+        <div class="theme-toggle"\(attrs)>
+          <button type="button" class="theme-toggle__btn" data-theme-choice="system"\(Aria.pressed(.no).render())>System</button>
+          <button type="button" class="theme-toggle__btn" data-theme-choice="light"\(Aria.pressed(.no).render())>Light</button>
+          <button type="button" class="theme-toggle__btn" data-theme-choice="dark"\(Aria.pressed(.no).render())>Dark</button>
         </div>
         """)
     }

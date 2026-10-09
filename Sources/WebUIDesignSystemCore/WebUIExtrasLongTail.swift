@@ -31,7 +31,7 @@ public struct WebUICarousel: View {
 
     public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"carousel\" id=\"\(htmlEscape(id))\">"
-        html += "<div class=\"carousel__track\" tabindex=\"0\" role=\"group\" aria-label=\"\(htmlEscape(label))\">"
+        html += "<div class=\"carousel__track\" tabindex=\"0\"" + Aria.attributes([.label(label)], role: .group) + ">"
         for (i, slide) in slides.enumerated() {
             html += "<div class=\"carousel__slide\" id=\"\(htmlEscape(id))-\(i)\">"
             html += slide.renderThroughBuffer()
@@ -41,7 +41,7 @@ public struct WebUICarousel: View {
         if showsDots && slides.count > 1 {
             html += "<div class=\"carousel__dots\">"
             for i in slides.indices {
-                html += "<a class=\"carousel__dot\" href=\"#\(htmlEscape(id))-\(i)\" aria-label=\"\(RenderContext.currentStrings.slide(i + 1))\"></a>"
+                html += "<a class=\"carousel__dot\" href=\"#\(htmlEscape(id))-\(i)\"" + Aria.label(RenderContext.currentStrings.slide(i + 1)).render() + "></a>"
             }
             html += "</div>"
         }
@@ -92,19 +92,19 @@ public struct WebUIMenubar: View {
     public func render(into buffer: inout HTMLBuffer) {
         var html = "<nav class=\"menubar\""
         if let id { html += " id=\"\(htmlEscape(id))\"" }
-        html += " aria-label=\"\(RenderContext.currentStrings.mainNavigation)\">"
+        html += Aria.label(RenderContext.currentStrings.mainNavigation).render() + ">"
         for (i, item) in items.enumerated() {
             html += "<div class=\"menubar__item\">"
-            html += "<button type=\"button\" class=\"menubar__trigger\" aria-haspopup=\"true\" aria-expanded=\"false\""
-            html += " aria-controls=\"\(htmlEscape(id ?? "menubar"))-panel-\(i)\">"
+            html += "<button type=\"button\" class=\"menubar__trigger\"" + Aria.attributes([.hasPopup(.yes), .expanded(.no)])
+            html += Aria.controls("\(id ?? "menubar")-panel-\(i)").render() + ">"
             html += htmlEscape(item.label)
             html += "</button>"
-            html += "<div class=\"menubar__panel\" id=\"\(htmlEscape(id ?? "menubar"))-panel-\(i)\" role=\"menu\">"
+            html += "<div class=\"menubar__panel\" id=\"\(htmlEscape(id ?? "menubar"))-panel-\(i)\"" + AriaRole.menu.render() + ">"
             for entry in item.entries {
                 if let href = entry.href {
-                    html += "<a class=\"menubar__link\" role=\"menuitem\" href=\"\(htmlEscape(href))\">"
+                    html += "<a class=\"menubar__link\"" + AriaRole.menuitem.render() + " href=\"\(htmlEscape(href))\">"
                 } else {
-                    html += "<span class=\"menubar__link\" role=\"menuitem\">"
+                    html += "<span class=\"menubar__link\"" + AriaRole.menuitem.render() + ">"
                 }
                 html += htmlEscape(entry.label)
                 html += entry.href == nil ? "</span>" : "</a>"

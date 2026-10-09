@@ -1322,7 +1322,7 @@ public struct WebUITable: View {
                     if canExpand {
                         html += "<td class=\"table__expand-col\"><button type=\"button\" class=\"table__expand-btn\" id=\"\(htmlEscape(base))-expand-\(htmlEscape(rowId))\"" + Aria.attributes([.expanded(expanded ? .yes : .no), .label(RenderContext.currentStrings.expandRow(rowId))]) + "\(expandAttrs)>\(expandIcon)</button></td>"
                     } else {
-                        html += "<td class=\"table__expand-col\"><button type=\"button\" class=\"table__expand-btn\" id=\"\(htmlEscape(base))-expand-\(htmlEscape(rowId))\" aria-disabled=\"true\" disabled" + Aria.label(RenderContext.currentStrings.expandRow(rowId)).render() + "\(expandAttrs)>\(expandIcon)</button></td>"
+                        html += "<td class=\"table__expand-col\"><button type=\"button\" class=\"table__expand-btn\" id=\"\(htmlEscape(base))-expand-\(htmlEscape(rowId))\"" + Aria.disabled(true).render() + " disabled" + Aria.label(RenderContext.currentStrings.expandRow(rowId)).render() + "\(expandAttrs)>\(expandIcon)</button></td>"
                     }
                 }
                 for (i, cell) in row.enumerated() where !hiddenColumns.contains(i) {

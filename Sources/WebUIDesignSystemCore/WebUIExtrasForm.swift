@@ -47,7 +47,7 @@ public struct WebUISlider: View {
         let inputAttrs = id.map { controlAttributes(id: "\($0)-input", event: .input, handler: onChange) } ?? ""
         let idAttr = inputID.isEmpty ? "" : " id=\"\(inputID)\""
         var html = "<div class=\"slider\(Self.classFor(size))\(vertical ? " slider--vertical" : "")\">"
-        html += "<input type=\"range\" class=\"slider__input\"\(idAttr) min=\"\(min)\" max=\"\(max)\" value=\"\(value)\" aria-valuenow=\"\(value)\"\(inputAttrs)>"
+        html += "<input type=\"range\" class=\"slider__input\"\(idAttr) min=\"\(min)\" max=\"\(max)\" value=\"\(value)\"" + Aria.valuenowDouble(value).render() + "\(inputAttrs)>"
         html += "<div class=\"slider__track\"><div class=\"slider__fill\" style=\"width:\(webuiFixedPoint(pct, places: 2))%\"></div><span class=\"slider__thumb\" style=\"left:\(webuiFixedPoint(pct, places: 2))%\"></span></div>"
         html += "<div class=\"slider__ticks\">"
         for _ in 0..<11 { html += "<span class=\"slider__tick\"></span>" }
@@ -147,10 +147,10 @@ public struct WebUIStepper: View {
         }
         let decID = id.map { " id=\"\(htmlEscape("\($0)-dec"))\"" } ?? ""
         let incID = id.map { " id=\"\(htmlEscape("\($0)-inc"))\"" } ?? ""
-        var html = "<div class=\"stepper\(Self.classFor(size))\"\(attrs) role=\"group\" aria-label=\"\(RenderContext.currentStrings.stepper)\">"
-        html += "<button class=\"stepper__btn\"\(decID) aria-label=\"\(RenderContext.currentStrings.decrease)\">−</button>"
+        var html = "<div class=\"stepper\(Self.classFor(size))\"\(attrs)" + Aria.attributes([.label(RenderContext.currentStrings.stepper)], role: .group) + ">"
+        html += "<button class=\"stepper__btn\"\(decID)" + Aria.label(RenderContext.currentStrings.decrease).render() + ">−</button>"
         html += "<span class=\"stepper__value\">\(value)</span>"
-        html += "<button class=\"stepper__btn\"\(incID) aria-label=\"\(RenderContext.currentStrings.increase)\">+</button>"
+        html += "<button class=\"stepper__btn\"\(incID)" + Aria.label(RenderContext.currentStrings.increase).render() + ">+</button>"
         html += "</div>"
         buffer.append(html)
     }
@@ -188,12 +188,12 @@ public struct WebUIOTP: View {
 
     public func render(into buffer: inout HTMLBuffer) {
         let digits = value ?? []
-        var html = "<div class=\"otp\(Self.classFor(size))\(error ? " otp--error" : "")\" aria-label=\"\(RenderContext.currentStrings.oneTimeCode)\">"
+        var html = "<div class=\"otp\(Self.classFor(size))\(error ? " otp--error" : "")\"" + Aria.label(RenderContext.currentStrings.oneTimeCode).render() + ">"
         for i in 0..<length {
             let filled = i < digits.count
             let cellID = id.map { " id=\"\(htmlEscape("\($0)-cell-\(i)"))\"" } ?? ""
             let cellAttrs = id.map { controlAttributes(id: "\($0)-cell-\(i)", event: .input, handler: onChange) } ?? ""
-            html += "<input class=\"otp__cell\(filled ? " otp__cell--filled" : "")\(i == digits.count ? " otp__cell--active" : "")\"\(cellID) type=\"text\" inputmode=\"numeric\" maxlength=\"1\" value=\"\(filled ? "\(digits[i])" : "")\" aria-label=\"\(RenderContext.currentStrings.digit(i + 1))\"\(cellAttrs)>"
+            html += "<input class=\"otp__cell\(filled ? " otp__cell--filled" : "")\(i == digits.count ? " otp__cell--active" : "")\"\(cellID) type=\"text\" inputmode=\"numeric\" maxlength=\"1\" value=\"\(filled ? "\(digits[i])" : "")\"\"" + Aria.label(RenderContext.currentStrings.digit(i + 1)).render() + "\(cellAttrs)>"
         }
         html += "</div>"
         buffer.append(html)
@@ -339,8 +339,8 @@ public struct WebUIValidation: View {
     public init(_ message: String, state: ValidationState = .error) { self.message = message; self.state = state }
 
     public func render(into buffer: inout HTMLBuffer) {
-        var html = "<div class=\"validation\(Self.classFor(state))\" role=\"status\">"
-        html += "<span class=\"validation__icon\" aria-hidden=\"true\">\(Self.icon(for: state))</span>"
+        var html = "<div class=\"validation\(Self.classFor(state))\"" + AriaRole.status.render() + ">"
+        html += "<span class=\"validation__icon\"" + Aria.hidden(.yes).render() + ">\(Self.icon(for: state))</span>"
         html += "<span class=\"validation__text\">\(htmlEscape(message))</span>"
         html += "</div>"
         buffer.append(html)
@@ -356,8 +356,8 @@ public struct WebUIDropZone: View {
     public init(_ title: String, hint: String = "", hover: Bool = false) { self.title = title; self.hint = hint; self.hover = hover }
 
     public func render(into buffer: inout HTMLBuffer) {
-        var html = "<div class=\"dropzone\(hover ? " dropzone--hover" : "")\" role=\"button\" tabindex=\"0\">"
-        html += "<div class=\"file-drop__icon\" aria-hidden=\"true\">⇪</div>"
+        var html = "<div class=\"dropzone\(hover ? " dropzone--hover" : "")\"" + AriaRole.button.render() + " tabindex=\"0\">"
+        html += "<div class=\"file-drop__icon\"" + Aria.hidden(.yes).render() + ">⇪</div>"
         html += "<div class=\"file-drop__title\">\(htmlEscape(title))</div>"
         if !hint.isEmpty { html += "<div class=\"file-drop__hint\">\(htmlEscape(hint))</div>" }
         html += "<input type=\"file\" style=\"display:none\">"
@@ -374,7 +374,7 @@ public struct WebUISignature: View {
 
     public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"sigpad\">"
-        html += "<div class=\"sigpad__canvas\" role=\"img\" aria-label=\"\(htmlEscape(label))\"></div>"
+        html += "<div class=\"sigpad__canvas\"" + Aria.attributes([.label(label)], role: .img) + "></div>"
         html += "<div class=\"sigpad__tools\"><button class=\"button button--ghost button--sm\">\(RenderContext.currentStrings.clear)</button></div>"
         html += "</div>"
         buffer.append(html)
@@ -417,10 +417,10 @@ public struct WebUIInlineEdit: View {
         let saveID = id.map { " id=\"\(htmlEscape("\($0)-save"))\"" } ?? ""
         let cancelID = id.map { " id=\"\(htmlEscape("\($0)-cancel"))\"" } ?? ""
         var html = "<div class=\"inline-edit\(Self.classFor(state))\(error ? " inline-edit--error" : "")\"\(rootAttrs)>"
-        html += "<div class=\"inline-edit__value\">\(htmlEscape(value))<span class=\"inline-edit__pencil\" aria-hidden=\"true\">✎</span></div>"
+        html += "<div class=\"inline-edit__value\">\(htmlEscape(value))<span class=\"inline-edit__pencil\"" + Aria.hidden(.yes).render() + ">✎</span></div>"
         if state == .editing {
             html += "<div class=\"inline-edit__editing\"><input class=\"inline-edit__input\(error ? " inline-edit__input--error" : "")\" value=\"\(htmlEscape(value))\">"
-            html += "<div class=\"inline-edit__actions\"><button class=\"inline-edit__check\"\(saveID) aria-label=\"\(RenderContext.currentStrings.save)\">✓</button><button class=\"inline-edit__pencil\"\(cancelID) aria-label=\"\(RenderContext.currentStrings.cancel)\">✕</button></div></div>"
+            html += "<div class=\"inline-edit__actions\"><button class=\"inline-edit__check\"\(saveID)" + Aria.label(RenderContext.currentStrings.save).render() + ">✓</button><button class=\"inline-edit__pencil\"\(cancelID)" + Aria.label(RenderContext.currentStrings.cancel).render() + ">✕</button></div></div>"
         }
         html += "</div>"
         buffer.append(html)
@@ -439,8 +439,8 @@ public struct WebUIMasked: View {
         let display = masked ? String(repeating: "•", count: value.count) : value
         var html = "<div class=\"masked\">"
         if let prefix { html += "<span class=\"masked__prefix\">\(htmlEscape(prefix))</span>" }
-        html += "<input type=\"text\" value=\"\(htmlEscape(display))\" aria-label=\"\(RenderContext.currentStrings.maskedValue)\">"
-        html += "<span class=\"masked__caret\" aria-hidden=\"true\"></span>"
+        html += "<input type=\"text\" value=\"\(htmlEscape(display))\"" + Aria.label(RenderContext.currentStrings.maskedValue).render() + ">"
+        html += "<span class=\"masked__caret\"" + Aria.hidden(.yes).render() + "></span>"
         html += "</div>"
         buffer.append(html)
     }
@@ -484,12 +484,12 @@ public struct WebUIRating: View {
         if heart { classes += " rating--heart" }
         if full > 0 { classes += " rating--filled" }
         let rootAttrs = id.map { controlAttributes(id: $0, event: .click, handler: onChange) } ?? ""
-        var html = "<div class=\"\(classes)\"\(rootAttrs) role=\"img\" aria-label=\"\(RenderContext.currentStrings.ratingValue(value, max))\">"
+        var html = "<div class=\"\(classes)\"\(rootAttrs)" + Aria.attributes([.label(RenderContext.currentStrings.ratingValue(value, max))], role: .img) + ">"
         for i in 1...max {
             let glyph = heart ? "♥" : "★"
             let filled = i <= full
             let starID = id.map { " id=\"\(htmlEscape("\($0)-star-\(i)"))\"" } ?? ""
-            html += "<span class=\"rating__star\(filled ? " rating__star--filled" : "")\"\(starID) aria-hidden=\"true\">\(glyph)</span>"
+            html += "<span class=\"rating__star\(filled ? " rating__star--filled" : "")\"\(starID)" + Aria.hidden(.yes).render() + ">\(glyph)</span>"
         }
         if showValue { html += "<span class=\"rating__value\">\(value)</span>" }
         html += "</div>"
@@ -548,7 +548,7 @@ public struct WebUITag: View {
         if let icon { html += "<span class=\"tag__icon\">\(WebUIIcon(icon, size: .small).renderThroughBuffer())</span>" }
         html += "<span class=\"tag__label\">\(htmlEscape(label))</span>"
         if let count { html += "<span class=\"tag__count\">\(count)</span>" }
-        if removable { html += "<button class=\"tag__remove\"\(removeID) aria-label=\"\(RenderContext.currentStrings.removeItem(htmlEscape(label)))\">×</button>" }
+        if removable { html += "<button class=\"tag__remove\"\(removeID)" + Aria.label(RenderContext.currentStrings.removeItem(label)).render() + ">×</button>" }
         html += "</span>"
         buffer.append(html)
     }
@@ -575,7 +575,7 @@ public struct WebUIChipInput: View {
         var html = "<div class=\"chip-input\"\(rootAttrs)>"
         for (i, chip) in chips.enumerated() {
             let removeID = id.map { " id=\"\(htmlEscape("\($0)-chip-\(i)"))\"" } ?? ""
-            html += "<span class=\"chip chip--sm chip--primary\">\(htmlEscape(chip))<button class=\"chip__remove\"\(removeID) aria-label=\"\(RenderContext.currentStrings.remove)\">×</button></span>"
+            html += "<span class=\"chip chip--sm chip--primary\">\(htmlEscape(chip))<button class=\"chip__remove\"\(removeID)" + Aria.label(RenderContext.currentStrings.remove).render() + ">×</button></span>"
         }
         html += "<input type=\"text\" placeholder=\"\(htmlEscape(placeholder))\">"
         html += "</div>"
@@ -699,7 +699,7 @@ public struct WebUIInputGroup: View {
         if let name { html += " name=\"\(htmlEscape(name))\"" }
         html += " placeholder=\"\(htmlEscape(placeholder))\""
         if let value { html += " value=\"\(htmlEscape(value))\"" }
-        if state == .error { html += " aria-invalid=\"true\"" }
+        if state == .error { html += Aria.invalid(true).render() }
         if disabled { html += " disabled" }
         html += ">"
         if let suffix {
@@ -823,13 +823,13 @@ public struct WebUIToggleGroup: View {
         }
         var html = "<div style=\"display: flex; flex-wrap: wrap; gap: var(--space-2)\""
         if let id { html += " id=\"\(htmlEscape(id))\"" }
-        html += " role=\"group\"\(attrs)>"
+        html += AriaRole.group.render() + "\(attrs)>"
         for (index, option) in options.enumerated() {
             var cls = "chip chip--filter"
             if option.selected { cls += " chip--filter-active" }
             let chipID = id.map { " id=\"\(htmlEscape("\($0)-opt-\(index)"))\"" } ?? ""
             html += "<button type=\"button\" class=\"\(cls)\"\(chipID)"
-            if option.selected { html += " aria-pressed=\"true\"" }
+            if option.selected { html += Aria.pressed(.yes).render() }
             html += ">\(htmlEscape(option.label))</button>"
         }
         html += "</div>"

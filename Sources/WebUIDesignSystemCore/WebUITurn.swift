@@ -19,7 +19,7 @@ public struct WebUIReasoningBlock: View {
     }
 
     public func render(into buffer: inout HTMLBuffer) {
-        buffer.append("<details class=\"turn-reasoning\"><summary>Reasoning</summary><pre>"
+        buffer.append("<details class=\"turn-reasoning\"><summary>\(RenderContext.currentStrings.reasoning)</summary><pre>"
             + htmlEscape(reasoning)
             + "</pre></details>")
     }

@@ -88,6 +88,12 @@ public struct WebUIStrings: Sendable {
     public var mainNavigation: String = "Main"
     /// a carousel dot's accessible name with its one-based slide position.
     public var slide: @Sendable (Int) -> String = { "Slide \($0)" }
+    /// the engine-status mirror's connected label.
+    public var connected: String = "connected"
+    /// the engine-status mirror's reconnecting label (trailing U+2026).
+    public var reconnecting: String = "reconnecting…"
+    /// a collapsible reasoning transcript's summary label.
+    public var reasoning: String = "Reasoning"
 
     /// the default catalog — every string's byte-identical English.
     public static let english = WebUIStrings()
@@ -159,7 +165,10 @@ public struct WebUIStrings: Sendable {
         copyLabel: "نسخ",
         map: "خريطة",
         mainNavigation: "التنقل الرئيسي",
-        slide: { "الشريحة \($0)" }
+        slide: { "الشريحة \($0)" },
+        connected: "متصل",
+        reconnecting: "إعادة الاتصال…",
+        reasoning: "الاستدلال"
     )
 }
 

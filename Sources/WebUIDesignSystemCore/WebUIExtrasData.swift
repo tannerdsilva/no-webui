@@ -37,7 +37,7 @@ public struct WebUICalendar: View {
         var html = "<div class=\"calendar\"\(attrs)>"
         html += "<div class=\"calendar__header\">"
         html += "<div class=\"calendar__month\">\(htmlEscape(month))</div>"
-        html += "<div class=\"calendar__nav\"><button aria-label=\"\(RenderContext.currentStrings.previous)\">‹</button><button aria-label=\"\(RenderContext.currentStrings.next)\">›</button><button class=\"calendar__today\">\(RenderContext.currentStrings.today)</button></div>"
+        html += "<div class=\"calendar__nav\"><button" + Aria.label(RenderContext.currentStrings.previous).render() + ">‹</button><button" + Aria.label(RenderContext.currentStrings.next).render() + ">›</button><button class=\"calendar__today\">\(RenderContext.currentStrings.today)</button></div>"
         html += "</div>"
         html += "<div class=\"calendar__grid\">"
         for wd in weekdays { html += "<div class=\"calendar__weekday\">\(htmlEscape(wd))</div>" }
@@ -95,9 +95,9 @@ public struct WebUIDatePicker: View {
     public func render(into buffer: inout HTMLBuffer) {
         let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onChange) } ?? ""
         var html = "<div class=\"date-picker\"\(attrs)>"
-        html += "<div class=\"date-picker__header\"><button class=\"date-picker__nav\" aria-label=\"\(RenderContext.currentStrings.previous)\">‹</button>"
+        html += "<div class=\"date-picker__header\"><button class=\"date-picker__nav\"" + Aria.label(RenderContext.currentStrings.previous).render() + ">‹</button>"
         html += "<div class=\"date-picker__month\">\(htmlEscape(month))</div>"
-        html += "<button class=\"date-picker__nav\" aria-label=\"\(RenderContext.currentStrings.next)\">›</button></div>"
+        html += "<button class=\"date-picker__nav\"" + Aria.label(RenderContext.currentStrings.next).render() + ">›</button></div>"
         html += "<div class=\"date-picker__grid\">"
         for wd in weekdays { html += "<div class=\"date-picker__weekday\">\(htmlEscape(wd))</div>" }
         for (i, day) in days.enumerated() {
@@ -391,7 +391,7 @@ public struct WebUICodeBlock: View {
 
     public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"codeblock\">"
-        html += "<div class=\"codeblock__bar\"><span class=\"codeblock__lang\">\(htmlEscape(language))</span><button class=\"code__copy\" aria-label=\"\(RenderContext.currentStrings.copyLabel)\">\(RenderContext.currentStrings.copy)</button></div>"
+        html += "<div class=\"codeblock__bar\"><span class=\"codeblock__lang\">\(htmlEscape(language))</span><button class=\"code__copy\"" + Aria.label(RenderContext.currentStrings.copyLabel).render() + ">\(RenderContext.currentStrings.copy)</button></div>"
         html += "<pre class=\"codeblock__code\"><code>\(htmlEscape(code))</code></pre>"
         html += "</div>"
         buffer.append(html)
@@ -441,7 +441,7 @@ public struct WebUILineChart: View {
              h - pad - ((p.y - minY) / rangeY) * (h - 2 * pad))
         }
         let lineStr = coords.map { "\(Int($0.0)),\(Int($0.1))" }.joined(separator: " ")
-        var html = "<div class=\"line-chart\"><svg viewBox=\"0 0 \(Int(w)) \(Int(h))\" role=\"img\" aria-hidden=\"true\">"
+        var html = "<div class=\"line-chart\"><svg viewBox=\"0 0 \(Int(w)) \(Int(h))\"" + Aria.attributes([.hidden(.yes)], role: .img) + ">"
         html += "<polyline class=\"line-chart__line\" points=\"\(lineStr)\"></polyline>"
         for c in coords { html += "<circle class=\"line-chart__dot\" cx=\"\(Int(c.0))\" cy=\"\(Int(c.1))\" r=\"3\"></circle>" }
         html += "</svg></div>"
@@ -531,7 +531,7 @@ public struct WebUIMap: View {
         for i in 0..<3 { html += "<div class=\"map__road map__road--h\" style=\"top:\(25 + i * 25)%\"></div>" }
         for i in 0..<4 { html += "<div class=\"map__road map__road--v\" style=\"left:\(10 + i * 20)%\"></div>" }
         for pin in pins {
-            html += "<div class=\"map__pin\(pin.active ? " map__pin--active" : "")\" style=\"left:\(Int(pin.x))%;top:\(Int(pin.y))%\" aria-label=\"\(htmlEscape(pin.label))\">\(htmlEscape(String(pin.label.prefix(1))))</div>"
+            html += "<div class=\"map__pin\(pin.active ? " map__pin--active" : "")\" style=\"left:\(Int(pin.x))%;top:\(Int(pin.y))%\"" + Aria.label(pin.label).render() + ">\(htmlEscape(String(pin.label.prefix(1))))</div>"
             if pin.active {
                 html += "<div class=\"map__popup\" style=\"left:\(Int(pin.x))%;top:\(Int(pin.y))%\"><span class=\"map__popup-arrow\"></span>\(htmlEscape(pin.label))</div>"
             }

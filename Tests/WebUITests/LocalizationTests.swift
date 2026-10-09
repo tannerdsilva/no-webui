@@ -96,6 +96,9 @@ private func renderInLocale<V: View>(_ env: LocalizedEnvironment, _ build: () ->
 		#expect(s.map == "map")
 		#expect(s.mainNavigation == "Main")
 		#expect(s.slide(1) == "Slide 1")
+		#expect(s.connected == "connected")
+		#expect(s.reconnecting == "reconnecting…")
+		#expect(s.reasoning == "Reasoning")
 	}
 
 	// MARK: english renders outside any context
@@ -152,6 +155,32 @@ private func renderInLocale<V: View>(_ env: LocalizedEnvironment, _ build: () ->
 	@Test func outsideAContextTheLookupFallsBackToEnglish() {
 		#expect(RenderContext.currentStrings.dismiss == "Dismiss")
 		#expect(RenderContext.currentStrings.rowsPerPage == "Rows per page")
+		#expect(RenderContext.currentStrings.connected == "connected")
+		#expect(RenderContext.currentStrings.reconnecting == "reconnecting…")
+		#expect(RenderContext.currentStrings.reasoning == "Reasoning")
+	}
+
+	// MARK: the last status strings (w5.0) resolve through the context
+
+	@Test func engineAndReasoningStringsResolveThroughTheContext() {
+		let status = WebUIEngineStatus().renderThroughBuffer()
+		#expect(status.contains(">connected<"))
+		#expect(status.contains(">reconnecting…<"))
+		#expect(WebUIReasoningBlock("x").renderThroughBuffer().contains("<summary>Reasoning</summary>"))
+		var catalog = WebUIStrings.english
+		catalog.connected = "Online"
+		catalog.reasoning = "Thoughts"
+		let env = TestLocale(strings: catalog)
+		let html = renderInLocale(env) {
+			WebUIEngineStatus()
+		}
+		#expect(html.contains(">Online<"))
+		#expect(!html.contains(">connected<"))
+		let reasoning = renderInLocale(env) {
+			WebUIReasoningBlock("x")
+		}
+		#expect(reasoning.contains("<summary>Thoughts</summary>"))
+		#expect(reasoning.contains("<summary>Reasoning</summary>") == false)
 	}
 
 	// MARK: the shipped arabic catalog

@@ -143,6 +143,38 @@ import WebUIShowcaseContent
 		#expect(A11yAudit.audit(html).isEmpty)
 	}
 
+	// MARK: the last hand-written emitters (w5.0) went typed
+
+	@Test func migratedEmittersUseTheTypedSurface() {
+		let drawer = WebUIDrawer(title: "t") { Text("x") }.renderThroughBuffer()
+		#expect(drawer.contains("role=\"dialog\""))
+		#expect(drawer.contains("aria-modal=\"true\""))
+		#expect(WebUISeparator().renderThroughBuffer().contains("role=\"separator\""))
+		#expect(WebUIEngineStatus().renderThroughBuffer().contains("role=\"status\""))
+		let otp = WebUIOTP().renderThroughBuffer()
+		#expect(otp.contains("aria-label=\"One-time code\""))
+		#expect(otp.contains("aria-label=\"Digit 1\""))
+		// the slider's fractional value survives the typed surface byte-identically.
+		#expect(WebUISlider(50).renderThroughBuffer().contains("aria-valuenow=\"50.0\""))
+		#expect(Aria.valuenowDouble(50.0).render() == " aria-valuenow=\"50.0\"")
+	}
+
+	@Test func migratedEmittersStayA11yClean() {
+		let rendered = [
+			WebUIEngineStatus().renderThroughBuffer(),
+			WebUISeparator().renderThroughBuffer(),
+			WebUIOTP().renderThroughBuffer(),
+			WebUIStepper(1).renderThroughBuffer(),
+			WebUIReactions(reactions: []).renderThroughBuffer(),
+			WebUITypingIndicator().renderThroughBuffer(),
+		]
+		for html in rendered {
+			let findings = A11yAudit.audit(html)
+			let report = findings.map { "[\($0.rule)] \($0.element) — \($0.message)" }.joined(separator: "\n")
+			#expect(findings.isEmpty, "findings: \(report)")
+		}
+	}
+
 	// MARK: the audit modifier
 
 	@Test func auditModifierRunsOverRenderedMarkup() {
