@@ -300,26 +300,42 @@ public actor WebUIServer {
 	/// cache to satisfy a sync signature is how a page goes stale.
 	public typealias RequestRender = @Sendable (WebUIServerRequest) async -> String
 
+	/// the element id a document's page region carries for in-place
+	/// navigation: the `navigate` answer patches this element. a page without
+	/// it is still answered (the engine skips an element it cannot find); a
+	/// path the router cannot answer is answered with a full-page redirect.
+	static let pageRegionID = "webui-page"
+
 	private let config: WebUIServerConfig
 	private let logger: Logger
 	private var lifecycle: Lifecycle?
+	/// the typed route table that answers the page path (and, at the
+	/// deprecated inits, nothing else). the framework's own asset routes are
+	/// matched before it, so a route can neither shadow nor disable them.
+	private let pageRouter: Router
 
 	/// render one fixed page and let the router carry all variation.
+	///
+	/// deprecated: a ``Router`` answers paths and parameters directly. this
+	/// init keeps its signature and stands on a single-route ``Router`` for
+	/// `config.pagePath`, so existing pages render byte-identically.
+	@available(*, deprecated, message: "build a Router and use init(router:config:logger:)")
 	public init(
 		render: @escaping Render,
 		router: EventRouter,
 		config: WebUIServerConfig = WebUIServerConfig(),
 		logger: Logger = Logger(label: "webui.server")
 	) {
-		self.config = config
-		self.logger = logger
-		self.lifecycle = nil
-		self.router = router
-		self.render = { _ in render() }
+		self.init(requestRender: { _ in render() }, router: router, config: config, logger: logger)
 	}
 
 	/// render from the request: path-dependent pages and `?s=<id>` deep links.
 	/// distinct label, so the two inits never compete in overload resolution.
+	///
+	/// deprecated: a ``Router`` answers paths and parameters directly. this
+	/// init keeps its signature and stands on a single-route ``Router`` for
+	/// `config.pagePath`, so existing pages render byte-identically.
+	@available(*, deprecated, message: "build a Router and use init(router:config:logger:)")
 	public init(
 		requestRender: @escaping RequestRender,
 		router: EventRouter,
@@ -328,13 +344,26 @@ public actor WebUIServer {
 	) {
 		self.config = config
 		self.logger = logger
-		self.lifecycle = nil
 		self.router = router
-		self.render = requestRender
+		self.pageRouter = Self.deprecatedPageRouter(config: config, render: requestRender)
+	}
+
+	/// serve a typed route table: many paths, path parameters, methods, and
+	/// the engine's `navigate` answered. this actor owns its event router —
+	/// handlers a page wires through `.onX`/`controlAttributes` register into
+	/// it, exactly as they did with the render-closure inits.
+	public init(
+		router: Router,
+		config: WebUIServerConfig = WebUIServerConfig(),
+		logger: Logger = Logger(label: "webui.server")
+	) {
+		self.config = config
+		self.logger = logger
+		self.router = EventRouter()
+		self.pageRouter = router
 	}
 
 	private let router: EventRouter
-	private let render: RequestRender
 	/// the connected pages a push reaches. created at init, so a broadcast
 	/// issued before `start()` is a no-op rather than a crash.
 	private let sinks = ConnectionSinks()
@@ -343,7 +372,7 @@ public actor WebUIServer {
 	public func start() async throws {
 		DesignSystemAssets.prewarm()
 		let cfg = config
-		let runner = Runner(render: render, router: router, config: cfg, logger: logger, sinks: sinks)
+		let runner = Runner(router: router, pageRouter: pageRouter, config: cfg, logger: logger, sinks: sinks)
 		let group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
 		let bootstrap = ServerBootstrap(group: group)
 			.serverChannelOption(ChannelOptions.backlog, value: 128)
@@ -468,6 +497,51 @@ public actor WebUIServer {
 	}
 }
 
+// MARK: - deprecated render inits
+
+extension WebUIServer {
+	/// the single-route router the deprecated `render:`/`requestRender:` inits
+	/// stand on: the page at `config.pagePath`, plus the historic
+	/// `/index.html` alias, answered through the given string-rendering
+	/// closure.
+	private static func deprecatedPageRouter(
+		config: WebUIServerConfig,
+		render: @escaping RequestRender
+	) -> Router {
+		Router {
+			Route(
+				method: .get,
+				pattern: PathPattern(config.pagePath),
+				responder: LegacyPageResponder(render: render)
+			)
+			// "/index.html" was an alias for the page before the router
+			// existed and stays one, so a deep link keeps resolving.
+			if config.pagePath != "/index.html" {
+				Route(
+					method: .get,
+					pattern: PathPattern("/index.html"),
+					responder: LegacyPageResponder(render: render)
+				)
+			}
+		}
+	}
+}
+
+/// the responder behind the deprecated render inits: adapt the typed request
+/// to the request-aware render closure and hand its string out as html.
+private struct LegacyPageResponder: Responder {
+	let render: WebUIServer.RequestRender
+
+	func respond(to request: HTTPRequest) async -> HTTPResponse {
+		let pageRequest = WebUIServerRequest(
+			path: request.path,
+			query: request.query,
+			renderToken: request.renderToken
+		)
+		return HTTPResponse(body: .html(await render(pageRequest)))
+	}
+}
+
 // MARK: - upgrade result
 
 enum ServerUpgradeResult: Sendable {
@@ -539,8 +613,10 @@ final class ConnectionSinks: Sendable {
 /// the connection-bound logic. `Sendable`: all state is immutable after init
 /// (the gate is the only mutable piece and is Mutex-backed).
 final class Runner: Sendable {
-	private let render: WebUIServer.RequestRender
 	private let router: EventRouter
+	/// the typed route table that owns the page path and everything else the
+	/// framework does not already answer.
+	private let pageRouter: Router
 	private let config: WebUIServerConfig
 	private let logger: Logger
 	let gate: ConnectionGate
@@ -568,14 +644,14 @@ final class Runner: Sendable {
 	}
 
 	init(
-		render: @escaping WebUIServer.RequestRender,
 		router: EventRouter,
+		pageRouter: Router,
 		config: WebUIServerConfig,
 		logger: Logger,
 		sinks: ConnectionSinks
 	) {
-		self.render = render
 		self.router = router
+		self.pageRouter = pageRouter
 		self.config = config
 		self.logger = logger
 		self.gate = ConnectionGate(maximum: config.maxConnections)
@@ -692,8 +768,20 @@ final class Runner: Sendable {
 					return false
 				}
 				try await writeJSON(WSOutgoing.pong, outbound: outbound)
-			case .navigate:
-				break
+			case .navigate(let url):
+				// a client-side navigation (the engine reports popstate):
+				// answer it instead of discarding it. an in-scope path
+				// re-renders the matched route into a fragment patch of the
+				// page region (see `pageRegionID`); anything the router
+				// cannot answer is a full-page redirect to the url itself.
+				guard let session = boundSession(nil) else {
+					try? await writeJSON(
+						WSOutgoing.error(code: "token", message: "unknown or missing render token"),
+						outbound: outbound
+					)
+					return false
+				}
+				await answerNavigate(url: url, session: session, outbound: outbound)
 			}
 		} catch {
 			let err = WSOutgoing.error(code: "decode", message: "bad event: \(error)")
@@ -734,6 +822,70 @@ final class Runner: Sendable {
 		return session
 	}
 
+	// MARK: navigate
+
+	/// answer the engine's `navigate` frame: re-render the matched route in
+	/// the socket's session and patch the page region, or fall back to a
+	/// full-page redirect when the router cannot answer the path.
+	private func answerNavigate(
+		url: String,
+		session: RenderSessionID,
+		outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>
+	) async {
+		// the engine reports `location.pathname + location.search`; derive
+		// the routed path and query the same way an http request is derived.
+		let pathPart = navigatePath(url)
+		let request = HTTPRequest(
+			method: .get,
+			path: pathPart,
+			query: parseQuery(navigateQuery(url)),
+			renderToken: RenderToken("")
+		)
+		// the re-render takes the same path a fresh page request takes: a
+		// session pass, the render context established for its duration.
+		router.begin(session)
+		let response = await RenderContext.$current.withValue(
+			RenderContext(router: router, session: session)
+		) {
+			await pageRouter.respond(to: request)
+		}
+		let frame: WSOutgoing
+		switch response.body {
+		case .html(let html):
+			frame = .update(fragments: [FragmentUpdate(id: WebUIServer.pageRegionID, html: html)])
+		case .redirect(let to, _):
+			frame = .redirect(url: to, replace: true)
+		default:
+			// no page markup matched and no redirect was declared: the path
+			// is outside the router's scope, so answer with a full-page
+			// redirect to the url the engine navigated to.
+			frame = .redirect(url: url, replace: true)
+		}
+		try? await writeJSON(frame, outbound: outbound)
+	}
+
+	/// the routed path of a navigate url: everything before '?' and '#', with
+	/// a scheme+host stripped so an absolute url routes as its path.
+	private func navigatePath(_ url: String) -> String {
+		var rest = url
+		if let qi = rest.firstIndex(of: "?"), qi > rest.startIndex { rest = String(rest[..<qi]) }
+		if let hi = rest.firstIndex(of: "#"), hi > rest.startIndex { rest = String(rest[..<hi]) }
+		if let scheme = rest.range(of: "://") {
+			if let slash = rest[scheme.upperBound...].firstIndex(of: "/") {
+				rest = String(rest[slash...])
+			} else {
+				rest = "/"
+			}
+		}
+		return rest.isEmpty ? "/" : rest
+	}
+
+	/// the query text of a navigate url ("" when absent).
+	private func navigateQuery(_ url: String) -> String {
+		guard let qi = url.firstIndex(of: "?") else { return "" }
+		return String(url[url.index(after: qi)...].prefix(while: { $0 != "#" }))
+	}
+
 	private func writeJSON(_ msg: WSOutgoing, outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>) async throws {
 		let bytes = msg.jsonBytes
 		var buf = ByteBuffer()
@@ -750,7 +902,10 @@ final class Runner: Sendable {
 		try await channel.executeThenClose { inbound, outbound in
 			for try await part in inbound {
 				guard case .head(let head) = part else { continue }
-				guard head.method == .GET else {
+				// a wire verb the typed model cannot name (trace, connect,
+				// custom): answer the old blanket 405 rather than routing a
+				// verb the model has no case for.
+				guard let method = HTTPMethod(rawValue: head.method.rawValue.lowercased()) else {
 					try await respond405(channel: channel.channel)
 					return
 				}
@@ -762,7 +917,19 @@ final class Runner: Sendable {
 				// resolves, and the bare page path accepts `?s=<id>`.
 				let path = String(uri.prefix(while: { $0 != "?" }))
 				let queryText = uri.dropFirst(path.count).dropFirst()
-				let request = WebUIServerRequest(path: path, query: parseQuery(String(queryText)))
+				// the framework asset chain is get-only (that is how browsers
+				// fetch it); every other request — a non-get included — is the
+				// typed router's (plan w3.2).
+				if method != .get {
+					try await routePage(
+						channel: channel.channel,
+						method: method,
+						path: path,
+						queryText: queryText,
+						headers: head.headers
+					)
+					continue
+				}
 				if path == "/__assets/css" {
 					// legacy stable path (old pages / old cache) — short cache.
 					try await respond(
@@ -829,45 +996,120 @@ final class Runner: Sendable {
 						contentType: asset.contentType,
 						cacheControl: asset.cacheControl
 					)
-				} else if path == config.pagePath || path == "/index.html" {
-					// the server owns the render context: handlers a page wires
-					// through `.onX`/`controlAttributes` register into THIS
-					// server's router, so hosts never juggle a second router
-					// (the classic page-local vs server-router mismatch). a page
-					// that wraps its own context still wins (the inner
-					// `withValue` takes precedence), so existing hosts are
-					// unaffected.
-					//
-					// every render also mints a token and opens a render session
-					// for it. the session is what bounds the router: a page's
-					// auto-minted ids are minted *within* it, so re-rendering
-					// overwrites the same keys instead of appending new ones, and
-					// two page instances can reuse one id space without ever
-					// sharing a handler.
-					let token = RenderToken.mint() ?? RenderToken("")
-					if token.value.isEmpty {
-						logger.error("WebUIServer: entropy unavailable — this render's events cannot be token-bound")
-					}
-					let session = token.session
-					router.begin(session)
-					var pageRequest = request
-					pageRequest.renderToken = token
-					let body = await RenderContext.$current.withValue(
-						RenderContext(router: router, session: session)
-					) {
-						await render(pageRequest)
-					}
-					try await respond(
-						channel: channel.channel,
-						body: body,
-						contentType: "text/html; charset=utf-8"
-					)
 				} else {
-					try await respond404(channel: channel.channel)
-					return
+					// everything the asset chain does not answer is the router's:
+					// the page route became a responder in plan w3.2, so this is
+					// the ONLY path into the page. a path no route matches is the
+					// router's 404; a matched pattern with an unmatched method is
+					// its 405 with an Allow header.
+					try await routePage(
+						channel: channel.channel,
+						method: method,
+						path: path,
+						queryText: queryText,
+						headers: head.headers
+					)
 				}
 			}
 		}
+	}
+
+	/// route one request through the typed ``Router``.
+	///
+	/// the server owns the render context: handlers a page wires through
+	/// `.onX`/`controlAttributes` register into THIS server's router, so hosts
+	/// never juggle a second router (the classic page-local vs server-router
+	/// mismatch). a page that wraps its own context still wins (the inner
+	/// `withValue` takes precedence), so existing hosts are unaffected.
+	///
+	/// every render also mints a token and opens a render session for it. the
+	/// session is what bounds the router: a page's auto-minted ids are minted
+	/// *within* it, so re-rendering overwrites the same keys instead of
+	/// appending new ones, and two page instances can reuse one id space
+	/// without ever sharing a handler.
+	private func routePage(
+		channel: Channel,
+		method: HTTPMethod,
+		path: String,
+		queryText: Substring,
+		headers: HTTPHeaders
+	) async throws {
+		let token = RenderToken.mint() ?? RenderToken("")
+		if token.value.isEmpty {
+			logger.error("WebUIServer: entropy unavailable — this render's events cannot be token-bound")
+		}
+		let session = token.session
+		router.begin(session)
+		let request = HTTPRequest(
+			method: method,
+			path: path,
+			query: parseQuery(String(queryText)),
+			headers: headers,
+			renderToken: token
+		)
+		let response = await RenderContext.$current.withValue(
+			RenderContext(router: router, session: session)
+		) {
+			await pageRouter.respond(to: request)
+		}
+		try await respond(channel: channel, response: response)
+	}
+
+	/// encode a typed ``HTTPResponse`` onto the wire — status, headers,
+	/// cookies, and one body shape — through the same byte responder the
+	/// cached assets use, so the security-header block and the cache policy
+	/// stay in one place.
+	private func respond(channel: Channel, response: HTTPResponse) async throws {
+		let contentType: String
+		let status: HTTPResponseStatus
+		var extraHeaders: [(name: String, value: String)] = []
+		let body: ByteBuffer
+
+		switch response.body {
+		case .html(let html):
+			contentType = "text/html; charset=utf-8"
+			status = HTTPResponseStatus(statusCode: response.status.code)
+			var buf = channel.allocator.buffer(capacity: html.utf8.count)
+			buf.writeString(html)
+			body = buf
+		case .text(let text):
+			contentType = "text/plain; charset=utf-8"
+			status = HTTPResponseStatus(statusCode: response.status.code)
+			var buf = channel.allocator.buffer(capacity: text.utf8.count)
+			buf.writeString(text)
+			body = buf
+		case .bytes(let bytes, let bytesContentType):
+			contentType = bytesContentType
+			status = HTTPResponseStatus(statusCode: response.status.code)
+			body = channel.allocator.buffer(bytes: bytes)
+		case .empty:
+			contentType = "text/plain; charset=utf-8"
+			status = HTTPResponseStatus(statusCode: response.status.code)
+			body = ByteBuffer()
+		case .redirect(let to, let redirectStatus):
+			contentType = "text/plain; charset=utf-8"
+			status = HTTPResponseStatus(statusCode: redirectStatus.code)
+			extraHeaders.append(("Location", to))
+			body = ByteBuffer()
+		}
+
+		// response headers and cookies are extras: applied after the
+		// framework's own block, so a handler can set any header it pleases.
+		extraHeaders.append(contentsOf: response.headers.map { (name: $0.key, value: $0.value) })
+		for cookie in response.cookies {
+			if let header = try? cookie.setCookieHeaderValue() {
+				extraHeaders.append(("Set-Cookie", header))
+			}
+		}
+
+		try await respond(
+			channel: channel,
+			bytes: body,
+			contentType: contentType,
+			status: status,
+			cacheControl: "no-store",
+			extraHeaders: extraHeaders
+		)
 	}
 
 	private func respond(
@@ -934,29 +1176,13 @@ final class Runner: Sendable {
 		try await channel.writeAndFlush(HTTPPart<HTTPResponseHead, ByteBuffer>.end(nil)).get()
 	}
 
-
-	private func respond404(channel: Channel) async throws {
-		try await respond(
-			channel: channel,
-			body: "not found",
-			contentType: "text/plain; charset=utf-8",
-			status: .notFound
-		)
-	}
-
-	/// the 405 body names the real cause rather than restating the status.
-	///
-	/// `Form`'s default method is `post` and this server answers GET only, so a
-	/// POST arriving here means a form with no JS interception reached the wire.
-	/// a bare "405" tells a welder nothing they can act on.
-	private static let methodNotAllowedBody =
-		"405 — WebUIServer accepts GET only; a POST here means a <form> has no JS "
-		+ "interception. See Documentation/API.md#forms (POST support: W3)."
-
+	/// the fallback for wire verbs the typed model cannot name. the router
+	/// answers every routed 405 with its own Allow list; this one exists only
+	/// for verbs that never reach a route.
 	private func respond405(channel: Channel) async throws {
 		try await respond(
 			channel: channel,
-			body: Self.methodNotAllowedBody,
+			body: Router.methodNotAllowedBody,
 			contentType: "text/plain; charset=utf-8",
 			status: .methodNotAllowed,
 			extraHeaders: [("Allow", "GET")]

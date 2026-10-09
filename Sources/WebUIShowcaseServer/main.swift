@@ -12,7 +12,12 @@ import WebUIShowcaseContent
 /// the current source: change a component or the css and this server serves
 /// it immediately. The runtime is enabled (and served a working `/ws` below),
 /// so the client boots cleanly with no failed-handshake error.
-func renderShowcasePage(state: ShowcaseState, checkClasses: Bool = true) -> String {
+///
+/// `renderToken` threads the server's minted render token into the emitted
+/// `RuntimeConfig`, exactly as `RenderToken` documents: a page that echoes it
+/// binds its events back to this render's session, which is what the
+/// stable-id dispatch gate (and a real browser) relies on.
+func renderShowcasePage(state: ShowcaseState, checkClasses: Bool = true, renderToken: String = "") -> String {
     HTMLClassValidator.onUndefined = { className in
         // the one page-scoped structural wrapper (documented in the class pin
         // test) — everything else should be in the sheet.
@@ -25,6 +30,7 @@ func renderShowcasePage(state: ShowcaseState, checkClasses: Bool = true) -> Stri
         title: "WebUI Showcase",
         body: ShowcasePage(state: state).renderedString(),
         includeRuntime: true,
+        runtimeConfig: renderToken.isEmpty ? nil : RuntimeConfig(renderToken: renderToken),
         checkClasses: checkClasses
     )
     return doc.renderThroughBuffer()
@@ -159,7 +165,13 @@ struct WebUIShowcaseServer {
         let state = ShowcaseState()
         let router = EventRouter()
         let server = WebUIServer(
-            render: { renderShowcasePage(state: state, checkClasses: checkClasses) },
+            requestRender: { request in
+                renderShowcasePage(
+                    state: state,
+                    checkClasses: checkClasses,
+                    renderToken: request.renderToken.value
+                )
+            },
             router: router,
             config: WebUIServerConfig(host: "0.0.0.0", port: port)
         )

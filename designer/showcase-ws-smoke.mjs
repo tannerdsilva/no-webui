@@ -24,6 +24,9 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PORT = 9092;
 const BASE = `http://127.0.0.1:${PORT}`;
 const WS_URL = `ws://127.0.0.1:${PORT}/ws`;
+// the served page's render token, read from the webui-config meta after the
+// page fetch and echoed on every event frame exactly as the engine echoes it.
+var RENDER_TOKEN = null;
 
 let pass = 0;
 let fail = 0;
@@ -72,12 +75,18 @@ function dispatch(id, eventName) {
     };
     socket.addEventListener("open", () => {
       opened = true;
-      socket.send(JSON.stringify({
+      const frame = {
         type: "event",
         component: id,
         event: eventName,
         data: { targetId: id, targetClass: "sort" }
-      }));
+      };
+      // a token-bound page echoes its render token on every event (the
+      // engine reads it Out of the webui-config meta); the probe does the
+      // same, or the server — rightly — refuses to route into the page's
+      // render session.
+      if (RENDER_TOKEN) { frame.token = RENDER_TOKEN; }
+      socket.send(JSON.stringify(frame));
     });
     socket.addEventListener("message", (ev) => {
       try {
@@ -116,6 +125,29 @@ try {
     ok(`served page exposes ${ids.length} stable-id control(s)`);
   }
 
+  // precondition 3: the page's render token, echoed from the webui-config
+  // meta exactly as the engine echoes it. a token-bound server routes events
+  // only into the session that minted its render, so a probe that does not
+  // carry the token can never be answered — and a page that does not emit one
+  // (a host that forgot to thread its render token) makes every click probe a
+  // silent no-op. both failure modes are asserted away here.
+  const configMeta = page.match(/<meta name="webui-config" content="([^"]*)"/);
+  if (configMeta) {
+    try {
+      const cfg = JSON.parse(
+        configMeta[1]
+          .replace(/&quot;/g, '"').replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">").replace(/&amp;/g, "&")
+      );
+      RENDER_TOKEN = cfg.renderToken || null;
+    } catch (e) { /* unparseable config: treated as tokenless below */ }
+  }
+  if (RENDER_TOKEN) {
+    ok(`served page carries a render token (${RENDER_TOKEN.slice(0, 6)}…)`);
+  } else {
+    bad("served page carries no render token — the host did not thread it, so clicks cannot route");
+  }
+
   const preferred = ids.filter((id) => id.includes("-sort-"));
   const probes = (preferred.length ? preferred : ids).slice(0, 3);
   console.log(`  probing: ${probes.join(", ")}`);
@@ -141,6 +173,56 @@ try {
     }
     // let the previous socket finish tearing down before the next probe opens
     await new Promise((r) => setTimeout(r, 150));
+  }
+
+  // W3.2: the navigate round-trip. the engine already sends
+  // {type:'navigate', url: location.pathname + location.search} on popstate;
+  // a server that discards it (the pre-w3.2 `case .navigate: break`) answers
+  // nothing and the probe times out. the router drives the answer: an
+  // in-scope path re-renders into an `update` fragment of the page region
+  // ("webui-page"); an out-of-scope path is answered with a `redirect`.
+  function navigate(url) {
+    return new Promise((resolve) => {
+      let settled = false;
+      let opened = false;
+      const socket = new WebSocket(WS_URL);
+      const finish = (value) => {
+        if (settled) { return; }
+        settled = true;
+        try { socket.close(); } catch (e) {}
+        resolve({ value, opened });
+      };
+      socket.addEventListener("open", () => {
+        opened = true;
+        socket.send(JSON.stringify({ type: "navigate", url }));
+      });
+      socket.addEventListener("message", (ev) => {
+        try { finish(JSON.parse(String(ev.data))); } catch (e) {}
+      });
+      socket.addEventListener("error", () => finish(null));
+      setTimeout(() => finish(null), 3000);
+    });
+  }
+
+  // in scope: the served page path ("/") re-renders into a fragment patch.
+  const inScope = await navigate("/");
+  if (inScope.value && inScope.value.type === "update" && Array.isArray(inScope.value.fragments) && inScope.value.fragments.length > 0) {
+    ok(`navigate "/" answered with an update fragment (${inScope.value.fragments.length} fragment(s), id "${inScope.value.fragments[0].id}")`);
+  } else if (inScope.value) {
+    bad(`navigate "/" answered but not with an update: ${JSON.stringify(inScope.value).slice(0, 120)}`);
+  } else {
+    bad(inScope.opened ? "navigate \"/\" never answered within 3s  navigate is still discarded" : "navigate probe could not connect");
+  }
+  await new Promise((r) => setTimeout(r, 150));
+
+  // out of scope: an unrouted path is answered with a full-page redirect.
+  const outScope = await navigate("/definitely/not/routed");
+  if (outScope.value && outScope.value.type === "redirect" && typeof outScope.value.url === "string") {
+    ok(`navigate "/definitely/not/routed" answered with a redirect`);
+  } else if (outScope.value) {
+    bad(`navigate to an unrouted path should redirect, got: ${JSON.stringify(outScope.value).slice(0, 120)}`);
+  } else {
+    bad(outScope.opened ? "navigate to an unrouted path never answered within 3s" : "navigate probe could not connect");
   }
 } finally {
   server.kill("SIGTERM");

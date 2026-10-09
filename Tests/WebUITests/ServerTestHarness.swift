@@ -103,6 +103,30 @@ func withServer(
 	try await assertClosed(port: port)
 }
 
+/// start a router-driven server (plan w3.2's `init(router:config:logger:)`)
+/// on a free port, run `body`, then stop it. same shape as `withServer`, so
+/// the wire-asserting suites drive both with the same helpers.
+func withRouterServer(
+	_ router: Router,
+	portBase: Int = 30000,
+	_ body: (Int) async throws -> Void
+) async throws {
+	let port = try await freePort(base: portBase)
+	let server = WebUIServer(router: router, config: WebUIServerConfig(host: "127.0.0.1", port: port))
+	let task = Task { try await server.start() }
+	_ = try await waitForServe(port: port)
+	do {
+		try await body(port)
+	} catch {
+		await server.stop()
+		task.cancel()
+		throw error
+	}
+	await server.stop()
+	task.cancel()
+	try await assertClosed(port: port)
+}
+
 /// probe upward for a port nothing is listening on.
 func freePort(base: Int = 21000) async throws -> Int {
 	for offset in 0..<20 {
@@ -141,7 +165,11 @@ func get(_ url: String) async throws -> (String, Int) {
 }
 
 func getData(_ url: String) async throws -> (Data, Int) {
-	var request = URLRequest(url: URL(string: url)!)
+	guard let urlValue = URL(string: url) else {
+		Issue.record("bad url in getData: \(url)")
+		return (Data(), 0)
+	}
+	var request = URLRequest(url: urlValue)
 	request.timeoutInterval = 5
 	let (data, response) = try await URLSession(configuration: .ephemeral).data(for: request)
 	return (data, (response as? HTTPURLResponse)?.statusCode ?? 0)
