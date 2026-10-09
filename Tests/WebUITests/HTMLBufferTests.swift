@@ -234,4 +234,28 @@ struct HTMLBufferTests {
 		#expect(b.mark == 5)
 		#expect(b.mark == b.byteCount)
 	}
+
+	// MARK: - 2.0: the buffer as a consumer API
+
+	@Test("a consumer can construct a buffer and write a view into it")
+	func consumerWritesAView() {
+		var buffer = HTMLBuffer()
+		Div(id: "x") { Text("hi") }.render(into: &buffer)
+		#expect(buffer.byteCount > 0)
+		#expect(!buffer.hasPendingAttributes)
+		let text = String(decoding: buffer.bytes, as: UTF8.self)
+		#expect(text.contains("id=\"x\""))
+		#expect(text.contains("hi"))
+	}
+
+	@Test("the element api frames a tag and merges an attribute into it")
+	func elementAPIMerges() {
+		var b = HTMLBuffer()
+		b.beginElement("a", " href=\"/x\"")
+		b.addAttributeValue("rel", "noopener")
+		b.endOpenTag()
+		b.appendEscaped("<click>")
+		b.endElement()
+		#expect(String(decoding: b.bytes, as: UTF8.self) == "<a href=\"/x\" rel=\"noopener\">&lt;click&gt;</a>")
+	}
 }

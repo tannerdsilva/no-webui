@@ -52,7 +52,11 @@ public struct HTMLBuffer {
 	private var pending: String = ""
 	private var frames: [Frame] = []
 
-	package init(capacity: Int = 256) {
+	/// create an empty buffer.
+	///
+	/// `capacity` is a starting-size hint, not a limit: the buffer grows as views
+	/// write into it.
+	public init(capacity: Int = 256) {
 		storage = []
 		storage.reserveCapacity(capacity)
 	}
@@ -60,16 +64,17 @@ public struct HTMLBuffer {
 	// MARK: writing
 
 	/// raw bytes — no escaping. callers that echo data use `appendEscaped`.
-	package mutating func append(_ text: String) {
+	public mutating func append(_ text: String) {
 		storage.append(contentsOf: text.utf8)
 	}
 
 	/// `htmlEscape`d text: the safe way to write a value into content.
-	package mutating func appendEscaped(_ text: String) {
+	public mutating func appendEscaped(_ text: String) {
 		storage.append(contentsOf: htmlEscape(text).utf8)
 	}
 
-	package mutating func appendBytes(_ bytes: some Sequence<UInt8>) {
+	/// append bytes verbatim (already-encoded utf-8, or genuinely binary content).
+	public mutating func appendBytes(_ bytes: some Sequence<UInt8>) {
 		storage.append(contentsOf: bytes)
 	}
 
@@ -78,7 +83,7 @@ public struct HTMLBuffer {
 	/// open an element. `attributes` is the element's own attribute text (the
 	/// same spelling the string path emits, minus the tag name); anything the
 	/// wrapping layers contributed is merged in at `endOpenTag`.
-	package mutating func beginElement(_ tag: String, _ attributes: String = "") {
+	public mutating func beginElement(_ tag: String, _ attributes: String = "") {
 		frames.append(Frame(tag: tag, base: attributes, startOffset: storage.count))
 		// the first element to open drains the pending slot
 		if !pending.isEmpty {
@@ -95,7 +100,7 @@ public struct HTMLBuffer {
 	/// runs per element (measured on the reference box: that round trip cost
 	/// ~25% of a page render while no contributions existed to merge, and the
 	/// verbatim path is closer to the old bytes, not further from them).
-	package mutating func endOpenTag() {
+	public mutating func endOpenTag() {
 		precondition(!frames.isEmpty, "endOpenTag with no open element")
 		precondition(!frames[frames.count - 1].openTagWritten, "endOpenTag called twice")
 		let frame = frames[frames.count - 1]
@@ -106,7 +111,7 @@ public struct HTMLBuffer {
 	/// write an element that has no closing tag — `img`, `input` — as the open
 	/// tag and nothing else. it drains the pending slot exactly like a framed
 	/// element, and it leaves no frame behind: there is no content to close.
-	package mutating func voidElement(_ tag: String, _ attributes: String = "") {
+	public mutating func voidElement(_ tag: String, _ attributes: String = "") {
 		writeOpenTag(tag, base: attributes, incoming: takePendingAttributes())
 	}
 
@@ -126,7 +131,7 @@ public struct HTMLBuffer {
 	}
 
 	/// write the closing tag and pop the element.
-	package mutating func endElement() {
+	public mutating func endElement() {
 		precondition(!frames.isEmpty, "endElement with no open element")
 		let frame = frames.removeLast()
 		precondition(frame.openTagWritten, "endElement before endOpenTag")
@@ -145,7 +150,7 @@ public struct HTMLBuffer {
 	/// with an element open but its tag unwritten, the text joins that element;
 	/// otherwise it waits for the next element (and is still pending if the
 	/// content turns out to open none — see `hasPendingAttributes`).
-	package mutating func addAttribute(_ text: String) {
+	public mutating func addAttribute(_ text: String) {
 		if let last = frames.indices.last, !frames[last].openTagWritten {
 			frames[last].incoming = frames[last].incoming.isEmpty ? text : text + " " + frames[last].incoming
 		} else {
@@ -158,7 +163,7 @@ public struct HTMLBuffer {
 	/// contribute `name="value"`, escaping both halves. the escape happens here
 	/// rather than at the call site so a contributed value cannot reach the
 	/// wire unescaped.
-	package mutating func addAttributeValue(_ name: String, _ value: String) {
+	public mutating func addAttributeValue(_ name: String, _ value: String) {
 		addAttribute("\(htmlEscape(name))=\"\(htmlEscape(value))\"")
 	}
 
@@ -168,11 +173,12 @@ public struct HTMLBuffer {
 	/// content it may need to wrap (see `wrapSpan(from:attributes:)`).
 	package var mark: Int { storage.count }
 
-	package var byteCount: Int { storage.count }
+	/// how many bytes have been written so far.
+	public var byteCount: Int { storage.count }
 
 	/// true when contributions are still waiting: the content that was
 	/// supposed to carry them opened no element.
-	package var hasPendingAttributes: Bool { !pending.isEmpty }
+	public var hasPendingAttributes: Bool { !pending.isEmpty }
 
 	/// take the undrained contributions (clearing the slot) so a caller can
 	/// decide what to do with them — the string path wraps such content in a
@@ -203,7 +209,7 @@ public struct HTMLBuffer {
 	}
 
 	/// the rendered bytes.
-	package var bytes: [UInt8] { storage }
+	public var bytes: [UInt8] { storage }
 
 	// MARK: the string-path fallback
 
