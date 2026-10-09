@@ -51,7 +51,7 @@ public struct WebUIStrings: Sendable {
     public var save: String = "Save"
     public var cancel: String = "Cancel"
     /// a rating's accessible name, e.g. "4 of 5".
-    public var ratingValue: @Sendable (Int, Int) -> String = { "\($0) of \($1)" }
+    public var ratingValue: @Sendable (Double, Int) -> String = { "\($0) of \($1)" }
     /// a tag's remove label with the tag's own name.
     public var removeItem: @Sendable (String) -> String = { "Remove \($0)" }
     public var cardNumber: String = "Card number"
@@ -63,6 +63,10 @@ public struct WebUIStrings: Sendable {
     public var options: String = "Options"
     public var tableOfContents: String = "Table of contents"
     public var onThisPage: String = "On this page"
+    public var breadcrumb: String = "Breadcrumb"
+    /// a masked input whose revealed value is hidden — the input's aria name.
+    public var maskedValue: String = "masked value"
+    public var add: String = "Add"
     public var previous: String = "Previous"
     public var next: String = "Next"
     public var noMatches: String = "No matches"
@@ -136,6 +140,9 @@ public struct WebUIStrings: Sendable {
         options: "خيارات",
         tableOfContents: "جدول المحتويات",
         onThisPage: "في هذه الصفحة",
+        breadcrumb: "مسار التنقل",
+        maskedValue: "قيمة مخفية",
+        add: "إضافة",
         previous: "السابق",
         next: "التالي",
         noMatches: "لا توجد نتائج",
