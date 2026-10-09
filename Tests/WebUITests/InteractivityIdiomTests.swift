@@ -119,9 +119,9 @@ struct InteractivityIdiomTests {
                 "\(event.rawValue) has no modifier: \(html)"
             )
         }
-        // 45 in the enum today. if a case is added, `sugar` stops compiling; if one
+        // 46 in the enum today. if a case is added, `sugar` stops compiling; if one
         // is added to the enum AND to `sugar` but forgotten here, this fails.
-        #expect(Self.namedCases.count == 45, "the event vocabulary changed size — update this list")
+        #expect(Self.namedCases.count == 46, "the event vocabulary changed size — update this list")
     }
 
     @Test("a custom event is reachable — the escape hatch is not stranded")
