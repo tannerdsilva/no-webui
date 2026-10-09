@@ -169,45 +169,45 @@ public struct ShowcasePage: Sendable, BufferRendering {
                         Heading("All input types, textarea, select, form with CSRF", level: .h2)
                         demoCard("Input Types") {
                             VStack(spacing: 12) {
-                                Label("Text:").class("demo-label")
+                                Label("Text:", for: "demo-text").class("demo-label")
                                 Input(id: "demo-text", placeholder: "Enter text", type: .text)
-                                Label("Email:").class("demo-label")
+                                Label("Email:", for: "demo-email").class("demo-label")
                                 Input(id: "demo-email", placeholder: "user@example.com", type: .email)
-                                Label("Password:").class("demo-label")
+                                Label("Password:", for: "demo-password").class("demo-label")
                                 Input(id: "demo-password", placeholder: "", type: .password)
-                                Label("Number:").class("demo-label")
+                                Label("Number:", for: "demo-number").class("demo-label")
                                 Input(id: "demo-number", placeholder: "0", type: .number)
-                                Label("Search:").class("demo-label")
+                                Label("Search:", for: "demo-search").class("demo-label")
                                 Input(id: "demo-search", placeholder: "Search...", type: .search)
-                                Label("Telephone:").class("demo-label")
+                                Label("Telephone:", for: "demo-tel").class("demo-label")
                                 Input(id: "demo-tel", placeholder: "+1 (555) 000-0000", type: .tel)
-                                Label("URL:").class("demo-label")
+                                Label("URL:", for: "demo-url").class("demo-label")
                                 Input(id: "demo-url", placeholder: "https://", type: .url)
-                                Label("Date:").class("demo-label")
+                                Label("Date:", for: "demo-date").class("demo-label")
                                 Input(id: "demo-date", type: .date)
-                                Label("Color:").class("demo-label")
+                                Label("Color:", for: "demo-color").class("demo-label")
                                 Input(id: "demo-color", type: .color)
-                                Label("Range:").class("demo-label")
+                                Label("Range:", for: "demo-range").class("demo-label")
                                 Input(id: "demo-range", type: .range)
-                                Label("File:").class("demo-label")
+                                Label("File:", for: "demo-file").class("demo-label")
                                 Input(id: "demo-file", type: .file)
-                                Label("Checkbox:").class("demo-label")
+                                Label("Checkbox:", for: "demo-checkbox").class("demo-label")
                                 Input(id: "demo-checkbox", type: .checkbox)
-                                Label("Radio:").class("demo-label")
+                                Label("Radio:", for: "demo-radio").class("demo-label")
                                 Input(id: "demo-radio", type: .radio)
-                                Label("Disabled & Required:").class("demo-label")
+                                Label("Disabled & Required:", for: "demo-disabled").class("demo-label")
                                 Input(id: "demo-disabled", placeholder: "Can't touch this", disabled: true, required: true)
                             }
                         }
                         demoCard("TextArea") {
                             VStack(spacing: 8) {
-                                Label("Bio:").class("demo-label")
+                                Label("Bio:", for: "demo-bio").class("demo-label")
                                 TextArea(id: "demo-bio", placeholder: "Tell us about yourself...", rows: 4)
                             }
                         }
                         demoCard("Select") {
                             VStack(spacing: 8) {
-                                Label("Country:").class("demo-label")
+                                Label("Country:", for: "demo-country").class("demo-label")
                                 Select(
                                     id: "demo-country",
                                     options: [
@@ -229,9 +229,9 @@ public struct ShowcasePage: Sendable, BufferRendering {
                                 csrfToken: (try? CSRFProtection.token(for: "demo-form", secret: "showcase-secret")) ?? ""
                             ) {
                                 VStack(spacing: 12) {
-                                    Label("Name:").class("demo-label")
+                                    Label("Name:", for: "form-name").class("demo-label")
                                     Input(id: "form-name", placeholder: "Your name", type: .text)
-                                    Label("Message:").class("demo-label")
+                                    Label("Message:", for: "form-message").class("demo-label")
                                     TextArea(id: "form-message", placeholder: "Your message", rows: 3)
                                     Button("Submit", id: "form-submit", type: .submit)
                                 }
@@ -607,14 +607,14 @@ public struct ShowcasePage: Sendable, BufferRendering {
                         }
                         demoCard("WebUIInput — all states") {
                             VStack(spacing: 12) {
-                                WebUIInput(placeholder: "Normal input", state: .normal)
-                                WebUIInput(placeholder: "Error state", state: .error)
-                                WebUIInput(placeholder: "Success state", state: .success)
-                                WebUIInput(placeholder: "Warning state", state: .warning)
-                                WebUIInput(placeholder: "Disabled input", disabled: true)
-                                WebUIInput(placeholder: "With label", label: "Username")
-                                WebUIInput(placeholder: "With help text", helpText: "Must be at least 3 characters")
-                                WebUIInput(placeholder: "Email type", type: .email, label: "Email")
+                                WebUIInput(placeholder: "Normal input", state: .normal, id: "demo-input-normal", label: "Normal input")
+                                WebUIInput(placeholder: "Error state", state: .error, id: "demo-input-error", label: "Error state")
+                                WebUIInput(placeholder: "Success state", state: .success, id: "demo-input-success", label: "Success state")
+                                WebUIInput(placeholder: "Warning state", state: .warning, id: "demo-input-warning", label: "Warning state")
+                                WebUIInput(placeholder: "Disabled input", disabled: true, id: "demo-input-disabled", label: "Disabled input")
+                                WebUIInput(placeholder: "With help text", id: "demo-input-help", label: "With help text", helpText: "Must be at least 3 characters")
+                                WebUIInput(placeholder: "With label", id: "demo-input-labeled", label: "Username")
+                                WebUIInput(placeholder: "Email type", id: "demo-input-email", type: .email, label: "Email")
                             }
                         }
                         demoCard("WebUICard — all variants") {
@@ -806,10 +806,10 @@ public struct ShowcasePage: Sendable, BufferRendering {
                         }
                         demoCard("WebUIInputGroup - glyph, prefix, suffix, error") {
                             VStack(spacing: 12) {
-                                WebUIInputGroup(placeholder: "Search", icon: .search, suffix: "Ctrl+K")
-                                WebUIInputGroup(placeholder: "0.00", prefix: "$", suffix: "USD", type: .number)
-                                WebUIInputGroup(placeholder: "you", prefix: "https://", suffix: ".example.com")
-                                WebUIInputGroup(placeholder: "amount", prefix: "$", suffix: "over limit", state: .error)
+                                WebUIInputGroup(placeholder: "Search", icon: .search, suffix: "Ctrl+K", ariaLabel: "Search")
+                                WebUIInputGroup(placeholder: "0.00", prefix: "$", suffix: "USD", type: .number, ariaLabel: "Amount")
+                                WebUIInputGroup(placeholder: "you", prefix: "https://", suffix: ".example.com", ariaLabel: "Your domain")
+                                WebUIInputGroup(placeholder: "amount", prefix: "$", suffix: "over limit", state: .error, ariaLabel: "Amount")
                             }
                         }
                         demoCard("WebUIBanner - info, success, warning, danger, dismissible") {
@@ -866,10 +866,10 @@ public struct ShowcasePage: Sendable, BufferRendering {
                                 WebUIField(label: "Workspace name", controlID: "field-name", required: true, count: "4 / 32", helper: "Shown to everyone in the org.") {
                                     WebUIInput(placeholder: "acme", id: "field-name")
                                 }
-                                WebUIField(label: "API key", note: "invalid", noteKind: .error, helper: "Regenerate it from the console.", helperIsError: true) {
+                                WebUIField(label: "API key", controlID: "field-key", note: "invalid", noteKind: .error, helper: "Regenerate it from the console.", helperIsError: true) {
                                     WebUIInput(placeholder: "key_...", id: "field-key")
                                 }
-                                WebUIField(label: "Domain", note: "available", noteKind: .success) {
+                                WebUIField(label: "Domain", controlID: "field-domain", note: "available", noteKind: .success) {
                                     WebUIInput(placeholder: "acme.dev", id: "field-domain")
                                 }
                             }
@@ -972,7 +972,7 @@ public struct ShowcasePage: Sendable, BufferRendering {
                         }
 
                         demoCard("WebUISearchField") {
-                            WebUISearchField(placeholder: "Filter conversations", id: "showcase-search")
+                            WebUISearchField(placeholder: "Filter conversations", id: "showcase-search", ariaLabel: "Filter conversations")
                         }
 
                         demoCard("WebUIListView") {
@@ -987,12 +987,12 @@ public struct ShowcasePage: Sendable, BufferRendering {
                         }
 
                         demoCard("WebUIComposer") {
-                            WebUIComposer(placeholder: "Message", inputID: "showcase-input", id: "showcase-composer")
+                            WebUIComposer(placeholder: "Message", inputID: "showcase-input", id: "showcase-composer", ariaLabel: "Message")
                         }
 
                         demoCard("WebUIPanel") {
                             WebUIPanel(title: "Workspace", subtitle: "2", edge: .leading) {
-                                WebUISearchField(placeholder: "Filter", id: "showcase-panel-search")
+                                WebUISearchField(placeholder: "Filter", id: "showcase-panel-search", ariaLabel: "Filter")
                                 WebUITree(
                                     nodes: [WebUITree.Node(id: "a", label: "arc-agent", icon: .folder, children: [
                                         WebUITree.Node(id: "s", label: "Sources", icon: .folder, children: [
@@ -1017,10 +1017,10 @@ public struct ShowcasePage: Sendable, BufferRendering {
                                     Raw(counterValueHTML(state.count))
                                 }
                                 HStack(spacing: 12) {
-                                    WebUIButton("", variant: .primary, size: .lg, id: "btn-decrement", onTap: { _ in
+                                    WebUIButton("−", variant: .primary, size: .lg, id: "btn-decrement", onTap: { _ in
                                         state.count -= 1
                                         return [FragmentUpdate(id: "counter-value", html: counterValueHTML(state.count))]
-                                    })
+                                    }).ariaLabel("Decrement")
                                     WebUIButton("+", variant: .primary, size: .lg, id: "btn-increment", onTap: { _ in
                                         state.count += 1
                                         return [FragmentUpdate(id: "counter-value", html: counterValueHTML(state.count))]
@@ -1041,7 +1041,7 @@ public struct ShowcasePage: Sendable, BufferRendering {
                                 Paragraph("Type something and submit — the server echoes it back.")
                                 Form(action: "#", method: "post", id: "echo-form") {
                                     VStack(spacing: 12) {
-                                        Label("Your message:").class("demo-label")
+                                        Label("Your message:", for: "echo-input").class("demo-label")
                                         Input(id: "echo-input", name: "message", placeholder: "Type something...", type: .text)
                                         WebUIButton("Send", variant: .primary, id: "echo-submit")
                                     }
@@ -1056,7 +1056,7 @@ public struct ShowcasePage: Sendable, BufferRendering {
                         demoCard("Live Preview") {
                             VStack(spacing: 12) {
                                 Paragraph("Type in the input — the preview updates in real time.")
-                                Label("Type here:").class("demo-label")
+                                Label("Type here:", for: "preview-input").class("demo-label")
                                 Input(id: "preview-input", placeholder: "Type to preview...", type: .text)
                                     .onInput { event in
                                         state.preview = event.value ?? ""
@@ -1080,7 +1080,7 @@ public struct ShowcasePage: Sendable, BufferRendering {
                                 liveChat(state: state)
                                 Form(action: "#", method: "post", id: "chat-form") {
                                     VStack(spacing: 12) {
-                                        Label("Message:").class("demo-label")
+                                        Label("Message:", for: "chat-input").class("demo-label")
                                         Input(id: "chat-input", name: "message", placeholder: "Say something...", type: .text)
                                         WebUIButton("Send", variant: .primary, id: "chat-send")
                                     }

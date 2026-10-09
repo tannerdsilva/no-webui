@@ -91,7 +91,7 @@ public enum WebUIBlocks {
  let cards = all.map { block in
 			WebUICard(variant: .outlined) {
 				VStack(alignment: .leading, spacing: 8) {
-					Heading(block.title, level: .h3)
+					Heading(block.title, level: .h2)
 					Paragraph(block.summary)
 					Link("Open block", href: "/blocks/" + block.rawValue,
 					     class: "button button--secondary button--sm")
@@ -187,15 +187,15 @@ public enum WebUIBlocks {
 			}
 			WebUICard(variant: .outlined) {
 				VStack(alignment: .leading, spacing: 12) {
-					Heading("Traffic", level: .h3)
- trendChart()
+					Heading("Traffic", level: .h2)
+					trendChart()
 				}
 				.padding(16)
 			}
 			WebUICard(variant: .outlined) {
 				VStack(alignment: .leading, spacing: 12) {
-					Heading("Deploys", level: .h3)
- deployTable()
+					Heading("Deploys", level: .h2)
+					deployTable()
 				}
 				.padding(16)
 			}
@@ -318,19 +318,19 @@ public enum WebUIBlocks {
 			Paragraph("Three long-tail patterns, composed from the surface that already exists.")
 
 			VStack(alignment: .leading, spacing: 8) {
-				Heading("Carousel", level: .h3)
+				Heading("Carousel", level: .h2)
 				Paragraph("Focus the track and use the arrow keys; the dots are anchors, so they jump but cannot track state.")
 				WebUICarousel(id: "blk-carousel", label: "Release highlights", slides: slides)
 			}
 
 			VStack(alignment: .leading, spacing: 8) {
-				Heading("Menubar", level: .h3)
+				Heading("Menubar", level: .h2)
 				Paragraph("Hover or tab onto a trigger to open its panel; escape-to-close is the documented divergence.")
 				WebUIMenubar(items: menu, id: "blk-menubar")
 			}
 
 			VStack(alignment: .leading, spacing: 8) {
-				Heading("Questionnaire", level: .h3)
+				Heading("Questionnaire", level: .h2)
 				WebUICard(variant: .outlined) {
 					VStack(alignment: .leading, spacing: 16) {
 						WebUIField(label: "How was the setup?", controlID: "blk-q1", required: true,
@@ -385,8 +385,8 @@ public enum WebUIBlocks {
 			}
 			WebUICard(variant: .outlined) {
 				VStack(alignment: .leading, spacing: 12) {
-					Heading("Deploys", level: .h3)
- deployTable()
+					Heading("Deploys", level: .h2)
+					deployTable()
 				}
 				.padding(16)
 			}

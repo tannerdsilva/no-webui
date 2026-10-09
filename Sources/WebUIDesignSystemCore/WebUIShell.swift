@@ -169,17 +169,20 @@ public struct WebUISearchField: View {
     public let placeholder: String
     public let id: String
     public let value: String?
+    public let ariaLabel: String?
     public let onInput: EventHandler?
 
     public init(
         placeholder: String,
         id: String,
         value: String? = nil,
+        ariaLabel: String? = nil,
         onInput: EventHandler? = nil
     ) {
         self.placeholder = placeholder
         self.id = id
         self.value = value
+        self.ariaLabel = ariaLabel
         self.onInput = onInput
     }
 
@@ -189,7 +192,9 @@ public struct WebUISearchField: View {
         html += "<span class=\"search-field__icon\">"
         html += WebUIIcon(.search, size: .slot).renderThroughBuffer()
         html += "</span>"
-        html += "<input class=\"search-field__input\" type=\"search\" placeholder=\"\(htmlEscape(placeholder))\""
+        html += "<input class=\"search-field__input\" type=\"search\""
+        if let ariaLabel { html += Aria.label(ariaLabel).render() }
+        html += " placeholder=\"\(htmlEscape(placeholder))\""
         if let value, !value.isEmpty {
             html += " value=\"\(htmlEscape(value))\""
         }
@@ -326,6 +331,7 @@ public struct WebUIComposer: View {
     public let inputID: String
     public let id: String
     public let disabled: Bool
+    public let ariaLabel: String?
     public let onSubmit: EventHandler?
     /// when set the attach tool is wired as an interactive control; when nil
     /// it renders disabled so the affordance is honest rather than a dead
@@ -340,6 +346,7 @@ public struct WebUIComposer: View {
         inputID: String,
         id: String,
         disabled: Bool = false,
+        ariaLabel: String? = nil,
         onSubmit: EventHandler? = nil,
         onAttach: EventHandler? = nil,
         hint: String? = nil
@@ -348,6 +355,7 @@ public struct WebUIComposer: View {
         self.inputID = inputID
         self.id = id
         self.disabled = disabled
+        self.ariaLabel = ariaLabel
         self.onSubmit = onSubmit
         self.onAttach = onAttach
         self.hint = hint
@@ -357,7 +365,9 @@ public struct WebUIComposer: View {
         let attrs = controlAttributes(id: id, event: .submit, handler: onSubmit)
         var html = "<form class=\"composer\" id=\"\(htmlEscape(id))\"\(attrs)>"
         html += "<div class=\"composer__input-row\">"
-        html += "<textarea class=\"composer__textarea\" id=\"\(htmlEscape(inputID))\" name=\"message\" rows=\"1\" placeholder=\"\(htmlEscape(placeholder))\"></textarea>"
+        html += "<textarea class=\"composer__textarea\" id=\"\(htmlEscape(inputID))\" name=\"message\" rows=\"1\""
+        if let ariaLabel { html += Aria.label(ariaLabel).render() }
+        html += " placeholder=\"\(htmlEscape(placeholder))\"></textarea>"
         html += "<div class=\"composer__tools\">"
         let attachAttrs = onAttach != nil
             ? controlAttributes(id: id + "-attach", event: .click, handler: onAttach)

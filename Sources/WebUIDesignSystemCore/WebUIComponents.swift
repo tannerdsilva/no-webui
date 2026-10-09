@@ -1320,9 +1320,9 @@ public struct WebUITable: View {
                         ? controlAttributes(id: "\(base)-expand-\(rowId)", handler: expandHandler)
                         : ""
                     if canExpand {
-                        html += "<td class=\"table__expand-col\"><button type=\"button\" class=\"table__expand-btn\" id=\"\(htmlEscape(base))-expand-\(htmlEscape(rowId))\" aria-expanded=\"\(expanded)\"\(expandAttrs)>\(expandIcon)</button></td>"
+                        html += "<td class=\"table__expand-col\"><button type=\"button\" class=\"table__expand-btn\" id=\"\(htmlEscape(base))-expand-\(htmlEscape(rowId))\" aria-expanded=\"\(expanded)\" aria-label=\"\(htmlEscape(RenderContext.currentStrings.expandRow(rowId)))\"\(expandAttrs)>\(expandIcon)</button></td>"
                     } else {
-                        html += "<td class=\"table__expand-col\"><button type=\"button\" class=\"table__expand-btn\" id=\"\(htmlEscape(base))-expand-\(htmlEscape(rowId))\" aria-disabled=\"true\" disabled\(expandAttrs)>\(expandIcon)</button></td>"
+                        html += "<td class=\"table__expand-col\"><button type=\"button\" class=\"table__expand-btn\" id=\"\(htmlEscape(base))-expand-\(htmlEscape(rowId))\" aria-disabled=\"true\" disabled aria-label=\"\(htmlEscape(RenderContext.currentStrings.expandRow(rowId)))\"\(expandAttrs)>\(expandIcon)</button></td>"
                     }
                 }
                 for (i, cell) in row.enumerated() where !hiddenColumns.contains(i) {
@@ -1801,12 +1801,24 @@ public struct WebUIPagination: View {
                     handler: rowsHandler
                 )
                 : ""
-            buffer.append("<span class=\"pagination__meta\"><label>\(RenderContext.currentStrings.rowsPerPage)</label><select class=\"select\"\(rowsIdAttr)\(rowsRoute)>")
+            // the rows-per-page select is a form control: name it with an
+            // explicit `for` when the control carries an id, or wrap the
+            // control when it does not — either way the association is real.
+            let rowsName: String
+            let rowsNameClose: String
+            if let rowsID = pid("rows") {
+                rowsName = "<label for=\"\(htmlEscape(rowsID))\">\(RenderContext.currentStrings.rowsPerPage)</label>"
+                rowsNameClose = ""
+            } else {
+                rowsName = "<label>\(RenderContext.currentStrings.rowsPerPage)"
+                rowsNameClose = "</label>"
+            }
+            buffer.append("<span class=\"pagination__meta\">\(rowsName)<select class=\"select\"\(rowsIdAttr)\(rowsRoute)>")
             for opt in rowsPerPageOptions {
                 let selected = opt == rowsPerPage ? " selected" : ""
                 buffer.append("<option value=\"\(opt)\"\(selected)>\(opt)</option>")
             }
-            buffer.append("</select></span>")
+            buffer.append("</select>\(rowsNameClose)</span>")
         }
         buffer.endElement()
     }

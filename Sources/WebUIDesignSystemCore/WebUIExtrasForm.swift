@@ -638,6 +638,9 @@ public struct WebUIInputGroup: View {
     public let id: String?
     public let value: String?
     public let disabled: Bool
+    /// the input's accessible name (aria-label) when the caller has no
+    /// wrapping <label> to lean on; rendered through the typed aria surface.
+    public let ariaLabel: String?
 
     /// this component's own class for a shared validation state — the sheet's
     /// bytes are unchanged, `none`'s empty string included. (this is why
@@ -663,7 +666,8 @@ public struct WebUIInputGroup: View {
         name: String? = nil,
         id: String? = nil,
         value: String? = nil,
-        disabled: Bool = false
+        disabled: Bool = false,
+        ariaLabel: String? = nil
     ) {
         self.placeholder = placeholder
         self.prefix = prefix
@@ -675,6 +679,7 @@ public struct WebUIInputGroup: View {
         self.id = id
         self.value = value
         self.disabled = disabled
+        self.ariaLabel = ariaLabel
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -690,6 +695,7 @@ public struct WebUIInputGroup: View {
         }
         html += "<input class=\"input__el\" type=\"\(type.rawValue)\""
         if let id { html += " id=\"\(htmlEscape(id))\"" }
+        if let ariaLabel { html += Aria.label(ariaLabel).render() }
         if let name { html += " name=\"\(htmlEscape(name))\"" }
         html += " placeholder=\"\(htmlEscape(placeholder))\""
         if let value { html += " value=\"\(htmlEscape(value))\"" }

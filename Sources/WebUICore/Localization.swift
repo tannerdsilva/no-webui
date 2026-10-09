@@ -20,6 +20,8 @@ public struct WebUIStrings: Sendable {
     public var selectAllRows: String = "Select all rows"
     /// a row's selection label with its stable row id.
     public var selectRow: @Sendable (String) -> String = { "Select row \($0)" }
+    /// a row's expander label with its stable row id.
+    public var expandRow: @Sendable (String) -> String = { "Expand row \($0)" }
     public var remove: String = "Remove"
     public var showOmittedItems: String = "Show omitted items"
     public var pagination: String = "Pagination"
