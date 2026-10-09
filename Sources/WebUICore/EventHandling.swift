@@ -664,9 +664,26 @@ public struct RenderContext: Sendable {
     /// lands in that record and the boundary can answer those ids' failures.
     var boundary: ErrorBoundaryRecord?
 
+    /// the localized environment this pass renders under (w4.5). a host that
+    /// renders one locale can leave this at the default (english/en/ltr);
+    /// a server serving many locales sets it per render. components read the
+    /// catalog's strings from here, so a page sets the locale once.
+    public var localized: LocalizedEnvironment = WebUILocalization()
+
     public init(router: EventRouter, session: RenderSessionID = .default) {
         self.router = router
         self.session = session
+    }
+
+    /// a render context under a specific localized environment.
+    public init(
+        router: EventRouter,
+        session: RenderSessionID = .default,
+        localized: LocalizedEnvironment
+    ) {
+        self.router = router
+        self.session = session
+        self.localized = localized
     }
     public mutating func nextComponentID() -> ComponentID {
         let id = router.nextComponentID(in: session)
@@ -699,6 +716,21 @@ public struct RenderContext: Sendable {
         router.register(fallback: handler, for: componentID, in: session)
     }
     @TaskLocal public static var current: RenderContext?
+}
+
+// MARK: - Localized accessors (w4.5)
+
+extension RenderContext: LocalizedEnvironment {
+    public var strings: WebUIStrings { localized.strings }
+    public var locale: String { localized.locale }
+    public var direction: Directionality { localized.direction }
+
+    /// the catalog in force for this render pass, or english outside one.
+    /// components call this instead of touching the literal, so a reworded
+    /// english default lands in exactly one file (Localization.swift).
+    public static var currentStrings: WebUIStrings {
+        current?.strings ?? .english
+    }
 }
 
 // MARK: - Stable-ID Control Wiring
