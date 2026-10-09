@@ -4,6 +4,28 @@ all notable changes to this project are documented here.
 
 ## [unreleased]
 
+### capability islands are typed (w3.6)
+
+- `Island` (`static let name` + `static func render(_:)`, same swift both
+  sides) and `IslandRegion<I: Island>` make declaring an island the whole
+  wiring: the view renders the engine's mount point
+  (`data-webui-island="<name>"` + a json `data-webui-args` envelope carrying
+  the input), and `WebUIDocument` collects every declared capability out of
+  the rendered body and folds it into the emitted `RuntimeConfig.capabilities`
+  (merging with an explicit `runtimeConfig:`/`clientMode:` list, deduplicated,
+  caller order preserved). the engine's existing lazy fetch does the rest —
+  no new client runtime, no manual `capabilities:` entry.
+- the region carries its own server-rendered fallback (`I.render(input)`), so
+  an absent artifact degrades to static markup with the page fully
+  server-rendered. a body with no islands leaves the emitted config
+  byte-identical (the showcase pin holds).
+- the smoke page declares two typed regions — one sharing the existing
+  `validate` artifact (two regions, one fetch — the browser gate counts it),
+  one with no artifact (degrades to the fallback) — and `browser-smoke.mjs`
+  asserts the artifact is fetched exactly once and the regions render.
+- tests: `Tests/WebUITests/IslandTests.swift` (mount contract, escaping,
+  config collection, merge, dedupe).
+
 ### docs — the high-level docs now match the shipped surface
 
 every claim below was measured against the tree, not restated. the five defects

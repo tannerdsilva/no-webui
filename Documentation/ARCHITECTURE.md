@@ -330,6 +330,34 @@ plugin — there is no `WebUIWasmPlugin`), and it emits a `WebUIWasmInfo` enum f
 an artifact. `node designer/browser-smoke.mjs` is what verifies an island is
 genuinely browser-hosted once its env imports are linked.
 
+**the typed surface (w3.6):** a page declares an island with the `Island`
+protocol and the `IslandRegion<I>` view, and declaring it is the whole wiring:
+
+```swift
+public protocol Island: Sendable {
+    static var name: String { get }                 // wires to the capability grant
+    static func render(_ input: String) -> String
+}
+public struct IslandRegion<I: Island>: View {       // declares the capability + mounts the region
+    public init(_ input: @autoclosure () -> String)
+}
+```
+
+`Island.name` is the capability grant — the engine fetches
+`/__assets/webui-<name>.wasm` only for a name in the emitted `capabilities`
+list. `render(_:)` is the same swift on both sides: it compiles (via the
+`wasm-island` verb) into the island's `webui_render_region` export, and the
+server calls it too for the region's first-render fallback, so an absent
+artifact degrades to server-rendered markup (`data-webui-island-state=
+"unmapped"`) and the page stays fully static. `IslandRegion` renders the engine's
+mount point — `data-webui-island="<name>"` plus a JSON `data-webui-args`
+envelope carrying the input as its `input` key, both escaped — and
+`WebUIDocument` collects every `data-webui-island` name out of the rendered
+body (typed or hand-rolled) and folds it into the emitted `RuntimeConfig`
+capabilities, merging with any explicit `runtimeConfig:`/`clientMode:` list
+(deduplicated, caller order preserved). a body with no islands leaves the
+emitted config byte-identical.
+
 the import-surface pin (a fixed `wasi_snapshot_preview1` + `env` function count,
 once asserted by a `WasmIntegrityTests` suite) went with the chamber: it described
 that module, not the islands. nothing in-tree asserts an island's import list today.

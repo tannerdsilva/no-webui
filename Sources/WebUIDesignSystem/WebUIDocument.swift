@@ -113,6 +113,34 @@ public struct WebUIDocument: View {
 			if !themeCSS.isEmpty { rawStyles.append(themeCSS) }
 			rawStyles.append(contentsOf: self.rawStyles)
 		}
+		// the island wiring: every `data-webui-island="..."` region in the
+		// body — typed `IslandRegion` or hand-rolled raw markup alike —
+		// declares a capability, and declaring it is the whole grant. fold
+		// the collected names into whichever config the page emits, so the
+		// engine's lazy fetch mounts the region with no manual `capabilities`
+		// entry. an empty body stays byte-identical: no declared islands, no
+		// config touched.
+		let declared = Self.declaredIslandNames(in: body)
+		let effectiveRuntimeConfig: RuntimeConfig?
+		let effectiveClientMode: ClientBoot?
+		if declared.isEmpty {
+			effectiveRuntimeConfig = runtimeConfig
+			effectiveClientMode = clientMode
+		} else {
+			effectiveRuntimeConfig = runtimeConfig?.addingCapabilities(declared)
+			if let clientMode {
+				effectiveClientMode = ClientBoot(
+					config: (clientMode.config ?? RuntimeConfig()).addingCapabilities(declared)
+				)
+			} else if runtimeConfig == nil {
+				// a bare declaration with no config at all still grants: the
+				// engine boots with a capabilities-only config.
+				effectiveClientMode = ClientBoot(config: RuntimeConfig(capabilities: declared))
+			} else {
+				effectiveClientMode = nil
+			}
+		}
+
 		let doc = HTMLDocument(
 			title: title,
 			body: body,
@@ -122,13 +150,13 @@ public struct WebUIDocument: View {
 			head: head,
 			headContent: headContent,
 			bodyAttributes: bodyAttributes,
-			clientMode: clientMode,
+			clientMode: effectiveClientMode,
 			devMode: devMode,
 			lang: lang,
 			dir: dir,
 			direction: direction,
 			includeRuntime: includeRuntime,
-			runtimeConfig: runtimeConfig,
+			runtimeConfig: effectiveRuntimeConfig,
 			contentSecurityPolicy: contentSecurityPolicy,
 			contentSecurityPolicyExtras: contentSecurityPolicyExtras,
 			preMinifiedStyles: true,
@@ -165,5 +193,27 @@ public struct WebUIDocument: View {
 			cookies: cookies,
 			body: .html(renderThroughBuffer())
 		)
+	}
+
+	/// every island capability declared by a body: the `data-webui-island`
+	/// mount-point names, in first-seen order, deduplicated. typed
+	/// `IslandRegion` regions and hand-rolled raw mount points both count —
+	/// declaring a region is what grants its capability, and this scan is the
+	/// collector `render(into:)` folds into the emitted config.
+	///
+	/// names are framework-controlled identifiers; the scan still skips empty
+	/// captures and treats the attribute as double-quoted, so a stray
+	/// single-quoted copy in prose cannot silently grant a capability.
+	package static func declaredIslandNames(in body: String) -> [String] {
+		let pattern = /data-webui-island="([^"]*)"/
+		var seen = Set<String>()
+		var names: [String] = []
+		for match in body.matches(of: pattern) {
+			let name = String(match.1)
+			if !name.isEmpty, seen.insert(name).inserted {
+				names.append(name)
+			}
+		}
+		return names
 	}
 }

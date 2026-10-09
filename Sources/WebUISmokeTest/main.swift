@@ -15,6 +15,7 @@ import WebUIDesignSystem
 import WebUIBlocks
 import WebUIChart
 import WebUIServer
+import WebUISharedCore
 import WebUISmokeShared
 
 // MARK: - Shared state
@@ -250,6 +251,33 @@ let smokePageStyle: String = """
 	</style>
 """
 
+// MARK: - Typed capability islands (W3.6)
+
+/// the typed surface behind `island-typed`: declares the `validate`
+/// capability (the existing artifact), so `WebUIDocument` grants it from the
+/// declaration alone and the raw region above shares the same single fetch.
+/// its `{"input":…}` mount envelope carries no validation rules, so the
+/// mounted chip is the vacuous `valid` — the rule-bearing envelope stays with
+/// the hand-rolled region. the server-rendered fallback below is byte-identical
+/// to what the artifact composes for that envelope (same swift, both sides).
+enum SmokeValidateIsland: Island {
+	static let name = "validate"
+	static func render(_ input: String) -> String {
+		"<div class=\"island island--validate island--ok\" role=\"status\"><span class=\"island__dot\"></span><span class=\"island__msg\">valid</span></div>"
+	}
+}
+
+/// the typed surface behind `island-greet`: a capability with no artifact, so
+/// the engine attempts the lazy fetch once, fails cleanly, and the region
+/// keeps its server-rendered fallback — the same swift a wasm build of this
+/// island would have shipped.
+enum SmokeGreetIsland: Island {
+	static let name = "typed-greet"
+	static func render(_ input: String) -> String {
+		"<span class=\"island__msg\">hello, \(htmlEscape(input))</span>"
+	}
+}
+
 // MARK: - Page assembly (renders interactive views, registers handlers)
 
 func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
@@ -421,6 +449,25 @@ func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
 					}
 					Raw("<div id=\"island-validate\" data-webui-island=\"validate\" data-webui-args='{\"value\":\"a\",\"rules\":[{\"rule\":\"required\"},{\"rule\":\"minLength\",\"arg\":4}]}'></div>")
 					Raw("<div id=\"island-never\" data-webui-island=\"never-built\" data-webui-args='{}'></div>")
+				// W3.6 — the typed capability surface: these two regions are
+				// declared, not hand-wired. `WebUIDocument` collects their
+				// names out of the body and folds them into the emitted
+				// config, so the engine grants + fetches + mounts with no
+				// manual `capabilities` entry. `island-typed` shares the
+				// existing `validate` artifact with the raw region above
+				// (one fetch serves both — the smoke gate counts); its
+				// `{"input":…}` mount envelope carries no validation rules,
+				// so the mounted chip is the vacuous `valid`, while the
+				// rule-bearing envelope stays with the raw region.
+				Div(id: "island-typed") {
+					IslandRegion<SmokeValidateIsland>("a")
+				}
+				// `typed-greet` has no artifact: the engine attempts the lazy
+				// fetch once, fails, and the region keeps its server-rendered
+				// fallback — the same swift a wasm build would have shipped.
+				Div(id: "island-greet") {
+					IslandRegion<SmokeGreetIsland>("world")
+				}
 					Div(class: "smoke__chart-hint") {
 						Text("The chip above is composed by a lazily loaded wasm island (no round trip).")
 					}

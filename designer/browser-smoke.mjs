@@ -91,13 +91,21 @@ const page = await context.newPage();
 const consoleErrors = [];
 const failedRequests = [];
 let expectedIsland404s = 0;
+// how many times the validate artifact was fetched (the engine caches by
+// name, so two mounting regions share one fetch — counted, not assumed).
+let validateFetchCount = 0;
+let validateFetchStatus = null;
 page.on("console", (m) => {
   if (m.type() === "error") consoleErrors.push(m.text());
 });
 page.on("requestfailed", (r) => failedRequests.push(r.url()));
 page.on("response", (r) => {
-  if (r.status() >= 400 && !/favicon|never-built/i.test(r.url())) failedRequests.push(`${r.status()} ${r.url()}`);
-  if (r.status() === 404 && /never-built/i.test(r.url())) expectedIsland404s++;
+  if (/webui-validate\.wasm/i.test(r.url())) {
+    validateFetchCount++;
+    validateFetchStatus = r.status();
+  }
+  if (r.status() >= 400 && !/favicon|never-built|typed-greet/i.test(r.url())) failedRequests.push(`${r.status()} ${r.url()}`);
+  if (r.status() === 404 && /never-built|typed-greet/i.test(r.url())) expectedIsland404s++;
 });
 
 await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
@@ -284,6 +292,37 @@ await page.waitForTimeout(350);
 const islandAfter = await page.evaluate(() => document.getElementById("island-validate")?.textContent ?? "");
 if (islandAfter.includes("valid")) ok("island re-validated on input from the module (no round trip)");
 else bad(`island did not re-validate: ${JSON.stringify(islandAfter)}`);
+
+// 6b-bis. typed capability islands (W3.6): a region declared through
+// `IslandRegion` wires its own capability — `WebUIDocument` folds the name
+// into the emitted config and the engine's lazy fetch mounts exactly ONE
+// fetch of the validate artifact for BOTH regions (the module cache is
+// shared, counted not assumed). a typed capability with no artifact degrades
+// to the region's server-rendered fallback (`unmapped`, fallback text intact)
+// while the rest of the page stays fully interactive.
+const typed = await page.evaluate(() => {
+  const mount = (id, name) => {
+    const el = document.querySelector(`#${id} [data-webui-island="${name}"]`);
+    return el ? { state: el.getAttribute("data-webui-island-state"), text: el.textContent } : null;
+  };
+  return {
+    typedRegion: mount("island-typed", "validate"),
+    greetRegion: mount("island-greet", "typed-greet"),
+    granted: document.querySelector('meta[name="webui-config"]')?.getAttribute("content") ?? "",
+  };
+});
+if (typed.typedRegion && typed.typedRegion.state === "mounted" && typed.typedRegion.text.trim() === "valid")
+  ok("typed IslandRegion<SmokeValidateIsland> mounts the existing artifact and renders its region");
+else bad(`typed validate region: ${JSON.stringify(typed.typedRegion)}`);
+if (validateFetchCount === 1 && validateFetchStatus === 200)
+  ok(`validate wasm artifact fetched exactly ONCE (${validateFetchStatus}) though both regions mount from it`);
+else bad(`validate artifact fetches: ${validateFetchCount} (status ${validateFetchStatus}) — expected exactly 1 × 200`);
+if (typed.greetRegion && typed.greetRegion.state === "unmapped" && typed.greetRegion.text.trim() === "hello, world")
+  ok("typed region with no artifact degrades to its server-rendered fallback (unmapped, fallback text intact)");
+else bad(`typed degrade region: ${JSON.stringify(typed.greetRegion)}`);
+if (typed.granted.includes("typed-greet") && typed.granted.includes("validate"))
+  ok("the emitted webui-config grants the declared capabilities (declaration is the wiring)");
+else bad(`webui-config capabilities: ${JSON.stringify(typed.granted)}`);
 
 // 6c. Progressive capability (p4, engine mode): offline shell service worker
 // registers from the declared capability, claims, and controls a reload; view

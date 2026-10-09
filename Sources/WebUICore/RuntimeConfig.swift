@@ -57,6 +57,21 @@ public struct RuntimeConfig: Sendable, Encodable {
 		self.persistence = persistence
 	}
 
+	/// a copy of this config with `names` folded into ``capabilities``
+	/// (the caller's order first, then new names in first-seen order;
+	/// duplicates dropped). `WebUIDocument` calls this for every capability a
+	/// page's body declares, so declaring an island replaces the
+	/// hand-maintained list.
+	public func addingCapabilities(_ names: [String]) -> RuntimeConfig {
+		var merged = capabilities ?? []
+		for name in names where !merged.contains(name) {
+			merged.append(name)
+		}
+		var copy = self
+		copy.capabilities = merged
+		return copy
+	}
+
 	public var isEmpty: Bool {
 		wsUrl == nil && wsReconnect == nil && wsMaxReconnectDelayMs == nil
 			&& wsPingIntervalMs == nil && wsPongTimeoutMs == nil && maxQueueSize == nil

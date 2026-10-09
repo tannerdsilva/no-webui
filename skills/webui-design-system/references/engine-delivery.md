@@ -56,6 +56,15 @@ gone; the wasm client remains available via an explicit
 - a region is `<div data-webui-island="validate" data-webui-args='{…}'>`; the
   module composes it via the region contract (`webui_input_ptr` /
   `webui_render_region` / `webui_frame_ptr|len`), sanitized before mount.
+- **declare, don't hand-wire**: a page declares an island with
+  `IslandRegion<MyIsland>(input)` (conformer: `static let name` — the grant —
+  and `static func render(_:)`, the same Swift both sides). `WebUIDocument`
+  collects every `data-webui-island` name out of the rendered body and folds
+  it into the emitted config, so **declaring the view replaces the manual
+  `capabilities:` entry**. the region's server-rendered fallback is
+  `MyIsland.render(input)`, so an absent artifact still shows the island's own
+  output (just static). inputs ride `data-webui-args` as a JSON
+  `{"input": …}` envelope.
 - build islands with
   `swift package --disable-sandbox plugin wasm-island --sdk swift-6.4.0-RELEASE_wasm-embedded`
   (the plugin links the sdk's `libswiftUnicodeDataTables.a` automatically).

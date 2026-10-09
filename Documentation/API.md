@@ -186,12 +186,19 @@ default `WebUIRuntime.init();` is emitted byte-for-byte.
 
 `RuntimeConfig` keys: `wsUrl`, `wsReconnect`, `wsMaxReconnectDelay`,
 `wsPingInterval`, `wsPongTimeout`, `maxQueueSize`, `debounceInputMs`,
-`debounceMaxWaitMs`, `optimisticSettleMs`, `logLevel`, and `renderToken`. the
+`debounceMaxWaitMs`, `optimisticSettleMs`, `logLevel`, `renderToken`,
+`capabilities`, and `persistence`. the
 `renderToken` (a per-render id minted by the server) is echoed back with every
 websocket `event`/`ping` so a server that mints tokens can route each message
 to the page's router and reject stale pages from other sessions — see
 `WebSocketProtocol` and the auth docs. only keys that are set are emitted;
 string values are hand-escaped into safe json string literals.
+
+`capabilities` is the grade the engine checks before fetching an island
+artifact (`/__assets/webui-<name>.wasm`): a capability not granted by a page
+is never fetched. it is usually not set by hand — declaring an
+`IslandRegion<I>` makes `WebUIDocument` collect `I.name` out of the body and
+fold it into this list (see `Island`).
 
 `stylesheetURL` and `themeStylesheetURL` are the two sheet slots, emitted in that
 order *before* the inline `<style>`: the base sheet (the design-system component css)
@@ -276,6 +283,26 @@ servers use the capped path) |
 | `CSRFProtection.generateSecret() throws -> String` | 32-byte random server secret; throws on entropy failure (no prng fallback) |
 | `CSRFProtection.token(for:secret:maxAge:) throws -> String` | HMAC-SHA256 stateless token; throws on signing failure |
 | `CSRFProtection.validate(_:for:secret:) -> Bool` | validate token (signature + expiration); false on any failure, including signing errors |
+
+### Capability Islands
+
+pure-Swift logic that compiles into a small standalone wasm module and is
+fetched lazily by a page that declares the capability.
+
+| Type | Members | Description |
+|---|---|---|
+| `Island` | `static var name: String`, `static func render(_ input: String) -> String` | the capability contract: `name` wires to the grant (`/__assets/webui-<name>.wasm` is fetched only for a granted name), and `render(_:)` is the same Swift on both sides — it compiles into the wasm's `webui_render_region` export and runs server-side for the region's first-render fallback |
+| `IslandRegion<I: Island>` | `init(_ input: @autoclosure () -> String)` | declares the capability and mounts the region; renders the engine's mount point (`data-webui-island="<I.name>"` + a JSON-escaped `data-webui-args` envelope carrying the input under `input`) plus the server-rendered fallback |
+
+declaring an `IslandRegion<I>` is the whole wiring: `WebUIDocument` collects
+`I.name` out of the rendered body and folds it into the emitted
+`RuntimeConfig.capabilities`, so the engine's existing lazy fetch grants and
+mounts the region with no manual capabilities entry. an absent artifact
+degrades to the fallback markup (`data-webui-island-state="unmapped"`).
+
+build the artifact with
+`swift package --disable-sandbox plugin wasm-island --product TheirIsland` —
+see `Documentation/ARCHITECTURE.md` layer 5.
 
 ## WebUIDesignSystem
 

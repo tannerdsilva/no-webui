@@ -326,6 +326,9 @@ let package = Package(
                 "WebUISmokeShared",
                 "WebUIBlocks",
                 "WebUIServer",
+                // the typed island conformers escape their fallback markup
+                // with the shared leaf's htmlEscape.
+                "WebUISharedCore",
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOHTTP1", package: "swift-nio"),

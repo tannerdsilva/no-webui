@@ -165,6 +165,12 @@ The same `View`/`ViewModifier` core can run **inside the browser** — the
   lazy-loads it — degrading to the base path when the artifact is absent. the
   repo's `WebUIValidateIsland` is the reference island: one Foundation-free core,
   compiled to wasm and exercised natively by the same tests.
+- **declare an island, don't wire it**: `IslandRegion<MyIsland>(input)`
+  (`MyIsland: Island` with `static let name` + `static func render(_:)`, same
+  Swift both sides) renders the engine's mount point, and `WebUIDocument`
+  collects the name out of the body into the emitted config — declaring the
+  view is the whole wiring, no manual `capabilities:` entry. an absent
+  artifact degrades to the server-rendered fallback.
 - **if you came here for a wasm *client* app: that path is gone.** migrate to the
   engine, or to an island for the specific local behaviour you needed.
 
