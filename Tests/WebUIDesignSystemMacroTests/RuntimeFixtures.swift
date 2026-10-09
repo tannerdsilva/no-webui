@@ -34,6 +34,15 @@ struct AccentOnly {
 	static let colorPrimarySolid = "#f59e0b"
 }
 
+@Theme
+struct FullAxisTheme {
+	static let colorPrimarySolid = "#6c8cff"
+	static let space4 = "1.5rem"
+	static let radiusLg = "0.75rem"
+	static let fontSizeLg = "1.125rem"
+	static let transitionFast = "150ms ease"
+}
+
 @Suite("@Theme compiled runtime")
 struct ThemeCompiledRuntimeTests {
 
@@ -78,5 +87,26 @@ struct ThemeCompiledRuntimeTests {
 	func emptyBagOverridesNothing() {
 		let theme = AccentOnly.theme.overlaying(WebUITheme())
 		#expect(theme.palette.tokens[.colorPrimarySolid] == "#f59e0b")
+	}
+
+	@Test("the synthesized DesignTheme conformance partitions flat members into the five axes")
+	func designThemeSynthesisPartitions() {
+		#expect(FullAxisTheme.palette.tokens[.colorPrimarySolid] == "#6c8cff")
+		#expect(FullAxisTheme.spacing.tokens[.space4] == "1.5rem")
+		#expect(FullAxisTheme.radii.tokens[.radiusLg] == "0.75rem")
+		#expect(FullAxisTheme.typography.tokens[.fontSizeLg] == "1.125rem")
+		#expect(FullAxisTheme.motion.tokens[.transitionFast] == "150ms ease")
+		// the empty axes exist and are empty: completeness without noise.
+		#expect(DefaultDesignTheme.spacing.isEmpty)
+	}
+
+	@Test("a @Theme struct is a DesignTheme: derivation renders real bytes")
+	func macroDesignThemeDerivesAndRenders() {
+		let css = FullAxisTheme.overriding([.colorPrimarySolid: "#123456"]).webUITheme().stylesheet()
+		#expect(css.contains("--color-primary-solid: #123456;"))
+		#expect(css.contains("--space-4: 1.5rem;"))
+		#expect(css.contains("--radius-lg: 0.75rem;"))
+		#expect(css.contains("--font-size-lg: 1.125rem;"))
+		#expect(css.contains("--transition-fast: 150ms ease;"))
 	}
 }

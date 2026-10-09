@@ -76,6 +76,24 @@ struct ThemeMacroExpansionTests {
 					)
 				}
 			}
+
+			extension NexusDark: DesignTheme {
+				static var palette: ThemePalette {
+					ThemePalette(tokens: [.colorPrimarySolid: colorPrimarySolid, .colorBg: colorBg], customTokens: customTokens)
+				}
+				static var spacing: TokenOverrides {
+					TokenOverrides()
+				}
+				static var radii: TokenOverrides {
+					TokenOverrides()
+				}
+				static var typography: TokenOverrides {
+					TokenOverrides()
+				}
+				static var motion: TokenOverrides {
+					TokenOverrides()
+				}
+			}
 			"""
 		)
 	}
@@ -95,6 +113,24 @@ struct ThemeMacroExpansionTests {
 			extension Bare: WebUIThemeProvider {
 				static var theme: WebUITheme {
 					WebUITheme()
+				}
+			}
+
+			extension Bare: DesignTheme {
+				static var palette: ThemePalette {
+					ThemePalette()
+				}
+				static var spacing: TokenOverrides {
+					TokenOverrides()
+				}
+				static var radii: TokenOverrides {
+					TokenOverrides()
+				}
+				static var typography: TokenOverrides {
+					TokenOverrides()
+				}
+				static var motion: TokenOverrides {
+					TokenOverrides()
 				}
 			}
 			"""
@@ -120,6 +156,24 @@ struct ThemeMacroExpansionTests {
 					WebUITheme(
 						defaultMode: defaultMode
 					)
+				}
+			}
+
+			extension DarkOnly: DesignTheme {
+				static var palette: ThemePalette {
+					ThemePalette()
+				}
+				static var spacing: TokenOverrides {
+					TokenOverrides()
+				}
+				static var radii: TokenOverrides {
+					TokenOverrides()
+				}
+				static var typography: TokenOverrides {
+					TokenOverrides()
+				}
+				static var motion: TokenOverrides {
+					TokenOverrides()
 				}
 			}
 			"""
@@ -149,6 +203,24 @@ struct ThemeMacroExpansionTests {
 					)
 				}
 			}
+
+			extension Tokens: DesignTheme {
+				static var palette: ThemePalette {
+					ThemePalette(tokens: [.colorText: colorText, .colorTextMuted: colorTextMuted])
+				}
+				static var spacing: TokenOverrides {
+					TokenOverrides()
+				}
+				static var radii: TokenOverrides {
+					TokenOverrides()
+				}
+				static var typography: TokenOverrides {
+					TokenOverrides()
+				}
+				static var motion: TokenOverrides {
+					TokenOverrides()
+				}
+			}
 			"""
 		)
 	}
@@ -174,6 +246,115 @@ struct ThemeMacroExpansionTests {
 					)
 				}
 			}
+
+			extension PublicTheme: DesignTheme {
+				public static var palette: ThemePalette {
+					ThemePalette(tokens: [.colorBg: colorBg])
+				}
+				public static var spacing: TokenOverrides {
+					TokenOverrides()
+				}
+				public static var radii: TokenOverrides {
+					TokenOverrides()
+				}
+				public static var typography: TokenOverrides {
+					TokenOverrides()
+				}
+				public static var motion: TokenOverrides {
+					TokenOverrides()
+				}
+			}
+			"""
+		)
+	}
+
+	@Test("flat members partition across the five DesignTheme axes by name")
+	func axisPartition() {
+		assertExpansion(
+			"""
+			@Theme
+			struct FullAxes {
+				static let colorBg = "#101014"
+				static let space4 = "1.5rem"
+				static let radiusLg = "0.75rem"
+				static let fontSizeLg = "1.125rem"
+				static let transitionBase = "200ms ease"
+			}
+			""",
+			expanded: """
+			struct FullAxes {
+				static let colorBg = "#101014"
+				static let space4 = "1.5rem"
+				static let radiusLg = "0.75rem"
+				static let fontSizeLg = "1.125rem"
+				static let transitionBase = "200ms ease"
+			}
+
+			extension FullAxes: WebUIThemeProvider {
+				static var theme: WebUITheme {
+					WebUITheme(
+						palette: ThemePalette(tokens: [.colorBg: colorBg, .space4: space4, .radiusLg: radiusLg, .fontSizeLg: fontSizeLg, .transitionBase: transitionBase])
+					)
+				}
+			}
+
+			extension FullAxes: DesignTheme {
+				static var palette: ThemePalette {
+					ThemePalette(tokens: [.colorBg: colorBg])
+				}
+				static var spacing: TokenOverrides {
+					TokenOverrides([.space4: space4])
+				}
+				static var radii: TokenOverrides {
+					TokenOverrides([.radiusLg: radiusLg])
+				}
+				static var typography: TokenOverrides {
+					TokenOverrides([.fontSizeLg: fontSizeLg])
+				}
+				static var motion: TokenOverrides {
+					TokenOverrides([.transitionBase: transitionBase])
+				}
+			}
+			"""
+		)
+	}
+
+	@Test("a palette member satisfies the palette axis directly; the extension omits it")
+	func paletteMemberSatisfiesPaletteAxis() {
+		assertExpansion(
+			"""
+			@Theme
+			struct PaletteOnly {
+				static let palette = ThemePalette(tokens: [.colorPrimarySolid: "#6c8cff"])
+			}
+			""",
+			expanded: """
+			struct PaletteOnly {
+				static let palette = ThemePalette(tokens: [.colorPrimarySolid: "#6c8cff"])
+			}
+
+			extension PaletteOnly: WebUIThemeProvider {
+				static var theme: WebUITheme {
+					WebUITheme(
+						palette: palette
+					)
+				}
+			}
+
+			extension PaletteOnly: DesignTheme {
+				static var spacing: TokenOverrides {
+					TokenOverrides()
+				}
+				static var radii: TokenOverrides {
+					TokenOverrides()
+				}
+				static var typography: TokenOverrides {
+					TokenOverrides()
+				}
+				static var motion: TokenOverrides {
+					TokenOverrides()
+				}
+			}
 			"""
 		)
 	}
@@ -197,6 +378,24 @@ struct ThemeMacroExpansionTests {
 					ArcBase.theme.overlaying(WebUITheme(
 						palette: ThemePalette(tokens: [.colorPrimarySolid: colorPrimarySolid])
 					))
+				}
+			}
+
+			extension Poseidon: DesignTheme {
+				static var palette: ThemePalette {
+					ThemePalette(tokens: [.colorPrimarySolid: colorPrimarySolid])
+				}
+				static var spacing: TokenOverrides {
+					TokenOverrides()
+				}
+				static var radii: TokenOverrides {
+					TokenOverrides()
+				}
+				static var typography: TokenOverrides {
+					TokenOverrides()
+				}
+				static var motion: TokenOverrides {
+					TokenOverrides()
 				}
 			}
 			"""
@@ -225,6 +424,21 @@ struct ThemeMacroExpansionTests {
 						palette: palette,
 						dark: dark
 					)
+				}
+			}
+
+			extension TwoMode: DesignTheme {
+				static var spacing: TokenOverrides {
+					TokenOverrides()
+				}
+				static var radii: TokenOverrides {
+					TokenOverrides()
+				}
+				static var typography: TokenOverrides {
+					TokenOverrides()
+				}
+				static var motion: TokenOverrides {
+					TokenOverrides()
 				}
 			}
 			"""
@@ -300,6 +514,19 @@ struct ThemeMacroNegativeTests {
 			}
 			""",
 			message: "@Theme member 'colorPrimarySolid' must be a 'static let' declaration"
+		)
+	}
+
+	@Test("a typed DesignTheme axis member is diagnosed, not read as a token")
+	func typedAxisThrows() {
+		assertExpansionThrows(
+			"""
+			@Theme
+			struct HasTypedAxis {
+				static let spacing: TokenOverrides = TokenOverrides()
+			}
+			""",
+			message: "@Theme on 'HasTypedAxis' declares a typed DesignTheme axis — the axes are synthesized from flat token members (space4, radiusLg, ...); write a hand-rolled DesignTheme conformance to declare a typed axis"
 		)
 	}
 }
