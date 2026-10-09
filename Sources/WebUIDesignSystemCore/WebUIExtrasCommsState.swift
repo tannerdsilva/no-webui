@@ -76,7 +76,11 @@ public struct WebUITypingIndicator: View {
 // MARK: WebUI Notification
 /// a notification row within a panel.
 public struct WebUINotification: View {
-    public enum Kind: String { case info, success, warning, danger }
+    // measured (W1.4): `Kind` was declared but never referenced — no property, no
+    // init parameter, no render use. a vocabulary duplicate with no reader, so it
+    // resolves to the shared `Tone` rather than carrying a private case set.
+    @available(*, deprecated, renamed: "Tone")
+    public typealias Kind = Tone
     public let title: String?
     public let text: String
     public let time: String
@@ -169,13 +173,24 @@ public struct WebUIStatCard: View {
 // MARK: WebUI Delta
 /// a small up/down trend indicator.
 public struct WebUIDelta: View {
-    public enum Direction: String, Sendable { case up = " delta--up", down = " delta--down" }
+    @available(*, deprecated, renamed: "Trend")
+    public typealias Direction = Trend
+
     public let text: String
-    public let direction: Direction
-    public init(_ text: String, direction: Direction = .up) { self.text = text; self.direction = direction }
+    public let direction: Trend
+    public init(_ text: String, direction: Trend = .up) { self.text = text; self.direction = direction }
 
     public func render() -> String {
-        return "<span class=\"delta\(direction.rawValue)\">\(direction == .up ? "▲" : "▼") \(htmlEscape(text))</span>"
+        // the shared Trend offers `flat`, which Delta never did: it forwards the
+        // component's own class pattern and a neutral bar glyph.
+        let cls: String
+        let glyph: String
+        switch direction {
+            case .up: cls = " delta--up"; glyph = "▲"
+            case .down: cls = " delta--down"; glyph = "▼"
+            case .flat: cls = " delta--flat"; glyph = "▬"
+        }
+        return "<span class=\"delta\(cls)\">\(glyph) \(htmlEscape(text))</span>"
     }
 }
 
@@ -262,18 +277,32 @@ public struct WebUICookieConsent: View {
 // MARK: WebUI Pull Refresh
 /// a pull-to-refresh indicator.
 public struct WebUIPullRefresh: View {
-    public enum State: String, Sendable { case idle = " pull-refresh--idle", active = " pull-refresh--active" }
-    public let state: State
+    @available(*, deprecated, renamed: "LoadState")
+    public typealias State = LoadState
+
+    public let state: LoadState
     public let text: String?
     public let id: String?
     public let onRefresh: EventHandler?
-    public init(state: State = .idle, text: String? = nil, id: String? = nil, onRefresh: EventHandler? = nil) {
+
+    /// this component's own class for a shared load state — `loading` keeps the
+    /// 1.x `active` bytes; `ready`/`failed` forward the pattern.
+    private static func classFor(_ state: LoadState) -> String {
+        switch state {
+            case .idle: return " pull-refresh--idle"
+            case .loading: return " pull-refresh--active"
+            case .ready: return " pull-refresh--ready"
+            case .failed: return " pull-refresh--failed"
+        }
+    }
+
+    public init(state: LoadState = .idle, text: String? = nil, id: String? = nil, onRefresh: EventHandler? = nil) {
         self.state = state; self.text = text; self.id = id; self.onRefresh = onRefresh
     }
 
     public func render() -> String {
         let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onRefresh) } ?? ""
-        var html = "<div class=\"pull-refresh\(state.rawValue)\"\(attrs) role=\"status\">"
+        var html = "<div class=\"pull-refresh\(Self.classFor(state))\"\(attrs) role=\"status\">"
         html += "<div class=\"pull-refresh__indicator\"><span class=\"pull-refresh__spinner\"></span>"
         if let text { html += "<span class=\"pull-refresh__text\">\(htmlEscape(text))</span>" }
         html += "</div></div>"
@@ -331,14 +360,28 @@ public struct WebUIAvatarStack: View {
 // MARK: WebUI Badge Status
 /// an online/away/busy status badge.
 public struct WebUIBadgeStatus: View {
-    public enum Status: String, Sendable { case online = " badge-status__dot--online", away = " badge-status__dot--away",
-        busy = " badge-status__dot--busy", offline = " badge-status__dot--offline", live = " badge-status__dot--live" }
+    @available(*, deprecated, renamed: "Presence")
+    public typealias Status = Presence
+
     public let label: String
-    public let status: Status
-    public init(_ label: String, status: Status = .online) { self.label = label; self.status = status }
+    public let status: Presence
+
+    /// this component's own class for a shared presence — an exact case-for-case
+    /// match, so every 1.x byte is unchanged (leading space included).
+    private static func classFor(_ status: Presence) -> String {
+        switch status {
+            case .online: return " badge-status__dot--online"
+            case .away: return " badge-status__dot--away"
+            case .busy: return " badge-status__dot--busy"
+            case .offline: return " badge-status__dot--offline"
+            case .live: return " badge-status__dot--live"
+        }
+    }
+
+    public init(_ label: String, status: Presence = .online) { self.label = label; self.status = status }
 
     public func render() -> String {
-        return "<span class=\"badge-status\"><span class=\"badge-status__dot \(status.rawValue)\"></span>\(htmlEscape(label))</span>"
+        return "<span class=\"badge-status\"><span class=\"badge-status__dot \(Self.classFor(status))\"></span>\(htmlEscape(label))</span>"
     }
 }
 
@@ -638,26 +681,35 @@ public struct WebUIMarker: View {
 /// optional remove affordance. conforms to `Dismissible`, so the remove button
 /// takes the standard `.onDismiss { me, _ in [me.remove()] }` handler.
 public struct WebUIAttachment: View, Dismissible {
-    public enum State: String, Sendable {
-        case ready = ""
-        case uploading = "attachment--uploading"
-        case error = "attachment--error"
-    }
+    @available(*, deprecated, renamed: "LoadState")
+    public typealias State = LoadState
 
     public let name: String
     /// secondary line: size, mime type, or the failure reason.
     public let meta: String?
     public let icon: IconName
-    public let state: State
+    public let state: LoadState
     public let removable: Bool
     public let id: String?
     public var onDismiss: DismissHandler?
+
+    /// this component's own class for a shared load state — `ready` is the base
+    /// surface (the 1.x empty string); `loading` keeps the `uploading` bytes and
+    /// `failed` the `error` ones.
+    private static func classFor(_ state: LoadState) -> String {
+        switch state {
+            case .idle: return "attachment--idle"
+            case .loading: return "attachment--uploading"
+            case .ready: return ""
+            case .failed: return "attachment--error"
+        }
+    }
 
     public init(
         name: String,
         meta: String? = nil,
         icon: IconName? = nil,
-        state: State = .ready,
+        state: LoadState = .ready,
         removable: Bool = false,
         id: String? = nil
     ) {
@@ -676,8 +728,9 @@ public struct WebUIAttachment: View, Dismissible {
 
     public func render() -> String {
         let dismissal = makeDismissal(ariaLabel: "Remove attachment")
+        let stateClass = Self.classFor(state)
         var html = "<div class=\"attachment"
-        if !state.rawValue.isEmpty { html += " \(state.rawValue)" }
+        if !stateClass.isEmpty { html += " \(stateClass)" }
         html += "\""
         if let elementID = dismissal.elementID ?? id {
             html += " id=\"\(htmlEscape(elementID))\""

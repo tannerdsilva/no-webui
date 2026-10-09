@@ -309,14 +309,38 @@ public struct WebUIMultiSelect: View {
 // MARK: WebUI Validation
 /// an inline validation message.
 public struct WebUIValidation: View {
-    public enum State: String, Sendable { case success = " validation--success", error = " validation--error", warning = " validation--warning" }
+    @available(*, deprecated, renamed: "ValidationState")
+    public typealias State = ValidationState
+
     public let message: String
-    public let state: State
-    public init(_ message: String, state: State = .error) { self.message = message; self.state = state }
+    public let state: ValidationState
+
+    /// this component's own class for a shared validation state — `none` maps to
+    /// the empty string, the base surface.
+    private static func classFor(_ state: ValidationState) -> String {
+        switch state {
+            case .none: return ""
+            case .success: return " validation--success"
+            case .warning: return " validation--warning"
+            case .error: return " validation--error"
+        }
+    }
+
+    /// a state's glyph. `none` renders nothing — an untouched field has no verdict.
+    private static func icon(for state: ValidationState) -> String {
+        switch state {
+            case .none: return ""
+            case .success: return "✓"
+            case .warning: return "!"
+            case .error: return "✗"
+        }
+    }
+
+    public init(_ message: String, state: ValidationState = .error) { self.message = message; self.state = state }
 
     public func render() -> String {
-        var html = "<div class=\"validation\(state.rawValue)\" role=\"status\">"
-        html += "<span class=\"validation__icon\" aria-hidden=\"true\">\(state == .success ? "✓" : (state == .warning ? "!" : "✗"))</span>"
+        var html = "<div class=\"validation\(Self.classFor(state))\" role=\"status\">"
+        html += "<span class=\"validation__icon\" aria-hidden=\"true\">\(Self.icon(for: state))</span>"
         html += "<span class=\"validation__text\">\(htmlEscape(message))</span>"
         html += "</div>"
         return html
@@ -360,16 +384,29 @@ public struct WebUISignature: View {
 // MARK: WebUI Inline Edit
 /// an editable inline value with idle/editing/saved states.
 public struct WebUIInlineEdit: View {
-    public enum State: String, Sendable { case idle = " inline-edit--idle", editing = " inline-edit--editing", saved = " inline-edit--saved" }
+    @available(*, deprecated, renamed: "EditState")
+    public typealias State = EditState
+
     public let value: String
-    public let state: State
+    public let state: EditState
     public let error: Bool
     /// stable id; when set with `onSave` the root div self-wires
     /// (`targetId == "<id>"`, event `.click`); the save button gets
     /// `id == "<id>-save"` and cancel `<id>-cancel`.
     public let id: String?
     public let onSave: EventHandler?
-    public init(_ value: String, state: State = .idle, error: Bool = false,
+
+    /// this component's own class for a shared edit state — same three values,
+    /// same bytes.
+    private static func classFor(_ state: EditState) -> String {
+        switch state {
+            case .idle: return " inline-edit--idle"
+            case .editing: return " inline-edit--editing"
+            case .saved: return " inline-edit--saved"
+        }
+    }
+
+    public init(_ value: String, state: EditState = .idle, error: Bool = false,
                 id: String? = nil, onSave: EventHandler? = nil) {
         self.value = value; self.state = state; self.error = error
         self.id = id; self.onSave = onSave
@@ -379,7 +416,7 @@ public struct WebUIInlineEdit: View {
         let rootAttrs = id.map { controlAttributes(id: $0, event: .click, handler: onSave) } ?? ""
         let saveID = id.map { " id=\"\(htmlEscape("\($0)-save"))\"" } ?? ""
         let cancelID = id.map { " id=\"\(htmlEscape("\($0)-cancel"))\"" } ?? ""
-        var html = "<div class=\"inline-edit\(state.rawValue)\(error ? " inline-edit--error" : "")\"\(rootAttrs)>"
+        var html = "<div class=\"inline-edit\(Self.classFor(state))\(error ? " inline-edit--error" : "")\"\(rootAttrs)>"
         html += "<div class=\"inline-edit__value\">\(htmlEscape(value))<span class=\"inline-edit__pencil\" aria-hidden=\"true\">✎</span></div>"
         if state == .editing {
             html += "<div class=\"inline-edit__editing\"><input class=\"inline-edit__input\(error ? " inline-edit__input--error" : "")\" value=\"\(htmlEscape(value))\">"
@@ -582,11 +619,25 @@ public struct WebUIInputGroup: View {
     /// text after the field. turns danger-coloured in the error state.
     public let suffix: String?
     public let type: InputType
-    public let state: WebUIInput.State
+    public let state: ValidationState
     public let name: String?
     public let id: String?
     public let value: String?
     public let disabled: Bool
+
+    /// this component's own class for a shared validation state — the sheet's
+    /// bytes are unchanged, `none`'s empty string included. (this is why
+    /// `WebUIInput.State` resolving to the shared type is not enough by itself:
+    /// the raw value stopped being a class fragment, so every reader of it had
+    /// to move to a `classFor` map.)
+    private static func classFor(_ state: ValidationState) -> String {
+        switch state {
+            case .none: return ""
+            case .success: return "input--success"
+            case .warning: return "input--warning"
+            case .error: return "input--error"
+        }
+    }
 
     public init(
         placeholder: String = "",
@@ -594,7 +645,7 @@ public struct WebUIInputGroup: View {
         icon: IconName? = nil,
         suffix: String? = nil,
         type: InputType = .text,
-        state: WebUIInput.State = .normal,
+        state: ValidationState = .none,
         name: String? = nil,
         id: String? = nil,
         value: String? = nil,
@@ -614,7 +665,8 @@ public struct WebUIInputGroup: View {
 
     public func render() -> String {
         var html = "<div class=\"input input--with-affix"
-        if !state.rawValue.isEmpty { html += " \(state.rawValue)" }
+        let stateClass = Self.classFor(state)
+        if !stateClass.isEmpty { html += " \(stateClass)" }
         html += "\">"
         if let icon {
             html += "<span class=\"input__affix input__affix--left\">" + WebUIIcon(icon, size: .small).render() + "</span>"

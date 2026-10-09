@@ -224,16 +224,14 @@ public struct WebUISpeedDial: View {
 // MARK: WebUI Wizard
 /// progress wizard with completed / current / error steps.
 public struct WebUIWizard: View {
-    public enum Status: String, Sendable {
-        case plain = "", completed = " wizard__step--completed",
-             current = " wizard__step--current", done = " wizard__step--done",
-             error = " wizard__step--error"
-    }
+    @available(*, deprecated, renamed: "StepStatus")
+    public typealias Status = StepStatus
+
     public struct Step: Sendable {
         public let label: String
         public let desc: String?
-        public let status: Status
-        public init(_ label: String, desc: String? = nil, status: Status = .plain) {
+        public let status: StepStatus
+        public init(_ label: String, desc: String? = nil, status: StepStatus = .pending) {
             self.label = label; self.desc = desc; self.status = status
         }
     }
@@ -241,10 +239,23 @@ public struct WebUIWizard: View {
     public let vertical: Bool
     public init(steps: [Step], vertical: Bool = false) { self.steps = steps; self.vertical = vertical }
 
+    /// this component's own class for a shared step status — every 1.x case keeps
+    /// its exact bytes, `.completed` included (the sheet ships it as a peer of
+    /// `--done`, which is why `StepStatus` carries both).
+    private static func classFor(_ status: StepStatus) -> String {
+        switch status {
+            case .pending: return ""
+            case .current: return " wizard__step--current"
+            case .completed: return " wizard__step--completed"
+            case .done: return " wizard__step--done"
+            case .error: return " wizard__step--error"
+        }
+    }
+
     public func render() -> String {
         var html = "<ol class=\"wizard\(vertical ? " wizard--vertical" : "")\">"
         for step in steps {
-            html += "<li class=\"wizard__step\(step.status.rawValue)\">"
+            html += "<li class=\"wizard__step\(Self.classFor(step.status))\">"
             html += "<span class=\"wizard__dot\"></span>"
             html += "<span class=\"wizard__label\">\(htmlEscape(step.label))</span>"
             if let desc = step.desc {
@@ -1044,9 +1055,10 @@ private extension Array where Element: Hashable {
 /// two-line pair (text between the lines, e.g. "or"); the glyph form puts an
 /// icon badge on the line itself.
 public struct WebUISeparator: View {
-    public enum Orientation: Sendable { case horizontal, vertical }
+    @available(*, deprecated, renamed: "Axis")
+    public typealias Orientation = Axis
 
-    public let orientation: Orientation
+    public let orientation: Axis
     /// text rendered between two lines. ignored when `icon` is set.
     public let label: String?
     /// glyph rendered on the line. wins over `label`.
@@ -1055,7 +1067,7 @@ public struct WebUISeparator: View {
 
     public init(
         _ label: String? = nil,
-        orientation: Orientation = .horizontal,
+        orientation: Axis = .horizontal,
         icon: IconName? = nil,
         strong: Bool = false
     ) {

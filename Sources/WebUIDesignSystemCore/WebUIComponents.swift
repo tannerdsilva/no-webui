@@ -203,24 +203,31 @@ public struct WebUIButton: View {
 
 // MARK: - WebUI Text Input
 public struct WebUIInput: View {
-    public enum State: String, Sendable {
-        case normal = ""
-        case error  = "input--error"
-        case success = "input--success"
-        case warning = "input--warning"
-    }
+    @available(*, deprecated, renamed: "ValidationState")
+    public typealias State = ValidationState
 
     public let placeholder: String
-    public let state: State
+    public let state: ValidationState
     public let disabled: Bool
     public let id: String?
     public let type: InputType
     public let label: String?
     public let helpText: String?
 
+    /// this component's own class for a shared validation state — the sheet's
+    /// bytes are unchanged, `none`'s empty string included.
+    private static func classFor(_ state: ValidationState) -> String {
+        switch state {
+            case .none: return ""
+            case .success: return "input--success"
+            case .warning: return "input--warning"
+            case .error: return "input--error"
+        }
+    }
+
     public init(
         placeholder: String = "",
-        state: State = .normal,
+        state: ValidationState = .none,
         disabled: Bool = false,
         id: String? = nil,
         type: InputType = .text,
@@ -252,7 +259,7 @@ public struct WebUIInput: View {
         buffer.append("<input")
         if let id { buffer.append(" id=\"\(htmlEscape(id))\"") }
         buffer.append(" type=\"\(type.rawValue)\"")
-        buffer.append(" class=\"input \(state.rawValue)\"")
+        buffer.append(" class=\"input \(Self.classFor(state))\"")
         buffer.append(" placeholder=\"\(htmlEscape(placeholder))\"")
         if disabled { buffer.append(" disabled") }
         buffer.append(">")
@@ -1635,10 +1642,8 @@ public struct WebUIStat: View {
     @available(*, deprecated, renamed: "ControlSize")
     public typealias Size = ControlSize
 
-    public enum Trend: String, Sendable {
-        case up   = "stat__trend--up"
-        case down = "stat__trend--down"
-    }
+    @available(*, deprecated, renamed: "WebUIDesignSystemCore.Trend")
+    public typealias Trend = WebUIDesignSystemCore.Trend
 
     public let label: String
     public let value: String
@@ -1646,7 +1651,7 @@ public struct WebUIStat: View {
     /// Trend magnitude text, e.g. "+4.2%" — renders with the up/down
     /// arrow when `trendDirection` is set.
     public let trend: String?
-    public let trendDirection: Trend?
+    public let trendDirection: WebUIDesignSystemCore.Trend?
     /// Small muted note beside the trend, e.g. "vs last week".
     public let compare: String?
     /// Normalized sparkline data points (any indexed series).
@@ -1692,10 +1697,18 @@ public struct WebUIStat: View {
         buffer.append("<span class=\"stat__label\">\(htmlEscape(label))</span>")
         buffer.append("<span class=\"stat__value\">\(htmlEscape(value))</span>")
         if let trend, let trendDirection {
-            let arrowPath = trendDirection == .up ? "M2 6.5L5 3.5l3 3" : "M2 3.5L5 6.5l3-3"
+            // the shared Trend offers `flat`, which `WebUIStat` never did: it
+            // forwards the component's own class pattern and a neutral rule glyph.
+            let arrowPath: String
+            let trendClass: String
+            switch trendDirection {
+                case .up: arrowPath = "M2 6.5L5 3.5l3 3"; trendClass = "stat__trend--up"
+                case .down: arrowPath = "M2 3.5L5 6.5l3-3"; trendClass = "stat__trend--down"
+                case .flat: arrowPath = "M2 5h6"; trendClass = "stat__trend--flat"
+            }
             let arrow = "<svg class=\"stat__trend-arrow\" viewBox=\"0 0 10 10\" width=\"10\" height=\"10\" fill=\"none\" aria-hidden=\"true\"><path d=\"\(arrowPath)\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\"/></svg>"
             buffer.append("<span class=\"stat__row\">")
-            buffer.append("<span class=\"stat__trend \(trendDirection.rawValue)\">\(arrow)\(htmlEscape(trend))</span>")
+            buffer.append("<span class=\"stat__trend \(trendClass)\">\(arrow)\(htmlEscape(trend))</span>")
             if let compare {
                 buffer.append("<span class=\"stat__compare\">\(htmlEscape(compare))</span>")
             }
@@ -1904,25 +1917,19 @@ public extension WebUIPagination {
 /// can be plain, completed (filled dot + check), current (pulsing dot), or
 /// error (danger dot). Renders `.timeline`.
 public struct WebUITimeline: View {
-    public enum Orientation: String, Sendable {
-        case vertical   = "timeline"
-        case horizontal = "timeline timeline--horizontal"
-    }
+    @available(*, deprecated, renamed: "Axis")
+    public typealias Orientation = Axis
 
-    public enum Status: String, Sendable {
-        case plain
-        case completed = "timeline__event--completed"
-        case current   = "timeline__event--current"
-        case error     = "timeline__event--error"
-    }
+    @available(*, deprecated, renamed: "StepStatus")
+    public typealias Status = StepStatus
 
     public struct Event: Sendable {
         public let time: String
         public let title: String
         public let desc: String?
-        public let status: Status
+        public let status: StepStatus
 
-        public init(time: String, title: String, desc: String? = nil, status: Status = .plain) {
+        public init(time: String, title: String, desc: String? = nil, status: StepStatus = .pending) {
             self.time = time
             self.title = title
             self.desc = desc
@@ -1931,9 +1938,29 @@ public struct WebUITimeline: View {
     }
 
     public let events: [Event]
-    public let orientation: Orientation
+    public let orientation: Axis
 
-    public init(events: [Event], orientation: Orientation = .vertical) {
+    /// this component's own class for a shared orientation — same two bytes.
+    private static func classFor(_ orientation: Axis) -> String {
+        switch orientation {
+            case .vertical: return "timeline"
+            case .horizontal: return "timeline timeline--horizontal"
+        }
+    }
+
+    /// this component's own class for a shared step status — `pending` is the bare
+    /// base the 1.x `plain` case rendered; `done` forwards the pattern.
+    private static func classFor(_ status: StepStatus) -> String {
+        switch status {
+            case .pending: return ""
+            case .current: return "timeline__event--current"
+            case .completed: return "timeline__event--completed"
+            case .done: return "timeline__event--done"
+            case .error: return "timeline__event--error"
+        }
+    }
+
+    public init(events: [Event], orientation: Axis = .vertical) {
         self.events = events
         self.orientation = orientation
     }
@@ -1943,11 +1970,12 @@ public struct WebUITimeline: View {
     }
 
     public func render(into buffer: inout HTMLBuffer) {
-        let attributeText = " class=\"\(orientation.rawValue)\""
+        let attributeText = " class=\"\(Self.classFor(orientation))\""
         buffer.beginElement("div", attributeText)
         buffer.endOpenTag()
         for event in events {
-            let statusCls = event.status == .plain ? "" : " \(event.status.rawValue)"
+            let statusClass = Self.classFor(event.status)
+            let statusCls = statusClass.isEmpty ? "" : " \(statusClass)"
             buffer.append("<div class=\"timeline__event\(statusCls)\"><span class=\"timeline__dot\"></span>")
             buffer.append("<span class=\"timeline__time\">\(htmlEscape(event.time))</span>")
             buffer.append("<div class=\"timeline__title\">\(htmlEscape(event.title))</div>")

@@ -92,8 +92,13 @@ public enum Elevation: String, Sendable, CaseIterable {
 // MARK: - state families
 
 /// where a step sits in a multi-step flow.
+///
+/// `completed` and `done` are distinct, and the sheet says so: a wizard renders
+/// `.wizard__step--completed` (a passed step, in the flow) and
+/// `.wizard__step--done` (a finished one, success-coloured) as two rules. the
+/// four-value list could not express what the sheet already ships.
 public enum StepStatus: String, Sendable, CaseIterable {
-    case pending, current, done, error
+    case pending, current, completed, done, error
 }
 
 /// where an async load sits.
@@ -107,6 +112,32 @@ public enum LoadState: String, Sendable, CaseIterable {
 /// verified, and a form that conflates them shows a green tick on an empty field.
 public enum ValidationState: String, Sendable, CaseIterable {
     case none, success, warning, error
+}
+
+// the 1.x spellings each component used for its own state slot, kept as
+// deprecated aliases so a call site still compiles. aliases rather than cases,
+// so `allCases` is unchanged (the W1.2 precedent): the parameter *type* is the
+// shared enum now, so the old name has to resolve on the shared enum.
+extension ValidationState {
+    /// `normal` was the input's "no verdict" state.
+    @available(*, deprecated, renamed: "none")
+    public static var normal: ValidationState { .none }
+}
+extension LoadState {
+    /// `active` was PullRefresh's "loading" state.
+    @available(*, deprecated, renamed: "loading")
+    public static var active: LoadState { .loading }
+    /// `uploading` was Attachment's "loading" state.
+    @available(*, deprecated, renamed: "loading")
+    public static var uploading: LoadState { .loading }
+    /// `error` was Attachment's "failed" state.
+    @available(*, deprecated, renamed: "failed")
+    public static var error: LoadState { .failed }
+}
+extension StepStatus {
+    /// `plain` was the timeline/wizard's "no state" step.
+    @available(*, deprecated, renamed: "pending")
+    public static var plain: StepStatus { .pending }
 }
 
 /// where an editable value sits.
