@@ -196,6 +196,9 @@ let package = Package(
             dependencies: [
                 "WebUI",
                 "WebUIDesignSystem",
+                // the typed request/response model and the cookie types it
+                // carries (`HTTPResponse.cookies`) live on the shared leaf.
+                "WebUISharedCore",
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
                 .product(name: "NIOPosix", package: "swift-nio"),
@@ -208,6 +211,8 @@ let package = Package(
             name: "WebUIAuth",
             dependencies: [
                 "WebUI",
+                // the deprecated cookie re-export shims resolve here.
+                "WebUISharedCore",
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "RAW", package: "rawdog"),
                 .product(name: "RAW_sha256", package: "rawdog"),
@@ -502,6 +507,10 @@ let package = Package(
                 "WebUIShowcaseContent",
                 "WebUIServer",
                 "WebUIBlocks",
+                // the typed http model's header collection is nio's own
+                // `HTTPHeaders` (case-insensitive by construction), so the
+                // model tests link NIOHTTP1 directly.
+                .product(name: "NIOHTTP1", package: "swift-nio"),
                 // the surface pins reference the toolkit's public types (STABILITY.md
                 // change discipline).
                 "WebUIBuild",
@@ -542,6 +551,8 @@ let package = Package(
             dependencies: [
                 "WebUIAuth",
                 "WebUI",
+                // proves the deprecated shims are the moved shared types.
+                "WebUISharedCore",
             ]
         ),
         .testTarget(

@@ -29,12 +29,17 @@ struct CookieTests {
 		#expect(header.contains("; "))
 	}
 
-	@Test("expires renders as an rfc-1123 date")
+	@Test("expires renders as an rfc-1123 date from epoch seconds")
 	func expiresDate() throws {
-		let date = Date(timeIntervalSince1970: 0)
-		let cookie = HTTPCookie(name: "a", value: "b", attributes: .init(expires: date))
+		// `WebUIAuth` re-exports the shared cookie types; the file must not
+		// import `WebUISharedCore` itself (the unqualified name would become
+		// ambiguous), so the epoch annotation is spelled as the shared
+		// typealias's underlying `UInt64`.
+		let epoch: UInt64 = 1623233894 // Wed, 09 Jun 2021 10:18:14 GMT
+		let cookie = HTTPCookie(name: "a", value: "b", attributes: .init(expires: epoch))
 		let header = try cookie.setCookieHeaderValue()
-		#expect(header.contains("Expires=Thu, 01 Jan 1970 00:00:00 GMT"))
+		#expect(header.contains("Expires=Wed, 09 Jun 2021 10:18:14 GMT"))
+		#expect(try HTTPCookie(name: "a", value: "b", attributes: .init(expires: 0)).setCookieHeaderValue().contains("Expires=Thu, 01 Jan 1970 00:00:00 GMT"))
 	}
 
 	@Test("__Host- requires secure, no domain, and path /")
