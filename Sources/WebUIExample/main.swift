@@ -167,7 +167,7 @@ struct DashboardDocument: View {
 		".demo-form { display: flex; flex-direction: column; gap: var(--space-3); }",
 		".demo-actions { display: flex; align-items: center; gap: var(--space-2); }",
 		".demo-routes { display: grid; grid-template-columns: auto 1fr; gap: var(--space-2) var(--space-4); font-size: 14px; }",
-		".demo-routes code { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }",
+		".demo-routes__label { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }",
 		".demo-count { font-variant-numeric: tabular-nums; font-weight: 600; }",
 		".demo-log { margin: 0; padding: var(--space-3); background: var(--color-surface-muted, #f3f4f6); border-radius: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 13px; min-height: 4em; white-space: pre-wrap; word-break: break-all; }",
 	]
@@ -185,14 +185,14 @@ func renderDashboardBody(state: DemoState) -> String {
 		WebUICard(elevation: .flat) {
 			Heading("The routes", level: .h3)
 			Div(class: "demo-routes") {
-				Text("GET  /")
-				Text("the dashboard you are reading")
-				Text("POST /login")
-				Text("a real form POST, parsed via FormValues, answered with a 303 redirect")
-				Text("POST /upload")
-				Text("multipart upload, persisted to the temp dir, answered with a byte + sha-256 proof")
-				Text("GET  /events")
-				Text("a server-sent-event feed of three events")
+				Span(class: "demo-routes__label") { Text("GET  /") }
+				Span { Text("the dashboard you are reading") }
+				Span(class: "demo-routes__label") { Text("POST /login") }
+				Span { Text("a real form POST, parsed via FormValues, answered with a 303 redirect") }
+				Span(class: "demo-routes__label") { Text("POST /upload") }
+				Span { Text("multipart upload, persisted to the temp dir, answered with a byte + sha-256 proof") }
+				Span(class: "demo-routes__label") { Text("GET  /events") }
+				Span { Text("a server-sent-event feed of three events") }
 			}
 		}
 		Div(class: "demo-grid") {
