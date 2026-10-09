@@ -246,6 +246,22 @@ frozen surface is a mistake:
    false guarantee. handler and render failures degrade gracefully (fallback
    markup, a 500 with the host's error page); traps take the process down —
    that is the contract.
+9. **numeric/date formatting is host-side (w4.5).** `WebUIStrings` is the
+   framework's own rendered strings — labels, aria names, default
+   placeholders, toolbar chrome — resolved through the render context
+   (`RenderContext.localized`, see `Localization.swift`): a page sets
+   strings/locale/direction once (on the context, or declared on
+   `WebUIDocument`, whose `locale` feeds `<html lang>` and whose `direction`
+   feeds `<html dir>`) and every component in the pass reads the same
+   catalog. a host overrides any subset; everything it omits keeps the
+   english default, and the english defaults are pinned by the showcase byte
+   gate — a reworded default is a regression, not a pin to update.
+   anything *formatted* — dates, times, numbers, currencies, plurals,
+   weekday/month names — is deliberately outside the catalog: the framework
+   renders strings, formatting belongs to the host, and no formatter ships.
+   initializer default strings (a field's placeholder, a rail's title) keep
+   their declared value at the call site rather than being re-resolved per
+   render; a host localizing one passes the catalog's value explicitly.
 
 ## change discipline
 

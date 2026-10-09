@@ -4,6 +4,24 @@ all notable changes to this project are documented here.
 
 ## [unreleased]
 
+### localization and direction (w4.5)
+
+- the framework's own rendered strings — labels, aria names, default
+  placeholders, toolbar chrome — now live in one catalog (`WebUIStrings`,
+  `Sources/WebUICore/Localization.swift`) and resolve through the render
+  context: a page sets strings/locale/direction once and every component in
+  the pass reads the same catalog. `WebUIDocument` declares `locale` (feeds
+  `<html lang>`) and `direction` (feeds `<html dir>`); the english defaults
+  are byte-identical to the pre-i18n output (showcase byte pin unchanged),
+  and a host overrides any subset. numeric/date formatting stays host-side —
+  recorded as a limit in `STABILITY.md`.
+- `LocalizedEnvironment` is read through `RenderContext`; `WebUILocalization`
+  is the default (english/en/ltr). ships an arabic example catalog
+  (`WebUIStrings.arabic`).
+- tests: `LocalizationTests` (defaults pinned, english render outside a
+  context, context threading, subset override, arabic render, and
+  locale/direction on the document).
+
 ### error boundaries (w4.2)
 
 - `ErrorBoundary<Content, Fallback>` answers a failing handler in its subtree
