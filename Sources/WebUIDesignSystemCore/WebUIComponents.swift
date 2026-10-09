@@ -2257,12 +2257,12 @@ public struct WebUIAspectRatio: View {
 /// sheet's stroke-dashoffset technique on a 36-unit viewBox, so the
 /// circumference is 100 and the dash offset reads directly as a percentage.
 public struct WebUICircularProgress: View {
-    public enum Tone: String, Sendable {
-        case primary = ""
-        case success = "ring--success"
-        case warning = "ring--warning"
-        case danger = "ring--danger"
-    }
+    /// the 1.x nested `Tone` — the framework's tone slot now. the shared type
+    /// carries seven cases against this one's four, so the three it could not
+    /// express (neutral, secondary, info) forward the ring's own pattern rather
+    /// than being unrepresentable.
+    @available(*, deprecated, renamed: "WebUIDesignSystemCore.Tone")
+    public typealias Tone = WebUIDesignSystemCore.Tone
 
     @available(*, deprecated, renamed: "ControlSize")
     public typealias Size = ControlSize
@@ -2285,6 +2285,21 @@ public struct WebUICircularProgress: View {
             case .md: return ""
             case .lg: return "ring--lg"
             case .xl: return "ring--xl"
+        }
+    }
+
+    /// this component's own class for a shared tone — the 1.x nested enum's four
+    /// fragments, byte for byte (`primary` was the empty string); the three the
+    /// shared slot adds forward the ring's pattern.
+    private static func classFor(_ tone: Tone) -> String {
+        switch tone {
+            case .primary: return ""
+            case .neutral: return "ring--neutral"
+            case .secondary: return "ring--secondary"
+            case .info: return "ring--info"
+            case .success: return "ring--success"
+            case .warning: return "ring--warning"
+            case .danger: return "ring--danger"
         }
     }
 
@@ -2314,7 +2329,8 @@ public struct WebUICircularProgress: View {
         let clamped = value < 0 ? 0 : (value > 1 ? 1 : value)
         var classes = ["ring"]
         if !Self.classFor(size).isEmpty { classes.append(Self.classFor(size)) }
-        if !tone.rawValue.isEmpty { classes.append(tone.rawValue) }
+        let toneClass = Self.classFor(tone)
+        if !toneClass.isEmpty { classes.append(toneClass) }
         if indeterminate { classes.append("ring--indeterminate") }
         var attributeText = " class=\"\(classes.joined(separator: " "))\" role=\"progressbar\""
         attributeText += " aria-label=\"\(htmlEscape(ariaLabel))\""
