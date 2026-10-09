@@ -61,9 +61,9 @@ public struct WebUIIcon: View {
 		let classes = iconClass(for: size)
 		var aria: String
 		if let title, !title.isEmpty {
-			aria = " role=\"img\" aria-label=\"\(htmlEscape(title))\""
+			aria = Aria.attributes([.label(title)], role: .img)
 		} else {
-			aria = " aria-hidden=\"true\""
+			aria = Aria.hidden(.yes).render()
 		}
 		buffer.append("<svg class=\"\(classes)\" viewBox=\"0 0 24 24\"\(iconDimensionAttributes(for: size)) fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\"\(aria)>\(name.body)</svg>")
 	}
@@ -117,9 +117,9 @@ public struct WebUIIconCustom: View {
 		let classes = iconClass(for: size)
 		var aria: String
 		if let title, !title.isEmpty {
-			aria = " role=\"img\" aria-label=\"\(htmlEscape(title))\""
+			aria = Aria.attributes([.label(title)], role: .img)
 		} else {
-			aria = " aria-hidden=\"true\""
+			aria = Aria.hidden(.yes).render()
 		}
 		let dataIcon = " data-icon=\"\(htmlEscape(name))\""
 		buffer.append("<svg class=\"\(classes)\" viewBox=\"0 0 24 24\"\(iconDimensionAttributes(for: size)) fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\"\(dataIcon)\(aria)>\(body)</svg>")

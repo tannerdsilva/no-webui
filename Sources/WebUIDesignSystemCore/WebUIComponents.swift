@@ -186,7 +186,7 @@ public struct WebUIButton: View {
         attributeText += wireAttrs
         attributeText += " class=\"\(classes)\""
         if disabled { attributeText += " disabled" }
-        if loading { attributeText += " aria-busy=\"true\"" }
+        if loading { attributeText += Aria.busy(.yes).render() }
         buffer.beginElement("button", attributeText)
         buffer.endOpenTag()
         if loading {
@@ -635,7 +635,7 @@ public struct WebUIAlert: View, Dismissible {    @available(*, deprecated, renam
 
     public func render(into buffer: inout HTMLBuffer) {
         let dismissal = makeDismissal(ariaLabel: RenderContext.currentStrings.dismiss)
-        var attributeText = " class=\"alert \(Self.classFor(tone))\" role=\"alert\""
+        var attributeText = " class=\"alert \(Self.classFor(tone))\"" + AriaRole.alert.render()
         if let elementID = dismissal.elementID ?? id {
             attributeText += " id=\"\(htmlEscape(elementID))\""
         }
@@ -694,7 +694,7 @@ public struct WebUITabs: View {
         let me = base.map { ElementRef.stable($0) } ?? ElementRef.stable("webui-tabs")
         var html = "<nav class=\"tabs\""
         if let id { html += " id=\"\(htmlEscape(id))\"" }
-        html += " role=\"tablist\">"
+        html += AriaRole.tablist.render() + ">"
         for tab in tabs {
             let active = tab.id == activeTab ? " tabs__tab--active" : ""
             var route = ""
@@ -704,7 +704,7 @@ public struct WebUITabs: View {
                 route = controlAttributes(id: "\(base)-\(tabID)", handler: { _ in await handler(me, tabID) })
             }
             let idAttr = base.map { " id=\"\(htmlEscape($0))-\(htmlEscape(tab.id))\"" } ?? ""
-            html += "<button class=\"tabs__tab\(active)\" role=\"tab\" aria-selected=\"\(tab.id == activeTab ? "true" : "false")\" data-tab=\"\(htmlEscape(tab.id))\"\(idAttr)\(route)>\(htmlEscape(tab.label))</button>"
+            html += "<button class=\"tabs__tab\(active)\"\(Aria.attributes([.selected(tab.id == activeTab ? .yes : .no)], role: .tab)) data-tab=\"\(htmlEscape(tab.id))\"\(idAttr)\(route)>\(htmlEscape(tab.label))</button>"
         }
         html += "</nav>"
         buffer.append(html)
@@ -840,7 +840,7 @@ public struct WebUIProgress: View {    @available(*, deprecated, renamed: "Tone"
     public func render(into buffer: inout HTMLBuffer) {
         let classes = "progress \(Self.classFor(tone)) \(Self.classFor(size))"
 
-        let attributeText = " class=\"\(classes)\" role=\"progressbar\" aria-valuenow=\"\(Int(value * 100))\" aria-valuemin=\"0\" aria-valuemax=\"100\""
+        let attributeText = " class=\"\(classes)\"" + Aria.attributes([.valuenow(Int(value * 100)), .valuemin(0), .valuemax(100)], role: .progressbar)
         buffer.beginElement("div", attributeText)
         buffer.endOpenTag()
         buffer.append("<div class=\"progress__bar\" style=\"width: \(Int(value * 100))%\">")
@@ -905,7 +905,7 @@ public struct WebUISkeleton: View {
             var html = "<div class=\"skeleton \(Self.classFor(shape))\""
             if let width { html += " style=\"width:\(width)\"" }
             if let height { html += " style=\"height:\(height)\"" }
-            html += " aria-hidden=\"true\"></div>"
+            html += Aria.hidden(.yes).render() + "></div>"
             result += html
         }
         buffer.append(result)
@@ -973,7 +973,7 @@ public struct WebUIToast: View, Dismissible {    @available(*, deprecated, renam
 
     public func render(into buffer: inout HTMLBuffer) {
         let dismissal = makeDismissal(ariaLabel: RenderContext.currentStrings.dismiss)
-        var attributeText = " class=\"toast \(Self.classFor(tone))\" role=\"alert\""
+        var attributeText = " class=\"toast \(Self.classFor(tone))\"" + AriaRole.alert.render()
         if let elementID = dismissal.elementID ?? id {
             attributeText += " id=\"\(htmlEscape(elementID))\""
         }
@@ -1023,7 +1023,7 @@ public struct WebUIModal: View, Dismissible {
         }
         buffer.beginElement("div", attributeText)
         buffer.endOpenTag()
-        buffer.append("<div class=\"modal\" role=\"dialog\" aria-modal=\"true\" aria-labelledby=\"\(htmlEscape(id ?? ""))-title\">")
+        buffer.append("<div class=\"modal\"" + Aria.attributes([.modal(.yes), .labelledby(htmlEscape(id ?? "") + "-title")], role: .dialog) + ">")
         buffer.append("<div class=\"modal__header\">")
         buffer.append("<h2 class=\"modal__title\" id=\"\(htmlEscape(id ?? ""))-title\">\(htmlEscape(title))</h2>")
         buffer.append(dismissal.buttonHTML)
@@ -1211,8 +1211,8 @@ public struct WebUITable: View {
         let me = ElementRef.stable(base)
         let wired = interactiveWanted && id != nil
 
-        let sortArrow = "<svg class=\"sort__arrow\" viewBox=\"0 0 10 10\" width=\"10\" height=\"10\" fill=\"none\" aria-hidden=\"true\"><path d=\"M2 6.5L5 3.5l3 3\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\"/></svg>"
-        let expandIcon = "<svg class=\"table__expand-icon\" viewBox=\"0 0 10 10\" width=\"10\" height=\"10\" fill=\"none\" aria-hidden=\"true\"><path d=\"M3.5 2.5L6.5 5l-3 2.5\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\"/></svg>"
+        let sortArrow = "<svg class=\"sort__arrow\" viewBox=\"0 0 10 10\" width=\"10\" height=\"10\" fill=\"none\"" + Aria.hidden(.yes).render() + "><path d=\"M2 6.5L5 3.5l3 3\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\"/></svg>"
+        let expandIcon = "<svg class=\"table__expand-icon\" viewBox=\"0 0 10 10\" width=\"10\" height=\"10\" fill=\"none\"" + Aria.hidden(.yes).render() + "><path d=\"M3.5 2.5L6.5 5l-3 2.5\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\"/></svg>"
 
         func alignmentClass(_ index: Int) -> String? {
             guard index < alignments.count else { return nil }
@@ -1243,10 +1243,10 @@ public struct WebUITable: View {
                 let selectAllAttrs = wired
                     ? controlAttributes(id: "\(base)-select-all", handler: selectAllHandler)
                     : ""
-                html += "<th class=\"table__select-col align-center\" scope=\"col\"><span class=\"table__select\" id=\"\(htmlEscape(base))-select-all\" role=\"checkbox\" aria-checked=\"\(state)\" aria-label=\"\(RenderContext.currentStrings.selectAllRows)\" tabindex=\"0\"\(selectAllAttrs)></span></th>"
+                html += "<th class=\"table__select-col align-center\" scope=\"col\"><span class=\"table__select\" id=\"\(htmlEscape(base))-select-all\"" + Aria.attributes([.checked(AriaChecked(rawValue: state) ?? .no), .label(RenderContext.currentStrings.selectAllRows)], role: .checkbox) + " tabindex=\"0\"\(selectAllAttrs)></span></th>"
             }
             if hasExpand {
-                html += "<th class=\"table__expand-col\" aria-hidden=\"true\"></th>"
+                html += "<th class=\"table__expand-col\"" + Aria.hidden(.yes).render() + "></th>"
             }
             for (i, h) in headers.enumerated() where !hiddenColumns.contains(i) {
                 let align = alignmentClass(i)
@@ -1262,7 +1262,7 @@ public struct WebUITable: View {
                 if let sort, sort.column == i {
                     let aria = sort.direction == .ascending ? "ascending" : "descending"
                     let desc = sort.direction == .descending ? " sort--desc" : ""
-                    html += "<th class=\"\(sortPrefix)\" aria-sort=\"\(aria)\">"
+                    html += "<th class=\"\(sortPrefix)\"" + Aria.sort(AriaSort(rawValue: aria) ?? .none).render() + ">"
                     html += "<span class=\"sort sort--active\(desc)\" id=\"\(htmlEscape(base))-sort-\(i)\"\(sortAttrs)>\(htmlEscape(h))\(sortArrow)</span>"
                     html += "</th>"
                 } else if sortableColumns.contains(i) {
@@ -1307,7 +1307,7 @@ public struct WebUITable: View {
                     let selectAttrs = wired
                         ? controlAttributes(id: "\(base)-select-\(rowId)", handler: selectHandler)
                         : ""
-                    html += "<td class=\"table__select-col align-center\"><span class=\"table__select\" id=\"\(htmlEscape(base))-select-\(htmlEscape(rowId))\" role=\"checkbox\" aria-checked=\"\(selected)\" aria-label=\"\(RenderContext.currentStrings.selectRow(htmlEscape(rowId)))\" tabindex=\"0\"\(selectAttrs)></span></td>"
+                    html += "<td class=\"table__select-col align-center\"><span class=\"table__select\" id=\"\(htmlEscape(base))-select-\(htmlEscape(rowId))\"" + Aria.attributes([.checked(selected ? .yes : .no), .label(RenderContext.currentStrings.selectRow(rowId))], role: .checkbox) + " tabindex=\"0\"\(selectAttrs)></span></td>"
                 }
                 if hasExpand {
                     let canExpand = rowDetails?[rowId] != nil
@@ -1320,9 +1320,9 @@ public struct WebUITable: View {
                         ? controlAttributes(id: "\(base)-expand-\(rowId)", handler: expandHandler)
                         : ""
                     if canExpand {
-                        html += "<td class=\"table__expand-col\"><button type=\"button\" class=\"table__expand-btn\" id=\"\(htmlEscape(base))-expand-\(htmlEscape(rowId))\" aria-expanded=\"\(expanded)\" aria-label=\"\(htmlEscape(RenderContext.currentStrings.expandRow(rowId)))\"\(expandAttrs)>\(expandIcon)</button></td>"
+                        html += "<td class=\"table__expand-col\"><button type=\"button\" class=\"table__expand-btn\" id=\"\(htmlEscape(base))-expand-\(htmlEscape(rowId))\"" + Aria.attributes([.expanded(expanded ? .yes : .no), .label(RenderContext.currentStrings.expandRow(rowId))]) + "\(expandAttrs)>\(expandIcon)</button></td>"
                     } else {
-                        html += "<td class=\"table__expand-col\"><button type=\"button\" class=\"table__expand-btn\" id=\"\(htmlEscape(base))-expand-\(htmlEscape(rowId))\" aria-disabled=\"true\" disabled aria-label=\"\(htmlEscape(RenderContext.currentStrings.expandRow(rowId)))\"\(expandAttrs)>\(expandIcon)</button></td>"
+                        html += "<td class=\"table__expand-col\"><button type=\"button\" class=\"table__expand-btn\" id=\"\(htmlEscape(base))-expand-\(htmlEscape(rowId))\" aria-disabled=\"true\" disabled" + Aria.label(RenderContext.currentStrings.expandRow(rowId)).render() + "\(expandAttrs)>\(expandIcon)</button></td>"
                     }
                 }
                 for (i, cell) in row.enumerated() where !hiddenColumns.contains(i) {
@@ -1532,8 +1532,8 @@ public struct WebUISpinner: View {
     }
 
     public func render(into buffer: inout HTMLBuffer) {
-        var attributeText = " class=\"spinner \(Self.classFor(size))\" role=\"status\""
-        if let label { attributeText += " aria-label=\"\(htmlEscape(label))\"" }
+        var attributeText = " class=\"spinner \(Self.classFor(size))\"" + AriaRole.status.render()
+        if let label { attributeText += Aria.label(label).render() }
         buffer.beginElement("div", attributeText)
         buffer.endOpenTag()
         buffer.append("<div class=\"spinner__ring\"></div>")
@@ -1574,7 +1574,7 @@ public struct WebUITooltip: View {
         for child in children {
             child.render(into: &buffer)
         }
-        buffer.append("<div class=\"tooltip \(position.rawValue)\" role=\"tooltip\">")
+        buffer.append("<div class=\"tooltip \(position.rawValue)\"" + AriaRole.tooltip.render() + ">")
         buffer.append("<span class=\"tooltip__arrow\"></span>")
         buffer.append("<span class=\"tooltip__text\">\(htmlEscape(text))</span>")
         buffer.append("</div>")
@@ -1650,7 +1650,7 @@ public struct WebUIStat: View {
                 case .down: arrowPath = "M2 3.5L5 6.5l3-3"; trendClass = "stat__trend--down"
                 case .flat: arrowPath = "M2 5h6"; trendClass = "stat__trend--flat"
             }
-            let arrow = "<svg class=\"stat__trend-arrow\" viewBox=\"0 0 10 10\" width=\"10\" height=\"10\" fill=\"none\" aria-hidden=\"true\"><path d=\"\(arrowPath)\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\"/></svg>"
+            let arrow = "<svg class=\"stat__trend-arrow\" viewBox=\"0 0 10 10\" width=\"10\" height=\"10\" fill=\"none\"" + Aria.hidden(.yes).render() + "><path d=\"\(arrowPath)\" stroke=\"currentColor\" stroke-width=\"1.5\" stroke-linecap=\"butt\" stroke-linejoin=\"miter\"/></svg>"
             buffer.append("<span class=\"stat__row\">")
             buffer.append("<span class=\"stat__trend \(trendClass)\">\(arrow)\(htmlEscape(trend))</span>")
             if let compare {
@@ -1682,7 +1682,7 @@ public struct WebUIStat: View {
         }
         let line = coords.joined(separator: " ")
         let area = "\(coords.first ?? "0,16") \(line) 100,32 0,32"
-        return "<svg viewBox=\"0 0 100 32\" preserveAspectRatio=\"none\" aria-hidden=\"true\">"
+        return "<svg viewBox=\"0 0 100 32\" preserveAspectRatio=\"none\"" + Aria.hidden(.yes).render() + ">"
             + "<polygon class=\"stat__spark-area\" points=\"\(area)\"/>"
             + "<polyline class=\"stat__spark-line\" points=\"\(line)\"/></svg>"
     }
@@ -1738,7 +1738,7 @@ public struct WebUIPagination: View {
         let wired = interactiveWanted && id != nil
         let me = id.map { ElementRef.stable($0) } ?? ElementRef.stable("webui-pagination")
 
-        let attributeText = " class=\"pagination\" aria-label=\"\(RenderContext.currentStrings.pagination)\""
+        let attributeText = " class=\"pagination\"" + Aria.label(RenderContext.currentStrings.pagination).render()
         buffer.beginElement("nav", attributeText)
         buffer.endOpenTag()
         let prevIdAttr = pid("prev").map { " id=\"\($0)\"" } ?? ""
@@ -1751,7 +1751,7 @@ public struct WebUIPagination: View {
         let prevRoute = wired
             ? controlAttributes(id: base.map { "\($0)-prev" } ?? "", handler: prevHandler)
             : ""
-        buffer.append("<button class=\"pagination__btn\"\(prevIdAttr) type=\"button\" aria-label=\"\(RenderContext.currentStrings.previousPage)\"\(prevDisabled)\(prevRoute)>&#8249;</button>")
+        buffer.append("<button class=\"pagination__btn\"\(prevIdAttr) type=\"button\"" + Aria.label(RenderContext.currentStrings.previousPage).render() + "\(prevDisabled)\(prevRoute)>&#8249;</button>")
         for item in pageWindow(page: page, pages: pages) {
             switch item {
             case .ellipsis:
@@ -1760,7 +1760,7 @@ public struct WebUIPagination: View {
                 let isActive = n == page
                 let cls = isActive ? "pagination__btn pagination__btn--active" : "pagination__btn"
                 let idAttr = pid("page-\(n)").map { " id=\"\($0)\"" } ?? ""
-                let current = isActive ? " aria-current=\"page\"" : ""
+                let current = isActive ? Aria.current(.page).render() : ""
                 var pageHandler: EventHandler? = nil
                 if wired, let onPageChange {
                     let h: @Sendable (ElementRef, Int) async -> [FragmentUpdate] = onPageChange
@@ -1782,7 +1782,7 @@ public struct WebUIPagination: View {
         let nextRoute = wired
             ? controlAttributes(id: base.map { "\($0)-next" } ?? "", handler: nextHandler)
             : ""
-        buffer.append("<button class=\"pagination__btn\"\(nextIdAttr) type=\"button\" aria-label=\"\(RenderContext.currentStrings.nextPage)\"\(nextDisabled)\(nextRoute)>&#8250;</button>")
+        buffer.append("<button class=\"pagination__btn\"\(nextIdAttr) type=\"button\"" + Aria.label(RenderContext.currentStrings.nextPage).render() + "\(nextDisabled)\(nextRoute)>&#8250;</button>")
         if let rowsPerPage {
             let rowsIdAttr = pid("rows").map { " id=\"\($0)\"" } ?? ""
             var rowsHandler: EventHandler? = nil
@@ -1974,8 +1974,8 @@ public struct WebUITree: View {
     public func render(into buffer: inout HTMLBuffer) {
         let interactive = onToggle != nil && id != nil
         var html = interactive
-            ? "<div class=\"tree tree--interactive\" role=\"tree\""
-            : "<div class=\"tree\" role=\"tree\""
+            ? "<div class=\"tree tree--interactive\"" + AriaRole.tree.render()
+            : "<div class=\"tree\"" + AriaRole.tree.render()
         if let id = id {
             html += " id=\"" + htmlEscape(id) + "\""
         }
@@ -1999,17 +1999,17 @@ public struct WebUITree: View {
         if let base = id {
             rowAttrs += " id=\"" + htmlEscape(base) + "-node-" + htmlEscape(node.id) + "\""
         }
-        rowAttrs += " role=\"treeitem\""
-        rowAttrs += " aria-level=\"" + String(level) + "\""
+        rowAttrs += AriaRole.treeitem.render()
+        rowAttrs += Aria.level(level).render()
         if hasChildren {
-            rowAttrs += " aria-expanded=\"" + String(isOpen) + "\""
+            rowAttrs += Aria.expanded(isOpen ? .yes : .no).render()
         }
         if interactive {
             rowAttrs += " tabindex=\"0\""
         }
 
         var html = "<div class=\"" + nodeCls + "\""
-        if hasChildren { html += " role=\"group\"" }
+        if hasChildren { html += AriaRole.group.render() }
         html += ">"
         html += "<div class=\"" + rowCls + "\"" + rowAttrs + ">"
         html += "<span class=\"" + caretCls + "\"></span>"
@@ -2086,7 +2086,7 @@ public struct WebUIBreadcrumb: View {
         func itemHTML(_ item: Item, index: Int, isCurrent: Bool) -> String {
             let idAttr = isCurrent ? "" : base.map { " id=\"\($0)-item-\(index)\"" } ?? ""
             if isCurrent {
-                return "<span class=\"breadcrumb__item breadcrumb__item--current\" aria-current=\"page\">\(htmlEscape(item.label))</span>"
+                return "<span class=\"breadcrumb__item breadcrumb__item--current\"" + Aria.current(.page).render() + ">\(htmlEscape(item.label))</span>"
             }
             if let href = item.href {
                 // canonical URL policy: a blocked scheme degrades to plain
@@ -2099,10 +2099,10 @@ public struct WebUIBreadcrumb: View {
             return "<span class=\"breadcrumb__item\"\(idAttr)>\(htmlEscape(item.label))</span>"
         }
         func sepHTML() -> String {
-            "<span class=\"breadcrumb__separator\" aria-hidden=\"true\">\(htmlEscape(sep))</span>"
+            "<span class=\"breadcrumb__separator\"" + Aria.hidden(.yes).render() + ">\(htmlEscape(sep))</span>"
         }
 
-        let attributeText = " class=\"breadcrumb\(slashCls)\" aria-label=\"\(RenderContext.currentStrings.breadcrumb)\""
+        let attributeText = " class=\"breadcrumb\(slashCls)\"" + Aria.label(RenderContext.currentStrings.breadcrumb).render()
         buffer.beginElement("nav", attributeText)
         buffer.endOpenTag()
         // head (links)
@@ -2113,7 +2113,7 @@ public struct WebUIBreadcrumb: View {
         // collapsed middle
         if collapsed {
             let ellipsisId = base.map { " id=\"\($0)-ellipsis\"" } ?? ""
-            buffer.append("<button type=\"button\" class=\"breadcrumb__ellipsis\"\(ellipsisId) aria-label=\"\(RenderContext.currentStrings.showOmittedItems)\">…</button>")
+            buffer.append("<button type=\"button\" class=\"breadcrumb__ellipsis\"\(ellipsisId)" + Aria.label(RenderContext.currentStrings.showOmittedItems).render() + ">…</button>")
             buffer.append(sepHTML())
         }
         // tail (last N−1 as links, final as current)
@@ -2264,14 +2264,14 @@ public struct WebUICircularProgress: View {
         let toneClass = Self.classFor(tone)
         if !toneClass.isEmpty { classes.append(toneClass) }
         if indeterminate { classes.append("ring--indeterminate") }
-        var attributeText = " class=\"\(classes.joined(separator: " "))\" role=\"progressbar\""
-        attributeText += " aria-label=\"\(htmlEscape(ariaLabel))\""
+        var attributeText = " class=\"\(classes.joined(separator: " "))\"" + AriaRole.progressbar.render()
+        attributeText += Aria.label(ariaLabel).render()
         if !indeterminate {
-            attributeText += " aria-valuemin=\"0\" aria-valuemax=\"100\" aria-valuenow=\"\(Int((clamped * 100).rounded()))\""
+            attributeText += Aria.attributes([.valuemin(0), .valuemax(100), .valuenow(Int((clamped * 100).rounded()))])
         }
         buffer.beginElement("div", attributeText)
         buffer.endOpenTag()
-        buffer.append("<svg viewBox=\"0 0 36 36\" aria-hidden=\"true\">")
+        buffer.append("<svg viewBox=\"0 0 36 36\"" + Aria.hidden(.yes).render() + ">")
         buffer.append("<circle class=\"ring__track\" cx=\"18\" cy=\"18\" r=\"15.915\"/>")
         if indeterminate {
             buffer.append("<circle class=\"ring__fill\" cx=\"18\" cy=\"18\" r=\"15.915\"/>")

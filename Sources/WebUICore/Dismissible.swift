@@ -126,7 +126,7 @@ public extension Dismissible {
             }
             return Dismissal(
                 elementID: nil,
-                buttonHTML: "<button class=\"\(cls)\" \(dismissMarker) aria-label=\"\(ariaLabel)\">&times;</button>"
+                buttonHTML: "<button class=\"\(cls)\" \(dismissMarker)\(Aria.label(ariaLabel).render())>&times;</button>"
             )
         }
         let buttonID = context.nextComponentID()
@@ -137,7 +137,7 @@ public extension Dismissible {
         }, for: buttonID)
         return Dismissal(
             elementID: elementID,
-            buttonHTML: "<button class=\"\(cls)\" \(dismissMarker) data-component-id=\"\(buttonID.value)\" data-event=\"click\" aria-label=\"\(ariaLabel)\">&times;</button>"
+            buttonHTML: "<button class=\"\(cls)\" \(dismissMarker) data-component-id=\"\(buttonID.value)\" data-event=\"click\"\(Aria.label(ariaLabel).render())>&times;</button>"
         )
     }
 }

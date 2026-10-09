@@ -73,6 +73,7 @@ swift package --disable-sandbox plugin serve        # host the real server on :9
 swift package --disable-sandbox plugin smoke        # asset-integrity + page-structure gate
 swift package --disable-sandbox plugin fullstack-smoke  # live WebSocket round-trip gate
 node designer/browser-smoke.mjs                     # headless-Chromium layout gate
+node designer/a11y-audit.mjs                        # six-rule accessibility gate (raw http, no browser)
 swift package plugin showcase --allow-writing-to-package-directory  # refresh showcase.html
 ```
 
@@ -88,6 +89,10 @@ swift package plugin showcase --allow-writing-to-package-directory  # refresh sh
   invariants (left-anchored fills, label placement, no console errors). you
   need `node` + `playwright` for this one; it writes a screenshot to
   `.smoke/browser.png`.
+- `a11y-audit` fetches the showcase and every block over raw http and runs the
+  same six rules the Swift `A11yAudit` applies (button/image/control names,
+  heading order, role-required aria): the framework's pages must ship zero
+  findings. no browser, no screenshots, nothing patched.
 - `showcase` regenerates `previews/showcase.html` — the full reference page —
   from the current Swift sources and embedded assets.
 
