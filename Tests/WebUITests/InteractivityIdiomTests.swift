@@ -51,6 +51,37 @@ private func sugar(for event: HTMLEvent, _ handler: @escaping EventHandler) -> S
         case .blur:      return Text("x").onBlur(perform: handler).renderThroughBuffer()
         case .focusin:   return Text("x").onFocusIn(perform: handler).renderThroughBuffer()
         case .focusout:  return Text("x").onFocusOut(perform: handler).renderThroughBuffer()
+        case .pointerdown: return Text("x").onPointerDown(perform: handler).renderThroughBuffer()
+        case .pointermove: return Text("x").onPointerMove(perform: handler).renderThroughBuffer()
+        case .pointerup:   return Text("x").onPointerUp(perform: handler).renderThroughBuffer()
+        case .pointercancel: return Text("x").onPointerCancel(perform: handler).renderThroughBuffer()
+        case .pointerenter:  return Text("x").onPointerEnter(perform: handler).renderThroughBuffer()
+        case .pointerleave:  return Text("x").onPointerLeave(perform: handler).renderThroughBuffer()
+        case .touchstart: return Text("x").onTouchStart(perform: handler).renderThroughBuffer()
+        case .touchmove:  return Text("x").onTouchMove(perform: handler).renderThroughBuffer()
+        case .touchend:   return Text("x").onTouchEnd(perform: handler).renderThroughBuffer()
+        case .dragstart:  return Text("x").onDragStart(perform: handler).renderThroughBuffer()
+        case .drag:       return Text("x").onDrag(perform: handler).renderThroughBuffer()
+        case .dragend:    return Text("x").onDragEnd(perform: handler).renderThroughBuffer()
+        case .dragenter:  return Text("x").onDragEnter(perform: handler).renderThroughBuffer()
+        case .dragover:   return Text("x").onDragOver(perform: handler).renderThroughBuffer()
+        case .dragleave:  return Text("x").onDragLeave(perform: handler).renderThroughBuffer()
+        case .drop:       return Text("x").onDrop(perform: handler).renderThroughBuffer()
+        case .copy:       return Text("x").onCopy(perform: handler).renderThroughBuffer()
+        case .cut:        return Text("x").onCut(perform: handler).renderThroughBuffer()
+        case .paste:      return Text("x").onPaste(perform: handler).renderThroughBuffer()
+        case .wheel:      return Text("x").onWheel(perform: handler).renderThroughBuffer()
+        case .scroll:     return Text("x").onScroll(perform: handler).renderThroughBuffer()
+        case .dblclick:   return Text("x").onDoubleClick(perform: handler).renderThroughBuffer()
+        case .contextmenu: return Text("x").onContextMenu(perform: handler).renderThroughBuffer()
+        case .animationend: return Text("x").onAnimationEnd(perform: handler).renderThroughBuffer()
+        case .transitionend: return Text("x").onTransitionEnd(perform: handler).renderThroughBuffer()
+        case .play:       return Text("x").onPlay(perform: handler).renderThroughBuffer()
+        case .pause:      return Text("x").onPause(perform: handler).renderThroughBuffer()
+        case .ended:      return Text("x").onEnded(perform: handler).renderThroughBuffer()
+        case .timeupdate: return Text("x").onTimeUpdate(perform: handler).renderThroughBuffer()
+        case .loadedmetadata: return Text("x").onLoadedMetadata(perform: handler).renderThroughBuffer()
+        case .error:      return Text("x").onError(perform: handler).renderThroughBuffer()
         case .custom:    return Text("x").on(event, perform: handler).renderThroughBuffer()
         }
     }
@@ -67,6 +98,15 @@ struct InteractivityIdiomTests {
         .mouseover, .mouseout, .mousedown, .mouseup,
         .keydown, .keyup, .keypress,
         .focus, .blur, .focusin, .focusout,
+        // the wave-4 event deck (W4.1)
+        .pointerdown, .pointermove, .pointerup, .pointercancel, .pointerenter, .pointerleave,
+        .touchstart, .touchmove, .touchend,
+        .dragstart, .drag, .dragend, .dragenter, .dragover, .dragleave, .drop,
+        .copy, .cut, .paste,
+        .wheel, .scroll,
+        .dblclick, .contextmenu,
+        .animationend, .transitionend,
+        .play, .pause, .ended, .timeupdate, .loadedmetadata, .error,
     ]
 
     @Test("every named HTMLEvent case has exactly one modifier spelling")
@@ -79,9 +119,9 @@ struct InteractivityIdiomTests {
                 "\(event.rawValue) has no modifier: \(html)"
             )
         }
-        // 15 in the enum today. if a case is added, `sugar` stops compiling; if one
+        // 45 in the enum today. if a case is added, `sugar` stops compiling; if one
         // is added to the enum AND to `sugar` but forgotten here, this fails.
-        #expect(Self.namedCases.count == 15, "the event vocabulary changed size — update this list")
+        #expect(Self.namedCases.count == 45, "the event vocabulary changed size — update this list")
     }
 
     @Test("a custom event is reachable — the escape hatch is not stranded")

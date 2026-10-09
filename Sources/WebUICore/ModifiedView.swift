@@ -196,6 +196,19 @@ public enum HTMLEvent: Sendable, Hashable {
     case mouseover, mouseout, mousedown, mouseup
     case keydown, keyup, keypress
     case focus, blur, focusin, focusout
+    // the wave-4 event deck (W4.1): the events a real app needs, grouped by
+    // family — pointer, touch, drag & drop, clipboard, wheel/scroll, misc,
+    // and media. every named case has a typed modifier in `Modifiers.swift`
+    // and a typed payload in `EventHandling.swift`, so handlers read the
+    // payload through a struct instead of `event.string("x")`.
+    case pointerdown, pointermove, pointerup, pointercancel, pointerenter, pointerleave
+    case touchstart, touchmove, touchend
+    case dragstart, drag, dragend, dragenter, dragover, dragleave, drop
+    case copy, cut, paste
+    case wheel, scroll
+    case dblclick, contextmenu
+    case animationend, transitionend
+    case play, pause, ended, timeupdate, loadedmetadata, error
     case custom(String)
 
     public var rawValue: String {
@@ -215,6 +228,37 @@ public enum HTMLEvent: Sendable, Hashable {
         case .blur:      return "blur"
         case .focusin:   return "focusin"
         case .focusout:  return "focusout"
+        case .pointerdown: return "pointerdown"
+        case .pointermove: return "pointermove"
+        case .pointerup:   return "pointerup"
+        case .pointercancel: return "pointercancel"
+        case .pointerenter:  return "pointerenter"
+        case .pointerleave:  return "pointerleave"
+        case .touchstart: return "touchstart"
+        case .touchmove:  return "touchmove"
+        case .touchend:   return "touchend"
+        case .dragstart:  return "dragstart"
+        case .drag:       return "drag"
+        case .dragend:    return "dragend"
+        case .dragenter:  return "dragenter"
+        case .dragover:   return "dragover"
+        case .dragleave:  return "dragleave"
+        case .drop:       return "drop"
+        case .copy:       return "copy"
+        case .cut:        return "cut"
+        case .paste:      return "paste"
+        case .wheel:      return "wheel"
+        case .scroll:     return "scroll"
+        case .dblclick:   return "dblclick"
+        case .contextmenu: return "contextmenu"
+        case .animationend: return "animationend"
+        case .transitionend: return "transitionend"
+        case .play:       return "play"
+        case .pause:      return "pause"
+        case .ended:      return "ended"
+        case .timeupdate: return "timeupdate"
+        case .loadedmetadata: return "loadedmetadata"
+        case .error:      return "error"
         case .custom(let v): return v
         }
     }

@@ -66,6 +66,10 @@ let package = Package(
             targets: ["WebUIExample"]
         ),
         .executable(
+            name: "WebUIEventDeck",
+            targets: ["WebUIEventDeck"]
+        ),
+        .executable(
             name: "WebUIAuthExample",
             targets: ["WebUIAuthExample"]
         ),
@@ -281,6 +285,14 @@ let package = Package(
         // ── Example ──────────────────────────────────────────────
         .executableTarget(
             name: "WebUIExample",
+            dependencies: [
+                "WebUI",
+                "WebUIDesignSystem",
+                "WebUIServer",
+            ]
+        ),
+        .executableTarget(
+            name: "WebUIEventDeck",
             dependencies: [
                 "WebUI",
                 "WebUIDesignSystem",

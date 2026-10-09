@@ -35,6 +35,11 @@ public struct EventData: Sendable, Codable {
         return value
     }
 
+    /// an integral field (`Double` on the wire, `Int` in a handler).
+    public func int(_ key: String) -> Int? {
+        number(key).map(Int.init)
+    }
+
     /// a boolean field.
     public func bool(_ key: String) -> Bool? {
         guard case .bool(let value)? = data[key] else { return nil }
@@ -67,6 +72,209 @@ public struct EventData: Sendable, Codable {
 
     /// a checkbox's checked state.
     public var checked: Bool? { bool("checked") }
+}
+
+// MARK: - the wave-4 event deck payloads (W4.1)
+//
+// the events `HTMLEvent` added in wave 4 carry typed payloads, so a handler
+// reads `event.pointer()?.x` instead of `event.number("x")` — the magic
+// strings retired for these events in the deck's Swift surface. each struct
+// decodes from the wire keys the engine emits (see `extractEventData` in
+// `designer/assets/webui-engine.js`) and is `Sendable` + `Equatable` like the
+// rest of the event surface, so a handler can snapshot and compare payloads.
+
+/// one pointer position on the wire — `clientX`/`clientY` plus the button
+/// state the browser reports (`event.button`, `event.buttons`).
+public struct PointerPayload: Sendable, Equatable {
+    public let x: Double
+    public let y: Double
+    public let button: Int
+    public let buttons: Int
+    public init(x: Double, y: Double, button: Int, buttons: Int) {
+        self.x = x
+        self.y = y
+        self.button = button
+        self.buttons = buttons
+    }
+}
+
+/// the first changed touch point plus how many touches are on the surface.
+public struct TouchPayload: Sendable, Equatable {
+    public let x: Double
+    public let y: Double
+    public let identifier: Int
+    public let touches: Int
+    public init(x: Double, y: Double, identifier: Int, touches: Int) {
+        self.x = x
+        self.y = y
+        self.identifier = identifier
+        self.touches = touches
+    }
+}
+
+/// one file carried by a drag: what the engine can read synchronously off the
+/// `DataTransfer`'s `File` object (`name`, `size`, `type`).
+public struct DroppedFile: Sendable, Equatable {
+    public let name: String
+    public let size: Int
+    public let type: String
+    public init(name: String, size: Int, type: String) {
+        self.name = name
+        self.size = size
+        self.type = type
+    }
+}
+
+/// what a drag/drop carried: the `DataTransfer`'s data map (mime type →
+/// string) and its file list.
+public struct DragPayload: Sendable, Equatable {
+    public let data: [String: String]
+    public let files: [DroppedFile]
+    public init(data: [String: String], files: [DroppedFile]) {
+        self.data = data
+        self.files = files
+    }
+}
+
+/// what a clipboard event carried: the plain-text and html halves of the
+/// clipboard, either of which may be absent.
+public struct PastePayload: Sendable, Equatable {
+    public let text: String?
+    public let html: String?
+    public init(text: String?, html: String?) {
+        self.text = text
+        self.html = html
+    }
+}
+
+/// the wheel delta the browser reported.
+public struct WheelPayload: Sendable, Equatable {
+    public let deltaX: Double
+    public let deltaY: Double
+    public init(deltaX: Double, deltaY: Double) {
+        self.deltaX = deltaX
+        self.deltaY = deltaY
+    }
+}
+
+/// the scroll position of the scrolled element.
+public struct ScrollPayload: Sendable, Equatable {
+    public let scrollTop: Double
+    public let scrollLeft: Double
+    public init(scrollTop: Double, scrollLeft: Double) {
+        self.scrollTop = scrollTop
+        self.scrollLeft = scrollLeft
+    }
+}
+
+/// the animation that ended.
+public struct AnimationPayload: Sendable, Equatable {
+    public let animationName: String
+    public init(animationName: String) {
+        self.animationName = animationName
+    }
+}
+
+/// the css property a transition ended on, and how long it took.
+public struct TransitionPayload: Sendable, Equatable {
+    public let propertyName: String
+    public let elapsedTime: Double
+    public init(propertyName: String, elapsedTime: Double) {
+        self.propertyName = propertyName
+        self.elapsedTime = elapsedTime
+    }
+}
+
+/// a media element's playback state. empty/null fields read as zero/nil, so a
+/// `timeupdate` before metadata exists and an `error` with no media error both
+/// decode into a usable value.
+public struct MediaPayload: Sendable, Equatable {
+    public let currentTime: Double
+    public let duration: Double
+    public let readyState: Int
+    public let code: Int?
+    public init(currentTime: Double, duration: Double, readyState: Int, code: Int?) {
+        self.currentTime = currentTime
+        self.duration = duration
+        self.readyState = readyState
+        self.code = code
+    }
+}
+
+extension EventData {
+    // every deck family decodes through one accessor, never a magic string —
+    // the wave-4 analogue of the typed `targetID`/`value` readers above.
+
+    /// the pointer family's payload (`pointer`, `dblclick`, `contextmenu` all
+    /// report a pointer position).
+    public func pointer() -> PointerPayload? {
+        guard let x = number("x"), let y = number("y") else { return nil }
+        return PointerPayload(x: x, y: y, button: int("button") ?? 0, buttons: int("buttons") ?? 0)
+    }
+
+    /// the touch family's payload — the first changed touch and the touch count.
+    public func touch() -> TouchPayload? {
+        guard let x = number("x"), let y = number("y") else { return nil }
+        return TouchPayload(x: x, y: y, identifier: int("identifier") ?? 0, touches: int("touches") ?? 0)
+    }
+
+    /// the drag & drop payload — the `dataTransfer` map and file list. always
+    /// decodes; a drop that carried neither data nor files is still a drop.
+    public func drag() -> DragPayload {
+        var dataMap: [String: String] = [:]
+        if case .object(let strData)? = self.data["data"] {
+            for (key, value) in strData {
+                if case .string(let text) = value { dataMap[key] = text }
+            }
+        }
+        var files: [DroppedFile] = []
+        if case .array(let list)? = self.data["files"] {
+            for item in list {
+                guard case .object(let file) = item else { continue }
+                let name = (file["name"].flatMap { if case .string(let s) = $0 { return s }; return nil }) ?? ""
+                let size = (file["size"].flatMap { if case .number(let n) = $0 { return Int(n) }; return nil }) ?? 0
+                let type = (file["type"].flatMap { if case .string(let s) = $0 { return s }; return nil }) ?? ""
+                files.append(DroppedFile(name: name, size: size, type: type))
+            }
+        }
+        return DragPayload(data: dataMap, files: files)
+    }
+
+    /// the clipboard payload — the plain-text/html halves, either nullable.
+    public func paste() -> PastePayload {
+        PastePayload(text: string("text"), html: string("html"))
+    }
+
+    /// the wheel payload.
+    public func wheel() -> WheelPayload {
+        WheelPayload(deltaX: number("deltaX") ?? 0, deltaY: number("deltaY") ?? 0)
+    }
+
+    /// the scroll payload.
+    public func scroll() -> ScrollPayload {
+        ScrollPayload(scrollTop: number("scrollTop") ?? 0, scrollLeft: number("scrollLeft") ?? 0)
+    }
+
+    /// the animation payload.
+    public func animation() -> AnimationPayload {
+        AnimationPayload(animationName: string("animationName") ?? "")
+    }
+
+    /// the transition payload.
+    public func transition() -> TransitionPayload {
+        TransitionPayload(propertyName: string("propertyName") ?? "", elapsedTime: number("elapsedTime") ?? 0)
+    }
+
+    /// the media payload. `code` is the media element's `error.code` for an
+    /// `error` event and nil otherwise.
+    public func media() -> MediaPayload {
+        MediaPayload(
+            currentTime: number("currentTime") ?? 0,
+            duration: number("duration") ?? 0,
+            readyState: int("readyState") ?? 0,
+            code: int("code")
+        )
+    }
 }
 
 // MARK: - EventHandler

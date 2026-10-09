@@ -236,6 +236,120 @@ extension View {
         ModifiedView(content: self, modifier: EventHandlerModifier(event: .focusout, handler: handler))
     }
 
+    // MARK: - Wave-4 Event Deck (W4.1)
+    //
+    // one typed modifier per deck event, in the spelling convention above. the
+    // handler receives an `EventData` whose typed payload decodes through the
+    // accessors in `EventHandling.swift` (`event.pointer()`, `event.drag()`,
+    // `event.paste()`, ...) — the magic strings are retired for these events.
+
+    // MARK: pointer
+    public func onPointerDown(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .pointerdown, handler: handler))
+    }
+    public func onPointerMove(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .pointermove, handler: handler))
+    }
+    public func onPointerUp(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .pointerup, handler: handler))
+    }
+    public func onPointerCancel(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .pointercancel, handler: handler))
+    }
+    public func onPointerEnter(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .pointerenter, handler: handler))
+    }
+    public func onPointerLeave(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .pointerleave, handler: handler))
+    }
+
+    // MARK: touch
+    public func onTouchStart(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .touchstart, handler: handler))
+    }
+    public func onTouchMove(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .touchmove, handler: handler))
+    }
+    public func onTouchEnd(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .touchend, handler: handler))
+    }
+
+    // MARK: drag & drop
+    public func onDragStart(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .dragstart, handler: handler))
+    }
+    public func onDrag(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .drag, handler: handler))
+    }
+    public func onDragEnd(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .dragend, handler: handler))
+    }
+    public func onDragEnter(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .dragenter, handler: handler))
+    }
+    public func onDragOver(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .dragover, handler: handler))
+    }
+    public func onDragLeave(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .dragleave, handler: handler))
+    }
+    public func onDrop(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .drop, handler: handler))
+    }
+
+    // MARK: clipboard
+    public func onCopy(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .copy, handler: handler))
+    }
+    public func onCut(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .cut, handler: handler))
+    }
+    public func onPaste(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .paste, handler: handler))
+    }
+
+    // MARK: wheel & scroll
+    public func onWheel(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .wheel, handler: handler))
+    }
+    public func onScroll(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .scroll, handler: handler))
+    }
+
+    // MARK: misc
+    public func onDoubleClick(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .dblclick, handler: handler))
+    }
+    public func onContextMenu(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .contextmenu, handler: handler))
+    }
+    public func onAnimationEnd(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .animationend, handler: handler))
+    }
+    public func onTransitionEnd(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .transitionend, handler: handler))
+    }
+
+    // MARK: media
+    public func onPlay(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .play, handler: handler))
+    }
+    public func onPause(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .pause, handler: handler))
+    }
+    public func onEnded(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .ended, handler: handler))
+    }
+    public func onTimeUpdate(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .timeupdate, handler: handler))
+    }
+    public func onLoadedMetadata(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .loadedmetadata, handler: handler))
+    }
+    public func onError(perform handler: @escaping EventHandler) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(content: self, modifier: EventHandlerModifier(event: .error, handler: handler))
+    }
+
     // MARK: - Optimistic Events
 
     public func onOptimisticClick(predict: @escaping () -> [FragmentUpdate], perform: @escaping EventHandler) -> ModifiedView<Self, OptimisticClickModifier> {

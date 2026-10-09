@@ -19,7 +19,8 @@ window.WebUIEngine = (function () {
   };
 
   var LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3, silent: 4 };
-  var EVENT_TYPES = ['click', 'input', 'change', 'submit', 'keydown', 'keyup', 'keypress', 'focus', 'blur', 'focusin', 'focusout', 'mouseover', 'mouseout', 'mousedown', 'mouseup'];
+  var EVENT_TYPES = ['click', 'input', 'change', 'submit', 'keydown', 'keyup', 'keypress', 'focus', 'blur', 'focusin', 'focusout', 'mouseover', 'mouseout', 'mousedown', 'mouseup', 'pointerdown', 'pointermove', 'pointerup', 'pointercancel', 'touchstart', 'touchmove', 'touchend', 'dragstart', 'drag', 'dragend', 'dragover', 'drop', 'copy', 'cut', 'paste', 'wheel', 'dblclick', 'contextmenu', 'animationend', 'transitionend'];
+  var EVENT_CAPTURE_TYPES = ['pointerenter', 'pointerleave', 'dragenter', 'dragleave', 'scroll', 'play', 'pause', 'ended', 'timeupdate', 'loadedmetadata', 'error'];
   var LOST_ANCHOR_WARNED = {};
   var LOST_OPEN_WARNED = {};
   var RETAINED_OPEN = {};
@@ -290,7 +291,12 @@ window.WebUIEngine = (function () {
         document.addEventListener(eventType, listener, false);
         listeners.push({ type: eventType, listener: listener });
       });
-      log.debug('Event delegation mounted for: ' + EVENT_TYPES.join(', '));
+      EVENT_CAPTURE_TYPES.forEach(function (eventType) {
+        var listener = function (e) { handleEvent(e); };
+        document.addEventListener(eventType, listener, true);
+        listeners.push({ type: eventType, listener: listener });
+      });
+      log.debug('Event delegation mounted for: ' + EVENT_TYPES.concat(EVENT_CAPTURE_TYPES).join(', '));
     }
 
     function unmount() {
@@ -406,6 +412,10 @@ window.WebUIEngine = (function () {
         flushPendingInputs(form, componentId);
       }
 
+      if (event.type === 'dragover' || event.type === 'drop') {
+        event.preventDefault();
+      }
+
       var eventData = extractEventData(event, componentEl);
 
       if (event.type === 'input') {
@@ -413,14 +423,44 @@ window.WebUIEngine = (function () {
         return;
       }
 
+      if (event.type === 'wheel' || event.type === 'scroll' || event.type === 'timeupdate') {
+        throttleEvent(componentId, declaredEvent || event.type, eventData);
+        return;
+      }
+
       if (event.type === 'click') {
         applyPrediction(componentEl, componentId);
       }
 
+      sendFrame(componentId, declaredEvent || event.type, eventData);
+    }
+
+    var throttled = {};
+
+    function throttleEvent(componentId, eventType, eventData) {
+      var key = componentId + ':' + eventType;
+      throttled[key] = eventData;
+      if (throttled[key + ':raf']) { return; }
+      throttled[key + ':raf'] = true;
+      var flushKey = key;
+      var flush = function () {
+        delete throttled[flushKey + ':raf'];
+        var pending = throttled[flushKey];
+        delete throttled[flushKey];
+        if (pending) { sendFrame(componentId, eventType, pending); }
+      };
+      if (typeof window.requestAnimationFrame === 'function') {
+        window.requestAnimationFrame(flush);
+      } else {
+        setTimeout(flush, 16);
+      }
+    }
+
+    function sendFrame(componentId, eventType, eventData) {
       var eventMsg = {
         type: 'event',
         component: componentId,
-        event: declaredEvent || event.type,
+        event: eventType,
         data: eventData,
       };
       if (config.renderToken) eventMsg.token = config.renderToken;
@@ -533,9 +573,116 @@ window.WebUIEngine = (function () {
         case 'mouseup':
           return {};
 
+        case 'pointerdown':
+        case 'pointermove':
+        case 'pointerup':
+        case 'pointercancel':
+        case 'pointerenter':
+        case 'pointerleave':
+        case 'dblclick':
+        case 'contextmenu':
+          return {
+            x: (typeof event.clientX === 'number' && isFinite(event.clientX)) ? event.clientX : 0,
+            y: (typeof event.clientY === 'number' && isFinite(event.clientY)) ? event.clientY : 0,
+            button: (typeof event.button === 'number') ? event.button : 0,
+            buttons: (typeof event.buttons === 'number') ? event.buttons : 0,
+          };
+
+        case 'touchstart':
+        case 'touchmove':
+        case 'touchend':
+          var changedTouch = (event.changedTouches && event.changedTouches.length) ? event.changedTouches[0] : null;
+          return {
+            x: changedTouch && typeof changedTouch.clientX === 'number' ? changedTouch.clientX : 0,
+            y: changedTouch && typeof changedTouch.clientY === 'number' ? changedTouch.clientY : 0,
+            identifier: changedTouch && typeof changedTouch.identifier === 'number' ? changedTouch.identifier : 0,
+            touches: (event.touches && event.touches.length) || 0,
+          };
+
+        case 'dragstart':
+        case 'drag':
+        case 'dragend':
+        case 'dragenter':
+        case 'dragover':
+        case 'dragleave':
+        case 'drop':
+          return extractDragData(event.dataTransfer);
+
+        case 'copy':
+        case 'cut':
+        case 'paste':
+          return extractClipboardData(event.clipboardData);
+
+        case 'wheel':
+          return {
+            deltaX: (typeof event.deltaX === 'number' && isFinite(event.deltaX)) ? event.deltaX : 0,
+            deltaY: (typeof event.deltaY === 'number' && isFinite(event.deltaY)) ? event.deltaY : 0,
+          };
+
+        case 'scroll':
+          return {
+            scrollTop: target && typeof target.scrollTop === 'number' ? target.scrollTop : 0,
+            scrollLeft: target && typeof target.scrollLeft === 'number' ? target.scrollLeft : 0,
+          };
+
+        case 'animationend':
+          return { animationName: event.animationName || '' };
+
+        case 'transitionend':
+          return {
+            propertyName: event.propertyName || '',
+            elapsedTime: Number(event.elapsedTime) || 0,
+          };
+
+        case 'play':
+        case 'pause':
+        case 'ended':
+        case 'timeupdate':
+        case 'loadedmetadata':
+        case 'error':
+          return extractMediaData(target);
+
         default:
           return {};
       }
+    }
+
+    function extractDragData(dt) {
+      var data = {};
+      var files = [];
+      if (dt) {
+        var types = dt.types || [];
+        for (var i = 0; i < types.length; i++) {
+          var type = types[i];
+          if (typeof type !== 'string') { continue; }
+          try { data[type] = dt.getData(type) || ''; } catch (e) { }
+        }
+        var list = dt.files || [];
+        for (var j = 0; j < list.length; j++) {
+          var f = list[j];
+          files.push({ name: f.name, size: f.size, type: f.type });
+        }
+      }
+      return { data: data, files: files };
+    }
+
+    function extractClipboardData(cd) {
+      var text = null;
+      var html = null;
+      if (cd && typeof cd.getData === 'function') {
+        try { text = cd.getData('text/plain') || null; } catch (e) { }
+        try { html = cd.getData('text/html') || null; } catch (e) { }
+      }
+      return { text: text, html: html };
+    }
+
+    function extractMediaData(el) {
+      var duration = el && typeof el.duration === 'number' && isFinite(el.duration) ? el.duration : 0;
+      var currentTime = el && typeof el.currentTime === 'number' && isFinite(el.currentTime) ? el.currentTime : 0;
+      var readyState = el && typeof el.readyState === 'number' ? el.readyState : 0;
+      var code = null;
+      if (el && el.error && typeof el.error.code === 'number') { code = el.error.code; }
+      return { currentTime: currentTime, duration: duration, readyState: readyState, code: code };
     }
 
     function extractFormData(form) {
