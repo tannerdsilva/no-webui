@@ -54,7 +54,7 @@ public struct WebUIReactions: View {
             if let id { html += " id=\"\(htmlEscape(id))-r-\(i)\"" }
             html += "><span aria-hidden=\"true\">\(htmlEscape(r.emoji))</span><span class=\"reactions__count\">\(r.count)</span></button>"
         }
-        html += "<button class=\"reactions__more\" aria-label=\"Add reaction\">＋</button>"
+        html += "<button class=\"reactions__more\" aria-label=\"\(RenderContext.currentStrings.addReaction)\">＋</button>"
         html += "</div>"
         buffer.append(html)
     }
@@ -67,7 +67,7 @@ public struct WebUITypingIndicator: View {
     public init(inline: Bool = false) { self.inline = inline }
 
     public func render(into buffer: inout HTMLBuffer) {
-        var html = "<div class=\"typing\(inline ? " typing--inline" : "")\" role=\"status\" aria-label=\"Someone is typing\">"
+        var html = "<div class=\"typing\(inline ? " typing--inline" : "")\" role=\"status\" aria-label=\"\(RenderContext.currentStrings.someoneIsTyping)\">"
         html += "<span class=\"typing__dot\"></span><span class=\"typing__dot\"></span><span class=\"typing__dot\"></span>"
         html += "</div>"
         buffer.append(html)
@@ -134,7 +134,7 @@ public struct WebUIBell: View {
 
     public func render(into buffer: inout HTMLBuffer) {
         let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onTap) } ?? ""
-        var html = "<button class=\"bell\"\(attrs) aria-label=\"Notifications\(count > 0 ? ", \(count) unread" : "")\">"
+        var html = "<button class=\"bell\"\(attrs) aria-label=\"\(RenderContext.currentStrings.notifications)\(count > 0 ? RenderContext.currentStrings.unreadCount(count) : "")\">"
         html += "<span class=\"bell__icon\">\(WebUIIcon(icon, size: .medium).renderThroughBuffer())</span>"
         if count > 0 { html += "<span class=\"bell__badge\">\(count)</span>" }
         html += "</button>"
@@ -529,7 +529,7 @@ public struct WebUIBanner: View, Dismissible {    @available(*, deprecated, rena
     public var dismissRootIdentifier: String? { id }
 
     public func render(into buffer: inout HTMLBuffer) {
-        let dismissal = makeDismissal(ariaLabel: "Dismiss")
+        let dismissal = makeDismissal(ariaLabel: RenderContext.currentStrings.dismiss)
         var html = "<div class=\"banner \(Self.classFor(tone))\" role=\"status\""
         if let elementID = dismissal.elementID ?? id {
             html += " id=\"\(htmlEscape(elementID))\""
@@ -621,7 +621,7 @@ public struct WebUIMessageScroller: View {
         height: String = "20rem",
         id: String? = nil,
         fade: Bool = true,
-        ariaLabel: String = "Messages",
+        ariaLabel: String = WebUIStrings.english.messages,
         @ViewBuilder content: () -> [any View]
     ) {
         self.height = height
@@ -728,7 +728,7 @@ public struct WebUIAttachment: View, Dismissible {
     public var dismissRootIdentifier: String? { id }
 
     public func render(into buffer: inout HTMLBuffer) {
-        let dismissal = makeDismissal(ariaLabel: "Remove attachment")
+        let dismissal = makeDismissal(ariaLabel: RenderContext.currentStrings.removeAttachment)
         let stateClass = Self.classFor(state)
         var html = "<div class=\"attachment"
         if !stateClass.isEmpty { html += " \(stateClass)" }
@@ -820,15 +820,15 @@ public struct WebUIChatBubble: View {
         switch receipt {
         case .sent:
             icon = .check
-            label = "Sent"
+            label = RenderContext.currentStrings.sent
             extraClass = ""
         case .delivered:
             icon = .checkCheck
-            label = "Delivered"
+            label = RenderContext.currentStrings.delivered
             extraClass = ""
         case .read:
             icon = .checkCheck
-            label = "Read"
+            label = RenderContext.currentStrings.read
             extraClass = " chat__receipt--read"
         }
         return "<span class=\"chat__receipt\(extraClass)\" role=\"img\" aria-label=\"\(label)\">"

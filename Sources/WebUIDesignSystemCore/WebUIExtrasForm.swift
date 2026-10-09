@@ -147,10 +147,10 @@ public struct WebUIStepper: View {
         }
         let decID = id.map { " id=\"\(htmlEscape("\($0)-dec"))\"" } ?? ""
         let incID = id.map { " id=\"\(htmlEscape("\($0)-inc"))\"" } ?? ""
-        var html = "<div class=\"stepper\(Self.classFor(size))\"\(attrs) role=\"group\" aria-label=\"Stepper\">"
-        html += "<button class=\"stepper__btn\"\(decID) aria-label=\"Decrease\">−</button>"
+        var html = "<div class=\"stepper\(Self.classFor(size))\"\(attrs) role=\"group\" aria-label=\"\(RenderContext.currentStrings.stepper)\">"
+        html += "<button class=\"stepper__btn\"\(decID) aria-label=\"\(RenderContext.currentStrings.decrease)\">−</button>"
         html += "<span class=\"stepper__value\">\(value)</span>"
-        html += "<button class=\"stepper__btn\"\(incID) aria-label=\"Increase\">+</button>"
+        html += "<button class=\"stepper__btn\"\(incID) aria-label=\"\(RenderContext.currentStrings.increase)\">+</button>"
         html += "</div>"
         buffer.append(html)
     }
@@ -188,12 +188,12 @@ public struct WebUIOTP: View {
 
     public func render(into buffer: inout HTMLBuffer) {
         let digits = value ?? []
-        var html = "<div class=\"otp\(Self.classFor(size))\(error ? " otp--error" : "")\" aria-label=\"One-time code\">"
+        var html = "<div class=\"otp\(Self.classFor(size))\(error ? " otp--error" : "")\" aria-label=\"\(RenderContext.currentStrings.oneTimeCode)\">"
         for i in 0..<length {
             let filled = i < digits.count
             let cellID = id.map { " id=\"\(htmlEscape("\($0)-cell-\(i)"))\"" } ?? ""
             let cellAttrs = id.map { controlAttributes(id: "\($0)-cell-\(i)", event: .input, handler: onChange) } ?? ""
-            html += "<input class=\"otp__cell\(filled ? " otp__cell--filled" : "")\(i == digits.count ? " otp__cell--active" : "")\"\(cellID) type=\"text\" inputmode=\"numeric\" maxlength=\"1\" value=\"\(filled ? "\(digits[i])" : "")\" aria-label=\"Digit \(i + 1)\"\(cellAttrs)>"
+            html += "<input class=\"otp__cell\(filled ? " otp__cell--filled" : "")\(i == digits.count ? " otp__cell--active" : "")\"\(cellID) type=\"text\" inputmode=\"numeric\" maxlength=\"1\" value=\"\(filled ? "\(digits[i])" : "")\" aria-label=\"\(RenderContext.currentStrings.digit(i + 1))\"\(cellAttrs)>"
         }
         html += "</div>"
         buffer.append(html)
@@ -213,7 +213,7 @@ public struct WebUIMFA: View {
         html += "<div class=\"mfa__qr\"><div class=\"qr\"><div class=\"qr__code\">"
         for _ in 0..<(11 * 11) { html += "<span class=\"qr__cell\"></span>" }
         html += "</div></div></div>"
-        html += "<div class=\"mfa__steps\"><div class=\"mfa__step\"><span class=\"mfa__step-label\">Scan</span></div><div class=\"mfa__step mfa__step--current\"><span class=\"mfa__step-label\">Enter code</span></div><div class=\"mfa__step\"><span class=\"mfa__step-label\">Verify</span></div></div>"
+        html += "<div class=\"mfa__steps\"><div class=\"mfa__step\"><span class=\"mfa__step-label\">\(RenderContext.currentStrings.scan)</span></div><div class=\"mfa__step mfa__step--current\"><span class=\"mfa__step-label\">\(RenderContext.currentStrings.enterCode)</span></div><div class=\"mfa__step\"><span class=\"mfa__step-label\">\(RenderContext.currentStrings.verify)</span></div></div>"
         html += "<div class=\"mfa__code\">"
         for i in 0..<6 {
             html += "<span class=\"mfa__digit\">\(i < 2 ? "•" : "·")</span>"
@@ -278,7 +278,7 @@ public struct WebUIMultiSelect: View {
     /// `id == "<id>-opt-<index>"`.
     public let id: String?
     public let onChange: EventHandler?
-    public init(options: [Option], placeholder: String = "Select…",
+    public init(options: [Option], placeholder: String = WebUIStrings.english.select,
                 id: String? = nil, onChange: EventHandler? = nil) {
         self.options = options; self.placeholder = placeholder
         self.id = id; self.onChange = onChange
@@ -296,7 +296,7 @@ public struct WebUIMultiSelect: View {
             if sel.count > 2 { html += "<span class=\"multiselect__more\">+\(sel.count - 2)</span>" }
         }
         html += "<span class=\"multiselect__chevron\">▾</span></button>"
-        html += "<div class=\"multiselect__panel\"><div class=\"multiselect__search\"><input type=\"search\" placeholder=\"Filter…\"></div>"
+        html += "<div class=\"multiselect__panel\"><div class=\"multiselect__search\"><input type=\"search\" placeholder=\"\(RenderContext.currentStrings.filter)\"></div>"
         for (i, option) in options.enumerated() {
             let optID = id.map { " id=\"\(htmlEscape("\($0)-opt-\(i)"))\"" } ?? ""
             html += "<div class=\"multiselect__option\(option.selected ? " multiselect__option--selected" : "")\"\(optID)>\(htmlEscape(option.label))</div>"
@@ -370,12 +370,12 @@ public struct WebUIDropZone: View {
 /// a signature capture pad.
 public struct WebUISignature: View {
     public let label: String
-    public init(_ label: String = "Sign here") { self.label = label }
+    public init(_ label: String = WebUIStrings.english.signHere) { self.label = label }
 
     public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"sigpad\">"
         html += "<div class=\"sigpad__canvas\" role=\"img\" aria-label=\"\(htmlEscape(label))\"></div>"
-        html += "<div class=\"sigpad__tools\"><button class=\"button button--ghost button--sm\">Clear</button></div>"
+        html += "<div class=\"sigpad__tools\"><button class=\"button button--ghost button--sm\">\(RenderContext.currentStrings.clear)</button></div>"
         html += "</div>"
         buffer.append(html)
     }
@@ -420,7 +420,7 @@ public struct WebUIInlineEdit: View {
         html += "<div class=\"inline-edit__value\">\(htmlEscape(value))<span class=\"inline-edit__pencil\" aria-hidden=\"true\">✎</span></div>"
         if state == .editing {
             html += "<div class=\"inline-edit__editing\"><input class=\"inline-edit__input\(error ? " inline-edit__input--error" : "")\" value=\"\(htmlEscape(value))\">"
-            html += "<div class=\"inline-edit__actions\"><button class=\"inline-edit__check\"\(saveID) aria-label=\"Save\">✓</button><button class=\"inline-edit__pencil\"\(cancelID) aria-label=\"Cancel\">✕</button></div></div>"
+            html += "<div class=\"inline-edit__actions\"><button class=\"inline-edit__check\"\(saveID) aria-label=\"\(RenderContext.currentStrings.save)\">✓</button><button class=\"inline-edit__pencil\"\(cancelID) aria-label=\"\(RenderContext.currentStrings.cancel)\">✕</button></div></div>"
         }
         html += "</div>"
         buffer.append(html)
@@ -439,7 +439,7 @@ public struct WebUIMasked: View {
         let display = masked ? String(repeating: "•", count: value.count) : value
         var html = "<div class=\"masked\">"
         if let prefix { html += "<span class=\"masked__prefix\">\(htmlEscape(prefix))</span>" }
-        html += "<input type=\"text\" value=\"\(htmlEscape(display))\" aria-label=\"masked value\">"
+        html += "<input type=\"text\" value=\"\(htmlEscape(display))\" aria-label=\"\(RenderContext.currentStrings.maskedValue)\">"
         html += "<span class=\"masked__caret\" aria-hidden=\"true\"></span>"
         html += "</div>"
         buffer.append(html)
@@ -484,7 +484,7 @@ public struct WebUIRating: View {
         if heart { classes += " rating--heart" }
         if full > 0 { classes += " rating--filled" }
         let rootAttrs = id.map { controlAttributes(id: $0, event: .click, handler: onChange) } ?? ""
-        var html = "<div class=\"\(classes)\"\(rootAttrs) role=\"img\" aria-label=\"\(value) of \(max)\">"
+        var html = "<div class=\"\(classes)\"\(rootAttrs) role=\"img\" aria-label=\"\(RenderContext.currentStrings.ratingValue(value, max))\">"
         for i in 1...max {
             let glyph = heart ? "♥" : "★"
             let filled = i <= full
@@ -548,7 +548,7 @@ public struct WebUITag: View {
         if let icon { html += "<span class=\"tag__icon\">\(WebUIIcon(icon, size: .small).renderThroughBuffer())</span>" }
         html += "<span class=\"tag__label\">\(htmlEscape(label))</span>"
         if let count { html += "<span class=\"tag__count\">\(count)</span>" }
-        if removable { html += "<button class=\"tag__remove\"\(removeID) aria-label=\"Remove \(htmlEscape(label))\">×</button>" }
+        if removable { html += "<button class=\"tag__remove\"\(removeID) aria-label=\"\(RenderContext.currentStrings.removeItem(htmlEscape(label)))\">×</button>" }
         html += "</span>"
         buffer.append(html)
     }
@@ -564,7 +564,7 @@ public struct WebUIChipInput: View {
     /// `id == "<id>-chip-<index>"`.
     public let id: String?
     public let onChange: EventHandler?
-    public init(chips: [String], placeholder: String = "Type and press enter…",
+    public init(chips: [String], placeholder: String = WebUIStrings.english.typeAndPressEnter,
                 id: String? = nil, onChange: EventHandler? = nil) {
         self.chips = chips; self.placeholder = placeholder
         self.id = id; self.onChange = onChange
@@ -575,7 +575,7 @@ public struct WebUIChipInput: View {
         var html = "<div class=\"chip-input\"\(rootAttrs)>"
         for (i, chip) in chips.enumerated() {
             let removeID = id.map { " id=\"\(htmlEscape("\($0)-chip-\(i)"))\"" } ?? ""
-            html += "<span class=\"chip chip--sm chip--primary\">\(htmlEscape(chip))<button class=\"chip__remove\"\(removeID) aria-label=\"Remove\">×</button></span>"
+            html += "<span class=\"chip chip--sm chip--primary\">\(htmlEscape(chip))<button class=\"chip__remove\"\(removeID) aria-label=\"\(RenderContext.currentStrings.remove)\">×</button></span>"
         }
         html += "<input type=\"text\" placeholder=\"\(htmlEscape(placeholder))\">"
         html += "</div>"
@@ -611,8 +611,8 @@ public struct WebUICardInput: View {
         html += "<div class=\"card-input__row\"><div class=\"card-input__preview\"><span class=\"card-input__chip\"></span><span class=\"card-input__number\">\(htmlEscape(number))</span><span class=\"card-input__holder\">\(htmlEscape(holder))</span>"
         if let brand { html += "<span class=\"card-input__brand-icon\(Self.classFor(brand))\"></span>" }
         html += "</div></div>"
-        html += "<div class=\"card-input__row\"><div class=\"card-input__field\"><label>Card number</label><input class=\"input\" value=\"\(htmlEscape(number))\"></div></div>"
-        html += "<div class=\"card-input__row\"><div class=\"card-input__field\"><label>Card holder</label><input class=\"input\" value=\"\(htmlEscape(holder))\"></div></div>"
+        html += "<div class=\"card-input__row\"><div class=\"card-input__field\"><label>\(RenderContext.currentStrings.cardNumber)</label><input class=\"input\" value=\"\(htmlEscape(number))\"></div></div>"
+        html += "<div class=\"card-input__row\"><div class=\"card-input__field\"><label>\(RenderContext.currentStrings.cardHolder)</label><input class=\"input\" value=\"\(htmlEscape(holder))\"></div></div>"
         html += "</div>"
         buffer.append(html)
     }

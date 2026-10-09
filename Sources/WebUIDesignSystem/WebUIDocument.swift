@@ -14,6 +14,13 @@ public struct WebUIDocument: View {
 	public let bodyAttributes: String
 	public let devMode: Bool
 	public let lang: String
+	/// the document's locale (BCP-47), feeding `<html lang>`; wins over ``lang``
+	/// when both are set (W4.5).
+	public let locale: String?
+	/// the page's string catalog (W4.5). nil keeps every component's English
+	/// default; set it (with ``locale`` and ``direction``) and the render pass
+	/// resolves `RenderContext.currentStrings` to this catalog.
+	public let strings: WebUIStrings?
 	/// the document's base direction (`ltr` / `rtl`); nil omits the attribute.
 	public let dir: String?
 	/// the typed base direction; wins over ``dir`` when both are set.
@@ -53,6 +60,8 @@ public struct WebUIDocument: View {
 		clientMode: ClientBoot? = nil,
 		devMode: Bool = false,
 		lang: String = "en",
+		locale: String? = nil,
+		strings: WebUIStrings? = nil,
 		dir: String? = nil,
 		direction: Directionality? = nil,
 		includeRuntime: Bool = true,
@@ -74,6 +83,8 @@ public struct WebUIDocument: View {
 		self.clientMode = clientMode
 		self.devMode = devMode
 		self.lang = lang
+		self.locale = locale
+		self.strings = strings
 		self.dir = dir
 		self.direction = direction
 		self.includeRuntime = includeRuntime
@@ -152,7 +163,7 @@ public struct WebUIDocument: View {
 			bodyAttributes: bodyAttributes,
 			clientMode: effectiveClientMode,
 			devMode: devMode,
-			lang: lang,
+			lang: locale ?? lang,
 			dir: dir,
 			direction: direction,
 			includeRuntime: includeRuntime,
@@ -172,6 +183,8 @@ public struct WebUIDocument: View {
 		}
 		buffer.append(html)
 	}
+
+
 
 	/// render this document and hand it out as the body of a typed response —
 	/// the bridge a page render uses now that renders answer with

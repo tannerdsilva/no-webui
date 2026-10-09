@@ -37,7 +37,7 @@ public struct WebUICalendar: View {
         var html = "<div class=\"calendar\"\(attrs)>"
         html += "<div class=\"calendar__header\">"
         html += "<div class=\"calendar__month\">\(htmlEscape(month))</div>"
-        html += "<div class=\"calendar__nav\"><button aria-label=\"Previous\">‹</button><button aria-label=\"Next\">›</button><button class=\"calendar__today\">Today</button></div>"
+        html += "<div class=\"calendar__nav\"><button aria-label=\"\(RenderContext.currentStrings.previous)\">‹</button><button aria-label=\"\(RenderContext.currentStrings.next)\">›</button><button class=\"calendar__today\">\(RenderContext.currentStrings.today)</button></div>"
         html += "</div>"
         html += "<div class=\"calendar__grid\">"
         for wd in weekdays { html += "<div class=\"calendar__weekday\">\(htmlEscape(wd))</div>" }
@@ -95,9 +95,9 @@ public struct WebUIDatePicker: View {
     public func render(into buffer: inout HTMLBuffer) {
         let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onChange) } ?? ""
         var html = "<div class=\"date-picker\"\(attrs)>"
-        html += "<div class=\"date-picker__header\"><button class=\"date-picker__nav\" aria-label=\"Previous\">‹</button>"
+        html += "<div class=\"date-picker__header\"><button class=\"date-picker__nav\" aria-label=\"\(RenderContext.currentStrings.previous)\">‹</button>"
         html += "<div class=\"date-picker__month\">\(htmlEscape(month))</div>"
-        html += "<button class=\"date-picker__nav\" aria-label=\"Next\">›</button></div>"
+        html += "<button class=\"date-picker__nav\" aria-label=\"\(RenderContext.currentStrings.next)\">›</button></div>"
         html += "<div class=\"date-picker__grid\">"
         for wd in weekdays { html += "<div class=\"date-picker__weekday\">\(htmlEscape(wd))</div>" }
         for (i, day) in days.enumerated() {
@@ -133,7 +133,7 @@ public struct WebUITimeZonePicker: View {
     public func render(into buffer: inout HTMLBuffer) {
         let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onSelect) } ?? ""
         var html = "<div class=\"tz-picker\"\(attrs)>"
-        html += "<div class=\"tz-picker__search\"><input type=\"search\" placeholder=\"Find a timezone…\"></div>"
+        html += "<div class=\"tz-picker__search\"><input type=\"search\" placeholder=\"\(RenderContext.currentStrings.findTimezone)\"></div>"
         html += "<div class=\"tz-picker__list\">"
         for (i, e) in entries.enumerated() {
             let entryID = id.map { " id=\"\(htmlEscape($0))-tz-\(i)\"" } ?? ""
@@ -160,7 +160,7 @@ public struct WebUICountryPicker: View {
     public func render(into buffer: inout HTMLBuffer) {
         let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onSelect) } ?? ""
         var html = "<div class=\"country-picker\"\(attrs)>"
-        html += "<div class=\"country-picker__search\"><input type=\"search\" placeholder=\"Search countries…\"></div>"
+        html += "<div class=\"country-picker__search\"><input type=\"search\" placeholder=\"\(RenderContext.currentStrings.searchCountries)\"></div>"
         html += "<div class=\"country-picker__list\">"
         for (i, e) in entries.enumerated() {
             let rowID = id.map { " id=\"\(htmlEscape($0))-row-\(i)\"" } ?? ""
@@ -196,7 +196,7 @@ public struct WebUIGantt: View {
 
     public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"gantt\">"
-        html += "<div class=\"gantt__header\"><div class=\"gantt__label-col\">Tasks</div><div class=\"gantt__week\"></div></div>"
+        html += "<div class=\"gantt__header\"><div class=\"gantt__label-col\">\(RenderContext.currentStrings.tasks)</div><div class=\"gantt__week\"></div></div>"
         for row in rows {
             html += "<div class=\"gantt__row\"><div class=\"gantt__label-col gantt__label\">\(htmlEscape(row.label))</div><div class=\"gantt__track\">"
             for bar in row.bars {
@@ -254,7 +254,7 @@ public struct WebUIDataSheet: View {
 
     public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"sheet\">"
-        html += "<div class=\"sheet__formula\"><span class=\"sheet__cellref\">Fx</span><span class=\"sheet__formula-input\"></span></div>"
+        html += "<div class=\"sheet__formula\"><span class=\"sheet__cellref\">\(RenderContext.currentStrings.formula)</span><span class=\"sheet__formula-input\"></span></div>"
         html += "<div class=\"sheet__grid\">"
         html += "<div class=\"sheet__row\"><span class=\"sheet__corner\"></span>"
         for col in ["A", "B", "C", "D", "E"] { html += "<span class=\"sheet__colhead\">\(col)</span>" }
@@ -391,7 +391,7 @@ public struct WebUICodeBlock: View {
 
     public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"codeblock\">"
-        html += "<div class=\"codeblock__bar\"><span class=\"codeblock__lang\">\(htmlEscape(language))</span><button class=\"code__copy\" aria-label=\"Copy\">copy</button></div>"
+        html += "<div class=\"codeblock__bar\"><span class=\"codeblock__lang\">\(htmlEscape(language))</span><button class=\"code__copy\" aria-label=\"\(RenderContext.currentStrings.copyLabel)\">\(RenderContext.currentStrings.copy)</button></div>"
         html += "<pre class=\"codeblock__code\"><code>\(htmlEscape(code))</code></pre>"
         html += "</div>"
         buffer.append(html)
@@ -536,7 +536,7 @@ public struct WebUIMap: View {
                 html += "<div class=\"map__popup\" style=\"left:\(Int(pin.x))%;top:\(Int(pin.y))%\"><span class=\"map__popup-arrow\"></span>\(htmlEscape(pin.label))</div>"
             }
         }
-        html += "<div class=\"map__attribution\">map</div>"
+        html += "<div class=\"map__attribution\">\(RenderContext.currentStrings.map)</div>"
         html += "</div>"
         buffer.append(html)
     }
@@ -581,7 +581,7 @@ public struct WebUIPayCard: View {
         var html = "<div class=\"paycard\">"
         html += "<div class=\"paycard__top\"><span class=\"paycard__brand\">\(htmlEscape(brand.rawValue.uppercased()))</span><span class=\"paycard__chip\"></span></div>"
         html += "<div class=\"paycard__number\">\(htmlEscape(number))</div>"
-        html += "<div class=\"paycard__row\"><div class=\"paycard__label\">Card holder</div><div class=\"paycard__value\">\(htmlEscape(holder))</div></div>"
+        html += "<div class=\"paycard__row\"><div class=\"paycard__label\">\(RenderContext.currentStrings.cardHolder)</div><div class=\"paycard__value\">\(htmlEscape(holder))</div></div>"
         html += "</div>"
         buffer.append(html)
     }

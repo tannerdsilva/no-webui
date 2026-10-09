@@ -41,7 +41,7 @@ public struct WebUICarousel: View {
         if showsDots && slides.count > 1 {
             html += "<div class=\"carousel__dots\">"
             for i in slides.indices {
-                html += "<a class=\"carousel__dot\" href=\"#\(htmlEscape(id))-\(i)\" aria-label=\"Slide \(i + 1)\"></a>"
+                html += "<a class=\"carousel__dot\" href=\"#\(htmlEscape(id))-\(i)\" aria-label=\"\(RenderContext.currentStrings.slide(i + 1))\"></a>"
             }
             html += "</div>"
         }
@@ -92,7 +92,7 @@ public struct WebUIMenubar: View {
     public func render(into buffer: inout HTMLBuffer) {
         var html = "<nav class=\"menubar\""
         if let id { html += " id=\"\(htmlEscape(id))\"" }
-        html += " aria-label=\"Main\">"
+        html += " aria-label=\"\(RenderContext.currentStrings.mainNavigation)\">"
         for (i, item) in items.enumerated() {
             html += "<div class=\"menubar__item\">"
             html += "<button type=\"button\" class=\"menubar__trigger\" aria-haspopup=\"true\" aria-expanded=\"false\""

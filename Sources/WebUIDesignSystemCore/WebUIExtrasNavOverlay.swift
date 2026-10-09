@@ -21,7 +21,7 @@ public struct WebUINavbar: View {
         /// key hint rendered in the trailing kbd, e.g. "Ctrl K".
         public let shortcut: String?
         public let id: String?
-        public init(placeholder: String = "Search", shortcut: String? = nil, id: String? = nil) {
+        public init(placeholder: String = WebUIStrings.english.search, shortcut: String? = nil, id: String? = nil) {
             self.placeholder = placeholder
             self.shortcut = shortcut
             self.id = id
@@ -43,7 +43,7 @@ public struct WebUINavbar: View {
     public let onNavigate: EventHandler?
     public init(brand: String? = nil, links: [Link] = [], sticky: Bool = false,
                 search: Search? = nil, mobileMenu: Bool = false,
-                mobileMenuLabel: String = "Menu",
+                mobileMenuLabel: String = WebUIStrings.english.menu,
                 id: String? = nil, onNavigate: EventHandler? = nil,
                 @ViewBuilder actions: () -> [any View]) {
         self.brand = brand; self.links = links; self.sticky = sticky
@@ -122,7 +122,7 @@ public struct WebUIBottomNav: View {
         } else {
             attrs = ""
         }
-        var html = "<nav class=\"bottom-nav\"\(attrs) aria-label=\"Primary\">"
+        var html = "<nav class=\"bottom-nav\"\(attrs) aria-label=\"\(RenderContext.currentStrings.primary)\">"
         for (index, item) in items.enumerated() {
             let itemID = id.map { " id=\"\(htmlEscape("\($0)-item-\(index)"))\"" } ?? ""
             html += "<a class=\"bottom-nav__item\(item.active ? " bottom-nav__item--active" : "")\"\(itemID) href=\"#\">"
@@ -282,7 +282,7 @@ public struct WebUITransfer: View {
     public let title: String
     public let options: [Option]
     public let searchPlaceholder: String
-    public init(title: String = "", options: [Option], searchPlaceholder: String = "Filter…") {
+    public init(title: String = "", options: [Option], searchPlaceholder: String = WebUIStrings.english.filter) {
         self.title = title; self.options = options; self.searchPlaceholder = searchPlaceholder
     }
 
@@ -295,12 +295,12 @@ public struct WebUITransfer: View {
             let cls = "transfer__item\(option.selected ? " transfer__item--selected" : "")\(option.moved ? " transfer__row--moved" : "")"
             html += "<div class=\"\(cls)\"><span class=\"transfer__row-label\">\(htmlEscape(option.label))</span>"
             if option.moved {
-                html += "<button class=\"transfer__remove\" aria-label=\"Remove\">×</button>"
+                html += "<button class=\"transfer__remove\" aria-label=\"\(RenderContext.currentStrings.remove)\">×</button>"
             }
             html += "</div>"
         }
         html += "</div>"
-        html += "<div class=\"transfer__controls\"><button class=\"transfer__btn\" aria-label=\"Add\">→</button><button class=\"transfer__btn\" aria-label=\"Remove\">←</button></div>"
+        html += "<div class=\"transfer__controls\"><button class=\"transfer__btn\" aria-label=\"\(RenderContext.currentStrings.add)\">→</button><button class=\"transfer__btn\" aria-label=\"\(RenderContext.currentStrings.remove)\">←</button></div>"
         html += "</div>"
         buffer.append(html)
     }
@@ -345,7 +345,7 @@ public struct WebUISplitButton: View {
         html += "<button class=\"button button--primary\"\(mainID)>\(htmlEscape(label))</button>"
         if caret {
             let caretID = id.map { " id=\"\(htmlEscape("\($0)-caret"))\"" } ?? ""
-            html += "<button class=\"button button--primary button--caret\"\(caretID) aria-label=\"Options\">▾</button>"
+            html += "<button class=\"button button--primary button--caret\"\(caretID) aria-label=\"\(RenderContext.currentStrings.options)\">▾</button>"
         }
         html += "</div>"
         buffer.append(html)
@@ -366,10 +366,10 @@ public struct WebUIToc: View {
     }
     public let entries: [Entry]
     public let title: String
-    public init(title: String = "On this page", entries: [Entry]) { self.title = title; self.entries = entries }
+    public init(title: String = WebUIStrings.english.onThisPage, entries: [Entry]) { self.title = title; self.entries = entries }
 
     public func render(into buffer: inout HTMLBuffer) {
-        var html = "<nav class=\"toc-rail\" aria-label=\"Table of contents\">"
+        var html = "<nav class=\"toc-rail\" aria-label=\"\(RenderContext.currentStrings.tableOfContents)\">"
         html += "<div class=\"toc-rail__title\">\(htmlEscape(title))</div>"
         for entry in entries {
             var cls = "toc-rail__item"
@@ -491,7 +491,7 @@ public struct WebUIActionSheet: View {
     /// each action carries `id + "-item-<index>"`, the cancel row `id + "-cancel"`.
     public let id: String?
     public let onSelect: EventHandler?
-    public init(title: String? = nil, sub: String? = nil, actions: [Action], cancel: String = "Cancel",
+    public init(title: String? = nil, sub: String? = nil, actions: [Action], cancel: String = WebUIStrings.english.cancel,
                 id: String? = nil, onSelect: EventHandler? = nil) {
         self.title = title; self.sub = sub; self.actions = actions; self.cancel = cancel
         self.id = id; self.onSelect = onSelect
@@ -568,7 +568,7 @@ public struct WebUIBottomSheet: View {
         html += "<div class=\"bottom-sheet__handle\"></div>"
         if let title {
             let closeID = id.map { " id=\"\(htmlEscape("\($0)-close"))\"" } ?? ""
-            html += "<div class=\"bottom-sheet__header\"><div class=\"bottom-sheet__title\">\(htmlEscape(title))</div><button class=\"bottom-sheet__close\"\(closeID) aria-label=\"Close\">×</button></div>"
+            html += "<div class=\"bottom-sheet__header\"><div class=\"bottom-sheet__title\">\(htmlEscape(title))</div><button class=\"bottom-sheet__close\"\(closeID) aria-label=\"\(RenderContext.currentStrings.close)\">×</button></div>"
         }
         html += "<div class=\"bottom-sheet__body\">"
         for c in children { html += c.renderThroughBuffer() }
@@ -639,7 +639,7 @@ public struct WebUIDrawer: View {
         html += "<div class=\"drawer__panel\">"
         if let title {
             let closeID = id.map { " id=\"\(htmlEscape("\($0)-close"))\"" } ?? ""
-            html += "<div class=\"drawer__header\"><div class=\"drawer__title\">\(htmlEscape(title))</div><button class=\"drawer__close\"\(closeID) aria-label=\"Close\">×</button></div>"
+            html += "<div class=\"drawer__header\"><div class=\"drawer__title\">\(htmlEscape(title))</div><button class=\"drawer__close\"\(closeID) aria-label=\"\(RenderContext.currentStrings.close)\">×</button></div>"
         }
         html += "<div class=\"drawer__content\">"
         for c in children { html += c.renderThroughBuffer() }
@@ -755,7 +755,7 @@ public struct WebUILinkPreview: View {
         html += "<div class=\"link-preview__domain\">\(htmlEscape(domain))</div>"
         if let title { html += "<div class=\"link-preview__title\">\(htmlEscape(title))</div>" }
         if let desc { html += "<div class=\"link-preview__desc\">\(htmlEscape(desc))</div>" }
-        html += "<button class=\"link-preview__close\" aria-label=\"Close\">×</button>"
+        html += "<button class=\"link-preview__close\" aria-label=\"\(RenderContext.currentStrings.close)\">×</button>"
         html += "</div></a>"
         buffer.append(html)
     }
@@ -791,9 +791,9 @@ public struct WebUILightbox: View {
         let prevID = id.map { " id=\"\(htmlEscape("\($0)-prev"))\"" } ?? ""
         let nextID = id.map { " id=\"\(htmlEscape("\($0)-next"))\"" } ?? ""
         let closeID = id.map { " id=\"\(htmlEscape("\($0)-close"))\"" } ?? ""
-        html += "<button class=\"lightbox__tool\"\(prevID) aria-label=\"Previous\">‹</button>"
-        html += "<button class=\"lightbox__tool\"\(nextID) aria-label=\"Next\">›</button>"
-        html += "<button class=\"lightbox__close\"\(closeID) aria-label=\"Close\">×</button>"
+        html += "<button class=\"lightbox__tool\"\(prevID) aria-label=\"\(RenderContext.currentStrings.previous)\">‹</button>"
+        html += "<button class=\"lightbox__tool\"\(nextID) aria-label=\"\(RenderContext.currentStrings.next)\">›</button>"
+        html += "<button class=\"lightbox__close\"\(closeID) aria-label=\"\(RenderContext.currentStrings.close)\">×</button>"
         html += "</div>"
         if let caption { html += "<div class=\"lightbox__caption\">\(htmlEscape(caption))</div>" }
         html += "</div>"
@@ -985,7 +985,7 @@ public struct WebUIComboBox: View {
     /// (`targetId == "<id>-opt-<index>"`).
     public let id: String?
     public let onChange: EventHandler?
-    public init(placeholder: String = "", options: [Option], emptyMessage: String = "No matches",
+    public init(placeholder: String = "", options: [Option], emptyMessage: String = WebUIStrings.english.noMatches,
                 id: String? = nil, onChange: EventHandler? = nil) {
         self.placeholder = placeholder; self.options = options; self.emptyMessage = emptyMessage
         self.id = id; self.onChange = onChange
@@ -1033,7 +1033,7 @@ public struct WebUICommandPalette: View {
     /// (`targetId == "<id>-cmd-<index>"`).
     public let id: String?
     public let onSelect: EventHandler?
-    public init(commands: [Command], placeholder: String = "Type a command…", footer: String? = nil,
+    public init(commands: [Command], placeholder: String = WebUIStrings.english.typeACommand, footer: String? = nil,
                 id: String? = nil, onSelect: EventHandler? = nil) {
         self.commands = commands; self.placeholder = placeholder; self.footer = footer
         self.id = id; self.onSelect = onSelect
@@ -1201,7 +1201,7 @@ public struct WebUIScrollTop: View {
     public init(
         progress: Double? = nil,
         icon: IconName = .arrowUp,
-        label: String = "Back to top",
+        label: String = WebUIStrings.english.backToTop,
         id: String? = nil,
         onTap: EventHandler? = nil
     ) {

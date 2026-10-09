@@ -634,7 +634,7 @@ public struct WebUIAlert: View, Dismissible {    @available(*, deprecated, renam
     public var dismissRootIdentifier: String? { id }
 
     public func render(into buffer: inout HTMLBuffer) {
-        let dismissal = makeDismissal(ariaLabel: "Dismiss")
+        let dismissal = makeDismissal(ariaLabel: RenderContext.currentStrings.dismiss)
         var attributeText = " class=\"alert \(Self.classFor(tone))\" role=\"alert\""
         if let elementID = dismissal.elementID ?? id {
             attributeText += " id=\"\(htmlEscape(elementID))\""
@@ -972,7 +972,7 @@ public struct WebUIToast: View, Dismissible {    @available(*, deprecated, renam
     public var dismissRootIdentifier: String? { id }
 
     public func render(into buffer: inout HTMLBuffer) {
-        let dismissal = makeDismissal(ariaLabel: "Dismiss")
+        let dismissal = makeDismissal(ariaLabel: RenderContext.currentStrings.dismiss)
         var attributeText = " class=\"toast \(Self.classFor(tone))\" role=\"alert\""
         if let elementID = dismissal.elementID ?? id {
             attributeText += " id=\"\(htmlEscape(elementID))\""
@@ -1016,7 +1016,7 @@ public struct WebUIModal: View, Dismissible {
     public var dismissRootIdentifier: String? { id }
 
     public func render(into buffer: inout HTMLBuffer) {
-        let dismissal = makeDismissal(ariaLabel: "Close")
+        let dismissal = makeDismissal(ariaLabel: RenderContext.currentStrings.close)
         var attributeText = " class=\"modal-overlay\""
         if let elementID = dismissal.elementID ?? id {
             attributeText += " id=\"\(htmlEscape(elementID))\""
@@ -1243,7 +1243,7 @@ public struct WebUITable: View {
                 let selectAllAttrs = wired
                     ? controlAttributes(id: "\(base)-select-all", handler: selectAllHandler)
                     : ""
-                html += "<th class=\"table__select-col align-center\" scope=\"col\"><span class=\"table__select\" id=\"\(htmlEscape(base))-select-all\" role=\"checkbox\" aria-checked=\"\(state)\" aria-label=\"Select all rows\" tabindex=\"0\"\(selectAllAttrs)></span></th>"
+                html += "<th class=\"table__select-col align-center\" scope=\"col\"><span class=\"table__select\" id=\"\(htmlEscape(base))-select-all\" role=\"checkbox\" aria-checked=\"\(state)\" aria-label=\"\(RenderContext.currentStrings.selectAllRows)\" tabindex=\"0\"\(selectAllAttrs)></span></th>"
             }
             if hasExpand {
                 html += "<th class=\"table__expand-col\" aria-hidden=\"true\"></th>"
@@ -1307,7 +1307,7 @@ public struct WebUITable: View {
                     let selectAttrs = wired
                         ? controlAttributes(id: "\(base)-select-\(rowId)", handler: selectHandler)
                         : ""
-                    html += "<td class=\"table__select-col align-center\"><span class=\"table__select\" id=\"\(htmlEscape(base))-select-\(htmlEscape(rowId))\" role=\"checkbox\" aria-checked=\"\(selected)\" aria-label=\"Select row \(htmlEscape(rowId))\" tabindex=\"0\"\(selectAttrs)></span></td>"
+                    html += "<td class=\"table__select-col align-center\"><span class=\"table__select\" id=\"\(htmlEscape(base))-select-\(htmlEscape(rowId))\" role=\"checkbox\" aria-checked=\"\(selected)\" aria-label=\"\(RenderContext.currentStrings.selectRow(htmlEscape(rowId)))\" tabindex=\"0\"\(selectAttrs)></span></td>"
                 }
                 if hasExpand {
                     let canExpand = rowDetails?[rowId] != nil
@@ -1459,7 +1459,7 @@ public struct WebUIChip: View, Dismissible {    @available(*, deprecated, rename
     public var dismissRootIdentifier: String? { id }
 
     public func render(into buffer: inout HTMLBuffer) {
-        let dismissal = makeDismissal(ariaLabel: "Remove")
+        let dismissal = makeDismissal(ariaLabel: RenderContext.currentStrings.remove)
         var attributeText = " class=\"chip \(Self.classFor(tone))\""
         if let elementID = dismissal.elementID ?? id {
             attributeText += " id=\"\(htmlEscape(elementID))\""
@@ -1738,7 +1738,7 @@ public struct WebUIPagination: View {
         let wired = interactiveWanted && id != nil
         let me = id.map { ElementRef.stable($0) } ?? ElementRef.stable("webui-pagination")
 
-        let attributeText = " class=\"pagination\" aria-label=\"Pagination\""
+        let attributeText = " class=\"pagination\" aria-label=\"\(RenderContext.currentStrings.pagination)\""
         buffer.beginElement("nav", attributeText)
         buffer.endOpenTag()
         let prevIdAttr = pid("prev").map { " id=\"\($0)\"" } ?? ""
@@ -1751,7 +1751,7 @@ public struct WebUIPagination: View {
         let prevRoute = wired
             ? controlAttributes(id: base.map { "\($0)-prev" } ?? "", handler: prevHandler)
             : ""
-        buffer.append("<button class=\"pagination__btn\"\(prevIdAttr) type=\"button\" aria-label=\"Previous page\"\(prevDisabled)\(prevRoute)>&#8249;</button>")
+        buffer.append("<button class=\"pagination__btn\"\(prevIdAttr) type=\"button\" aria-label=\"\(RenderContext.currentStrings.previousPage)\"\(prevDisabled)\(prevRoute)>&#8249;</button>")
         for item in pageWindow(page: page, pages: pages) {
             switch item {
             case .ellipsis:
@@ -1782,7 +1782,7 @@ public struct WebUIPagination: View {
         let nextRoute = wired
             ? controlAttributes(id: base.map { "\($0)-next" } ?? "", handler: nextHandler)
             : ""
-        buffer.append("<button class=\"pagination__btn\"\(nextIdAttr) type=\"button\" aria-label=\"Next page\"\(nextDisabled)\(nextRoute)>&#8250;</button>")
+        buffer.append("<button class=\"pagination__btn\"\(nextIdAttr) type=\"button\" aria-label=\"\(RenderContext.currentStrings.nextPage)\"\(nextDisabled)\(nextRoute)>&#8250;</button>")
         if let rowsPerPage {
             let rowsIdAttr = pid("rows").map { " id=\"\($0)\"" } ?? ""
             var rowsHandler: EventHandler? = nil
@@ -1801,7 +1801,7 @@ public struct WebUIPagination: View {
                     handler: rowsHandler
                 )
                 : ""
-            buffer.append("<span class=\"pagination__meta\"><label>Rows per page</label><select class=\"select\"\(rowsIdAttr)\(rowsRoute)>")
+            buffer.append("<span class=\"pagination__meta\"><label>\(RenderContext.currentStrings.rowsPerPage)</label><select class=\"select\"\(rowsIdAttr)\(rowsRoute)>")
             for opt in rowsPerPageOptions {
                 let selected = opt == rowsPerPage ? " selected" : ""
                 buffer.append("<option value=\"\(opt)\"\(selected)>\(opt)</option>")
@@ -2090,7 +2090,7 @@ public struct WebUIBreadcrumb: View {
             "<span class=\"breadcrumb__separator\" aria-hidden=\"true\">\(htmlEscape(sep))</span>"
         }
 
-        let attributeText = " class=\"breadcrumb\(slashCls)\" aria-label=\"Breadcrumb\""
+        let attributeText = " class=\"breadcrumb\(slashCls)\" aria-label=\"\(RenderContext.currentStrings.breadcrumb)\""
         buffer.beginElement("nav", attributeText)
         buffer.endOpenTag()
         // head (links)
@@ -2101,7 +2101,7 @@ public struct WebUIBreadcrumb: View {
         // collapsed middle
         if collapsed {
             let ellipsisId = base.map { " id=\"\($0)-ellipsis\"" } ?? ""
-            buffer.append("<button type=\"button\" class=\"breadcrumb__ellipsis\"\(ellipsisId) aria-label=\"Show omitted items\">…</button>")
+            buffer.append("<button type=\"button\" class=\"breadcrumb__ellipsis\"\(ellipsisId) aria-label=\"\(RenderContext.currentStrings.showOmittedItems)\">…</button>")
             buffer.append(sepHTML())
         }
         // tail (last N−1 as links, final as current)
