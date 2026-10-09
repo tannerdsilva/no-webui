@@ -251,6 +251,15 @@ public struct WebUIServerConfig: Sendable {
 	/// when the component registered a fallback, given something to render in the
 	/// broken control's place. a silent failure is what made C3 invisible.
 	public var handlerFailurePolicy: HandlerFailurePolicy
+	/// what a failed page render answers over http: the host's error page for
+	/// the thrown error. `nil` answers a plain-text 500 naming the failure.
+	///
+	/// a render throw used to surface as a dead page — the error propagated up
+	/// and the connection was dropped. with this set, the request is answered
+	/// with a 500 carrying `onRenderFailure(error)`, so the failure is visible
+	/// and the connection survives. a swift trap is not an error and never
+	/// reaches this closure (see `STABILITY.md`).
+	public var onRenderFailure: (@Sendable (any Error) -> String)?
 
 	/// the hard cap on one request body, in bytes. a declared `Content-Length`
 	/// over the cap is refused before a single body byte is buffered, and a
@@ -272,6 +281,7 @@ public struct WebUIServerConfig: Sendable {
 		assets: [WebUIServerAsset] = [],
 		requireRenderToken: Bool = false,
 		handlerFailurePolicy: HandlerFailurePolicy = .notifyClient,
+		onRenderFailure: (@Sendable (any Error) -> String)? = nil,
 		maxBodyBytes: Int = 1 << 20,
 		maxMultipartParts: Int = 64
 	) {
@@ -285,6 +295,7 @@ public struct WebUIServerConfig: Sendable {
 		self.assets = assets
 		self.requireRenderToken = requireRenderToken
 		self.handlerFailurePolicy = handlerFailurePolicy
+		self.onRenderFailure = onRenderFailure
 		self.maxBodyBytes = maxBodyBytes
 		self.maxMultipartParts = maxMultipartParts
 	}
@@ -304,14 +315,18 @@ public struct WebUIServerConfig: Sendable {
 /// replaces handler registrations idempotently (register is a dictionary
 /// assignment), so a page can re-render with a stable router.
 public actor WebUIServer {
-	public typealias Render = @Sendable () -> String
+	public typealias Render = @Sendable () throws -> String
 	/// the request-aware render: receives the path and decoded query, so a page
 	/// can vary by URL (deep links) as well as by router state.
 	///
 	/// async because a page that reflects live store state has to await it —
 	/// a session store, a database, a filesystem scan. pre-rendering into a
 	/// cache to satisfy a sync signature is how a page goes stale.
-	public typealias RequestRender = @Sendable (WebUIServerRequest) async -> String
+	///
+	/// throwing: a render that throws is answered as a 500 carrying the host's
+	/// error page (`WebUIServerConfig.onRenderFailure`) instead of dropping
+	/// the connection. a closure that never throws needs no `try`.
+	public typealias RequestRender = @Sendable (WebUIServerRequest) async throws -> String
 
 	/// the element id a document's page region carries for in-place
 	/// navigation: the `navigate` answer patches this element. a page without
@@ -339,7 +354,7 @@ public actor WebUIServer {
 		config: WebUIServerConfig = WebUIServerConfig(),
 		logger: Logger = Logger(label: "webui.server")
 	) {
-		self.init(requestRender: { _ in render() }, router: router, config: config, logger: logger)
+		self.init(requestRender: { _ in try render() }, router: router, config: config, logger: logger)
 	}
 
 	/// render from the request: path-dependent pages and `?s=<id>` deep links.
@@ -545,13 +560,13 @@ extension WebUIServer {
 private struct LegacyPageResponder: Responder {
 	let render: WebUIServer.RequestRender
 
-	func respond(to request: HTTPRequest) async -> HTTPResponse {
+	func respond(to request: HTTPRequest) async throws -> HTTPResponse {
 		let pageRequest = WebUIServerRequest(
 			path: request.path,
 			query: request.query,
 			renderToken: request.renderToken
 		)
-		return HTTPResponse(body: .html(await render(pageRequest)))
+		return HTTPResponse(body: .html(try await render(pageRequest)))
 	}
 }
 
@@ -857,10 +872,22 @@ final class Runner: Sendable {
 		// the re-render takes the same path a fresh page request takes: a
 		// session pass, the render context established for its duration.
 		router.begin(session)
-		let response = await RenderContext.$current.withValue(
-			RenderContext(router: router, session: session)
-		) {
-			await pageRouter.respond(to: request)
+		let response: HTTPResponse
+		do {
+			response = try await RenderContext.$current.withValue(
+				RenderContext(router: router, session: session)
+			) {
+				try await pageRouter.respond(to: request)
+			}
+		} catch {
+			// a render throw has nowhere to carry a 500 on a websocket — the page
+			// is told by frame instead, and the socket stays open.
+			logger.error("WebUIServer: navigate re-render failed for \(url): \(error)")
+			try? await writeJSON(
+				WSOutgoing.error(code: "render", message: "re-render failed: \(error)"),
+				outbound: outbound
+			)
+			return
 		}
 		let frame: WSOutgoing
 		switch response.body {
@@ -1174,10 +1201,26 @@ final class Runner: Sendable {
 			body: requestBody,
 			renderToken: token
 		)
-		let response = await RenderContext.$current.withValue(
-			RenderContext(router: router, session: session)
-		) {
-			await pageRouter.respond(to: request)
+		let response: HTTPResponse
+		do {
+			response = try await RenderContext.$current.withValue(
+				RenderContext(router: router, session: session)
+			) {
+				try await pageRouter.respond(to: request)
+			}
+		} catch {
+			// a render throw used to drop the connection — the error surfaced as a
+			// dead page with no explanation. now it is a 500 carrying the host's
+			// error page (or a plain naming of the failure), and the connection
+			// survives. a swift trap is not an error and never lands here.
+			logger.error("WebUIServer: page render failed for \(path): \(error)")
+			let body: HTTPResponse.Body
+			if let page = config.onRenderFailure {
+				body = .html(page(error))
+			} else {
+				body = .text("500 — the page failed to render: \(error)")
+			}
+			response = HTTPResponse(status: 500, body: body)
 		}
 		return try await respond(channel: channel, response: response)
 	}

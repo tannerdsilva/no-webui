@@ -110,18 +110,18 @@ struct PathPatternTests {
 struct RouterMatchingOrderTests {
 
 	@Test("a literal route beats a capture route for the same path")
-	func literalBeatsCapture() async {
+	func literalBeatsCapture() async throws {
 		let router = Router {
 			Route.get("/users/:id") { _ in HTTPResponse(body: .text("capture")) }
 			Route.get("/users/me") { _ in HTTPResponse(body: .text("literal")) }
 		}
-		let response = await router.respond(to: HTTPRequest(path: "/users/me"))
+		let response = try await router.respond(to: HTTPRequest(path: "/users/me"))
 		#expect(response.bodyText == "literal")
 		#expect(response.status.code == 200)
 	}
 
 	@Test("a capture route beats a wildcard route")
-	func captureBeatsWildcard() async {
+	func captureBeatsWildcard() async throws {
 		let router = Router {
 			Route.get("/files/*rest") { _ in HTTPResponse(body: .text("wildcard")) }
 			Route.get("/files/:name") { req in
@@ -129,12 +129,12 @@ struct RouterMatchingOrderTests {
 				return HTTPResponse(body: .text("capture:\(name)"))
 			}
 		}
-		let response = await router.respond(to: HTTPRequest(path: "/files/a.png"))
+		let response = try await router.respond(to: HTTPRequest(path: "/files/a.png"))
 		#expect(response.bodyText == "capture:a.png")
 	}
 
 	@Test("literal segment count outranks capture count")
-	func literalCountFirst() async {
+	func literalCountFirst() async throws {
 		// "/a/b/*rest" (two literals) and "/a/:x" (one literal) both match
 		// "/a/b/c"; the deeper literal prefix must win.
 		let router = Router {
@@ -144,12 +144,12 @@ struct RouterMatchingOrderTests {
 				return HTTPResponse(body: .text("long:\(rest)"))
 			}
 		}
-		let response = await router.respond(to: HTTPRequest(path: "/a/b/c"))
+		let response = try await router.respond(to: HTTPRequest(path: "/a/b/c"))
 		#expect(response.bodyText == "long:c")
 	}
 
 	@Test("precedence never depends on declaration order")
-	func notDeclarationOrder() async {
+	func notDeclarationOrder() async throws {
 		// the capture is declared FIRST and still loses to the literal: the
 		// router sorts by specificity, it does not consult registration order.
 		// (registration order is only the tie-break between two patterns with
@@ -158,8 +158,8 @@ struct RouterMatchingOrderTests {
 			Route.get("/users/:id") { _ in HTTPResponse(body: .text("capture")) }
 			Route.get("/users/me") { _ in HTTPResponse(body: .text("literal")) }
 		}
-		#expect((await router.respond(to: HTTPRequest(path: "/users/me"))).bodyText == "literal")
-		#expect((await router.respond(to: HTTPRequest(path: "/users/other"))).bodyText == "capture")
+		#expect((try await router.respond(to: HTTPRequest(path: "/users/me"))).bodyText == "literal")
+		#expect((try await router.respond(to: HTTPRequest(path: "/users/other"))).bodyText == "capture")
 	}
 }
 
@@ -169,7 +169,7 @@ struct RouterMatchingOrderTests {
 struct RouterSemanticsTests {
 
 	@Test("path parameters fill the routed request")
-	func paramsFillRequest() async {
+	func paramsFillRequest() async throws {
 		let router = Router {
 			Route.get("/users/:id/posts/:postId") { req in
 				let id = req.params["id"] ?? "?"
@@ -177,65 +177,65 @@ struct RouterSemanticsTests {
 				return HTTPResponse(body: .text("u\(id)/p\(postId)"))
 			}
 		}
-		let response = await router.respond(to: HTTPRequest(path: "/users/7/posts/hello"))
+		let response = try await router.respond(to: HTTPRequest(path: "/users/7/posts/hello"))
 		#expect(response.status.code == 200)
 		#expect(response.bodyText == "u7/phello")
 	}
 
 	@Test("no matching pattern is a 404")
-	func notFound() async {
+	func notFound() async throws {
 		let router = Router {
 			Route.get("/users/:id") { _ in HTTPResponse(body: .text("user")) }
 		}
-		let response = await router.respond(to: HTTPRequest(path: "/nope"))
+		let response = try await router.respond(to: HTTPRequest(path: "/nope"))
 		#expect(response.status.code == 404)
 		#expect(response.headers["Allow"] == nil)
 	}
 
 	@Test("a matched pattern with an unmatched method is a 405 with an Allow header")
-	func methodNotAllowed() async {
+	func methodNotAllowed() async throws {
 		let router = Router {
 			Route.get("/users/:id") { _ in HTTPResponse(body: .text("get")) }
 			Route.post("/users/:id") { _ in HTTPResponse(body: .text("post")) }
 		}
-		let response = await router.respond(to: HTTPRequest(method: .patch, path: "/users/7"))
+		let response = try await router.respond(to: HTTPRequest(method: .patch, path: "/users/7"))
 		#expect(response.status.code == 405)
 		#expect(response.headers["Allow"] == "GET, POST")
 	}
 
 	@Test("Allow names only the methods of patterns that actually matched")
-	func allowOnlyMatchedMethods() async {
+	func allowOnlyMatchedMethods() async throws {
 		let router = Router {
 			Route.get("/users/:id") { _ in HTTPResponse(body: .text("get")) }
 			// a pattern that does not match the path must not leak into Allow.
 			Route.post("/elsewhere") { _ in HTTPResponse(body: .text("post")) }
 		}
-		let response = await router.respond(to: HTTPRequest(method: .delete, path: "/users/7"))
+		let response = try await router.respond(to: HTTPRequest(method: .delete, path: "/users/7"))
 		#expect(response.status.code == 405)
 		#expect(response.headers["Allow"] == "GET")
 	}
 
 	@Test("a matched method still serves after an earlier 405 candidate")
-	func matchedMethodWinsOver405() async {
+	func matchedMethodWinsOver405() async throws {
 		let router = Router {
 			Route.get("/users/:id") { _ in HTTPResponse(body: .text("user")) }
 			Route.get("/users/:id") { _ in HTTPResponse(body: .text("never")) }
 			Route.post("/other") { _ in HTTPResponse(body: .text("post")) }
 		}
-		let response = await router.respond(to: HTTPRequest(method: .get, path: "/users/7"))
+		let response = try await router.respond(to: HTTPRequest(method: .get, path: "/users/7"))
 		#expect(response.status.code == 200)
 		#expect(response.bodyText == "user")
 	}
 
 	@Test("a wildcard route serves a whole subtree including params")
-	func wildcardDelivery() async {
+	func wildcardDelivery() async throws {
 		let router = Router {
 			Route.get("/docs/*rest") { req in
 				let rest = req.params["rest"] ?? "?"
 				return HTTPResponse(body: .text("doc:\(rest)"))
 			}
 		}
-		let response = await router.respond(to: HTTPRequest(path: "/docs/guides/getting-started"))
+		let response = try await router.respond(to: HTTPRequest(path: "/docs/guides/getting-started"))
 		#expect(response.bodyText == "doc:guides/getting-started")
 	}
 

@@ -234,6 +234,18 @@ frozen surface is a mistake:
    wire/ABI pinned by this 1.0.0 epoch remains
    authoritative until the 2.0 epoch cut — the harness lands as an island
    capability, so the engine path and its pins stay untouched.
+8. **error boundaries catch failures, not traps.** `ErrorBoundary` and
+   `WebUIServerConfig.onRenderFailure` catch *failures* — a handler that
+   throws and a render that throws, both surfaced as ordinary swift errors
+   through the typed router. they do not catch swift *traps* (`precondition`,
+   a force unwrap, an out-of-bounds index): a trap terminates the process and
+   **no layer of this framework can intercept it in-process** — catching one
+   would require the process isolation that is explicitly out of scope
+   (restarting the page in a child process). keeping the two apart is the
+   point of the boundary; pretending a boundary contains a trap would be a
+   false guarantee. handler and render failures degrade gracefully (fallback
+   markup, a 500 with the host's error page); traps take the process down —
+   that is the contract.
 
 ## change discipline
 

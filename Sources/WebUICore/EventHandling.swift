@@ -658,19 +658,27 @@ public struct RenderContext: Sendable {
     /// that renders one page with one router can leave this at `.default`; a
     /// server that serves many page instances passes one per render.
     public var session: RenderSessionID
+    /// the innermost error boundary this render pass sits inside, or nil
+    /// outside one (W4.2). a boundary installs a context value carrying its
+    /// record while its content renders, so every id the subtree registers
+    /// lands in that record and the boundary can answer those ids' failures.
+    var boundary: ErrorBoundaryRecord?
 
     public init(router: EventRouter, session: RenderSessionID = .default) {
         self.router = router
         self.session = session
     }
     public mutating func nextComponentID() -> ComponentID {
-        router.nextComponentID(in: session)
+        let id = router.nextComponentID(in: session)
+        boundary?.record(id)
+        return id
     }
 
     public mutating func nextElementID() -> ComponentID {
         router.nextElementID(in: session)
     }
     public mutating func register(handler: @escaping EventHandler, for componentID: ComponentID) {
+        boundary?.record(componentID)
         router.register(handler, for: componentID, in: session)
     }
 
@@ -679,7 +687,16 @@ public struct RenderContext: Sendable {
         outcome handler: @escaping OutcomeHandler,
         for componentID: ComponentID
     ) {
+        boundary?.record(componentID)
         router.register(outcome: handler, for: componentID, in: session)
+    }
+
+    /// register fragments to render when `componentID`'s handler fails.
+    public mutating func register(
+        fallback handler: @escaping EventHandler,
+        for componentID: ComponentID
+    ) {
+        router.register(fallback: handler, for: componentID, in: session)
     }
     @TaskLocal public static var current: RenderContext?
 }

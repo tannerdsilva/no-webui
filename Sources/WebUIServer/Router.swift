@@ -7,8 +7,12 @@ import WebUI
 // concern — a responder knows nothing about nio, nonces, or sessions.
 
 /// answers one typed request with one typed response.
+///
+/// throwing: a responder may fail (a page render can throw), and the server
+/// turns that throw into a 500 carrying the host's error page rather than a
+/// dropped connection (`WebUIServerConfig.onRenderFailure`).
 public protocol Responder: Sendable {
-	func respond(to request: HTTPRequest) async -> HTTPResponse
+	func respond(to request: HTTPRequest) async throws -> HTTPResponse
 }
 
 // MARK: - PathPattern
@@ -175,6 +179,10 @@ public struct Route: Sendable {
 	/// the render context the server establishes (component ids, handler
 	/// registration, csp nonce).
 	///
+	/// `content` may throw; a throw is answered by the server as a 500 with
+	/// the host's error page (`WebUIServerConfig.onRenderFailure`), never as a
+	/// dropped connection. a closure that never throws needs no `try`.
+	///
 	/// `content` is a plain closure, not `@ViewBuilder`: this package's
 	/// `ViewBuilder` is array-shaped (its `buildExpression` wraps every view
 	/// into `[any View]`), so a builder-returned `D: View` can never be
@@ -183,7 +191,7 @@ public struct Route: Sendable {
 	/// return it here.
 	public static func page<D: View>(
 		_ pattern: PathPattern,
-		content: @escaping @Sendable (HTTPRequest) -> D
+		content: @escaping @Sendable (HTTPRequest) throws -> D
 	) -> Route {
 		Route(method: .get, pattern: pattern, responder: PageResponder(content: content))
 	}
@@ -195,17 +203,18 @@ private struct ClosureResponder: Responder {
 	init(_ body: @escaping @Sendable (HTTPRequest) async -> HTTPResponse) {
 		self.body = body
 	}
-	func respond(to request: HTTPRequest) async -> HTTPResponse {
+	func respond(to request: HTTPRequest) async throws -> HTTPResponse {
 		await body(request)
 	}
 }
 
 /// the view-backed responder `Route.page` stands on: render the view through
 /// the buffer (the one View requirement) and hand the bytes out as html.
+/// the render can throw — the server answers the throw, it does not drop it.
 private struct PageResponder<D: View>: Responder {
-	let content: @Sendable (HTTPRequest) -> D
-	func respond(to request: HTTPRequest) async -> HTTPResponse {
-		HTTPResponse(body: .html(content(request).renderThroughBuffer()))
+	let content: @Sendable (HTTPRequest) throws -> D
+	func respond(to request: HTTPRequest) async throws -> HTTPResponse {
+		HTTPResponse(body: .html(try content(request).renderThroughBuffer()))
 	}
 }
 
@@ -237,7 +246,7 @@ public struct Router: Sendable, Responder {
 		self.routes = build()
 	}
 
-	public func respond(to request: HTTPRequest) async -> HTTPResponse {
+	public func respond(to request: HTTPRequest) async throws -> HTTPResponse {
 		let matching = routes.filter { $0.pattern.match(request.path) != nil }
 		guard !matching.isEmpty else {
 			return HTTPResponse(status: .notFound, body: .text("not found"))
@@ -254,7 +263,7 @@ public struct Router: Sendable, Responder {
 		if let route = ranked.first(where: { $0.method == request.method }) {
 			var routed = request
 			routed.params = route.pattern.match(request.path) ?? [:]
-			return await route.responder.respond(to: routed)
+			return try await route.responder.respond(to: routed)
 		}
 
 		// a matched pattern with an unmatched method: 405, and the Allow

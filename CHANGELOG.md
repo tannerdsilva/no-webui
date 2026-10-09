@@ -4,6 +4,29 @@ all notable changes to this project are documented here.
 
 ## [unreleased]
 
+### error boundaries (w4.2)
+
+- `ErrorBoundary<Content, Fallback>` answers a failing handler in its subtree
+  with rendered fallback markup: while its content renders, every component
+  id the subtree registers is recorded, and the boundary registers a fallback
+  for exactly those ids. when one of those handlers later throws, the
+  `HandlerOutcome.fail` path patches the boundary's wrapper element (a
+  `div` with a per-render stable id, replaced by id on the client) with the
+  rendered fallback. a failing handler outside any boundary keeps the
+  pre-w4.2 behaviour: the error frame fires and the page keeps what it
+  had. `.errorBoundary { ... }` wraps any view, and `ErrorBoundary` is the
+  first real conformer of the `Recoverable` capability.
+- the responder chain can now fail: `Route.page` content and the render
+  closures may throw, and a throw is answered as a 500 carrying the host's
+  error page (`WebUIServerConfig.onRenderFailure`) instead of dropping the
+  connection. default (no host page): a plain-text 500 naming the failure.
+- boundaries catch *failures*, not swift *traps* — process isolation stays
+  explicitly out of scope, recorded as a limit in `STABILITY.md`.
+- tests: `Tests/WebUITests/ErrorBoundaryTests.swift` (fallback in / out of
+  the boundary, the modifier, inertness without a context, the 500 path with
+  and without a host error page). `Responder`/`Router.respond` became
+  `async throws`; the route-tests now `try`.
+
 ### capability islands are typed (w3.6)
 
 - `Island` (`static let name` + `static func render(_:)`, same swift both
