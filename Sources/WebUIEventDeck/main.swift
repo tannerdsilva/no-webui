@@ -81,6 +81,12 @@ struct DeckDocument: View {
             title: "Event deck · wave 4",
             body: deckBody(),
             runtimeConfig: renderToken.isEmpty ? nil : RuntimeConfig(renderToken: renderToken),
+            // the deck is a probe fixture: `designer/event-deck-probe.mjs`
+            // drives its media controls with data:-uri wavs, which the default
+            // `default-src 'self'` policy blocks with MEDIA_ERR_SRC_NOT_SUPPORTED.
+            // this one page relaxes media-src so the media pipeline is real;
+            // framework defaults are untouched.
+            contentSecurityPolicyExtras: "media-src 'self' data: blob:;",
             rawStyles: Self.deckStyles
         )
         buffer.append(document.renderThroughBuffer())
@@ -93,7 +99,9 @@ struct DeckDocument: View {
         ".deck-ctrl { display: inline-block; padding: 6px 12px; border: 1px solid var(--color-border-subtle, #d1d5db); border-radius: 999px; background: var(--color-surface-muted, #f3f4f6); font-size: 13px; cursor: default; user-select: none; }",
         ".deck-log { margin: var(--space-3) 0 0; padding: var(--space-3); background: var(--color-surface-muted, #f3f4f6); border-radius: 8px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; min-height: 2.2em; white-space: pre-wrap; word-break: break-all; }",
         ".deck-scroll-box { width: 360px; height: 90px; overflow: auto; border: 1px solid var(--color-border-subtle, #d1d5db); border-radius: 8px; padding: 8px; }",
-        ".deck-scroll-box div { height: 280px; white-space: nowrap; }",
+        // the inner content is a Text span, not a div — the selector must match
+        // what the renderer actually emits or the box never scrolls.
+        ".deck-scroll-box span { height: 280px; display: block; white-space: nowrap; }",
         ".deck-anim { animation: deck-pulse 0.35s ease; }",
         "@keyframes deck-pulse { from { opacity: 0.35; } to { opacity: 1; } }",
         ".deck-tran { width: 160px; height: 44px; transition: width 0.3s ease; }",
