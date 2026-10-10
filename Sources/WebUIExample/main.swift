@@ -301,6 +301,14 @@ struct WebUIExample {
 			Route.post("/login") { request in handleLogin(request: request, state: state) }
 			Route.post("/upload") { request in handleUpload(request: request, state: state) }
 			Route.get("/events") { _ in SSE.response(tickStream()) }
+			// the W5.4 theming demo: the same body under three themes. the
+			// default route is the control — a host that never themes — and
+			// `/theme-light` + `/theme-dark` carry the three token overrides
+			// and the host component's StyleSheet. driven by
+			// designer/theme-default-probe.mjs.
+			Route.page("/theme-default") { _ in ThemeDemo.document(mode: nil) }
+			Route.page("/theme-light") { _ in ThemeDemo.document(mode: .light) }
+			Route.page("/theme-dark") { _ in ThemeDemo.document(mode: .dark) }
 		}
 		let server = WebUIServer(
 			router: router,
