@@ -1,6 +1,17 @@
 import Testing
 import WebUI
+import WebUIDesignSystem
 import WebUIShowcaseContent
+
+// the showcase artifact's byte count, pinned in one place. this is the single
+// constant for the whole repo's showcase byte gate — it must never be
+// duplicated in another file. `Documentation/STABILITY.md` documents when it
+// may move: a legitimate change to the served page's byte count, justified in
+// the commit that updates it here. the gate asserts the byte COUNT, never a
+// hash of the raw bytes: `JSONValue.serialize()` emits object keys by direct
+// dictionary iteration and swift dictionary order is per-process randomized,
+// so the raw bytes are not stable run-to-run — only their count is.
+private let showcaseBytePin = 168671
 
 // pins the showcase's live interactive surface. if a wiring migration (like
 // the WebUIButton onTap flip, or a component dropping its typed handler)
@@ -57,5 +68,21 @@ struct ShowcaseWiringTests {
 			"data-component-id count drifted: \(emitted)")
 		#expect(router.handlerCount == expectedIds.count + renderTimeControls,
 			"handler count drifted: \(router.handlerCount)")
+	}
+
+	// the showcase byte pin: the exact artifact `swift run WebUIShowcase
+	// --generate` produces, rendered in-process through the same path
+	// (`RenderContext.$current` snapshot + `WebUIDocument(title:body:
+	// includeRuntime:false)`), asserted to be `showcaseBytePin` bytes.
+	// drift here is a regression or a deliberate change — the latter is a
+	// justified update to the single constant above, not a silent pass.
+	@Test func showcaseArtifactByteCountIsPinned() {
+		let snapshot = RenderContext.$current.withValue(RenderContext(router: EventRouter())) {
+			ShowcasePage(state: ShowcaseState()).renderedString()
+		}
+		let doc = WebUIDocument(title: "WebUI Showcase", body: snapshot, includeRuntime: false)
+		let html = doc.renderThroughBuffer()
+		#expect(html.utf8.count == showcaseBytePin,
+			"showcase artifact drifted: \(html.utf8.count) bytes, pinned \(showcaseBytePin). a legitimate move is one justified commit updating this single constant.")
 	}
 }
