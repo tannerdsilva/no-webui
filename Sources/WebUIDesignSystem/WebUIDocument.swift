@@ -34,6 +34,11 @@ public struct WebUIDocument: View {
 	public let theme: WebUITheme
 	public let clientMode: ClientBoot?
 	public let rawStyles: [String]
+	/// Host-defined ``StyleSheet``s, forwarded to the document — emitted after
+	/// the framework sheet and the theme, so a host component wins the cascade
+	/// by origin. a page without any is byte-identical to one that never heard
+	/// of the type.
+	public let styleSheets: [StyleSheet]
 	/// when set, the design-system sheet is emitted as a cacheable
 	/// `<link rel="stylesheet">` instead of being inlined (default
 	/// `/__assets/css` — hosts serve the same bytes via
@@ -70,6 +75,7 @@ public struct WebUIDocument: View {
 		contentSecurityPolicyExtras: String? = nil,
 		theme: WebUITheme = .standard,
 		rawStyles: [String] = [],
+		styleSheets: [StyleSheet] = [],
 		stylesheetURL: String? = DesignSystemAssets.stylesheetURL,
 		themeStylesheetURL: String? = nil,
 		checkClasses: Bool = false
@@ -93,6 +99,7 @@ public struct WebUIDocument: View {
 		self.contentSecurityPolicyExtras = contentSecurityPolicyExtras
 		self.theme = theme
 		self.rawStyles = rawStyles
+		self.styleSheets = styleSheets
 		self.stylesheetURL = stylesheetURL
 		self.themeStylesheetURL = themeStylesheetURL
 		self.checkClasses = checkClasses
@@ -157,6 +164,7 @@ public struct WebUIDocument: View {
 			body: body,
 			styles: CSSStylesheet([]),
 			rawStyles: rawStyles,
+			styleSheets: styleSheets,
 			scripts: scripts,
 			head: head,
 			headContent: headContent,

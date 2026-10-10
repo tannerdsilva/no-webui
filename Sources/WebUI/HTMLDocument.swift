@@ -40,6 +40,11 @@ public struct HTMLDocument: Sendable, BufferRendering {
     public let body: String
     public let styles: CSSStylesheet
     public let rawStyles: [String]
+    /// Host-defined ``StyleSheet``s, emitted after every other css so their
+    /// ``StyleSheet/css`` — the order statement plus its `@layer` block — lands
+    /// after the framework's layers. each sheet is self-contained, so the bytes
+    /// are placement-independent by construction.
+    public let styleSheets: [StyleSheet]
     public let scripts: String
     /// Raw `<head>` markup, verbatim — the escape hatch.
     ///
@@ -185,6 +190,7 @@ public struct HTMLDocument: Sendable, BufferRendering {
         body: String,
         styles: CSSStylesheet = CSSStylesheet([]),
         rawStyles: [String] = [],
+        styleSheets: [StyleSheet] = [],
         scripts: String = "",
         head: String = "",
         headContent: HeadContent? = nil,
@@ -210,6 +216,7 @@ public struct HTMLDocument: Sendable, BufferRendering {
         self.body = body
         self.styles = styles
         self.rawStyles = rawStyles
+        self.styleSheets = styleSheets
         self.scripts = scripts
         self.head = head
         self.headContent = headContent
@@ -306,6 +313,11 @@ public struct HTMLDocument: Sendable, BufferRendering {
             let cssContent = styles.renderedString()
             if !cssContent.isEmpty { cssParts.append(cssContent) }
             cssParts.append(contentsOf: rawStyles)
+            // host sheets come last: their order statement re-states the
+            // framework layers (a no-op) and appends `host`, so the host block
+            // — first mentioned here, after the framework's own statement —
+            // wins the cascade by origin.
+            cssParts.append(contentsOf: styleSheets.map(\.css))
             let combinedCSS = cssParts.joined(separator: "\n\n")
             let allCSS = preMinifiedStyles ? combinedCSS : minifyCSS(combinedCSS)
             styleTag = allCSS.isEmpty ? "" : "<style>\n\(allCSS)\n</style>"

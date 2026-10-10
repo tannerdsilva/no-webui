@@ -105,4 +105,24 @@ struct CascadeLayerTests {
 		#expect(scoped.contains(":root[data-scheme=\"probe\"]"))
 		#expect(!theme.stylesheet().contains("@layer"))
 	}
+
+	@Test("the framework statement names no host layer: host is declared only by a host sheet")
+	func frameworkNeverDeclaresHost() {
+		// a page with no host stylesheet must emit byte-identically, which means
+		// the framework's own `@layer` statement cannot name `host` — declaring
+		// the layer unconditionally would add it to every document (and with it,
+		// re-order nothing, but the bytes would move). the host layer is declared
+		// exactly once, by the StyleSheet artifact, and always after the framework
+		// layers: `StyleSheet.css` opens with the canonical statement.
+		let working = WebUIAssets.css
+		#expect(working.contains("@layer webui, webui.utilities;"))
+		#expect(!working.contains(", host;"), "the working sheet names host")
+		#expect(!working.contains("@layer host"), "the working sheet declares a host layer")
+
+		let sheet = StyleSheet(name: "probe") {
+			CSSRule(".x", [CSSDeclaration("color", "red")])
+		}
+		#expect(sheet.css.hasPrefix("@layer webui, webui.utilities, host;"))
+		#expect(sheet.css.contains("@layer host {\n  .x {\n    color: red;\n  }"))
+	}
 }

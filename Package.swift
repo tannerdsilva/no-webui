@@ -78,6 +78,10 @@ let package = Package(
             targets: ["WebUIShowcase"]
         ),
         .executable(
+            name: "WebUICascadeProbe",
+            targets: ["WebUICascadeProbe"]
+        ),
+        .executable(
             name: "WebUISmokeTest",
             targets: ["WebUISmokeTest"]
         ),
@@ -366,6 +370,18 @@ let package = Package(
                 "WebUIShowcaseContent",
                 "WebUIServer",
                 .product(name: "Logging", package: "swift-log"),
+            ]
+        ),
+
+        // ── Host-cascade probe (W5.3 browser gate) ──────────────────────────
+        // renders two self-contained pages through the real emission path —
+        // the framework sheet plus a host StyleSheet, and the same markup with
+        // no host sheet — for the designer/cascade-probe.mjs browser gate.
+        .executableTarget(
+            name: "WebUICascadeProbe",
+            dependencies: [
+                "WebUI",
+                "WebUIDesignSystem",
             ]
         ),
 
