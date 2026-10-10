@@ -3,7 +3,7 @@
 the contract for the 2.0 cut: every 1.x spelling that changed across wave 1–5,
 one table per wave, each row naming the deprecated shim and the version that
 removes it. this document is derived from the tree at `245eecc` and from the
-plan's `## 16. PROGRESS` wave log — every symbol below greps in `Sources/` at
+plan's wave log (section 16) — every symbol below greps in `Sources/` at
 that commit; a row whose symbol does not grep is a failed push, not a typo.
 
 two corrections to the plan's own sketch, stated up front because a host that
@@ -16,7 +16,7 @@ starts from the plan would migrate into APIs that do not exist:
   `Appearance` and their parameter is `appearance:`. `Emphasis` exists only
   as a top-level vocabulary slot with no consumer. only `WebUICard` was
   genuinely split, and it split onto `elevation:` plus typed flags.
-- **the plan's `.replaceClasses(_:)` escape was never implemented.** `.class(_:)`
+- **the plan's replace-classes escape was never implemented.** `.class(_:)`
   and its siblings merge in 2.0, and there is no replace-classes modifier in the
   tree. a host that needs to take a framework class off an element does it
   host-side, through the cascade (unlayered host css outranks the layered
