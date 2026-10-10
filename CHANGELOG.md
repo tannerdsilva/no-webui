@@ -2,7 +2,341 @@
 
 all notable changes to this project are documented here.
 
-## [unreleased]
+## [2.0.0] — the typed web (2026-10-10)
+
+### breaking changes
+
+a 1.x host migrating to 2.0 breaks in four places, and every one of them is
+spelled row by row in `Documentation/MIGRATION_2_0.md` (five wave tables, 58
+rows, every symbol grep-verified against the tree):
+
+- **`View.render()` is no longer the protocol requirement.** since the wave-2
+  flip, a `View` declares `func render(into buffer: inout HTMLBuffer)` and
+  nothing else; `render() -> String` survives only as a deprecated *default*
+  that materializes the buffer through `renderThroughBuffer()`. a 1.x view
+  that implements only `render()` does **not** satisfy the protocol — it does
+  not compile against 2.0. keep the body, change the shape: `return X` becomes
+  `buffer.append(X)`. `HTMLBuffer` itself is a public type; `init`, `append`,
+  `appendEscaped`, `appendBytes`, `beginElement`, `endOpenTag`,
+  `endElement`, `voidElement`, `addAttribute`, `addAttributeValue`,
+  `byteCount`, `hasPendingAttributes` and `bytes` are the public members, and
+  the modifier plumbing (`mark`, `takePendingAttributes`, `wrapSpan`,
+  `settlePendingAttributes`, `finish`) stays package.
+- **`.class(_:)` merges; it no longer replaces.** in 1.x a `.class("mine")`
+  wiped the element's own classes; in 2.0 the content's classes survive, in
+  call order, duplicates folded — `appendClassList` in `WebUISharedCore` is
+  the one merge, and both merge passes route through it. a page that relied
+  on replacement to *remove* a framework class loses that ability, and there
+  is no replace escape: the plan's replace-classes escape was never
+  implemented — no such modifier exists anywhere in the tree (0 hits).
+  removing a framework class is now done
+  host-side through the cascade — unlayered host css outranks the layered
+  framework sheet (wave 5, below). the byte gate did not move because no
+  in-repo page chained `.class()` onto a classed element; the merge is proven
+  by `AttributeMergeTests` (37 green).
+- **the slot vocabulary moved out of the components.** the 15 nested `Size`
+  enums became one `ControlSize`; `Variant` became `Appearance` on
+  `WebUIButton`/`WebUITag`/`WebUIAccordion` (renamed, not split: their
+  classes conflict, so a two-axis API would type-check and lie) and `tone:
+  Tone` on the seven tone components; `WebUICard`'s fused `Variant` genuinely
+  split into `elevation: Elevation?` plus the typed flags `interactive:`,
+  `horizontal:`, `hover:`, `compact:`, `disabled:`; the state families became
+  `ValidationState`/`LoadState`/`EditState`/`StepStatus`; and the stringly
+  slots — `WebUIGantt.Bar.state`, `WebUIJsonTree.Node.type`,
+  `WebUIDiff.Line.kind`, `WebUITerminal.Line.kind`, `WebUIDonut.Slice.color`
+  — became typed enums (`GanttBarState`, `JsonNodeType`, `DiffLineKind`,
+  `TerminalLineKind`, `ChartColorSlot`). every 1.x spelling survives as a
+  deprecated alias or forwarding initializer that emits its old bytes
+  (`DeprecatedVocabularyTests` calls all 56 of them), so a 1.x host migrates
+  on the deprecation schedule below, not all at once.
+- **the server's render-closure inits are deprecated.** the 2.0 way to stand
+  up a server is `WebUIServer(router:config:logger:)` with a typed `Router`.
+  the deprecated pair — each marked `build a Router and use
+  init(router:config:logger:)` — is `init(render:router:config:logger:)` and
+  `init(requestRender:router:config:logger:)`. the direction is load-bearing:
+  the router init is the *new* one (the plan's sketch once described it as
+  deprecated — that falsehood is corrected, with the other two, in
+  `Documentation/MIGRATION_2_0.md`). a path-dependent page is a
+  `Route.page` that reads `request.path`.
+
+### the semantic vocabulary (w1)
+
+- `Sources/WebUIDesignSystemCore/Vocabulary.swift` declares all 18 semantic
+  slots as top-level types, and the rule is now *the raw value is the
+  semantic token* — each component builds its own class name from the shared
+  type at render, so the emitted bytes for `sm`/`md`/`lg` are exactly what
+  1.x emitted. the wave-start measurement is why this existed at all: 15
+  nested `Size`, 13 nested `Variant`, 5 `State`, 3 `Status`, 2 `Side`, 2
+  `Edge`, and `Brand` declared twice with different raw value sets — no
+  generic bearer could name a concept with 15 spellings.
+  `SlotBearing.swift` provides the bearer protocols
+  (`SizeBearing`/`ToneBearing`/`ElevationBearing`), one conformance line per
+  measured bearer.
+- **the migration was byte-gated at every step.** `plugin smoke` (19/0)
+  pinned the served bytes throughout; the per-component `classFor(_:)` maps
+  were audited by a generator that refuses to write unless every mapping
+  equals the original raw value; and `SizeConsolidationTests`/
+  `VariantSplitTests`/`StateFamilyTests`/`DuplicateTypeTests`/
+  `TypedSlotTests`/`SlotInvariantTests` assert old → new → bytes for every
+  case. the discipline surfaced the shapes that made this a migration and not
+  a rename: `WebUIKbd` and `WebUICircularProgress` named their cases
+  `small`/`medium`/`large` (kept as deprecated static aliases on
+  `ControlSize`); `WebUIStat`'s `md` is the bare `stat` class; eight
+  components use an empty-string `md` with a leading-space `sm`/`lg`; and
+  `WebUIBanner.danger` has always emitted `banner--error` — the mapping is
+  built from each enum's own raw values, never from case names. the suites
+  also caught two real bugs the byte gate could not see: a name-keyed map
+  that silently gave the circular progress its `xl` class for all four sizes,
+  and the legitimate `md = ""` case read as falsy and substituted `xl`.
+- the seven tone components take `tone: Tone` (the vocabulary gained
+  `secondary` as the brand position the sheet already treated as a peer), the
+  exact-match shapes took `shape: SkeletonShape` and
+  `position: SlidePosition`, the duplicates merged (`Side` →
+  `BubbleSide`/`Placement`, `Edge` → `DrawerEdge`/`PanelEdge`, two `Brand`s →
+  one), and the stringly slots were typed **from the sheet, not from the
+  plan's case lists** — their cases are the rules the sheet actually ships.
+  the donut is the wave's one intended byte change: `WebUIDonut.Slice.color`
+  took raw css (`#6366f1`) and now names the sheet's own palette
+  (`ChartColorSlot` → `--color-chart-1…8`).
+- wave-1 gate: **1172 tests / 0 issues, exit 0** (1125 at wave start, +47);
+  smoke 19/0; blocks-sweep 107/0; rtl-audit 54/0.
+
+### the protocol stack and typed escape hatches (w2)
+
+- `View` keeps carrying only what every view must meet, and the wave made
+  that a compile-time invariant: the capability protocols `Interactive`,
+  `Identified`, `StreamingContent`, `AsyncContent`, `Recoverable`
+  (`Capabilities.swift`) all live in `WebUICore` with defaults, so conforming
+  is a one-word change — `CapabilityProtocolTests` stops compiling the day a
+  requirement lands on `View`. the real conformers arrived with the
+  capabilities themselves (streaming, the event deck, error boundaries).
+- **`.class(_:)` merges** — the semantic change is in the breaking list
+  above; its typed spellings are `ClassName`, `classes(_:)`, `addClass(_:)`.
+- the escape hatches are typed and explicit. `UnsafeMarkup` has **no public
+  initializer** — `.trusted(_:)` is the only way in, one grep-able act that
+  names the exact line that took responsibility for unverified bytes — and
+  `Raw` takes it as its primary initializer, with the `String` initializer
+  deprecated as a one-word-fix path. the `<head>` got the same treatment:
+  `HeadContent`/`HeadContentBuilder`/`LinkRelation` are typed nodes (meta,
+  og, jsonld, link, script), urls sanitized (an unusable `og:image` or
+  `href` is dropped rather than emitted empty), and scripts stay typed until
+  render so the document's **nonce cannot be forgotten** — including on
+  inline JSON-LD, which escapes `</` to `<\/` so a payload containing
+  `</script>` cannot close the element it lives in.
+- `Directionality` lives in `WebUICore` beside `Raw` (the design system
+  re-exports it as a typealias) so the document can name it without importing
+  the design system.
+- `HTMLBuffer` opened as a consumer type and the `render()` →
+  `render(into:)` flip landed (breaking list above): every `View` in the tree
+  declares `render(into:)` now, and the only `render() -> String`
+  declarations left are the deprecated default plus the two attribute-render
+  helpers on `AriaRole`/`Aria` — neither of those is a `View` renderer.
+- wave-2 gate: **1195 tests / 0 issues, exit 0**; smoke 19/0; browser-smoke
+  46/0; blocks-sweep 107/0; rtl-audit 54/0. the typed view-tree spike (w2.5)
+  was measured and decided — recorded in `Documentation/DESIGN_NOTES.md`, not
+  shipped: containers migrate one per task, each behind the byte gate.
+
+### the web's actual HTTP surface (w3)
+
+- **a typed request/response model.** `HTTPMethod`, `HTTPStatus`,
+  `HTTPRequest` (method/path/query/headers/cookies/body/`renderToken`/
+  `isSecure`/`params`) and `HTTPResponse` (`Body`: `.html(_:)`, `.text(_:)`,
+  `.bytes(_:contentType:)`, `.stream(_:contentType:)`) are the server's
+  vocabulary. `WebUISharedCore` gained a **Foundation-free** `HTTPCookie`/
+  `CookieParser` (self-contained `HTTPDate`), and `WebUIAuth` re-exports both
+  through deprecated renamed typealiases. a render answer keeps the guides
+  the server already enforced: the `.html` body still carries auto-CSP and a
+  **fresh nonce per render**, and `Set-Cookie` survives the response path.
+- **a typed router.** `Router(_ routes:)` with
+  `Route.get(_:_:)`/`Route.post(_:_:)`/`Route.page(_:content:)` and
+  `PathPattern` (`"/users/:id"`, trailing `*rest`), matched
+  most-specific-first by a computed `specificity` score so declaration order
+  cannot matter (a test pins it), and the `/..%2f` traversal guard splits on
+  `/` **before** percent-decoding. a page's `renderToken` flows into
+  `RuntimeConfig(renderToken:)`, so `navigate` and events are answered — the
+  gate that had been silently red since the runtime gained per-render tokens.
+- **request bodies, forms and uploads.** `FormBody` with `FormValues`,
+  `MultipartForm`, `UploadedFile`, and `BodyReader(maxBodyBytes: 1 MiB,
+  maxMultipartParts: 64)`. `Form(enctype:)` and `Input(accept:multiple:)`
+  ship real file inputs, and the engine's progressive enhancement submits a
+  native multipart POST when a form has an explicit `action`, `method=post`
+  and a file input — proven live in headless Chromium with JavaScript
+  disabled, the uploaded bytes compared via the `X-Upload-Sha256` header.
+- **renders return a typed response.** `HandlerOutcome` gains
+  `.response(HTTPResponse)` — the case that retired the auth example's
+  hand-rolled NIO — and a websocket handler's `.response` drives a redirect
+  frame.
+- **chunked streaming and SSE.** `HTTPStream` +
+  `HTTPResponse.Body.stream(AsyncStream<[UInt8]>, contentType:)` for
+  mid-stream cancellable chunks, and `SSEEvent`/`SSE` for server-sent
+  events: every field value is split on line boundaries and re-emitted one
+  `name: value` line each, so a payload containing a raw newline stays data
+  and cannot manufacture a frame boundary.
+- typed capability islands closed the wave and are covered in their own
+  section below. the acceptance demo — `WebUIExample`, driven by
+  `designer/acceptance-demo.mjs` (8/0) — exercises the surface in a real
+  browser: a click over the websocket, a native form POST → 303, a real file
+  upload persisted with a byte + sha-256 proof, three SSE events on an
+  `EventSource`.
+- wave-3 lines, every gate green at each step: 1206 → 1225 → 1254 → 1258 →
+  1273 → 1284 tests, the byte pin **exactly 167300** throughout.
+
+### breadth — the event deck, typed media, the typed aria surface (w4)
+
+- **the full event deck.** seven families of events now round-trip typed
+  payloads over the wire — pointer, touch, drag & drop, clipboard,
+  wheel/scroll (rAF-throttled), misc, media — across `EventHandling.swift`,
+  `Modifiers.swift` and `webui-engine.js`, and `View.on(_:perform:)`
+  attaches any `HTMLEvent`, including the previously unreachable
+  `.custom("dragstart")`. the gate is `designer/event-deck-probe.mjs`:
+  33/33 browser, 32/32 socket, 35 other, 0 fail.
+- **typed media.** `Video`, `Audio`, `Picture`, `Source`, `Track`, `Iframe`,
+  `Canvas` with `TrackKind`, `IframeSandbox`, `LoadingStrategy`. `sanitizeURL`
+  guards all six src-bearing paths **including `Video.poster`**, and a
+  hostile src drops the element rather than emitting an empty attribute;
+  `IframeSandbox.strict` is the **empty** set — no permissions at all — with
+  `allow-scripts` an explicit opt-in. the framework's default CSP has no
+  `media-src`, so `data:`/`blob:` media is browser-blocked unless a host adds
+  a directive — recorded in the Video/Audio doc comments (w4.3).
+- **the typed aria surface and its audit.** `Aria` (one case per attribute)
+  and `AriaRole`, plus the typed states `AriaChecked`/`AriaExpanded`/
+  `AriaPressed`/`AriaSelected`/`AriaModal`/`AriaHidden`/`AriaBusy`/`AriaLive`/
+  `AriaCurrent`/`AriaSort`/`AriaHasPopup`/`AriaOrientation` — the case names
+  are mnemonics and the raw values are the served bytes
+  (`.expanded(.yes)` ships `aria-expanded="true"`).
+  `A11yAudit.audit(_:)` answers `[A11yFinding]` with six named rules
+  (`buttonNoName`, `imageNoAlt`, `controlNoLabel`, `interactiveNoName`,
+  `headingSkip`, `roleMissingAria`), and the framework's own markup is clean:
+  `designer/a11y-audit.mjs` (26/0) proves its own rules fire by feeding a
+  synthetic `<img src="x.png">` to `imageNoAlt` before asserting zero
+  findings. **this is the wave's one authorised byte-pin move, 167300 →
+  168671 (+1371), proven fragment-by-fragment to be a11y-only**: 62 added
+  fragments, 43 carrying `aria-`/`for=`/`<label`/`role=`, the removed side
+  exactly the 8 old unassociated `<label class="demo-label">` tags — nothing
+  deleted, nothing cosmetic.
+- error boundaries (w4.2) and localization + typed direction (w4.5) have
+  their own sections below. wave 4 closes at **1355 tests / 0 issues, exit
+  0**, twelve gates.
+
+### aesthetics — typed theming and public stylesheets (w5)
+
+- `DesignTheme` is the typed theming protocol: five **mandatory** static axes
+  (`palette`, `spacing`, `radii`, `typography`, `motion`) with no defaults,
+  so a conformer that omits one cannot compile — the completeness promise is
+  structural, not documented. `DefaultDesignTheme`,
+  `DerivedTheme<Base: DesignTheme>` (a value that statically inherits the
+  base and applies overrides at render time), `TokenOverrides`
+  (`ExpressibleByDictionaryLiteral`, so `.overriding([.colorPrimary500:
+  "…"])` is a bare dictionary literal), `resolvedPalette`, `.webUITheme(mode:)`
+  and the `@Theme` conformance macro complete the surface. the demo —
+  `WebUIExample`, driven by `designer/theme-default-probe.mjs` (40/0) —
+  overrides exactly three tokens for both themes through the typed path
+  (`.overriding([.colorPrimarySolid, .colorBg, .colorBorder], mode:)`) and
+  renders them from one host at `/theme-light`, `/theme-dark` and
+  `/theme-default`, the last a control page proving the unoverridden values
+  are the framework's (and that the dark page needs no OS media query to
+  prove it).
+- token completeness is machine-checked **in both directions**: the
+  generated `DesignToken.verify(_ theme: any DesignTheme.Type) ->
+  [MissingToken]` (with `.notInStylesheet`/`.misplacedAxis` kinds)
+  re-implements the stylesheet scan independently of the generator, and two
+  negative tests assert a `MissingToken` that *names* the token.
+- **a public `StyleSheet` with typed cascade layers.** `StyleSheet(name:
+  layer:rules:)` with `CascadeLayer` (`.webui`, `.utilities`, `.host` —
+  declared last so it wins by origin), the `CSSRuleBuilder`, and
+  `StyleSheet.css` emitting the canonical `@layer webui, webui.utilities,
+  host;` statement — a host rule beats the framework at equal **and** lower
+  specificity with zero `!important` in host bytes, proven in
+  `designer/cascade-probe.mjs` (12/0) on computed style against a control.
+  `WebUIDocument.styleSheets` and `stylesheetURL` ship it as a cacheable
+  `<link>` instead of inline bytes.
+- additive throughout: wave 5 closes at **1396 tests / 0 issues, exit 0**,
+  fourteen gates, the **byte pin unmoved at 168671** — the wave that proved
+  theming and stylesheets cost the served page nothing.
+
+### deprecation and removal schedule
+
+- per `Documentation/STABILITY.md` ("deprecation"), a frozen-surface member
+  ships its deprecation across **one full minor release** and removal lands
+  in the **next major**. `Documentation/MIGRATION_2_0.md` carries the
+  schedule row by row, and its removal column says **2.0.0** for every row:
+  the slot spellings (the nested `Size`/`Variant`/`State`/`Status` enums and
+  the 56 surviving aliases and forwarding inits), the case-name aliases on
+  `ControlSize` and the state enums, `Raw(_ content: String)` (and
+  `Raw.content`), the `head:`/`dir:` string parameters, `WebUIAuth.Cookie`/
+  `CookieParser`, and the two render-closure server inits (`init(render:…)`/
+  `init(requestRender:…)`). the `render()` default is a deprecated
+  requirement-replacement, removed with the rest.
+- `WebUIMenu.Item.destructive` rode the w0.8 read-through into `danger`
+  (deprecated property + deprecated initializer); `WebUICard`'s deprecated
+  `Variant` enum and `init(variant:)` forward to `elevation:` + flags byte
+  for byte; the inert chart scroll api listed in the charts entry below was
+  removed without a cycle because it had no reader anywhere — recorded in
+  `STABILITY.md` as "removals that were never
+  functional", the corrective precedent rather than a deprecation.
+- **a schedule note the cut must decide.** `MIGRATION_2_0.md` frames the
+  deprecation carrier as "the minor shipping right now is 1.1.0", but the
+  1.1.0 tag (`94301a1`, 2026-09-23) predates every deprecation this arc
+  introduced (wave 1 opened 2026-10-08) — none of them has shipped in a
+  public release. STABILITY's "one full minor" therefore does not hold
+  automatically if 2.0.0 is cut directly from this tree: the deprecations
+  would have lived **zero** minors in the wild. the consistent reading is
+  that a 1.x minor carrying the deprecations ships first (the schedule the
+  migration guide assumes), or the owner records an explicit waiver in the
+  cut record. this changelog names the rule and the fact; the cut is the
+  owner's call.
+
+### security invariants preserved
+
+- the release keeps every security invariant the 1.x epoch documented, and
+  the new surface is held to the same bar: server-authoritative rendering
+  with a per-render CSP nonce; escaping that cannot be accidentally skipped
+  (`UnsafeMarkup.trusted(_:)` is the only way in, and the typed head keeps
+  scripts' nonce until render); typed slots that make old injection payloads
+  inexpressible (the wave-1 hardening test that used a `status:` string as an
+  injection vector now asserts the structural property instead); the router's
+  split-before-decode traversal guard; body caps defaulted-on and refused
+  **before buffering** (a declared `Content-Length` over the cap, a lying
+  `Content-Length` answered 400, an overloaded body a 413 naming its limit);
+  SSE fields that cannot manufacture frame boundaries; media urls sanitized
+  on every src-bearing path with a hostile src dropping the element; and an
+  iframe sandbox that defaults to zero permissions.
+- the shipped bytes stay prose-free (build-time `ProseGuard`), the pre-paint
+  theme prelude carries the render nonce, and the framework's own pages are
+  a11y-clean — the audits each prove their rules fire before asserting zero
+  findings.
+
+### verification
+
+- `swift test` **1398 passed / 0 issues, exit 0**; `swift build` clean.
+- the fourteen-gate ladder, one consecutive run at this head:
+  plugin `smoke` **19/0**; plugin `fullstack-smoke` **24/0**;
+  `designer/browser-smoke.mjs` **50/0**; `designer/showcase-ws-smoke.mjs`
+  **9/0**; `designer/blocks-sweep.mjs` **107/0**;
+  `designer/chart-mobile-audit.mjs` **77/0**; `designer/rtl-audit.mjs`
+  **54/0**; `designer/acceptance-demo.mjs` **8/0**;
+  `designer/event-deck-probe.mjs` 33/33 browser · 32/32 socket · 35 other,
+  0 fail; `designer/a11y-audit.mjs` **26/0**; `designer/cascade-probe.mjs`
+  **12/0**; `designer/theme-default-probe.mjs` **40/0**;
+  `designer/engine-theme-default-probe.mjs` **5/0**.
+- **the showcase byte pin: exactly 168671 bytes** at this epoch. the number
+  is enforced in-repo — `showcaseBytePin` in `ShowcaseWiringTests.swift`,
+  the single occurrence tree-wide — and re-rendered by `swift run
+  WebUIShowcase --generate`. per `Documentation/STABILITY.md` ("the showcase
+  byte pin"), what the gate asserts is the byte **count**, never a hash of
+  the raw bytes: `JSONValue.serialize()` iterates a `Dictionary`, so byte
+  *order* is nondeterministic across processes while the count is stable.
+  "byte-identical" is therefore only ever true in the weak sense — identical
+  count and identical markup under a stable process — never as a
+  hash-verifiable promise. a drift fails the suite naming measured vs pinned.
+- STABILITY's coverage number, stated per the cut criterion: the generated
+  `Documentation/frozen-surface.symbols` enumerates **4558 member-level
+  symbols** across the eight modules a consumer reaches, re-extracted
+  in-process on every `swift test` and failing by name on any added or
+  removed symbol. the migration contract is `Documentation/MIGRATION_2_0.md`:
+  five wave tables (w1 = 26, w2 = 7, w3 = 12, w4 = 9, w5 = 4 data rows,
+  58 in all — measured), appendix a the re-measured 79-line deprecated
+  inventory, appendix b how the document verifies itself.
 
 ### localization and direction (w4.5)
 
