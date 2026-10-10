@@ -1,7 +1,7 @@
 ---
 name: webui-design-system
 description: "Use when BUILDING a frontend in your own Swift project with the no-webui public API: add the dependency, author views/components in Swift, wire live server round-trips, apply design tokens/theming, and serve + verify the page. For any kind of app UI — a shell, a dashboard, a chat-style page, a tool — see the 'Build your UI in Swift' section and the references index. (Maintaining the no-webui package itself — its designer assets, icon pipeline, showcase generation, smoke gates — is repo work documented in the repo's README/AGENTS.md, not this skill.)"
-version: 1.15.0
+version: 2.0.0
 author: Hermes Agent
 license: MIT
 platforms: [macos]
@@ -20,8 +20,11 @@ You do **not** edit the no-webui package — you compose its public views and
 components.
 
 Core idea: **your UI is written in Swift.** Views compose like SwiftUI,
-`.render()` emits semantic HTML, and a small JS runtime patches the DOM over a
-WebSocket. The web is only the delivery surface.
+`render(into:)` writes each view's bytes into a shared `HTMLBuffer` that
+becomes semantic HTML, and a small JS runtime patches the DOM over a
+WebSocket. The web is only the delivery surface. (``render() -> String``
+still exists as a **deprecated** convenience that materializes the buffer —
+the sole protocol requirement is `render(into:)`.)
 
 ## When to use
 
@@ -59,8 +62,8 @@ external JS/CSS/npm — the design system and runtime are embedded at build time
 ## Build your UI in Swift (the guiding principle)
 
 - **Express every region as a `View`.** Compose `VStack`/`HStack`/`ZStack`,
-  `ScrollView`, `WebUIButton`, `WebUICard`, `WebUITable`, … then `.render()`.
-  The toolkit owns the markup.
+  `ScrollView`, `WebUIButton`, `WebUICard`, `WebUITable`, … then
+  `render(into:)` them (see *Compose and render a page*).
 - **Prefer an existing component over any markup.** The design system covers
   buttons, inputs, cards, badges, tabs, trees, tables, lists, segmented
   controls, sidebars, panels, composers, empty states. Reach for one first.
@@ -136,17 +139,30 @@ import WebUIDesignSystem
 
 let body = VStack(spacing: 16) {
     Heading("Hi", level: .h2)
-    WebUIButton("Go", variant: .primary, size: .md)
+    WebUIButton("Go", appearance: .primary, size: .md)
 }
 .padding(24)
-.render()                       // -> String HTML fragment
+
+// the sole `View` requirement is `render(into:)` — write into a buffer, then
+// materialize the string from it (`HTMLBuffer` is public).
+var buffer = HTMLBuffer()
+body.render(into: &buffer)
+let bodyHTML = String(decoding: buffer.bytes, as: UTF8.self)
 
 let doc = WebUIDocument(
     title: "Page",
-    body: body,
+    body: bodyHTML,
     runtimeConfig: RuntimeConfig(renderToken: "...")   // optional
-).render()
+)
+var docBuffer = HTMLBuffer()
+doc.render(into: &docBuffer)
+let html = String(decoding: docBuffer.bytes, as: UTF8.self)
 ```
+
+(`render() -> String` still compiles and is byte-identical — it is the
+deprecated 1.x convenience that materializes the same buffer — but a type that
+implements *only* `render()` does **not** satisfy `View`: the buffer method is
+the requirement.)
 
 `WebUIDocument` assembles the full HTML document with the design-system CSS
 and JS runtime embedded, an auto-generated CSP + nonce, and the theme.
@@ -199,6 +215,28 @@ The same `View`/`ViewModifier` core can run **inside the browser** — the
   an app stylesheet, and the theme sheet outrank the framework by cascade origin.
   no `!important`, no matching specificity.
 
+### The typed theme stack (2.0)
+
+`WebUITheme`/`@Theme` is the *typed* restatement of the vocabulary — a token
+override there is compiler-checked against the generated `DesignToken` enum:
+
+- **`DesignTheme`** — a complete five-axis theme (`palette`, `spacing`,
+  `radii`, `typography`, `motion`), every axis **mandatory** (a conformer that
+  omits one does not compile); `DefaultDesignTheme` changes nothing,
+  `DerivedTheme<Base>` + `.overriding([.colorPrimary500: "#6c8cff"])` moves a
+  few tokens on top of a base theme.
+- **`@Theme`** — the conformance macro: flat token members synthesize a full
+  five-axis conformance (`static let colorPrimarySolid = "#6c8cff"`), and
+  `@Theme(base: SomeTheme.self)` layers them on another provider — the shape a
+  many-scheme app wants. a mistyped token name is a compile error.
+- **`StyleSheet`** — host css with framework guarantees: `StyleSheet(name:layer:rules:)`
+  emits a placement-independent layered artifact (`CascadeLayer.host` beats the
+  framework by cascade origin — equal *or* lower specificity, zero
+  `!important`; `cascade-probe` proves it on computed style). wire it with
+  `WebUIDocument.styleSheets` / `stylesheetURL` (a cacheable `<link>`).
+- **`TokenOverrides`** — the axis value type (a `[DesignToken: String]` in
+  dictionary-literal form), shared by spacing/radii/typography/motion.
+
 ### The `*__body` padding convention (key gotcha)
 
 Container components carry their interior padding on a `__body` **child**, not
@@ -244,6 +282,26 @@ The live layer: the runtime opens a WebSocket and forwards DOM events as
   `RuntimeConfig.renderToken` and have your server reject messages whose
   token doesn't match the session's current render set.
 
+### The event deck (2.0)
+
+`HTMLEvent` now spans **seven families** — pointer, touch, drag & drop,
+clipboard, wheel/scroll, misc (dblclick/context-menu/animation-end/
+transition-end), and media — each with a typed modifier (`.onPointerDown`,
+`.onDragStart`, `.onDrop`, `.onCopy`/`.onCut`/`.onPaste`, `.onWheel`,
+`.onScroll`, `.onPlay`/`.onPause`/`.onEnded`/`.onTimeUpdate`/`.onLoadedMetadata`/`.onError`)
+and a **typed payload**: read `event.pointer()?.x`, `event.touch()`, `event.drag()`
+(`data` map + `files`), `event.paste()` (`text`/`html`), `event.wheel()`,
+`event.scroll()`, `event.animation()`, `event.transition()`, `event.media()`
+instead of `event.number("x")` magic strings. `.on(_:perform:)` attaches any
+event including `HTMLEvent.custom("…")` for one the vocabulary does not name.
+
+- **`.onFocus`/`.onBlur` are delivered via the bubbling `focusin`/`focusout`** and
+  normalized to the declared event name, so a focus/blur handler works even
+  when the actual browser event fires on a descendant.
+- **`targetId` (`event.targetID`) resolves to the nearest id-bearing element
+  *inside* the component boundary** — a click usually lands on a label or icon
+  child, and clicking the component's own root reports `nil`.
+
 ## Filling the space
 
 - Inside `VStack(.leading)` everything **shrink-wraps**. Add `align-self: stretch`
@@ -282,7 +340,8 @@ design-system tokens, with no client charting library.
 
 Your server serves the rendered document and assets, and upgrades `/ws`:
 
-- Serve the page (`WebUIDocument(...).render()`) plus the design-system assets
+- Serve the page (`WebUIDocument(...).render(into: &buffer)` + materialize)
+  plus the design-system assets
   (`DesignSystemAssets.minifiedCss`, `WebUIAssets.js`) — the `WebUIDocument`
   already inlines the CSS/runtime, so commonly only the document + `/ws` are
   needed.
@@ -341,6 +400,55 @@ gates — is not this skill's audience. It belongs to the no-webui repo and live
 in its `README.md`, `AGENTS.md`, and `Documentation/*`; reach for those (or the
 `no-webui` skill) when you're working *on* the package.
 
+## The 2.0 contract (what changed)
+
+the full old→new mapping, one table per wave, lives in
+`Documentation/MIGRATION_2_0.md` in the package checkout — read it before
+migrating a 1.x host. the short version a 2.0 host writes against:
+
+- **`render(into:)` is the sole `View` requirement.** `render() -> String` is
+  a deprecated default materialized from the buffer; a type implementing only
+  `render()` does not satisfy `View`. `ViewModifier` likewise requires
+  `decorate(_:into:)` in addition to `apply(to:)` (defaulted through the buffer).
+- **`class:` merges now.** `.class("x")`/`.classes(...)`/`.addClass(...)` and
+  the `class:` parameters keep the content's own classes — call order,
+  duplicates folded. the 1.x replace semantics are gone, and there is **no
+  replace escape**: a host that must take a framework class off an element
+  does it through the cascade (unlayered host css / a `StyleSheet` outranks
+  the layered sheet).
+- **the retired slot vocabulary.** 15 nested `Size` enums → `ControlSize`
+  (`sm`/`md`/`lg`/`xl`); `WebUIButton.Variant`/`WebUITag.Variant`/
+  `WebUIAccordion.Variant` → a shared `Appearance` + `appearance:`; the seven
+  tone components' `Variant` → `tone: Tone`; `WebUICard.Variant` — the fused
+  elevation/flag enum — split into `elevation: Elevation?` plus the typed
+  flags `interactive:`/`horizontal:`/`hover:`/`compact:`/`disabled:` (and the
+  nested `State`/`Status`/`Trend`/`Side`/`Edge`/`Brand` slots → the shared
+  top-level vocabulary). every 1.x spelling keeps a deprecated shim through
+  the one minor; removal lands in 2.0.0.
+- **capability protocols** — conformance is a one-word change and no capability
+  adds a `View` requirement: `Interactive`, `Identified` (`stableID`),
+  `StreamingContent`, `AsyncContent`, `Recoverable`. `ErrorBoundary` is the
+  shipped `Recoverable` conformer.
+- **typed aria.** `Aria` (one case per attribute: `.label`, `.expanded(.yes)`,
+  `.checked(.mixed)`, `.live(.polite)`, `.sort(.ascending)`, …) and `AriaRole`
+  replace hand-written `aria-*`/`role=` strings; `.role(_:)`/`.aria(_:)`/
+  `.ariaLabel(_:)`/`.ariaLive(_:)`/`.focusable()` attach them to any view.
+  `A11yAudit.audit(_:)` applies the same six rules the browser gate runs.
+- **`ErrorBoundary`** + `.errorBoundary { … }` answer a *failing handler*
+  inside the guarded subtree with a rendered fallback — and the honest
+  boundary: a swift **trap** (`precondition`, a force unwrap, an out-of-bounds
+  index) cannot be caught in-process, and no boundary here pretends otherwise
+  (`Documentation/STABILITY.md` item 8). pass exactly ONE content view — not
+  `@ViewBuilder` (see the gotcha below).
+- **typed media primitives** — `Video`, `Audio`, `Picture`, `Source`, `Track`
+  (`TrackKind`), `Iframe` (`IframeSandbox`, `.strict` is the **empty** set),
+  `Canvas`, `LoadingStrategy`; `sanitizeURL` guards every src-bearing path.
+- **localisation** — `WebUIStrings` is the catalog of the framework's own
+  strings (67 properties, English default; override any subset), resolved
+  through the render context; `WebUIDocument` takes `locale:` (feeds `<html lang>`)
+  and typed `direction: Directionality` (`ltr`/`rtl`, wins over the deprecated
+  `dir:` string). the Arabic catalog ships as the reference override.
+
 ## Consumer gotchas
 
 - **Content flush against a container edge** → missing `__body` wrapper (pad via
@@ -350,11 +458,12 @@ in its `README.md`, `AGENTS.md`, and `Documentation/*`; reach for those (or the
 - **A chart collapses to the width of its own text** → charts contribute no
   intrinsic width; give the container a declared width or a grid track, and pick
   the design width (`chartHeight`) for the smallest placement (see *Charts*).
-- **`.class("x")` on a component replaces its own classes** → the attribute merge
-  keeps the *later* value, so a `VStack(spacing: 32).class("mine")` loses
-  `vstack spacing-32 align-flex-start` and its layout silently changes. wrap it
-  in `Div(class: "mine") { … }` instead, or scope the rule in css to the classes
-  the component already emits (`.parent > .vstack { … }`).
+- **`class("x")` on a component *merges* with its own classes (2.0)** — the old
+  replace semantics are gone, so `WebUIButton("Go").class("mine")` keeps
+  `button button--primary button--md` and adds `mine`. there is **no**
+  replace-escape modifier. to override a framework class, scope a rule (a
+  `StyleSheet`, or `.parent > .vstack { … }`) — unlayered host css outranks
+  the framework by cascade origin.
 - **String escaping in Swift HTML literals** — a doubled backslash (`\\`) renders
   a literal `\`; write single `\(…)`. Prefer multiline string literals.
 - **Nested ternary inside interpolation** breaks the parser — compute the
@@ -381,6 +490,17 @@ in its `README.md`, `AGENTS.md`, and `Documentation/*`; reach for those (or the
   (badges, tags, avatars, charts, skeletons, stat/celebrate/countdown, …) or
   drag/edit widgets whose interaction contract isn't designed yet (kanban,
   transfer, datasheet, signature) — those stay modifier-drivable via `.onClick`.
+- **`Text` emits a bare text node, not an element.** it frames no element at
+  all, so a grid/flex container that renders texts directly has no items to
+  lay out (shared by the chart-width trap above). wrap text content in
+  `Span`/`Div` whenever CSS layout depends on it.
+- **The array-shaped `ViewBuilder` cannot infer a single-view generic.** this
+  package's `ViewBuilder` wraps every view into `[any View]`, so an API with a
+  `@ViewBuilder` closure and one generic `Content: View` parameter can never
+  infer `Content` from a single view expression. any API wanting exactly ONE
+  view takes a plain closure (`ErrorBoundary.init`, `Route.page`) — follow that
+  model in your own components, and compose a multi-view subtree as one view
+  (`VStack { … }`).
 
 ## Committing (in your own app)
 

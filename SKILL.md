@@ -1,7 +1,7 @@
 ---
 name: no-webui
 description: Work on the no-webui framework itself (maintainer): repo layout, swift build/test, the command-plugin verbs (serve/smoke/fullstack-smoke/probe/showcase/showcase-serve), asset embedding + icon pipeline, generated files, security invariants, house style, and maintainer pitfalls. For building an APP that uses the public API, load webui-design-system instead.
-version: 1.2.0
+version: 1.3.0
 author: Tanner D'silva, Hermes Agent
 license: MIT
 platforms: [macos]
@@ -55,9 +55,11 @@ modules). Full stage map: `Documentation/ASSEMBLY.md`.
 | `probe` | `swift package plugin probe [port]` | connect-based port check |
 | `showcase` | `swift package plugin showcase --allow-writing-to-package-directory` | regenerates `designer/previews/showcase.html` |
 | `showcase-serve` | `swift package --disable-sandbox plugin showcase-serve` | hosts the live swift-generated showcase on :9092 |
+| `wasm-island` | `swift package --disable-sandbox plugin wasm-island [--product TheirIsland] [--no-strip]` | cross-builds a capability island with the wasm SDK into the isolated `.build/wasm-island-scratch` root (strips name table + DWARF unless `--no-strip`) and copies it to `.build/out/Products/Release-webassembly-wasm32/<product>.wasm`; `WebUIWasmTool` strips and emits the `WebUIWasmInfo` metadata carrier |
+| `budget` | `swift package plugin budget` | fails when any shipped surface (engine, design-system sheet, shell, island artifact) exceeds its pinned size ceiling. read-only, no sandbox flag |
 
-- **`--disable-sandbox` is mandatory for `serve`/`smoke`/`fullstack-smoke`/`showcase-serve`**
-  (and `probe` needs no flag). The command-plugin sandbox forbids `listen()` —
+- **`--disable-sandbox` is mandatory for `serve`/`smoke`/`fullstack-smoke`/`showcase-serve`/`wasm-island`**
+  (and `probe`/`budget` need no flag). The command-plugin sandbox forbids `listen()` —
   `bind()` fails with `EPERM` even with the local-network permission (which is
   outbound-only). A forgotten flag surfaces as
   `server did not become ready — run with --disable-sandbox`.
@@ -142,16 +144,55 @@ token). The detailed table is in `Documentation/ARCHITECTURE.md`.
   server keeps serving the old page until restarted after a full `swift build`.
 - **`Logger` methods take `Logger.Message`**, not `String`; prefer unconditional
   `Logger.warning()` over `#if DEBUG` for security-relevant warnings.
-- **Smoke pins the interactive count** (24 `data-component-id` attributes on the
-  smoke page) — add/remove a component there and update `WebUISmokePlugin.swift`.
+- **Smoke pins the interactive count** (26 `data-component-id` attributes on the
+  smoke page: 3 counter + 2 progress + 1 echo + 12 routed table controls
+  [3 sort + select-all + 4 select + 4 expand] + 6 routed chart bars + 1 upload
+  form) — add/remove a component there and update `WebUISmokePlugin.swift`.
 - **A rendered artifact showing something the source lacks = stale artifact** —
   regenerate the showcase, don't hand-edit; don't treat it as a framework bug.
 
-## Verification
+## Verification — the fourteen-gate ladder plus the byte pin
 
-- `swift test` (byte-identity of embedded css/js vs `designer/assets/`),
-  `smoke` (served bytes == source), `fullstack-smoke` (live WS round-trips),
-  `node designer/browser-smoke.mjs` (real-DOM layout gate, headless Chromium).
+every change ships on all fourteen rungs, run in order. each gate hosts its own
+server and tears it down — never run one while `serve` or another gate is up
+(the `.build` lock forbids concurrency). counts are the current measured
+totals, not assertions — re-measure rather than trust:
+
+1. `swift build` — plugins regenerate `Assets+Generated.swift`,
+   `DesignTokens+Generated.swift`, `IconLibrary.swift`.
+2. `swift test` — currently **1398 tests / 0 issues**.
+3. `swift package --disable-sandbox plugin smoke` — currently **19** ok-pass
+   assertions: served bytes, page signatures, CSP, the 26 interactive
+   components.
+4. `swift package --disable-sandbox plugin fullstack-smoke` — live WS
+   round-trips (click/echo/redirect/optimistic), currently **24**.
+5. `node designer/browser-smoke.mjs` — real-DOM layout gate, headless
+   Chromium, currently **50**.
+6. `node designer/showcase-ws-smoke.mjs` — stable-id dispatch gate against
+   the showcase server (a raw client, never patches the runtime), currently **9**.
+7. `node designer/blocks-sweep.mjs` — every standalone block at
+   320/768/1440, both themes, no overflow, currently **107**.
+8. `node designer/chart-mobile-audit.mjs` — chart text ≥ 11px and fully
+   visible plots across six viewports × both themes, currently **77**.
+9. `node designer/rtl-audit.mjs` — both directions × both themes × three
+   widths, mirrored-order assertions against an ltr control, currently **54**.
+10. `node designer/acceptance-demo.mjs` — the four acceptance routes (dashboard,
+    click round-trip, form POST, file upload) end to end, currently **8**.
+11. `node designer/event-deck-probe.mjs` — every deck event through a real
+    browser (layer A) and the probe's own socket (layer B), currently
+    **33/33 browser · 32/32 socket · 35 other, 0 fail**.
+12. `node designer/a11y-audit.mjs` — the six-rule accessibility gate over raw
+    http (with a self-test that the rules fire), currently **26**.
+13. `node designer/cascade-probe.mjs` — a host `StyleSheet` wins the cascade
+    by origin with zero `!important`, currently **12**.
+14. `node designer/theme-default-probe.mjs` + `engine-theme-default-probe.mjs`
+    — the typed-theme and engine theme-default contracts on computed style,
+    currently **40** and **5**.
+
+plus the **byte pin**: `swift run WebUIShowcase --generate <tmp file>` renders
+exactly **168671 bytes**; a docs-only change must not move it (asserted
+in-process by the showcase byte-pin suite).
+
 - After a CSS/component change, regenerate the showcase and confirm it shows
   the change in **both** light and dark.
 
