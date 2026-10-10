@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// designer/theme-default-probe.mjs  the engine's theme-default contract, in a real browser.
+// designer/engine-theme-default-probe.mjs  the engine's theme-default contract, in a real browser.
 //
 // the contract has two rules, and both must agree with the pre-paint prelude:
 //   1. a stored choice wins outright;
@@ -16,7 +16,7 @@
 // interception — so the default is deterministic and the engine's boot is the only
 // variable.
 //
-// usage: node designer/theme-default-probe.mjs
+// usage: node designer/engine-theme-default-probe.mjs
 //   spawns WebUIShowcaseServer on :9093, runs two browser contexts, tears down.
 //   exits non-zero on failure. needs `playwright` resolvable from the repo root.
 

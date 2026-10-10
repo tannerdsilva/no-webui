@@ -6,21 +6,24 @@
 
 | Protocol | Requirement | Notes |
 |---|---|---|
-| `View` | `func render() -> String` | pure function, no side effects, `Sendable` |
-| `View` | `func render(into buffer: inout HTMLBuffer)` | *defaulted* requirement: writes into a shared render buffer; the default falls back to `render()`, so a view that implements only `render()` renders byte-identically |
+| `View` | `func render(into buffer: inout HTMLBuffer)` | the **sole requirement** since the 2.0 flip: writes this view's bytes into a shared render buffer. a requirement deliberately — an extension method would resolve statically, so a view's own implementation would never run through `any View`; the dispatch is pinned by `RenderIntoBufferTests` |
+| `View` | `func render() -> String` | **deprecated extension default**: renders through the buffer and materializes the string. existing call sites keep compiling and rendering identically — the deprecation is the migration signal. it is not a way to *conform*: a type that implements only `render() -> String` does not satisfy the protocol |
 | `ViewModifier` | `func apply(to html: String) -> String` | wraps rendered html with attributes or styles |
-| `ViewModifier` | `func decorate<C: View>(_ content: C, into buffer: inout HTMLBuffer)` | *defaulted* requirement: applies the modifier through the buffer; the default applies to `content.render()` |
+| `ViewModifier` | `func decorate<C: View>(_ content: C, into buffer: inout HTMLBuffer)` | *defaulted* requirement: applies the modifier through the buffer; the default applies `apply(to:)` to the content's string render |
 | `ModifiedView<Content: View, M: ViewModifier>` | `View` | type-preserving wrapper returned by every modifier |
 | `EmptyView` | `View` | renders nothing |
 
-the buffer route is the framework's own render path, not yet consumer API:
-`HTMLBuffer` is a `public` *type* — a protocol requirement is implicitly as
-visible as its protocol, and the requirements name it — while **every member
-stays `package`**. a consumer can see the type in a signature but cannot
-construct or write through one; the members open up with the 2.0 flip, when
-`render(into:)` becomes the requirement and `render()` a deprecated
-convenience (`STABILITY.md`). both additions are additive in the 1.x sense:
-an existing conformer keeps compiling and rendering identically.
+the buffer is a real consumer surface now: `HTMLBuffer` is a `public` type
+with **13 public members** — `init(capacity:)`, `append`, `appendEscaped`,
+`appendBytes`, `beginElement`, `endOpenTag`, `endElement`, `voidElement`,
+`addAttribute`, `addAttributeValue`, `byteCount`, `hasPendingAttributes`,
+`bytes` — and the modifier plumbing (`mark`, `takePendingAttributes`,
+`wrapSpan`, `settlePendingAttributes`, `finish`) stays `package`. migrating a
+1.x conformer: implement `render(into:)`. a 1.x view that implemented only
+`render() -> String` does **not** compile against the 2.0 protocol — there is
+no default for the requirement (a kept `render()` would be silently bypassed
+through `any View`). see `Documentation/MIGRATION_2_0.md` (wave 2) for the
+flip and the shim.
 
 ### ViewBuilder
 
@@ -170,7 +173,7 @@ real `POST` — bodies, uploads, redirect-after-post — lands in **W3**
 | Type | Parameters | Description |
 |---|---|---|
 | `HTMLDocument` | title, body, styles, rawStyles, scripts, contentSecurityPolicy, contentSecurityPolicyExtras, includeRuntime, runtimeConfig, devMode, head, bodyAttributes, lang, preMinifiedStyles, stylesheetURL, themeStylesheetURL, inlinedComponentStyles | complete HTML document with auto-generated CSP and nonce. shipped css is minified (comments + blank lines stripped) unless `preMinifiedStyles: true` embeds the caller-provided combined sheet verbatim (used by `WebUIDocument`'s hoisted sheet) |
-| `WebUIDocument` | same as HTMLDocument | HTML document with the full design system css — the record sheet (layout rules + embedded css) is minified once into `WebUIDocument.minifiedDesignStyles` and embedded verbatim on every render (`preMinifiedStyles: true`), removing the old per-render minify of ~300 kb css (~11 ms in release → <0.01 ms) |
+| `WebUIDocument` | same as HTMLDocument | HTML document with the full design system css — the record sheet (layout rules + embedded css) is minified once into `WebUIDocument.minifiedDesignStyles` and embedded verbatim on every render (`preMinifiedStyles: true`), removing the old per-render minify of ~350 kb css (~11 ms in release → <0.01 ms) |
 
 `contentSecurityPolicyExtras` is the seam for a host that needs one more directive than
 the policy it would otherwise get: its directives are **merged per name** into the
@@ -518,28 +521,37 @@ WebUIIconCustom(name: "custom", body: "<path d=\"M12 2l9 10-9 10-9-10z\"/>")
 
 ## WebUIServer
 
-one-call serving of a no-webui page: http page route, the framework asset
+one-call serving of a no-webui page: http page routes, the framework asset
 routes (stylesheet, engine, shell) with cache headers, host assets, `/ws`
-upgrade, `EventRouter` dispatch, ping/pong, read-idle reaping, and an
+upgrade, typed `Router` dispatch, ping/pong, read-idle reaping, and an
 admission cap — replaces the NIO boilerplate reference hosts used to copy.
 
 ```swift
-let router = EventRouter()
+let router = Router {
+    Route.page("/") { _ in
+        WebUIDocument(title: "demo", body: VStack { Text("hello") })
+    }
+    Route.post("/login") { request in handleLogin(request: request) }
+}
 let server = WebUIServer(
-    render: { renderPage(router: router) },   // fresh document per request (new nonce)
     router: router,
     config: WebUIServerConfig(port: 9090)
 )
 try await server.start()                       // serves until stop() / process exit
 ```
 
-- `render` is called per request (fresh CSP nonce each time — the documented
-  best practice) and registers handlers into the same `router`; re-rendering
-  replaces registrations idempotently (stable ids or auto `c0..` order both
-  work when the tree is deterministic). the request-aware
-  `WebUIServer(requestRender:router:config:logger:)` instead receives a
-  `WebUIServerRequest` (`path` + decoded `query`), which is what a deep link
-  like `/index.html?s=<id>` needs.
+- the `Router` is a typed `Route` table (`Route.get`/`Route.post`/`Route.page`,
+  `PathPattern` params). `Route.page` renders its view as a whole document
+  inside the render context the server establishes — component ids, handler
+  registration, and a fresh CSP nonce per request, with
+  `HTTPRequest.renderToken` available to echo into the page so the websocket
+  frames bind back to this render. re-rendering replaces registrations
+  idempotently (stable ids or auto `c0..` order both work when the tree is
+  deterministic). the render-closure inits — `init(render:router:config:logger:)`
+  and `init(requestRender:router:config:logger:)` — are **deprecated**: they
+  keep their signatures and stand on a single-route `Router` for
+  `config.pagePath`, so an existing 1.x page renders byte-identically
+  (`WebUIServer.swift`).
 - `WebUIServerConfig` tunes host/port, admission cap, read-idle seconds,
   asset cache seconds, the page path (default `/`), and `assets` — the host's
   own served files (see below).
@@ -610,8 +622,8 @@ try await group.run()
 a bind failure propagates out of `run()`, so a server that cannot listen fails
 startup rather than reporting itself ready.
 
-see `Sources/WebUIExample/main.swift` — the reference server is now ~100
-lines of page + state, with the pipeline entirely inside `WebUIServer`.
+see `Sources/WebUIExample/main.swift` — the reference server is ~330 lines
+of page + state + routes, with the pipeline entirely inside `WebUIServer`.
 
 ## WebUIExample
 

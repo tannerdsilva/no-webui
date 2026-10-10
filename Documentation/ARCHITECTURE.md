@@ -2,7 +2,7 @@
 
 ## Overview
 
-The framework has four layers that connect to form a complete server-rendered
+The framework has five layers that connect to form a complete server-rendered
 web UI with live DOM updates:
 
 ```
@@ -25,7 +25,9 @@ web UI with live DOM updates:
 ```
 
 the **client runtimes** (next architecture, `NEXT_ARCHITECTURE.md`): the
-default is the framework-owned **engine** (`webui-engine.js`, ~30 kb) —
+default is the framework-owned **engine** (`webui-engine.js`, ~58 kb — the
+measured size of the committed working file, which is comment-free and ships
+as-is) —
 event capture on the `data-component-id` contract, `/ws` transport with
 reconnect + optimistic prediction, sanitized fragment patching with
 scroll/focus survival, keyboard/focus parity (incl. modal trap + return),
@@ -35,37 +37,76 @@ view transitions, and capability-island mounting. **wasm islands**
 compose regions with zero round trips. the **wasm monolith client**
 (`WebUIClient` — a chamber-hosted boot plus a content-addressed ~55 mb module)
 was deleted: it fetched and instantiated that module on every app-mode page for
-work the ~37 kb engine does, and it could not render server views. there is no
+work the ~58 kb engine does, and it could not render server views. there is no
 `ClientBoot(flavor:)`; the engine is the client runtime, and wasm survives only
 as capability islands (Layer 5). the server stays authority for persistence,
 auth, and render correctness (`FragmentUpdate` is the universal patch
 envelope in both directions).
+
+## what this framework is — and is not
+
+the honest boundary, in one place (the README restates it for newcomers):
+
+**is:** a server-authoritative swift web framework. the page is a swift
+`View` tree rendered on the server; the shipped client is one engine module
+(`webui-engine.js`) that delegates DOM events back over `/ws` and patches the
+fragments the server sends; real http on the wire (methods, a typed `Router`,
+forms, uploads, streaming, status/headers/cookies); a typed design system
+shipped as compiled-in css; and wasm capability islands for pure-swift
+client-side logic.
+
+**is not:** a client-side SPA framework. there is no browser `fetch()` api by
+design — the only `fetch(` in the engine is the lazy capability-island loader
+(`designer/assets/webui-engine.js`) — client state is server-owned (the
+client's store is a small optimistic mirror the authoritative `update`
+replaces, and it rolls back on timeout), and process isolation for a trapping
+handler is not offered: `ErrorBoundary` catches *failures*, never swift traps
+(`STABILITY.md`, "what is not stable" item 8).
 
 ## Layer 1: View Tree
 
 **Files:** `View.swift`, `ViewBuilder.swift`, `Primitives.swift`, `Layouts.swift`,
 `ModifiedView.swift`, `Modifiers.swift`
 
-Every UI is a tree of `View` conformers. Each view implements `render() -> String`,
-producing an HTML fragment. Views are value types — constructed, rendered, and
-discarded within a single request.
+Every UI is a tree of `View` conformers. Each view implements the one
+requirement, `render(into:)`, writing its bytes into a shared `HTMLBuffer`
+(`WebUISharedCore/HTMLBuffer.swift`). Views are value types — constructed,
+rendered, and discarded within a single request.
 
 ### View Protocol
 
 ```swift
 public protocol View: Sendable {
-    func render() -> String
+    /// the sole requirement since the 2.0 flip: write this view's bytes into
+    /// the shared render buffer.
+    func render(into buffer: inout HTMLBuffer)
+}
+
+extension View {
+    /// deprecated: materialize the buffered render as a string. call sites
+    /// keep compiling and rendering identically; conforming happens through
+    /// `render(into:)` alone.
+    @available(*, deprecated, message: "implement render(into:) instead")
+    public func render() -> String
 }
 ```
 
-A view's `render()` is a pure function: same inputs always produce the same HTML.
-No side effects, no mutable state passed through the tree.
+a view render is pure: same inputs always produce the same HTML, no side
+effects, no mutable state passed through the tree. the deprecated
+`render() -> String` is an extension *default* that renders through the buffer
+and materializes the string — it is not a conformance path, so a 1.x view that
+implemented only `render()` does **not** compile against the 2.0 requirement (a
+kept `render()` would be silently bypassed through `any View`). see
+`Documentation/MIGRATION_2_0.md` (wave 2) for the flip and the shim.
 
 ### ViewModifier Protocol
 
 ```swift
 public protocol ViewModifier: Sendable {
     func apply(to html: String) -> String
+    /// defaulted: apply through the buffer; the default applies `apply(to:)`
+    /// to the content's string render.
+    func decorate<C: View>(_ content: C, into buffer: inout HTMLBuffer)
 }
 ```
 
@@ -83,7 +124,9 @@ VStack {
 }
 ```
 
-It produces `[any View]` — an array of type-erased views. This is intentional:
+a single-expression block preserves the concrete view
+type (`buildBlock<V: View>(_ view: V) -> V`); a multi-view block produces
+`[any View]` — an array of type-erased views. This is intentional:
 it keeps the compiler happy without deep generic nesting.
 
 ### Primitives
@@ -195,8 +238,8 @@ from `EventRouter.handle`: `eventReceived`, `eventHandled`, and `debug`
 (missing handler). the remaining cases — `viewRendered`, `fragmentSent`, the
 `websocket*` triad, and `error` — are extension points: the framework owns no
 transport (the WebSocket servers in the example targets drive NIO directly),
-and `View.render()` is a pure function by contract, so a render-timing emission
-cannot live inside `render()` without violating that invariant. adopters whose
+and a view render is a pure function by contract, so a render-timing emission
+cannot live inside `render(into:)` without violating that invariant. adopters whose
 transport/render layer emits these should route them through
 `logger.emit(event, observers:)` so logging and notification stay on the single
 funnel. use the stack for logging, metrics, or debugging.
@@ -296,7 +339,7 @@ there is no wasm client mode.
 
 the monolith client — `WebUIClient`, a chamber-hosted `designer/assets/webui-client.js`
 booting a content-addressed ~55 mb module — was deleted. it fetched and
-instantiated that module on every app-mode page for work a ~37 kb runtime does,
+instantiated that module on every app-mode page for work a ~58 kb runtime does,
 and it could not render server views at all. the `webui-wasm` meta contract, the
 `ClientBoot(flavor: .wasm, …)` spelling and the `clientMode: ClientBoot(wasmURL: …)`
 argument went with it. `designer/assets/` ships four files today: the sheet, the
@@ -386,10 +429,39 @@ island machinery that remains is described in `NEXT_ARCHITECTURE.md` §2c–§2d
 | Large-response truncation | http responses are written through the raw channel and the terminal write's promise is awaited before closing — the async channel writer does not await write promises, so a response larger than the socket send buffer silently lost its tail at close (probe-verified) |
 | Data race | `Mutex` (Swift `Synchronization`) on all `EventRouter.State` and `ObserverList` mutations |
 | Unbounded growth | Caps on `EventRouter.maxHandlers` (10K) and `ObserverList.maxObservers` (100) |
-| Per-request render cost | `WebUIDocument` hoists the minified design sheet (layout rules + embedded css) to a startup constant and embeds it verbatim (`HTMLDocument.preMinifiedStyles`) instead of re-minifying ~300 kb of css per request — probe-measured 11 ms → <0.01 ms in release. `/__assets/css` likewise serves the minified sheet (comment-free; the first law now holds on every endpoint) |
+| Per-request render cost | `WebUIDocument` hoists the minified design sheet (layout rules + embedded css) to a startup constant and embeds it verbatim (`HTMLDocument.preMinifiedStyles`) instead of re-minifying ~350 kb of css per request — probe-measured 11 ms → <0.01 ms in release. `/__assets/css` likewise serves the minified sheet (comment-free; the first law now holds on every endpoint) |
 | Event-loop CPU isolation | Argon2id runs on a dedicated `NIOThreadPool` (`--argon2-workers`, default 2), never on a connection's event loop; event handlers are `@Sendable async` and can hop off-loop for heavy work |
 | Memory ceiling on small hosts | `ConnectionGate` caps concurrent connections (`--max-connections`, default 256) with admission enforced in the child channel initializer — bare connect-only sockets count toward the cap, so a connect-flood cannot sidestep it — and a 120 s read-idle reaper guards plain http and websockets alike (`--event-loops` sizes the nio group) |
 > **note (post-deletion):** the wasm monolith client (`WebUIClientRuntime`,
 > `WebUIClient`, the chamber + content-addressed artifact) has been deleted. the
 > engine is the client runtime; wasm survives only as capability islands. any
 > reference to the client boot below is historical.
+
+## verification ladder
+
+no CI in this repo's gate story (the five-step sketch in `STABILITY.md` is the
+headline subset); the full ladder is **fourteen gates plus the byte pin**, each
+self-contained and runnable by one human:
+
+| gate | run as | passes expected |
+|---|---|---|
+| build | `swift build` | clean |
+| test | `swift test` | 1398 tests / 0 issues — includes the frozen-surface gate and the showcase byte pin |
+| smoke | `swift package --disable-sandbox plugin smoke` | 19/0 |
+| fullstack smoke | `swift package --disable-sandbox plugin fullstack-smoke` | 24/0 |
+| browser layout | `node designer/browser-smoke.mjs` | 50/0 |
+| showcase ws dispatch | `node designer/showcase-ws-smoke.mjs` | 9/0 |
+| blocks sweep | `node designer/blocks-sweep.mjs` | 107/0 |
+| chart mobile audit | `node designer/chart-mobile-audit.mjs` | 77/0 |
+| rtl audit | `node designer/rtl-audit.mjs` | 54/0 |
+| acceptance demo | `node designer/acceptance-demo.mjs` | 8/0 |
+| event deck probe | `node designer/event-deck-probe.mjs` | 33/33 browser · 32/32 socket · 35 other, 0 fail |
+| a11y audit | `node designer/a11y-audit.mjs` | 26/0 |
+| cascade probe | `node designer/cascade-probe.mjs` | 12/0 |
+| theme default probe | `node designer/theme-default-probe.mjs` | 40/0 |
+| engine theme default probe | `node designer/engine-theme-default-probe.mjs` | 5/0 |
+| **the byte pin** | `swift run WebUIShowcase --generate <tmp file>` | exactly 168671 bytes — `showcaseArtifactByteCountIsPinned` asserts the count in-process too (`STABILITY.md`, "the showcase byte pin": the *count* is the enforced claim, never a hash of the raw bytes) |
+
+`swift test` (the frozen surface + the byte pin) plus every gate above is run
+end-to-end before a wave commits; the byte pin and the frozen surface can each
+only move in a committing change that justifies them (`STABILITY.md`).

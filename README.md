@@ -6,7 +6,7 @@ for live UI updates.
 
 ## Modules
 
-the package ships 24 targets (13 libraries, 10 executables, 1 macro), 11 plugins
+the package ships 26 targets (13 libraries, 12 executables, 1 macro), 11 plugins
 and 7 test targets. the consumer-facing ones:
 
 | Module (import) | what it is | depends on |
@@ -24,8 +24,10 @@ and 7 test targets. the consumer-facing ones:
 
 the remaining targets are the demo servers (`WebUIExample` :9090,
 `WebUIAuthExample` :9091, `WebUIShowcase`, `WebUIShowcaseServer`, `WebUISmokeTest`,
-`WebUIBlocksServer`, `WebUIValidateIsland`), the tools (`WebUIAssetTool`,
-`WebUIIconTool`, `WebUIWasmTool`) and the shared bits they have in common
+`WebUIBlocksServer`, `WebUIValidateIsland`), the gate-hosting probes
+(`WebUIEventDeck` — the event-deck gate's server; `WebUICascadeProbe` — the
+cascade gate's two probe pages), the tools (`WebUIAssetTool`, `WebUIIconTool`,
+`WebUIWasmTool`) and the shared bits they have in common
 (`WebUISharedCore`, `WebUISmokeShared`, `WebUIShowcaseContent`).
 
 the 11 plugins split into 3 **build tools** — `WebUIAssetPlugin` (embeds
@@ -69,7 +71,7 @@ See `Sources/WebUIExample/main.swift` and `Documentation/GETTING_STARTED.md`.
 
 ```bash
 swift build          # WebUIAssetPlugin auto-generates Assets+Generated.swift
-swift test           # 1095 tests, 7 test targets
+swift test           # 1398 tests, 7 test targets
 swift run WebUIExample  # example server on :9090
 ```
 
@@ -86,12 +88,46 @@ swift package plugin probe 9123                 # is a port in use?
 swift package plugin showcase --allow-writing-to-package-directory  # refresh designer/previews/showcase.html
 ```
 
+## what this is — and what it deliberately is not
+
+**this is** a security-hardened, server-authoritative swift web framework:
+
+- the page is a swift `View` tree, rendered **on the server** into html; the
+  shipped client is one framework-owned js module — the engine
+  (`designer/assets/webui-engine.js`) — which delegates DOM events back over
+  a websocket and patches the fragments the server sends. live updates are a
+  round trip to the server's `EventRouter`, never a client-side re-render;
+- real http on the wire: `HTTPMethod`/`HTTPStatus`, a typed `Router`
+  (`Route.get`/`Route.post`/`Route.page`), forms (`FormMethod`, multipart
+  uploads via `UploadedFile`), streaming and server-sent events, and
+  status/headers/cookies (`HTTPResponse`, `HTTPCookie`);
+- a typed design system (174 css custom properties + 133 component types)
+  that ships as css compiled into the binary, plus a wasm **capability
+  island** path for pure-swift client-side logic;
+- zero npm, zero node_modules, zero client-side frameworks: the whole
+  client surface is the engine plus the host's own css/script assets.
+
+**this is not** a client-side SPA framework:
+
+- there is no browser `fetch()` API by design. the only `fetch(` in the
+  shipped engine (`designer/assets/webui-engine.js`) is the lazy
+  capability-island loader — it fetches `webui-<name>.wasm` for a granted
+  capability, and nothing else;
+- client state is server-owned. the page is a snapshot of server state; the
+  client holds a small optimistic mirror that the next authoritative
+  `update` replaces and that rolls back on timeout;
+- a trapping handler is not contained. `ErrorBoundary` catches *failures*
+  (thrown errors, answered as the host's error page or fallback markup); it
+  cannot catch a swift *trap* — a `precondition` or force-unwrap takes the
+  process down, and process isolation for a trapping handler is explicitly
+  not offered (`Documentation/STABILITY.md`).
+
 ## Project structure
 
 ```
 no-webui/
-├── Package.swift                  # one manifest: 24 targets, 11 plugins, 7 test targets
-├── Sources/                       # 24 target directories
+├── Package.swift                  # one manifest: 26 targets, 11 plugins, 7 test targets
+├── Sources/                       # 26 target directories
 │   ├── WebUI/                     # framework entry: re-exports core + embedded assets
 │   ├── WebUICore/                 # render core (view protocol, router, JSONValue, ClientBoot)
 │   ├── WebUISharedCore/           # the zero-dependency leaf (shared with island builds)
@@ -112,6 +148,8 @@ no-webui/
 │   ├── WebUIShowcaseContent/      # the showcase page content (shared by both)
 │   ├── WebUISmokeTest/            # smoke/demo server (hosted by the plugins)
 │   ├── WebUISmokeShared/          # helpers shared by the smoke + block harnesses
+│   ├── WebUIEventDeck/            # event-deck probe server (the event-deck gate's host)
+│   ├── WebUICascadeProbe/         # host-cascade probe pages (the cascade gate's host)
 │   ├── WebUIValidateIsland/       # the reference capability island
 │   └── WebUIAssetTool · WebUIIconTool · WebUIWasmTool   # build tools (CLIs)
 ├── Plugins/                       # 11 plugin target directories
@@ -125,7 +163,7 @@ no-webui/
 │   ├── WebUITests/                # the bulk of the suite (+ WebUIAuthTests, the tool suites)
 │   └── WebUIAuthTests/ · WebUIBuildTests/ · WebUIAssetToolTests/
 │       WebUIWasmToolTests/ · WebUIIslandCoreTests/ · WebUIDesignSystemMacroTests/
-├── Documentation/                 # 16 documentation files (see below)
+├── Documentation/                 # 18 documentation files (see below)
 ├── designer/                      # designer sandbox: css/js, icon manifest, node gates, previews
 ├── CHANGELOG.md
 └── AGENTS.md
@@ -160,6 +198,8 @@ See `designer/README.md` for the full designer guide.
 - `Documentation/DESIGN_SYSTEM.md` — design system component reference
 - `Documentation/CHARTS.md` — charting guide (marks, scales, axes, the responsive width contract)
 - `Documentation/LAYOUTS.md` — layout primitives reference
+- `Documentation/MIGRATION_2_0.md` — the 2.0 migration guide: every 1.x spelling that changed, wave by wave
+- `Documentation/DESIGN_NOTES.md` — decisions made on the strength of a measurement, with the measurement written down
 - `Documentation/GETTING_STARTED.md` — getting started guide
 - `Documentation/ASSEMBLY.md` — project tooling and the build/verification stage map
 - `Documentation/ASSETS.md` — the asset toolkit for hosts (`WebUIBuild`, embed plugin, budgets)
