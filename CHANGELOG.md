@@ -268,7 +268,7 @@ the suite is run because the claims above are about the code).
   page rendering neither falls back to `system`. `data-scheme` already behaved this way — not
   storing a choice is not the same as choosing nothing — and the pre-paint prelude always had
   this shape; the engine was the odd one out, and a host's server-side default mode was
-  silently replaced on every fresh client. `designer/theme-default-probe.mjs` is the gate
+  silently replaced on every fresh client. `designer/engine-theme-default-probe.mjs` is the gate
   (it drives a synthesised page whose only theme code is the engine), and it refuses to run
   against a port that is already serving: an earlier revision of it passed while measuring a
   **stale** server left over from the previous run.
