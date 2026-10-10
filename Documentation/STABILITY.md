@@ -28,22 +28,50 @@ the canonical list of what may not change in a minor/patch is known as the
 ## the frozen surface
 
 the frozen surface is the consumer-facing API of the library products
-(`WebUI`, `WebUIDesignSystem`, `WebUIAuth`, `WebUIChart`). it is enforced by
-**`Tests/WebUITests/APISurfaceTests.swift`**: every public initializer is
-referenced at compile time (a signature change fails the build) and every
-component's render contract — class/role/aria/escaping markers — is
-asserted. not every frozen name is pinned *here*, though — some are pinned by
-another suite or by the demo page that renders them: `WebUIMenubar` is
-constructed only in `WebUISmokeTest` and `WebUIBlocks`, `ClientBoot` in
-`EngineBootTests`/`CSPExtrasTests`, `DesignSystemAssets` in `ThemeSheetTests`
-and the deployment-integrity suites. equivalent as a build-time guard, which is
-what the promise needs, though a demo-page pin catches a signature break and not
-a marker break. a full count of pin coverage is measured in *measured
-consumption* below.
-`Tests/WebUITests/ChartTests.swift` pins the chart product, the
-`WebUIAuth` signatures are pinned by the same suite's `authSurfacePins`
-(behavior by the `WebUIAuthTests` suites), and the wire/runtime contracts
-are pinned by `WebUIClientTests` + `DeploymentIntegrityTests`.
+(`WebUI`, `WebUIDesignSystem`, `WebUIAuth`, `WebUIChart`, `WebUIServer`) and
+the modules a consumer reaches through their `@_exported` cores (`WebUICore`,
+`WebUIDesignSystemCore`, `WebUISharedCore`). it is enforced by **two
+mechanisms**, and only what a mechanism demonstrably checks is claimed here as
+checked:
+
+**the generated pin list.** `Documentation/frozen-surface.symbols` is a
+generated, member-level enumeration of the frozen surface: every declared
+public init, method, property, subscript, enum case, typealias and macro in
+the eight modules, emitted by the real toolchain tool
+`swift-symbolgraph-extract` (there is no `swift package api` verb, despite the
+earlier plan's claim — `swift package --help` has none, and the external
+`swift-package-tool` binary enumerates top-level declarations only).
+`Tests/WebUITests/FrozenSurfaceTests.swift` re-extracts the built products on
+every `swift test` and **fails, naming each added and removed symbol**, when
+the committed list and the fresh extraction diverge — so a public symbol
+absent from the list fails the build, and so does a symbol in the list that
+left the tree. the list is generated, not hand-maintained: intentionally
+moving the surface means regenerating it (`FROZEN_SURFACE_EMIT=1 swift test
+--filter FrozenSurfaceTests` rewrites the file in place) and committing the
+regeneration in the same commit as the api change that forced it, justified
+there. re-measured 2026-10-09: 4558 symbols across 8 modules.
+compiler-synthesized members are excluded — a synthesized `==` is generated,
+not a declared contract, and including it would make the list churn on every
+equatable addition.
+
+**the compile-time reference pins.** `Tests/WebUITests/APISurfaceTests.swift`
+(the W1-era suite, hand-maintained) references the primitives, layouts,
+modifiers, event modifiers, design-system components, auth surface and
+document assembly at compile time and asserts their render markers. it pins
+**none** of the wave-2–5 surface — `StyleSheet`, `DesignTheme`,
+`TokenOverrides`, `Island`, `ErrorBoundary`, `HTTPRequest`, `Router`,
+`WebUIStrings`, `Aria`, `CascadeLayer`, `UnsafeMarkup` all have zero mentions
+there (measured, not assumed). those are pinned by the generated list above
+and by their own suites: `StyleSheetTests`, `ThemeProtocolTests`,
+`IslandTests`, `ErrorBoundaryTests`, `RouterTests`, `LocalizationTests`,
+`A11yTests`, `CascadeLayerTests`, the `authSurfacePins` in `APISurfaceTests`,
+the `WebUIAuthTests` suites, `ChartTests` for the chart product, and the
+wire/runtime contracts in `WebUIClientTests` + `DeploymentIntegrityTests`.
+where a type is constructed only by a demo page (`WebUIMenubar` in
+`WebUISmokeTest`/`WebUIBlocks`, `ClientBoot` in `EngineBootTests`/
+`CSPExtrasTests`, `DesignSystemAssets` in `ThemeSheetTests`), that pin catches
+a signature break but not a marker break — a demo-page construction compiles
+or it does not, and no marker is asserted there.
 
 the frozen surface is:
 
@@ -94,11 +122,15 @@ the frozen surface is:
   `data-event`), the websocket message shapes (`WSIncoming`/`WSOutgoing`),
   and the fragment patch semantics (`FragmentUpdate`, replace-by-id,
   optimistic rollback, input/scroll/focus restoration) — pinned by the
-  client-runtime suites and the byte-identity asset tests.
+  client-runtime suites and the served-bytes gates (`smoke`'s asset-byte
+  checks and the showcase byte-count pin).
 
-### measured consumption (re-measured 2026-10-08)
+### measured consumption (re-measured 2026-10-09)
 
-the frozen list above is a **promise**, not a usage report. a survey of every
+the frozen list in the two paragraphs above is the *shape* contract, and the
+generated pin enforces it mechanically. this survey is the *usage* report — it
+separates what is exercised from what merely exists, because the generated
+list pins a name whether or not anything renders it. a survey of every
 top-level `public` declaration in `Sources/` — non-comment mentions outside the
 declaring file, partitioned by consumer class (library product target / demo
 app / `Tests/`) — found three sets. re-measure before trusting the counts.
@@ -121,7 +153,12 @@ demo page renders these; the `APISurfaceTests` pin is their only exerciser. they
 are deliberately **outside** the frozen list: a shape nothing exercises has not
 earned a promise, and binding a release to an unvalidated shape costs more than
 it buys. treat any new use as a design review — the first real consumer is what
-freezes them, and that is now a one-line edit to the list above.
+freezes them, and that is now a one-line edit to the list above. note that the
+generated pin list *does* capture their current shape — it enumerates every
+public symbol of the eight modules, proven or not — but that is a record, not a
+promise: redesigning one in a minor means regenerating the list, and no gate
+argues against it. the semver promise applies to the frozen list, not to the
+record.
 
 | name | why it is unproven |
 |---|---|
@@ -149,6 +186,40 @@ without one is a draft, whichever file it lives in.
 outside the frozen surface (free to change in any release): example
 apps (`WebUIExample`, `WebUIAuthExample`, `WebUIShowcaseServer`), plugin
 verbs, docs, and internal target layout.
+
+## the showcase byte pin
+
+the showcase artifact — the page `swift run WebUIShowcase --generate` writes —
+renders at exactly **168671 bytes** at this epoch. that number is now enforced
+in-repo: `Tests/WebUITests/ShowcaseWiringTests.swift` renders the artifact
+in-process through the same path the generator uses (`RenderContext.$current`
+snapshot + `WebUIDocument(title:body:includeRuntime:false)`) and
+`showcaseArtifactByteCountIsPinned` asserts its byte count against the single
+constant `showcaseBytePin` (in that file — the value lives in exactly one
+place). before this gate existed the number lived only in the gitignored plan,
+so nothing could ever fail on drift; now a drifted count fails `swift test`
+with the measured and pinned values.
+
+the gate asserts the byte **count**, never a hash of the raw bytes. the raw
+bytes are not stable run-to-run: `JSONValue.serialize()` emits object keys by
+direct `Dictionary` iteration and swift dictionary order is randomized per
+process, so a raw-bytes hash would be flaky. the *count* is deterministic
+(modulo a legitimate change), which is the machine-checkable claim; the *order*
+of the bytes is not a stability contract. "byte-identical HTML for unchanged
+source" is therefore only ever true in the weak sense — identical byte count
+and identical markup under a stable process — never as a hash-verifiable
+promise.
+
+when does the pin legitimately move? a change that adds or removes bytes in
+the rendered page (a new component on the showcase, a reworded default since
+fixed, an attribute gained) moves it. the rule is the same one the generated
+surface follows: update the single constant `showcaseBytePin` in the same
+commit as the change, justify the move in the commit message, and re-measure
+the new count from `swift run WebUIShowcase --generate` rather than guessing.
+a move that *isn't* deliberate (an accidental reword, a byte added by a
+component refactor) is a regression, not a pin to update. the gate proved
+non-vacuous at landing: the corrupted-constant run fails with "showcase
+artifact drifted: 168671 bytes, pinned 168672".
 
 ## migration notes for consumers of 0.x
 
@@ -225,8 +296,13 @@ frozen surface is a mistake:
 6. **the deprecation rule is a process rule, not a machine rule.** there is
    no CI or lint that can verify "one full minor before removal"; it is
    enforced by review against this document and the changelog. the in-repo
-   enforcement (tests, byte-identity pins) guarantees the *current* epoch's
-   surface, not the *transition* between epochs.
+   enforcement (tests, the generated surface, the showcase byte-count pin)
+   guarantees the *current* epoch's surface, not the *transition* between
+   epochs. what *is* mechanical now is the removal act itself: deleting a
+   public symbol from one of the eight modules fails the frozen-surface gate
+   until the list is regenerated in a committing change — the timing rule
+   ("one full minor of deprecation first") is the part that stays
+   review-enforced.
 7. **the applet harness is pre-2.0.** the harness's design doc
    (`WASM_APPLET_HARNESS.md`) was deleted with the wasm-era docs; the target
    contract — applet regions, renderer registry, expanded import surface, v2
@@ -255,7 +331,8 @@ frozen surface is a mistake:
    feeds `<html dir>`) and every component in the pass reads the same
    catalog. a host overrides any subset; everything it omits keeps the
    english default, and the english defaults are pinned by the showcase byte
-   gate — a reworded default is a regression, not a pin to update.
+   gate (`showcaseArtifactByteCountIsPinned`) — a reworded default is a
+   regression, not a pin to update.
    anything *formatted* — dates, times, numbers, currencies, plurals,
    weekday/month names — is deliberately outside the catalog: the framework
    renders strings, formatting belongs to the host, and no formatter ships.
@@ -265,13 +342,20 @@ frozen surface is a mistake:
 
 ## change discipline
 
-- every public-surface change lands with (a) a test in `APISurfaceTests`
-  (signature + render marker), (b) `Documentation/DESIGN_SYSTEM.md` /
-  `API.md` updates, (c) a `CHANGELOG.md` entry under `[unreleased]`, and
-  where a component's look changes, (d) a browser check in **both** themes
-  via the showcase/preview route.
+- every public-surface change lands with (a) a test — in `APISurfaceTests`
+  for the assembled W1-era surface, in the owning surface's suite otherwise —
+  plus, for any change touching one of the eight frozen modules, a
+  **regenerated** `Documentation/frozen-surface.symbols` (the gate names what
+  regenerating restores), (b) `Documentation/DESIGN_SYSTEM.md` / `API.md`
+  updates, (c) a `CHANGELOG.md` entry under `[unreleased]`, and where a
+  component's look changes, (d) a browser check in **both** themes via the
+  showcase/preview route.
+- a change that moves the showcase's byte count updates the single
+  `showcaseBytePin` constant **in the same commit**, justified there; a change
+  that does not move it must not touch the constant.
 - security fixes always land as patches **within** the current minor.
 - no CI in this repo's gate story: the verification ladder is
-  `swift build` → `swift test` → `swift package --disable-sandbox plugin
+  `swift build` → `swift test` (which includes the frozen-surface gate and the
+  showcase byte pin) → `swift package --disable-sandbox plugin
   smoke` → `plugin fullstack-smoke` → `node designer/browser-smoke.mjs`,
   each self-contained and runnable by one human.
