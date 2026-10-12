@@ -48,8 +48,8 @@ struct ThemeSheetTests {
 	func documentLinks() {
 		let sheet = ThemeSheet(css: "/*x*/")
 		let html = WebUIDocument(
-			title: "t", body: "<p>x</p>", theme: aTheme, themeStylesheetURL: sheet.url
-		).renderThroughBuffer()
+			title: "t", body: .trusted("<p>x</p>"), theme: aTheme, themeStylesheetURL: sheet.url
+		).markup.html
 		#expect(html.contains("href=\"\(sheet.url)\"") || html.contains(sheet.url))
 		// nothing from the theme is inlined: that is the whole point of linking it.
 		#expect(!html.contains("--color-bg: #FFFFFF;"),
@@ -58,7 +58,7 @@ struct ThemeSheetTests {
 
 	@Test("without a url the theme is still inlined — unchanged behaviour")
 	func inlineRemains() {
-		let html = WebUIDocument(title: "t", body: "<p>x</p>", theme: aTheme).renderThroughBuffer()
+		let html = WebUIDocument(title: "t", body: .trusted("<p>x</p>"), theme: aTheme).markup.html
 		#expect(html.contains("--color-bg: #FFFFFF;"))
 	}
 
@@ -66,8 +66,8 @@ struct ThemeSheetTests {
 	func linkOrder() {
 		let sheet = ThemeSheet(css: "/*x*/")
 		let html = WebUIDocument(
-			title: "t", body: "<p>x</p>", theme: aTheme, themeStylesheetURL: sheet.url
-		).renderThroughBuffer()
+			title: "t", body: .trusted("<p>x</p>"), theme: aTheme, themeStylesheetURL: sheet.url
+		).markup.html
 		guard let base = html.range(of: "href=\"\(DesignSystemAssets.stylesheetURL)\""),
 			  let theme = html.range(of: sheet.url) else {
 			Issue.record("both links must be present"); return

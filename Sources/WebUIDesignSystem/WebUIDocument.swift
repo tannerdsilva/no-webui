@@ -4,7 +4,7 @@ import WebUI
 // MARK: - WebUIDocument
 public struct WebUIDocument: View {
 	public let title: String
-	public let body: String
+	public let body: UnsafeMarkup
 	public let scripts: String
 	/// Raw `<head>` markup, verbatim — the escape hatch; prefer ``headContent``.
 	public let head: String
@@ -57,7 +57,7 @@ public struct WebUIDocument: View {
 	public let checkClasses: Bool
 	public init(
 		title: String = "WebUI",
-		body: String,
+		body: UnsafeMarkup,
 		scripts: String = "",
 		head: String = "",
 		headContent: HeadContent? = nil,
@@ -138,7 +138,7 @@ public struct WebUIDocument: View {
 		// engine's lazy fetch mounts the region with no manual `capabilities`
 		// entry. an empty body stays byte-identical: no declared islands, no
 		// config touched.
-		let declared = Self.declaredIslandNames(in: body)
+		let declared = Self.declaredIslandNames(in: body.html)
 		let effectiveRuntimeConfig: RuntimeConfig?
 		let effectiveClientMode: ClientBoot?
 		if declared.isEmpty {
@@ -185,7 +185,7 @@ public struct WebUIDocument: View {
 			// block above) — the missing-sheet diagnostics must stay quiet
 			inlinedComponentStyles: stylesheetURL == nil
 		)
-		let html = doc.renderedString()
+		let html = doc.markup.html
 		if checkClasses {
 			HTMLClassValidator.report(html: html)
 		}
@@ -212,7 +212,7 @@ public struct WebUIDocument: View {
 			status: status,
 			headers: headers,
 			cookies: cookies,
-			body: .html(renderThroughBuffer())
+			body: .html(markup)
 		)
 	}
 

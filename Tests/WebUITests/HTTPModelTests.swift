@@ -76,15 +76,15 @@ struct HTTPModelTests {
 		response.status = .created
 		response.headers["Location"] = "/next"
 		response.cookies.append(HTTPCookie(name: "sid", value: "1"))
-		response.body = .html("<p>hi</p>")
+		response.body = .html(.trusted("<p>hi</p>"))
 		#expect(response.status.code == 201)
 		#expect(response.headers["Location"] == "/next")
 		#expect(response.cookies.count == 1)
-		guard case .html(let html) = response.body else {
+		guard case .html(let markup) = response.body else {
 			Issue.record("expected an html body")
 			return
 		}
-		#expect(html == "<p>hi</p>")
+		#expect(markup.html == "<p>hi</p>")
 	}
 
 	@Test("redirect response defaults to 303")

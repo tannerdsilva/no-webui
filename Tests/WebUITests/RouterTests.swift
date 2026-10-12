@@ -1,4 +1,6 @@
 import Testing
+import Foundation
+import WebUI
 import WebUIServer
 
 // MARK: - RouterTests
@@ -14,7 +16,7 @@ import WebUIServer
 private extension HTTPResponse {
 	var bodyText: String {
 		switch body {
-		case .html(let html): html
+		case .html(let markup): markup.html
 		case .text(let text): text
 		case .bytes(let bytes, _): String(decoding: bytes, as: UTF8.self)
 		case .empty: ""
@@ -296,6 +298,53 @@ struct WebUIServerRouterIntegrationTests {
 			#expect(postStatus == 405)
 			let postBody = String(decoding: postData, as: UTF8.self)
 			#expect(postBody.contains("GET"))
+		}
+	}
+}
+
+// MARK: - page serves documents
+
+@Suite("router: page serves documents", .serialized)
+struct RouterPageDocumentTests {
+
+	@Test("a document route serves the document's own markup bytes")
+	func documentRouteServesBytes() async throws {
+		// the wave's proof: `Route.page` is now typed on `BufferRendering`, so a
+		// whole document (an `HTMLDocument` — never a `View`) is servable through
+		// the typed route. the served body must equal the document's own bytes.
+		let doc = HTMLDocument(title: "doc route", body: .trusted("<p>a whole page, not a view</p>"))
+		let expected = Data(doc.markup.html.utf8)
+		let router = Router {
+			Route.get("/") { _ in HTTPResponse(body: .text("ok")) }
+			Route.page("/doc") { (_: HTTPRequest) -> HTMLDocument in
+				doc
+			}
+		}
+		try await withRouterServer(router, portBase: 41_200) { port in
+			let (data, status) = try await getData("http://127.0.0.1:\(port)/doc")
+			#expect(status == 200)
+			#expect(data == expected)
+		}
+	}
+
+	@Test("an async page route serves the document's own markup bytes")
+	func asyncDocumentRouteServesBytes() async throws {
+		// an agent host awaits its state before rendering; the async overload
+		// carries that content through the same typed door, emitting the same
+		// document bytes over the wire.
+		let doc = HTMLDocument(title: "async doc route", body: .trusted("<p>awaited, then rendered</p>"))
+		let expected = Data(doc.markup.html.utf8)
+		let router = Router {
+			Route.get("/") { _ in HTTPResponse(body: .text("ok")) }
+			Route.page("/async-doc") { (_: HTTPRequest) async throws -> HTMLDocument in
+				try await Task.sleep(for: .milliseconds(5))
+				return doc
+			}
+		}
+		try await withRouterServer(router, portBase: 41_300) { port in
+			let (data, status) = try await getData("http://127.0.0.1:\(port)/async-doc")
+			#expect(status == 200)
+			#expect(data == expected)
 		}
 	}
 }

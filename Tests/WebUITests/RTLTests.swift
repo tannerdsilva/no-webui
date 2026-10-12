@@ -9,24 +9,24 @@ import WebUIDesignSystem
 @Suite struct RTLTests {
 
 	@Test func dirIsEmittedWhenSet() {
-		let rtl = HTMLDocument(body: "<p>x</p>", dir: "rtl").renderedString()
+		let rtl = HTMLDocument(body: .trusted("<p>x</p>"), dir: "rtl").markup.html
 		#expect(rtl.contains("<html lang=\"en\" dir=\"rtl\">"), "dir must land on <html>")
-		#expect(HTMLDocument(body: "<p>x</p>", dir: "ltr").renderedString().contains("dir=\"ltr\""))
+		#expect(HTMLDocument(body: .trusted("<p>x</p>"), dir: "ltr").markup.html.contains("dir=\"ltr\""))
 	}
 
 	@Test func dirIsOmittedByDefault() {
-		#expect(!HTMLDocument(body: "<p>x</p>").renderedString().contains(" dir="),
+		#expect(!HTMLDocument(body: .trusted("<p>x</p>")).markup.html.contains(" dir="),
 			"no dir attribute unless asked for")
 	}
 
 	@Test func onlyRealDirectionsAreEmitted() {
-		let html = HTMLDocument(body: "<p>x</p>", dir: "rtl; onload=alert(1)").renderedString()
+		let html = HTMLDocument(body: .trusted("<p>x</p>"), dir: "rtl; onload=alert(1)").markup.html
 		#expect(!html.contains("onload"), "an invalid dir value is dropped, not written")
 		#expect(!html.contains(" dir="))
 	}
 
 	@Test func theDesignSystemDocumentPassesDirThrough() {
-		#expect(WebUIDocument(title: "t", body: "<p>x</p>", dir: "rtl").renderThroughBuffer()
+		#expect(WebUIDocument(title: "t", body: .trusted("<p>x</p>"), dir: "rtl").markup.html
 			.contains("<html lang=\"en\" dir=\"rtl\">"))
 	}
 }

@@ -357,7 +357,7 @@ public extension View {
 	/// run the structural a11y audit over this view's rendered markup —
 	/// the preflight a test or a build check calls before shipping a page.
 	func a11yAudit() -> [A11yFinding] {
-		A11yAudit.audit(renderThroughBuffer())
+		A11yAudit.audit(markup.html)
 	}
 }
 

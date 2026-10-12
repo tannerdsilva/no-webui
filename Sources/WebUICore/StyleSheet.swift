@@ -75,7 +75,7 @@ public struct StyleSheet: Sendable, Equatable {
     /// the full layered artifact, ready to ship: the canonical order
     /// statement, then the rules inside `@layer <layer> { … }`.
     public var css: String {
-        let indented = CSSStylesheet(rules).renderedString()
+        let indented = CSSStylesheet(rules).markup.html
             .split(separator: "\n")
             .map { "  " + String($0) }
             .joined(separator: "\n")

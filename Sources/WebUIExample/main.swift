@@ -150,11 +150,11 @@ struct DashboardDocument: View {
 	func render(into buffer: inout HTMLBuffer) {
 		let document = WebUIDocument(
 			title: "Wave 3 · acceptance demo",
-			body: renderDashboardBody(state: state),
+			body: .trusted(renderDashboardBody(state: state)),
 			runtimeConfig: renderToken.isEmpty ? nil : RuntimeConfig(renderToken: renderToken),
 			rawStyles: Self.demoStyles
 		)
-		buffer.append(document.renderThroughBuffer())
+		buffer.append(document.markup.html)
 	}
 
 	/// the page-scoped shell styles: the shared sheet leaves the demo's
@@ -254,7 +254,7 @@ func renderDashboardBody(state: DemoState) -> String {
 		Footer {
 			Paragraph("served by Sources/WebUIExample — the wave-3 acceptance surface (W3.7).")
 		}
-	}.renderThroughBuffer()
+	}.markup.html
 }
 
 /// the rendered sign-in proof: the last name the /login POST parsed.

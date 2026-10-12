@@ -21,7 +21,7 @@ struct EventDataWideningTests {
 				captured.withLock { $0 = event }
 				return []
 			}
-			.renderThroughBuffer()
+			.markup.html
 		}
 		await router.handle(EventData(component: "c0", event: "click", data: payload))
 		let event = try #require(captured.withLock { $0 })

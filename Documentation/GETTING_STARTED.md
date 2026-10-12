@@ -11,7 +11,7 @@ import WebUI
 struct CounterPage: View {
     let count: Int
 
-    func render() -> String {
+    func render(into buffer: inout HTMLBuffer) {
         VStack(spacing: 16) {
             Text("Count: \(count)")
                 .font(size: 32, weight: "700")
@@ -23,7 +23,7 @@ struct CounterPage: View {
                 }
         }
         .padding(32)
-        .render()
+        .render(into: &buffer)
     }
 }
 ```
@@ -43,7 +43,7 @@ handlers.
 ```swift
 var context = RenderContext(router: router)
 let html = RenderContext.$current.withValue(context) {
-    CounterPage(count: 0).render()
+    CounterPage(count: 0).markup
 }
 ```
 
@@ -61,7 +61,7 @@ let doc = HTMLDocument(
     title: "Counter",
     body: html
 )
-let pageHTML = doc.render()
+let pageHTML = doc.markup.html
 ```
 
 `HTMLDocument` wraps the body in a full HTML document with:
@@ -139,9 +139,9 @@ patches:
 struct CounterPage: View {
     let state: CounterState
 
-    func render() -> String {
+    func render(into buffer: inout HTMLBuffer) {
         var context = RenderContext(router: state.router)
-        return RenderContext.$current.withValue(context) {
+        RenderContext.$current.withValue(context) {
             VStack(spacing: 16) {
                 Raw(counterValueHTML(state.count))
                 Button("Increment")
@@ -150,7 +150,7 @@ struct CounterPage: View {
                         return [FragmentUpdate(id: "counter-value", html: counterValueHTML(state.count))]
                     }
             }
-            .render()
+            .render(into: &buffer)
         }
     }
 }
@@ -199,19 +199,21 @@ end to end. run it with `swift run WebUIExample` and open http://localhost:9090.
 ## Using the Design System
 
 ```swift
+import WebUI
 import WebUIDesignSystem
 
 let page = WebUIDocument(
     title: "Styled Page",
     body: VStack(spacing: 24) {
-        WebUIButton("Primary Action", variant: .primary, size: .lg)
-        WebUIButton("Delete", variant: .danger, disabled: true)
+        WebUIButton("Primary Action", appearance: .primary, size: .lg)
+        WebUIButton("Delete", appearance: .danger, disabled: true)
         WebUICard {
             Text("Card content")
         }
         WebUIInput(placeholder: "Enter text...")
     }
     .padding(32)
+    .markup
 )
 ```
 
@@ -241,7 +243,7 @@ WebUIDocument(
                 // DOM truth: remove the element itself
                 return [me.remove()]
             }
-    }
+    }.markup
 )
 ```
 

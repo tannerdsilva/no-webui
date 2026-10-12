@@ -9,7 +9,7 @@ import WebUIDesignSystem
 // sheet's own palette.
 
 private func render(_ view: some View) -> String {
-    RenderContext.$current.withValue(RenderContext(router: EventRouter())) { view.renderThroughBuffer() }
+    RenderContext.$current.withValue(RenderContext(router: EventRouter())) { view.markup.html }
 }
 
 @Suite("the stringly slots are typed")

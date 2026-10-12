@@ -31,8 +31,8 @@ struct FormMethodTests {
 
     @Test("the typed default is .post and emits exactly what the string default did")
     func typedDefaultMatchesLegacyBytes() {
-        let typed = Form(action: "/go") { Text("x") }.renderThroughBuffer()
-        let legacy = Form(action: "/go", method: "post") { Text("x") }.renderThroughBuffer()
+        let typed = Form(action: "/go") { Text("x") }.markup.html
+        let legacy = Form(action: "/go", method: "post") { Text("x") }.markup.html
         #expect(typed == legacy)
         #expect(typed.contains(" method=\"post\""))
     }
@@ -40,7 +40,7 @@ struct FormMethodTests {
     @Test("every typed case emits its raw value")
     func everyCaseEmits() {
         for method in FormMethod.allCases {
-            let html = Form(action: "/go", method: method) { Text("x") }.renderThroughBuffer()
+            let html = Form(action: "/go", method: method) { Text("x") }.markup.html
             #expect(html.contains(" method=\"\(method.rawValue)\""), "got \(html)")
         }
     }
@@ -49,21 +49,21 @@ struct FormMethodTests {
     func legacyStringIsVerbatim() {
         // an unknown method is not silently rewritten to post: the legacy
         // initializer's contract is byte fidelity.
-        let html = Form(action: "/go", method: "put") { Text("x") }.renderThroughBuffer()
+        let html = Form(action: "/go", method: "put") { Text("x") }.markup.html
         #expect(html.contains(" method=\"put\""), "got \(html)")
     }
 
     @Test("a hostile method string is escaped, never emitted raw")
     func hostileMethodIsEscaped() {
-        let html = Form(method: "post\" onsubmit=\"alert(1)") { Text("x") }.renderThroughBuffer()
+        let html = Form(method: "post\" onsubmit=\"alert(1)") { Text("x") }.markup.html
         #expect(!html.contains(" onsubmit=\"alert(1)\""), "attribute injection: \(html)")
         #expect(html.contains("&quot;"), "got \(html)")
     }
 
     @Test("the action still routes through sanitizeURL")
     func actionSanitized() {
-        #expect(Form(action: "javascript:alert(1)") { Text("x") }.renderThroughBuffer().contains("action=\"\""))
-        #expect(Form(action: "/go") { Text("x") }.renderThroughBuffer().contains("action=\"/go\""))
+        #expect(Form(action: "javascript:alert(1)") { Text("x") }.markup.html.contains("action=\"\""))
+        #expect(Form(action: "/go") { Text("x") }.markup.html.contains("action=\"/go\""))
     }
 }
 

@@ -160,7 +160,7 @@ totals, not assertions — re-measure rather than trust:
 
 1. `swift build` — plugins regenerate `Assets+Generated.swift`,
    `DesignTokens+Generated.swift`, `IconLibrary.swift`.
-2. `swift test` — currently **1398 tests / 0 issues**.
+2. `swift test` — currently **1406 tests / 0 issues**.
 3. `swift package --disable-sandbox plugin smoke` — currently **19** ok-pass
    assertions: served bytes, page signatures, CSP, the 26 interactive
    components.

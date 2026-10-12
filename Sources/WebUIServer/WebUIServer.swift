@@ -376,6 +376,28 @@ public actor WebUIServer {
 		self.pageRouter = Self.deprecatedPageRouter(config: config, render: requestRender)
 	}
 
+	/// serve a typed route table, routing events through a host-owned ``EventRouter``.
+	///
+	/// additive beside ``init(router:config:logger:)``, which mints its own event
+	/// router: that suits a host whose handlers all register during render
+	/// (`.onX`/`controlAttributes`, which write into the server's router for the
+	/// render's session). a host that wires handlers *explicitly* — the
+	/// `router.register(_:for:)` shape, whose default session is documented as
+	/// the single-page host's path — must hand its router in, or every
+	/// registration lands in a router nothing consults. the label is distinct,
+	/// so the two inits never compete in overload resolution.
+	public init(
+		router: Router,
+		eventRouter: EventRouter,
+		config: WebUIServerConfig = WebUIServerConfig(),
+		logger: Logger = Logger(label: "webui.server")
+	) {
+		self.config = config
+		self.logger = logger
+		self.router = eventRouter
+		self.pageRouter = router
+	}
+
 	/// serve a typed route table: many paths, path parameters, methods, and
 	/// the engine's `navigate` answered. this actor owns its event router —
 	/// handlers a page wires through `.onX`/`controlAttributes` register into
@@ -566,7 +588,12 @@ private struct LegacyPageResponder: Responder {
 			query: request.query,
 			renderToken: request.renderToken
 		)
-		return HTTPResponse(body: .html(try await render(pageRequest)))
+		// the 1.x compat boundary: a `Render`/`RequestRender` closure answers a
+		// String by contract (public typealias, frozen). this is the one place
+		// that string becomes a page, and it is the framework — not a host —
+		// that takes responsibility for it here. a host on the typed surface
+		// never passes through this line.
+		return HTTPResponse(body: .html(UnsafeMarkup.trusted(try await render(pageRequest))))
 	}
 }
 
@@ -891,8 +918,8 @@ final class Runner: Sendable {
 		}
 		let frame: WSOutgoing
 		switch response.body {
-		case .html(let html):
-			frame = .update(fragments: [FragmentUpdate(id: WebUIServer.pageRegionID, html: html)])
+		case .html(let markup):
+			frame = .update(fragments: [FragmentUpdate(id: WebUIServer.pageRegionID, html: markup.html)])
 		case .redirect(let to, _):
 			frame = .redirect(url: to, replace: true)
 		default:
@@ -1216,7 +1243,13 @@ final class Runner: Sendable {
 			logger.error("WebUIServer: page render failed for \(path): \(error)")
 			let body: HTTPResponse.Body
 			if let page = config.onRenderFailure {
-				body = .html(page(error))
+				// the error-page boundary: `onRenderFailure` is a host closure
+				// that answers a String by contract (a frozen public config
+				// property — `WebUIServerConfig.onRenderFailure`), so this is
+				// where that string becomes a page. the framework — not the
+				// host — takes responsibility for it here; a host on the typed
+				// surface never passes through this line.
+				body = .html(UnsafeMarkup.trusted(page(error)))
 			} else {
 				body = .text("500 — the page failed to render: \(error)")
 			}
@@ -1244,11 +1277,11 @@ final class Runner: Sendable {
 		let body: ByteBuffer
 
 		switch response.body {
-		case .html(let html):
+		case .html(let markup):
 			contentType = "text/html; charset=utf-8"
 			status = HTTPResponseStatus(statusCode: response.status.code)
-			var buf = channel.allocator.buffer(capacity: html.utf8.count)
-			buf.writeString(html)
+			var buf = channel.allocator.buffer(capacity: markup.html.utf8.count)
+			buf.writeString(markup.html)
 			body = buf
 		case .text(let text):
 			contentType = "text/plain; charset=utf-8"

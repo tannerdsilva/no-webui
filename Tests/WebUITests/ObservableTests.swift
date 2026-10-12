@@ -278,10 +278,10 @@ func webuiRuntimeSource() {
 func htmlDocumentWithRawStyles() {
     let doc = HTMLDocument(
         title: "Test",
-        body: "<p>Hello</p>",
+        body: .trusted("<p>Hello</p>"),
         rawStyles: [".custom { color: red; }"]
     )
-    let html = doc.renderedString()
+    let html = doc.markup.html
     #expect(html.contains(".custom { color: red; }"))
     #expect(validateTagBalance(html))
 }
@@ -290,13 +290,13 @@ func htmlDocumentWithRawStyles() {
 func htmlDocumentWithMultipleRawStyles() {
     let doc = HTMLDocument(
         title: "Test",
-        body: "<p>Hello</p>",
+        body: .trusted("<p>Hello</p>"),
         rawStyles: [
             ".a { color: red; }",
             ".b { color: blue; }",
         ]
     )
-    let html = doc.renderedString()
+    let html = doc.markup.html
     #expect(html.contains(".a { color: red; }"))
     #expect(html.contains(".b { color: blue; }"))
     #expect(validateTagBalance(html))
@@ -306,11 +306,11 @@ func htmlDocumentWithMultipleRawStyles() {
 func htmlDocumentRawStylesDevMode() {
     let doc = HTMLDocument(
         title: "Test",
-        body: "<p>Hello</p>",
+        body: .trusted("<p>Hello</p>"),
         rawStyles: [".custom { color: red; }"],
         devMode: true
     )
-    let html = doc.renderedString()
+    let html = doc.markup.html
     #expect(!html.contains(".custom { color: red; }"))
     #expect(html.contains("<link rel=\"stylesheet\""))
 }
@@ -321,9 +321,9 @@ func htmlDocumentRawStylesDevMode() {
 func webuiDocumentIncludesFullCSS() {
     let doc = WebUIDocument(
         title: "Test",
-        body: "<p>Hello</p>"
+        body: .trusted("<p>Hello</p>")
     )
-    let html = doc.renderThroughBuffer()
+    let html = doc.markup.html
     // the design sheet is linked (cacheable) now — the same bytes serve on
     // the content-addressed /__assets/css.<sha256>, so the sheet assertions
     // live on the asset, not the page.
@@ -339,9 +339,9 @@ func webuiDocumentIncludesFullCSS() {
 func webuiDocumentIncludesRuntime() {
     let doc = WebUIDocument(
         title: "Test",
-        body: "<p>Hello</p>"
+        body: .trusted("<p>Hello</p>")
     )
-    let html = doc.renderThroughBuffer()
+    let html = doc.markup.html
     #expect(html.contains("<meta name=\"webui-config\""))
     #expect(!html.contains("WebUIRuntime"))
 }
@@ -363,7 +363,7 @@ func layoutStylesAll() {
 @Test("LayoutStyles.complete generates spacing and alignment rules")
 func layoutStylesCompleteGeneratesRules() {
     let rules = LayoutStyles.complete
-    let rendered = CSSStylesheet(rules).renderedString()
+    let rendered = CSSStylesheet(rules).markup.html
     #expect(rendered.contains(".spacing-8"))
     #expect(rendered.contains(".spacing-16"))
     #expect(rendered.contains(".align-flex-start"))
@@ -397,14 +397,14 @@ func fullPipelineRender() {
         WebUICard(variant: .elevated) {
             Text("Card content")
         }
-    }.renderThroughBuffer()
+    }.markup.html
 
     let doc = WebUIDocument(
         title: "Pipeline Test",
-        body: body
+        body: .trusted(body)
     )
 
-    let html = doc.renderThroughBuffer()
+    let html = doc.markup.html
 
     // structural checks
     #expect(html.hasPrefix("<!DOCTYPE html>"))

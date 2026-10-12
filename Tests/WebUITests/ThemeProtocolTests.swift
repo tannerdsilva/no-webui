@@ -31,11 +31,11 @@ struct DesignThemeProtocolTests {
 
 	@Test("the default theme renders an unthemed document's exact bytes")
 	func defaultDocumentIsByteIdentical() {
-		let plain = WebUIDocument(title: "t", body: "<p>hi</p>").renderThroughBuffer()
+		let plain = WebUIDocument(title: "t", body: .trusted("<p>hi</p>")).markup.html
 		let themed = WebUIDocument(
-			title: "t", body: "<p>hi</p>",
+			title: "t", body: .trusted("<p>hi</p>"),
 			theme: WebUITheme(mode: .automatic, theme: DefaultDesignTheme.self)
-		).renderThroughBuffer()
+		).markup.html
 		// the csp nonce is random per render; scrub both spellings so the
 		// comparison isolates the theme's contribution.
 		func scrubNonce(_ html: String) -> String {
@@ -116,9 +116,9 @@ struct DerivedThemeTests {
 	@Test("a derived theme's override reaches a real document's bytes")
 	func derivedThemeReachesDocument() {
 		let html = WebUIDocument(
-			title: "t", body: "<p>hi</p>",
+			title: "t", body: .trusted("<p>hi</p>"),
 			theme: AccentTheme.overriding([.colorPrimary500: "#cc5500"]).webUITheme()
-		).renderThroughBuffer()
+		).markup.html
 		#expect(html.contains("--color-primary-500: #cc5500;"))
 		#expect(html.contains("--space-4: 1.25rem;"))
 	}

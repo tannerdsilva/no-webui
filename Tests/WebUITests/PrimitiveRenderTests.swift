@@ -18,7 +18,7 @@ struct PrimitiveRenderTests {
 
 	@Test("text escapes on both paths")
 	func textEscapes() {
-		#expect(Text("<b>&</b>'").renderThroughBuffer() == "&lt;b&gt;&amp;&lt;/b&gt;&#39;")
+		#expect(Text("<b>&</b>'").markup.html == "&lt;b&gt;&amp;&lt;/b&gt;&#39;")
 		var buffer = HTMLBuffer()
 		Text("<b>&</b>'").render(into: &buffer)
 		#expect(buffer.finish() == "&lt;b&gt;&amp;&lt;/b&gt;&#39;")
@@ -26,7 +26,7 @@ struct PrimitiveRenderTests {
 
 	@Test("raw stays verbatim on both paths")
 	func rawVerbatim() {
-		#expect(Raw("<i>x</i>").renderThroughBuffer() == "<i>x</i>")
+		#expect(Raw("<i>x</i>").markup.html == "<i>x</i>")
 		var buffer = HTMLBuffer()
 		Raw("<i>x</i>").render(into: &buffer)
 		#expect(buffer.finish() == "<i>x</i>")
@@ -36,16 +36,16 @@ struct PrimitiveRenderTests {
 
 	@Test("img and input emit a bare open tag — no closing tag")
 	func voidElementsHaveNoClosingTag() {
-		#expect(Image(src: "/p.png", alt: "p").renderThroughBuffer() == "<img src=\"/p.png\" alt=\"p\">")
-		#expect(Input(id: "i", name: "n", placeholder: "ph", type: .email, required: true).renderThroughBuffer()
+		#expect(Image(src: "/p.png", alt: "p").markup.html == "<img src=\"/p.png\" alt=\"p\">")
+		#expect(Input(id: "i", name: "n", placeholder: "ph", type: .email, required: true).markup.html
 			== "<input id=\"i\" name=\"n\" type=\"email\" placeholder=\"ph\" required>")
 	}
 
 	@Test("a contribution drains into a void element")
 	func contributionDrainsIntoVoidElement() {
-		#expect(Image(src: "/p.png", alt: "p").class("avatar").renderThroughBuffer()
+		#expect(Image(src: "/p.png", alt: "p").class("avatar").markup.html
 			== "<img src=\"/p.png\" alt=\"p\" class=\"avatar\">")
-		#expect(Input(type: .text).attribute("data-x", "1").renderThroughBuffer() == "<input type=\"text\" data-x=\"1\">")
+		#expect(Input(type: .text).attribute("data-x", "1").markup.html == "<input type=\"text\" data-x=\"1\">")
 	}
 
 	@Test("voidElement writes a bare tag, drains a contribution, and leaves no frame")
@@ -73,48 +73,48 @@ struct PrimitiveRenderTests {
 
 	@Test("button attributes keep their order and escaping")
 	func buttonAttributes() {
-		#expect(Button("Go & stop", id: "go", class: "btn", type: .button, disabled: true, name: "act").renderThroughBuffer()
+		#expect(Button("Go & stop", id: "go", class: "btn", type: .button, disabled: true, name: "act").markup.html
 			== "<button id=\"go\" class=\"btn\" name=\"act\" type=\"button\" disabled>Go &amp; stop</button>")
 	}
 
 	@Test("input's custom attribute list skips an empty key and escapes both halves")
 	func inputCustomAttributes() {
 		let input = Input(attributes: [("", "dropped"), ("data-q", "a\"b")])
-		#expect(input.renderThroughBuffer() == "<input type=\"text\" data-q=\"a&quot;b\">")
+		#expect(input.markup.html == "<input type=\"text\" data-q=\"a&quot;b\">")
 	}
 
 	@Test("image degrades to a bare alt when the src is unsafe")
 	func imageUnsafeSrc() {
-		#expect(Image(src: "javascript:alert(1)", alt: "x").renderThroughBuffer() == "<img alt=\"x\">")
-		#expect(Image(src: "/a.png", alt: "x", class: "c", loading: .lazy, decoding: .async).renderThroughBuffer()
+		#expect(Image(src: "javascript:alert(1)", alt: "x").markup.html == "<img alt=\"x\">")
+		#expect(Image(src: "/a.png", alt: "x", class: "c", loading: .lazy, decoding: .async).markup.html
 			== "<img src=\"/a.png\" alt=\"x\" class=\"c\" loading=\"lazy\" decoding=\"async\">")
 	}
 
 	@Test("link degrades to its text when the href is unsafe, and keeps rel order")
 	func linkContracts() {
-		#expect(Link("go", href: "javascript:x").renderThroughBuffer() == "go")
-		#expect(Link("docs", href: "/d", class: "l", target: .blank, rel: [.noopener, .noreferrer]).renderThroughBuffer()
+		#expect(Link("go", href: "javascript:x").markup.html == "go")
+		#expect(Link("docs", href: "/d", class: "l", target: .blank, rel: [.noopener, .noreferrer]).markup.html
 			== "<a href=\"/d\" class=\"l\" target=\"_blank\" rel=\"noopener noreferrer\">docs</a>")
 	}
 
 	@Test("heading levels and paragraph classes frame their tags")
 	func headingAndParagraph() {
-		#expect(Heading("Hi", level: .h3).renderThroughBuffer() == "<h3>Hi</h3>")
-		#expect(Heading("Hi", level: .h1, class: "title").renderThroughBuffer() == "<h1 class=\"title\">Hi</h1>")
-		#expect(Paragraph("t", class: "lead").renderThroughBuffer() == "<p class=\"lead\">t</p>")
+		#expect(Heading("Hi", level: .h3).markup.html == "<h3>Hi</h3>")
+		#expect(Heading("Hi", level: .h1, class: "title").markup.html == "<h1 class=\"title\">Hi</h1>")
+		#expect(Paragraph("t", class: "lead").markup.html == "<p class=\"lead\">t</p>")
 	}
 
 	@Test("label, textarea, and select keep their attribute and option order")
 	func formControls() {
-		#expect(Label("Name", for: "nm", class: "lbl").renderThroughBuffer() == "<label for=\"nm\" class=\"lbl\">Name</label>")
-		#expect(TextArea(id: "t", name: "ta", placeholder: "p", value: "v", rows: 4).renderThroughBuffer()
+		#expect(Label("Name", for: "nm", class: "lbl").markup.html == "<label for=\"nm\" class=\"lbl\">Name</label>")
+		#expect(TextArea(id: "t", name: "ta", placeholder: "p", value: "v", rows: 4).markup.html
 			== "<textarea id=\"t\" name=\"ta\" rows=\"4\" placeholder=\"p\">v</textarea>")
 		#expect(Select(
 			id: "s",
 			name: "n",
 			options: [SelectOption(value: "us", label: "United"), SelectOption(value: "ca", label: "Canada")],
 			selected: "ca"
-		).renderThroughBuffer()
+		).markup.html
 			== "<select id=\"s\" name=\"n\"><option value=\"us\">United</option><option value=\"ca\" selected>Canada</option></select>")
 	}
 
@@ -122,64 +122,64 @@ struct PrimitiveRenderTests {
 
 	@Test("table frames thead and tbody exactly as the string path did")
 	func tableFraming() {
-		#expect(Table(headers: ["A", "B"], rows: [[Text("1"), Text("2")]], class: "t").renderThroughBuffer()
+		#expect(Table(headers: ["A", "B"], rows: [[Text("1"), Text("2")]], class: "t").markup.html
 			== "<table class=\"t\"><thead><tr><th>A</th><th>B</th></tr></thead><tbody><tr><td>1</td><td>2</td></tr></tbody></table>")
-		#expect(Table(headers: [], rows: []).renderThroughBuffer() == "<table><tbody></tbody></table>")
+		#expect(Table(headers: [], rows: []).markup.html == "<table><tbody></tbody></table>")
 	}
 
 	@Test("form sanitizes the action and carries the csrf field")
 	func formContract() {
-		#expect(Form(action: "javascript:x", method: "post", id: "f", csrfToken: "tok<") { }.renderThroughBuffer()
+		#expect(Form(action: "javascript:x", method: "post", id: "f", csrfToken: "tok<") { }.markup.html
 			== "<form id=\"f\" action=\"\" method=\"post\"><input type=\"hidden\" name=\"_csrf\" value=\"tok&lt;\"></form>")
-		#expect(Form(action: "/go", method: "get", class: "c") { Text("x") }.renderThroughBuffer()
+		#expect(Form(action: "/go", method: "get", class: "c") { Text("x") }.markup.html
 			== "<form class=\"c\" action=\"/go\" method=\"get\">x</form>")
 	}
 
 	@Test("form emits enctype only when set, and it is escaped")
 	func formEnctype() {
-		#expect(Form(action: "/go") { Text("x") }.renderThroughBuffer().contains(" enctype=") == false)
-		#expect(Form(action: "/go", enctype: "multipart/form-data") { Text("x") }.renderThroughBuffer()
+		#expect(Form(action: "/go") { Text("x") }.markup.html.contains(" enctype=") == false)
+		#expect(Form(action: "/go", enctype: "multipart/form-data") { Text("x") }.markup.html
 			== "<form action=\"/go\" method=\"post\" enctype=\"multipart/form-data\">x</form>")
-		#expect(Form(action: "/go", enctype: "multi\" onsubmit=\"x") { Text("x") }.renderThroughBuffer().contains("&quot;"))
+		#expect(Form(action: "/go", enctype: "multi\" onsubmit=\"x") { Text("x") }.markup.html.contains("&quot;"))
 	}
 
 	@Test("a file input emits accept and multiple only when set")
 	func fileInputAttributes() {
-		let plain = Input(name: "f", type: .file).renderThroughBuffer()
+		let plain = Input(name: "f", type: .file).markup.html
 		#expect(plain == "<input name=\"f\" type=\"file\">")
-		#expect(Input(name: "f", type: .file, accept: "image/png,text/plain").renderThroughBuffer()
+		#expect(Input(name: "f", type: .file, accept: "image/png,text/plain").markup.html
 			== "<input name=\"f\" type=\"file\" accept=\"image/png,text/plain\">")
-		#expect(Input(name: "f", type: .file, multiple: true).renderThroughBuffer()
+		#expect(Input(name: "f", type: .file, multiple: true).markup.html
 			== "<input name=\"f\" type=\"file\" multiple>")
 		// a hostile accept value is escaped, never emitted raw.
-		#expect(Input(name: "f", type: .file, accept: "\" onfocus=\"alert(1)").renderThroughBuffer().contains("&quot;"))
+		#expect(Input(name: "f", type: .file, accept: "\" onfocus=\"alert(1)").markup.html.contains("&quot;"))
 	}
 
 	@Test("group composes its children with no wrapper")
 	func groupComposes() {
-		#expect(Group { Text("a"); Text("b") }.renderThroughBuffer() == "ab")
+		#expect(Group { Text("a"); Text("b") }.markup.html == "ab")
 	}
 
 	// MARK: layouts
 
 	@Test("a spacer is an empty framed div")
 	func spacerContract() {
-		#expect(Spacer(minSize: 8).renderThroughBuffer()
+		#expect(Spacer(minSize: 8).markup.html
 			== "<div class=\"spacer\" style=\"flex:1;min-width:8px;min-height:8px\"></div>")
 	}
 
 	@Test("scrollview keeps the literal newlines")
 	func scrollViewNewlines() {
-		#expect(ScrollView { Text("x") }.renderThroughBuffer() == "<div class=\"scrollview\">\nx\n</div>")
+		#expect(ScrollView { Text("x") }.markup.html == "<div class=\"scrollview\">\nx\n</div>")
 	}
 
 	@Test("the semantic layout tags frame their children")
 	func semanticTags() {
-		#expect(Navigation(class: "n") { Text("x") }.renderThroughBuffer() == "<nav class=\"n\">x</nav>")
-		#expect(Header { Text("x") }.renderThroughBuffer() == "<header>x</header>")
-		#expect(Footer { Text("x") }.renderThroughBuffer() == "<footer>x</footer>")
-		#expect(Main { Text("x") }.renderThroughBuffer() == "<main>x</main>")
-		#expect(Aside { Text("x") }.renderThroughBuffer() == "<aside>x</aside>")
+		#expect(Navigation(class: "n") { Text("x") }.markup.html == "<nav class=\"n\">x</nav>")
+		#expect(Header { Text("x") }.markup.html == "<header>x</header>")
+		#expect(Footer { Text("x") }.markup.html == "<footer>x</footer>")
+		#expect(Main { Text("x") }.markup.html == "<main>x</main>")
+		#expect(Aside { Text("x") }.markup.html == "<aside>x</aside>")
 	}
 
 	// MARK: the framing is real, not a naive append
@@ -195,8 +195,8 @@ struct PrimitiveRenderTests {
 
 	@Test("a modifier on a primitive lands in its own tag")
 	func modifierOnPrimitive() {
-		#expect(Heading("Hi", level: .h2).class("c").renderThroughBuffer() == "<h2 class=\"c\">Hi</h2>")
-		#expect(Button("Go").padding(4).renderThroughBuffer()
+		#expect(Heading("Hi", level: .h2).class("c").markup.html == "<h2 class=\"c\">Hi</h2>")
+		#expect(Button("Go").padding(4).markup.html
 			== "<button type=\"submit\" style=\"padding: 4px;\">Go</button>")
 	}
 }

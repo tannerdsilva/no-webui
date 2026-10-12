@@ -2,9 +2,11 @@
 
 the contract for the 2.0 cut: every 1.x spelling that changed across wave 1–5,
 one table per wave, each row naming the deprecated shim and the version that
-removes it. this document is derived from the tree at `245eecc` and from the
-plan's wave log (section 16) — every symbol below greps in `Sources/` at
-that commit; a row whose symbol does not grep is a failed push, not a typo.
+removes it. this document is derived from the tree at `245eecc` (waves 1–5) —
+the typed-markup arc's `markup` materializer is documented against HEAD in the
+section below — and from the plan's wave log (section 16) — every symbol below
+greps in `Sources/` at its stated base; a row whose symbol does not grep is a
+failed push, not a typo.
 
 two corrections to the plan's own sketch, stated up front because a host that
 starts from the plan would migrate into APIs that do not exist:
@@ -97,9 +99,9 @@ requirement, escaping is an explicit act, and classes compose.
 | `Raw(_ content: String)` | `Raw(UnsafeMarkup.trusted("…"))` — `UnsafeMarkup` has no public init; `.trusted(_:)` is the only way in | byte-identical | deprecated `init(_ content: String)` + the old `content` property (`Sources/WebUICore/Markup.swift:41,:45`) | 2.0.0 |
 | `head:` raw string parameter | `headContent: HeadContent` — the typed builder (`HeadContentBuilder` with `meta(name:content:)`, `og(title:description:image:)`, `jsonLD(_:)`, `link(rel:href:type:)`, `script(src:module:)`, `unsafe(_:)`); scripts keep their nonce until render time | byte-identical for equal content | the raw `String` parameter stays, deprecated | 2.0.0 |
 | `dir:` string parameter | `direction: Directionality` (lives in `WebUICore` beside `Raw`; the design system re-exports it as a typealias) | byte-identical | the `String` parameter stays, deprecated | 2.0.0 |
-| `View.render() -> String` (the only `View` requirement) | `func render(into buffer: inout HTMLBuffer)` — the sole requirement; the flip is all-or-nothing because a kept `render()` would be silently bypassed through `any View` | byte-identical (a migrated view writes its bytes directly into the buffer) | deprecated `render()` *default* — existing `render()`-implementing views keep their bodies working through the buffer materializer | 2.0.0 |
+| `View.render() -> String` (the only `View` requirement) | `View: BufferRendering` — the sole requirement is `func render(into buffer: inout HTMLBuffer)`; the flip is all-or-nothing because a kept `render()` would be silently bypassed through `any View`. a `View` only refines `BufferRendering`, whose **public** `markup: UnsafeMarkup` is the materializer — a host no longer hand-rolls `String(decoding: buffer.bytes…)` | byte-identical (a migrated view writes its bytes directly into the buffer) | deprecated `render()` *default* — `render() -> String` is `markup.html`; it is not a way to conform | 2.0.0 |
 | (nothing to migrate) | the capability protocols `Interactive`, `Identified`, `StreamingContent`, `AsyncContent`, `Recoverable` (`Sources/WebUICore/Capabilities.swift`) — conformance is a one-word change, no capability adds a `View` requirement | — | — | — |
-| (nothing to migrate) | consumer `HTMLBuffer` — `init`, `append`, `appendEscaped`, `appendBytes`, `beginElement`, `endOpenTag`, `endElement`, `voidElement`, `addAttribute`, `addAttributeValue`, `byteCount`, `hasPendingAttributes`, `bytes` are public | — | the modifier plumbing (`mark`, `takePendingAttributes`, `wrapSpan`, `settlePendingAttributes`, `finish`) stays package | — |
+| (nothing to migrate) | consumer `HTMLBuffer` — `init`, `append`, `appendEscaped`, `appendBytes`, `beginElement`, `endOpenTag`, `endElement`, `voidElement`, `addAttribute`, `addAttributeValue`, `byteCount`, `hasPendingAttributes`, `bytes` are public; `BufferRendering.markup` (not on the buffer) is the materializer | — | the modifier plumbing (`mark`, `takePendingAttributes`, `wrapSpan`, `settlePendingAttributes`, `finish`) stays package — `finish()` is the internal boundary that hands the buffer's bytes to `UnsafeMarkup.rendered(_:)`, the framework-vouched variant; making it public would let a host mint framework-trusted markup without taking responsibility, which is exactly what `.trusted(_:)` exists to keep loud. the public door to a rendered value is `markup` | — |
 
 ## wave 3 — the web's actual HTTP surface
 
@@ -112,10 +114,10 @@ needs to know about.
 |---|---|---|---|---|
 | `WebUIServer(render:router:config:logger:)` | `WebUIServer(router:config:logger:)` — the router is a typed `Route` table and the server owns its `EventRouter` | byte-identical — the deprecated inits stand on a single-route router for `config.pagePath` | `@available(*, deprecated, message: "build a Router and use init(router:config:logger:)")` (`WebUIServer.swift:350`) | 2.0.0 |
 | `WebUIServer(requestRender:router:config:logger:)` | same `init(router:config:logger:)` — a path-dependent page is a `Route.page` with `request.path` | byte-identical | `@available(*, deprecated, …)` (`WebUIServer.swift:366`) | 2.0.0 |
-| raw render closures returning `String` | `HTTPResponse` (`HTTPResponse.Body`: `.html(_:)`, `.text(_:)`, `.bytes(_:contentType:)`, `.stream(_:contentType:)`); a handler that renders a view answers `.html(…renderThroughBuffer())` | — | — | — |
+| raw render closures returning `String` | `HTTPResponse` (`HTTPResponse.Body`: `.html(_:)`, `.text(_:)`, `.bytes(_:contentType:)`, `.stream(_:contentType:)`) — `.html` now carries an **`UnsafeMarkup`**, so a bare `String` can no longer become a page (the compiler rejects it). a handler that renders a view answers `HTTPResponse(view.markup)` — the `HTTPResponse(_ markup:status:headers:cookies:)` convenience — or `.html(view.markup)`. the 1.x response-body materializer this row once pinned has been **deleted**, not deprecated — see the typed-markup section | — | — | — |
 | hand-parsed request plumbing | `HTTPRequest` (method/path/query/headers/cookies/body/`renderToken`/`isSecure`/`params`), `HTTPMethod`, `HTTPStatus`, `RequestBody` (`.none`/`.bytes`/`.form`/`.multipart`) | — | — | — |
 | `WebUIAuth.Cookie`, `WebUIAuth.CookieParser` | `WebUISharedCore.HTTPCookie`, `WebUISharedCore.CookieParser` — the Foundation-free shared leaf; `@_exported` from `WebUIServer` | — | deprecated `renamed:` typealiases in `WebUIAuth/Cookie.swift` | 2.0.0 |
-| `Router(…)` doesn't exist; paths were the config's single page | `Router(_ routes: [Route])` + `Route.get(_:_:)`, `Route.post(_:_:)`, `Route.page(_:content:)`, `PathPattern` (`"/users/:id"`, trailing `*rest`), matching most-specific-first with a computed `specificity` | — | — | — |
+| `Router(…)` doesn't exist; paths were the config's single page | `Router(_ routes: [Route])` + `Route.get(_:_:)`, `Route.post(_:_:)`, `Route.page<D: BufferRendering>(_ pattern:content:)`, `PathPattern` (`"/users/:id"`, trailing `*rest`), matching most-specific-first with a computed `specificity`. `Route.page` exists in **both a sync and an async form with the same `content:` label** — the compiler disambiguates on the closure's async-ness, so a trailing closure keeps working — and `PageResponder` is typed on `BufferRendering`, so a document (not a view) serves as a page | — | — | — |
 | `Route.page` and `ErrorBoundary.init` took `@ViewBuilder` | plain closures — this package's `ViewBuilder` is array-shaped, so a builder-returned single view is never inferred; build the view first, return it | — | — | — |
 | forms | typed `FormMethod` (`.get`/`.post`/`.dialog`) with a raw-string init kept for byte fidelity; `Form(enctype:)`, `Input(accept:multiple:)` for file inputs; `FormValues`/`MultipartForm`/`UploadedFile`/`BodyReader` (`maxBodyBytes` 1 MiB, `maxMultipartParts` 64 — a declared `Content-Length` over the cap is refused before buffering) | — | — | — |
 | (nothing to migrate) | chunked streaming: `HTTPStream` + `HTTPResponse.Body.stream(AsyncStream<[UInt8]>, contentType:)`; server-sent events: `SSEEvent` (field values splitLines-guarded) + `SSE.response(_:)` | — | — | — |
@@ -148,6 +150,56 @@ wave 5 is additive — the byte pin never moved across it (fourteen gates green,
 | hand-rolled theme sheets | `ThemeSheet.init<T: DesignTheme>(theme: T.Type, mode:)` and the `ThemeCatalog` path for cacheable linked sheets | additive | — | — |
 | (nothing to migrate) | token completeness, machine-checked in both directions: generated `DesignToken.verify(_ theme: any DesignTheme.Type) -> [MissingToken]` with `.notInStylesheet`/`.misplacedAxis` kinds | — | — | — |
 | `rawStyles: [String]` is the only host sheet | `StyleSheet(name:layer:rules:)` with typed `CascadeLayer` (`.webui`, `.utilities = "webui.utilities"`, `.host` — host declared last so it wins by origin), the `CSSRuleBuilder`, and `StyleSheet.css` emitting the canonical `@layer` statement; `WebUIDocument.styleSheets` and `stylesheetURL` (cacheable `<link>` instead of inlining) | additive; a host rule beats the framework at equal *and* lower specificity with zero `!important` (proven in `designer/cascade-probe.mjs` on computed style against a control) | `rawStyles` stays | — |
+
+## the typed markup surface — markup, not render()
+
+(the typed-markup arc, measured against HEAD: the migration tables above were
+written against `245eecc`, before the arc landed.)
+
+the arc made `markup` the one door a host reaches a rendered value through, and
+removed the two string materializers 1.x trained hosts to call. measured against
+HEAD:
+
+- `BufferRendering` is a **public** protocol with `public var markup: UnsafeMarkup`
+  (`Sources/WebUICore/BufferRendering.swift`). `View` **refines** it, so `.markup`
+  works on any view *and* on `HTMLDocument`, `WebUIDocument` and `CSSStylesheet` —
+  a document is not a view, but it sings the same door.
+- the two string materializers this document's 1.x rows once named — renderThroughBuffer
+  and renderedString — are **deleted**, not deprecated. neither exists at HEAD (0 hits
+  tree-wide), so a 1.x host that calls either simply fails to compile. `render() -> String`
+  survives only as a **deprecated 1.x spelling**: it is `markup.html`.
+- `HTTPResponse.Body.html` now carries **`UnsafeMarkup`**, not `String` — a bare
+  `String` can no longer become a page; the compiler rejects it. the convenience
+  `HTTPResponse(_ markup:status:headers:cookies:)` answers from a rendered value.
+- `HTMLDocument.body` and `WebUIDocument.body` carry **`UnsafeMarkup`**.
+- `Route.page<D: BufferRendering>` exists in **both sync and async form, same
+  `content:` label** — the compiler disambiguates on the closure's async-ness, so a
+  trailing closure keeps working. `PageResponder` is likewise typed on
+  `BufferRendering`.
+- `UnsafeMarkup.trusted(_:)` is the **one escape hatch** for genuinely hand-written
+  markup, and it is greppable by design.
+- two public parameters **deliberately stay `String`**: `HTMLDocument.diagnostics(body:)`
+  and `WebUIDocument.declaredIslandNames(in:)` — both are pure scans that render
+  nothing. do not "fix" them.
+
+### the consumer proof (measured, not invented)
+
+the arc's real consumer — `~/workspace/no-webui-migrate-test` — was built the naive
+(1.x) way first, one shape fixed per build so `swiftc` surfaces the next error
+class (`naive-diagnostics.md` there records each raw batch). the four error classes
+a 1.x host hits, in the order they surface, are the migration:
+
+| shape | the compiler says | the typed door |
+|---|---|---|
+| document body | `cannot convert value of type 'String' to expected argument type 'UnsafeMarkup'` (`HTMLDocument.init body:`) | `HTMLDocument(body: shell.markup, styles: sheet)` — `View: BufferRendering.markup` → `UnsafeMarkup` |
+| route content | `static method 'page(_:content:)' requires that 'String' conform to 'BufferRendering'` | `Router { Route.page("/") { doc } }` — a document, not a view |
+| response body | `.html(A String)` rejected — `String` is not `UnsafeMarkup` | `HTTPResponse(doc.markup)` — the `HTTPResponse(_ markup:)` convenience |
+| stylesheet served as a page | same rejection on a css `String` body | `HTTPResponse(sheet.markup)` — `CSSStylesheet: BufferRendering`, served typed, no `String` |
+
+the async route changes nothing at the call site: `Route.page("/async-page") {
+_ async in … doc }` keeps the same `content:` label, gains only `async`, and the
+compiler picks the async overload. the whole consumer reaches served bytes with
+zero `String`s materialized and zero calls to `UnsafeMarkup.trusted(_:)`.
 
 ## new in 2.0, in one place
 

@@ -1089,7 +1089,7 @@ public struct ShowcasePage: Sendable, BufferRendering {
                                     let text = event.string("message") ?? ""
                                     guard !text.isEmpty else { return [] }
                                     state.appendChat(text)
-                                    return [FragmentUpdate(id: "live-chat", html: liveChat(state: state).renderThroughBuffer())]
+                                    return [FragmentUpdate(id: "live-chat", html: liveChat(state: state).markup.html)]
                                 }
                             }
                         }

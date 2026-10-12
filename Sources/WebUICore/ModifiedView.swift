@@ -5,7 +5,7 @@ extension ViewModifier {
     /// content's string render, which re-parses that html — the cost S2
     /// removes for the migrated modifier set.
     public func decorate<C: View>(_ content: C, into buffer: inout HTMLBuffer) {
-        buffer.append(apply(to: content.renderThroughBuffer()))
+        buffer.append(apply(to: content.markup.html))
     }
 }
 

@@ -28,7 +28,7 @@ verification driver (no ci — owner rule).
   `swift build` → `swift test` → `swift package --disable-sandbox plugin smoke` →
   `plugin fullstack-smoke` → `node designer/browser-smoke.mjs`.
 - token-only values in new css; no raw px/hex; both themes audited.
-- never touch the frozen consumer surface (`View`, `render()`, modifiers,
+- never touch the frozen consumer surface (`View`, `render(into:)`, modifiers,
   components, `FragmentUpdate`) — additive optional params only (see risks r1).
 
 ## phase map
@@ -239,7 +239,7 @@ tables are linked, not stubbed).
   measure bytes/frames saved vs whole-fragment replace on the counter/echo/table
   routes.
 - only if measurable (>30% patch bytes on the table route): introduce an internal
-  `Element` IR in `Sources/WebUICore/` (value-type node tree; `render()` becomes a
+  `Element` IR in `Sources/WebUICore/` (value-type node tree; `render(into:)` becomes a
   projection — public surface unchanged by construction) + per-connection
   render cache; `FragmentUpdate` gains an additive `ops` array (old `html` field
   stays the fallback; wire stays byte-compatible per d5).

@@ -60,9 +60,9 @@ struct ThemeCompiledRuntimeTests {
 	func themedDocumentRenders() {
 		let html = WebUIDocument(
 			title: "t",
-			body: "<p class=\"chat-bubble\">hi</p>",
+			body: .trusted("<p class=\"chat-bubble\">hi</p>"),
 			theme: NexusDark.theme
-		).renderThroughBuffer()
+		).markup.html
 		#expect(html.contains("color-scheme: dark;"))
 		#expect(html.contains("--color-primary-solid: #6c8cff;"))
 		#expect(html.contains("--chat-user-bubble: #2a2a2e;"))

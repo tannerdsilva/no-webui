@@ -40,7 +40,7 @@ struct IslandTests {
 
 	@Test("IslandRegion renders the engine's mount point with the declared capability")
 	func mountPointAttributes() {
-		let html = IslandRegion<GreetingIsland>("world").renderThroughBuffer()
+		let html = IslandRegion<GreetingIsland>("world").markup.html
 		#expect(html.hasPrefix("<div "))
 		#expect(html.contains("data-webui-island=\"greeting\""))
 		#expect(html.hasSuffix("</div>"))
@@ -48,7 +48,7 @@ struct IslandTests {
 
 	@Test("the mount args are the engine's json envelope with the input under 'input'")
 	func mountArgsEnvelope() throws {
-		let html = IslandRegion<GreetingIsland>("hello world").renderThroughBuffer()
+		let html = IslandRegion<GreetingIsland>("hello world").markup.html
 		let decoded = try #require(Self.decodedArgs(from: html))
 		let object = try #require(
 			try JSONSerialization.jsonObject(with: Data(decoded.utf8)) as? [String: String]
@@ -59,7 +59,7 @@ struct IslandTests {
 	@Test("a hostile input cannot break the single-quoted args attribute")
 	func mountInputEscaping() throws {
 		let input = "say \"hi\" \\ <>&' \u{2028}"
-		let html = IslandRegion<GreetingIsland>(input).renderThroughBuffer()
+		let html = IslandRegion<GreetingIsland>(input).markup.html
 		let rawArgs = try #require(Self.rawArgs(from: html))
 		// the attribute is single-quoted: no raw single quote may ride inside
 		#expect(!rawArgs.contains("'"))
@@ -72,7 +72,7 @@ struct IslandTests {
 
 	@Test("the region renders its server-side fallback inside the mount point")
 	func ssrFallbackRenders() {
-		let html = IslandRegion<GreetingIsland>("dolly").renderThroughBuffer()
+		let html = IslandRegion<GreetingIsland>("dolly").markup.html
 		#expect(html.contains("<span>hi dolly</span>"))
 	}
 
@@ -80,8 +80,8 @@ struct IslandTests {
 
 	@Test("declaring an island wires the capability into the emitted config")
 	func bareDeclarationGrants() throws {
-		let body = IslandRegion<GreetingIsland>("world").renderThroughBuffer()
-		let html = WebUIDocument(title: "Islands", body: body).renderThroughBuffer()
+		let body = IslandRegion<GreetingIsland>("world").markup.html
+		let html = WebUIDocument(title: "Islands", body: .trusted(body)).markup.html
 		let config = try #require(Self.decodedConfig(from: html))
 		#expect(config.contains(#""capabilities":["greeting"]"#))
 		#expect(html.contains("data-webui-island=\"greeting\""))
@@ -90,17 +90,17 @@ struct IslandTests {
 
 	@Test("a body with no islands leaves the emitted config untouched")
 	func noIslandsNoCapabilities() {
-		let html = WebUIDocument(title: "t", body: "just text").renderThroughBuffer()
+		let html = WebUIDocument(title: "t", body: .trusted("just text")).markup.html
 		#expect(html.contains("webui-config"))
 		#expect(!html.contains("capabilities"))
 	}
 
 	@Test("declared islands merge into an explicit runtimeConfig without duplicating")
 	func explicitConfigMergesDeclared() throws {
-		let body = IslandRegion<GreetingIsland>("a").renderThroughBuffer()
-			+ IslandRegion<GreetingPingIsland>("b").renderThroughBuffer()
+		let body = IslandRegion<GreetingIsland>("a").markup.html
+			+ IslandRegion<GreetingPingIsland>("b").markup.html
 		let config = RuntimeConfig(capabilities: ["greeting"])
-		let html = WebUIDocument(title: "t", body: body, runtimeConfig: config).renderThroughBuffer()
+		let html = WebUIDocument(title: "t", body: .trusted(body), runtimeConfig: config).markup.html
 		// caller order first, then the new declaration; greeting not duplicated
 		let decoded = try #require(Self.decodedConfig(from: html))
 		#expect(decoded.contains(#""capabilities":["greeting","ping"]"#))
@@ -108,9 +108,9 @@ struct IslandTests {
 
 	@Test("declared islands merge into a clientMode config too (the smoke-page shape)")
 	func clientModeMergesDeclared() throws {
-		let body = IslandRegion<GreetingIsland>("a").renderThroughBuffer()
+		let body = IslandRegion<GreetingIsland>("a").markup.html
 		let boot = ClientBoot(config: RuntimeConfig(capabilities: ["offline", "never-built"]))
-		let html = WebUIDocument(title: "t", body: body, clientMode: boot).renderThroughBuffer()
+		let html = WebUIDocument(title: "t", body: .trusted(body), clientMode: boot).markup.html
 		let decoded = try #require(Self.decodedConfig(from: html))
 		#expect(decoded.contains(#""capabilities":["offline","never-built","greeting"]"#))
 	}
@@ -126,8 +126,8 @@ struct IslandTests {
 
 	@Test("an empty island name is never granted")
 	func emptyNameNotGranted() {
-		let body = IslandRegion<NamelessIsland>("x").renderThroughBuffer()
-		let html = WebUIDocument(title: "t", body: body).renderThroughBuffer()
+		let body = IslandRegion<NamelessIsland>("x").markup.html
+		let html = WebUIDocument(title: "t", body: .trusted(body)).markup.html
 		#expect(html.contains("data-webui-island=\"\""))
 		#expect(!html.contains("capabilities"))
 	}

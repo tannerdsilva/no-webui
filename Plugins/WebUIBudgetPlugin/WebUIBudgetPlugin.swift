@@ -42,6 +42,15 @@ struct WebUIBudgetPlugin: CommandPlugin {
     /// for. measured 44,118 raw / 10,898 gz, so the gzip pin holds (the additions compress
     /// well: raw +4%, gz +3%) and only the raw ceiling moves.
     ///
+    /// re-pinned 2026-10-12: the engine grew to 58,372 raw / 14,022 gz served (measured
+    /// from the asset tool's manifest on this tree) — the events-deck/continuum work landed
+    /// after the 2026-09-30 pin and tripped this gate, which is what it is for (the dev
+    /// lane's `0be8d23` records the same pattern as "trip #4"). the ceilings move to
+    /// 63,000 / 15,200 (~8% headroom); sheet, shell and island hold unchanged:
+    ///   sheet  322,381 SERVED / 45,152 gz  (≤ 335,000 / 49,500)
+    ///   shell    1,514 raw   /    539 gz   (≤   1,700 /    650)
+    ///   island 164,705 stripped            (≤ 200,000)
+    ///
     /// the sheet's `raw` is the MINIFIED size, not the working file: the two differ by
     /// ~8% and a budget on the wrong number is a false sense of safety. this plugin
     /// learned that the hard way — its first pin was taken from the working file's gzip
@@ -53,7 +62,7 @@ struct WebUIBudgetPlugin: CommandPlugin {
     /// the theming work (T8/T9) will add tokens and therefore grow the sheet, which should
     /// trip this gate and force a deliberate re-pin rather than a silent drift.
     private static let ceilings: [Ceiling] = [
-        Ceiling(surface: "engine", label: "webui-engine.js", raw: 46_000, gz: 11_600),
+        Ceiling(surface: "engine", label: "webui-engine.js", raw: 63_000, gz: 15_200),
         Ceiling(surface: "sheet", label: "design-system.css", raw: 335_000, gz: 49_500),
         Ceiling(surface: "shell", label: "webui-shell.js", raw: 1_700, gz: 650),
     ]

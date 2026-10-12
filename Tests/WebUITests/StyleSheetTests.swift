@@ -79,14 +79,14 @@ struct StyleSheetTests {
 	func documentEmissionOrder() throws {
 		let doc = WebUIDocument(
 			title: "t",
-			body: "<button class=\"button button--primary\">go</button>",
+			body: .trusted("<button class=\"button button--primary\">go</button>"),
 			styleSheets: [
 				StyleSheet(name: "probe") {
 					CSSRule(".button--primary", [CSSDeclaration("background", "rgb(240, 20, 20)")])
 				}
 			],
 			stylesheetURL: nil
-		).renderThroughBuffer()
+		).markup.html
 
 		// this test asserts *rendered output*: the collision pair — the
 		// framework's own `.button--primary` rule and the host's — both reach
@@ -110,12 +110,12 @@ struct StyleSheetTests {
 	func linkedModeStillEmitsHostSheets() throws {
 		let doc = WebUIDocument(
 			title: "t",
-			body: "<p>x</p>",
+			body: .trusted("<p>x</p>"),
 			styleSheets: [
 				StyleSheet(name: "probe") { CSSRule(".x", [CSSDeclaration("color", "red")]) }
 			],
 			stylesheetURL: "/__assets/css.abc"
-		).renderThroughBuffer()
+		).markup.html
 		let link = try #require(doc.range(of: "<link rel=\"stylesheet\" href=\"/__assets/css.abc\">"))
 		let hostStatement = try #require(doc.range(of: "@layer webui, webui.utilities, host;"))
 		#expect(link.upperBound < hostStatement.lowerBound, "the host layer must come after the framework link, so it is declared later")
@@ -131,14 +131,14 @@ struct StyleSheetTests {
 		let scrubbed = Self.scrubbedNonces(_:)
 		// `plain` is the pre-W5.3 call shape — no styleSheets argument at all —
 		// and must emit byte-identically to one that passes an empty list.
-		let plain = scrubbed(WebUIDocument(title: "t", body: "<p>x</p>", stylesheetURL: nil).renderThroughBuffer())
-		let withEmpty = scrubbed(WebUIDocument(title: "t", body: "<p>x</p>", styleSheets: [], stylesheetURL: nil).renderThroughBuffer())
+		let plain = scrubbed(WebUIDocument(title: "t", body: .trusted("<p>x</p>"), stylesheetURL: nil).markup.html)
+		let withEmpty = scrubbed(WebUIDocument(title: "t", body: .trusted("<p>x</p>"), styleSheets: [], stylesheetURL: nil).markup.html)
 		let withExplicitHostless = scrubbed(WebUIDocument(
 			title: "t",
-			body: "<p>x</p>",
+			body: .trusted("<p>x</p>"),
 			styleSheets: [StyleSheet(name: "empty", layer: .host, { [] })],
 			stylesheetURL: nil
-		).renderThroughBuffer())
+		).markup.html)
 		#expect(plain == withEmpty)
 		// the default document never declares a host layer
 		#expect(!plain.contains("@layer webui, webui.utilities, host;"))

@@ -24,7 +24,7 @@ Chart(marks)
     .chartID("sales")                      // enables interactive marks
     .chartSelection(axis: .x, value: .category("Jan"))
     .chartAccessibilityLabel("Bar chart of quarterly sales")
-    .render()                              // -> String (a <figure>)
+    .markup                              // -> UnsafeMarkup (a <figure>)
 ```
 
 or, the Swift Charts style — marks built with the concrete initializers and
@@ -36,12 +36,14 @@ Chart {
         BarMark(x: .value("Month", d.month), y: .value("Sales", d.sales))
             .foregroundStyle(by: d.product)
     }
-}.render()
+    }.markup
 ```
 
-`Chart` conforms to `View`; `render()` returns the full figure HTML.
-An empty mark list renders a designed empty state (`.chart--empty`), not a
-blank box.
+`Chart` conforms to `View` — and `View` refines `BufferRendering` — so the full
+figure is its `markup` (an `UnsafeMarkup`, not a `String`). the 1.x spelling
+`render() -> String` is **deprecated**; a caller that needs a string reads
+`.markup.html`. an empty mark list renders a designed empty state (`.chart--empty`),
+not a blank box.
 
 ## marks
 

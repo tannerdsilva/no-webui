@@ -28,13 +28,13 @@ import WebUIDesignSystem
 let page = WebUIDocument(
     title: "Hello",
     body: VStack {
-        WebUIButton("Click me", variant: .primary)
+        WebUIButton("Click me", appearance: .primary)
         Text("Hello, world!")
-    }
+    }.markup
 )
 
 // Render to HTML
-let html = page.render()
+let html = page.markup.html
 // → "<!DOCTYPE html><html lang=\"en\">..."
 ```
 
@@ -44,7 +44,7 @@ For the full pipeline (HTTP server + WebSocket event handling), see
 ## Rendering Pipeline
 
 ```
-View tree → render() → HTML string → HTMLDocument → HTTP response
+View tree → render(into:) → HTML string → HTMLDocument → HTTP response
                                               ↓ (WebSocket)
 Client event → EventRouter.handle() → [FragmentUpdate] → WS send → DOM patch
 ```

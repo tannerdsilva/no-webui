@@ -28,12 +28,12 @@ func renderShowcasePage(state: ShowcaseState, checkClasses: Bool = true, renderT
     }
     let doc = WebUIDocument(
         title: "WebUI Showcase",
-        body: ShowcasePage(state: state).renderedString(),
+        body: ShowcasePage(state: state).markup,
         includeRuntime: true,
         runtimeConfig: renderToken.isEmpty ? nil : RuntimeConfig(renderToken: renderToken),
         checkClasses: checkClasses
     )
-    return doc.renderThroughBuffer()
+    return doc.markup.html
 }
 
 // MARK: - render profiling
@@ -78,7 +78,7 @@ func renderBench(n: Int) {
         }
     }
     report("synthetic \(nodes) div+text nodes", iterations: max(5, n / 4)) {
-        _ = RenderContext.$current.withValue(ctx) { tree.renderThroughBuffer() }
+        _ = RenderContext.$current.withValue(ctx) { tree.markup.html }
     }
 
     print("=== micro paths the render leans on ===")

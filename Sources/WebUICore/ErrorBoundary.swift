@@ -59,7 +59,7 @@ public struct ErrorBoundary<Content: View, Fallback: View>: View {
 		}
 		// the fallback renders outside the boundary scope, so ids its own
 		// controls mint are not recorded against this boundary.
-		let fallbackHTML = fallback.renderThroughBuffer()
+		let fallbackHTML = fallback.markup.html
 		let updates = [FragmentUpdate(id: elementID, html: fallbackHTML)]
 		let registration: EventHandler = { _ in updates }
 		for componentID in record.componentIDs() {

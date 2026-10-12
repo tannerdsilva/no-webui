@@ -25,7 +25,7 @@ import WebUIDesignSystem
 // person to widen a slot sees exactly what the sheet promised before.
 
 private func render(_ view: some View) -> String {
-    RenderContext.$current.withValue(RenderContext(router: EventRouter())) { view.renderThroughBuffer() }
+    RenderContext.$current.withValue(RenderContext(router: EventRouter())) { view.markup.html }
 }
 
 /// every class token in the markup, from every `class="..."` on the page.

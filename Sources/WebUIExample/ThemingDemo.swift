@@ -119,7 +119,7 @@ enum ThemeDemo {
 				Span { Text("this page ships theme: ") }
 				Span { Raw(UnsafeMarkup.trusted("<strong id=\"theme-mode\">" + htmlEscape(label) + "</strong>")) }
 			}
-		}.renderThroughBuffer()
+		}.markup.html
 	}
 
 	/// one demo page under one theme. `nil` is `.standard` — a host that
@@ -141,7 +141,7 @@ enum ThemeDemo {
 		}
 		return WebUIDocument(
 			title: "Theming demo · " + label,
-			body: body(label: label),
+			body: .trusted(body(label: label)),
 			theme: theme,
 			rawStyles: shellStyles,
 			styleSheets: [ThemeDemoStyle.sheet]

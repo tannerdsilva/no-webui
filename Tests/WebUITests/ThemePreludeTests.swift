@@ -14,10 +14,10 @@ struct ThemePreludeTests {
 	private func document(_ themePrelude: Bool = true, includeRuntime: Bool = true) -> String {
 		HTMLDocument(
 			title: "t",
-			body: "<p>x</p>",
+			body: .trusted("<p>x</p>"),
 			includeRuntime: includeRuntime,
 			themePrelude: themePrelude
-		).renderedString()
+		).markup.html
 	}
 
 	@Test("is emitted, inline, carrying the nonce, and free of comments")
@@ -118,9 +118,9 @@ struct ThemePreludeTests {
 	func hostPolicyWithoutNonceSourceSkipsPrelude() {
 		let html = HTMLDocument(
 			title: "t",
-			body: "<p>x</p>",
+			body: .trusted("<p>x</p>"),
 			contentSecurityPolicy: "default-src 'self'; script-src 'self';"
-		).renderedString()
+		).markup.html
 		#expect(!html.contains("localStorage.getItem('webui-theme')"),
 			"a prelude the browser will refuse is payload plus a console error")
 		#expect(!html.contains("<script nonce="), "no inline script is emitted at all")

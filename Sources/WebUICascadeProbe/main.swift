@@ -36,13 +36,13 @@ let hostSheet = StyleSheet(name: "cascade-probe", layer: .host) {
 func page(styled: Bool) -> String {
     WebUIDocument(
         title: "cascade probe",
-        body: markup,
+        body: .trusted(markup),
         includeRuntime: false,
         // inline the framework sheet: the page is self-contained, so the gate
         // server has a single html route and no csp-style link order surprises.
         styleSheets: styled ? [hostSheet] : [],
         stylesheetURL: nil
-    ).renderThroughBuffer()
+    ).markup.html
 }
 
 func write(_ html: String, to path: String) {

@@ -25,8 +25,8 @@ struct WebUIServerTests {
 				WebUIButton("Go", variant: .primary)
 			}
 			.padding(24)
-			.renderThroughBuffer()
-			return WebUIDocument(title: "WebUI Server Test", body: body).renderThroughBuffer()
+			.markup.html
+			return WebUIDocument(title: "WebUI Server Test", body: .trusted(body)).markup.html
 		}
 
 		for offset in 0..<10 {
@@ -169,8 +169,8 @@ struct TypedResponseTests {
 				Route.get("/") { _ in
 					let html = WebUIDocument(
 						title: "typed response page",
-						body: "<main>ride-through</main>"
-					).renderThroughBuffer()
+						body: .trusted("<main>ride-through</main>")
+					).markup.html
 					return HTTPResponse(
 						cookies: [
 							HTTPCookie(
@@ -179,7 +179,7 @@ struct TypedResponseTests {
 								attributes: HTTPCookie.Attributes(path: "/", httpOnly: true, sameSite: .lax)
 							)
 						],
-						body: .html(html)
+						body: .html(.trusted(html))
 					)
 				}
 			},
@@ -212,13 +212,13 @@ struct TypedResponseTests {
 		// the point, exactly as in DeprecatedVocabularyTests.
 		let unbound = WebUIServer(
 			render: {
-				WebUIDocument(title: "deprecated render page", body: "<p>a</p>").renderThroughBuffer()
+				WebUIDocument(title: "deprecated render page", body: .trusted("<p>a</p>")).markup.html
 			},
 			router: EventRouter()
 		)
 		let pathAware = WebUIServer(
 			requestRender: { request in
-				WebUIDocument(title: "deprecated requestRender page", body: "<p>\(request.path)</p>").renderThroughBuffer()
+				WebUIDocument(title: "deprecated requestRender page", body: .trusted("<p>\(request.path)</p>")).markup.html
 			},
 			router: EventRouter()
 		)
@@ -227,7 +227,7 @@ struct TypedResponseTests {
 		// and one of them serves end-to-end, the string wrapped as `.html`.
 		try await withServer(
 			requestRender: { _ in
-				WebUIDocument(title: "deprecated requestRender page", body: "<p>b</p>").renderThroughBuffer()
+				WebUIDocument(title: "deprecated requestRender page", body: .trusted("<p>b</p>")).markup.html
 			},
 			router: EventRouter(),
 			assets: [],

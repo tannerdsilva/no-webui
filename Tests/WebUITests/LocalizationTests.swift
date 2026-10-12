@@ -22,7 +22,7 @@ private struct TestLocale: LocalizedEnvironment {
 
 private func renderInLocale<V: View>(_ env: LocalizedEnvironment, _ build: () -> V) -> String {
 	RenderContext.$current.withValue(RenderContext(router: EventRouter(), localized: env)) {
-		build().renderThroughBuffer()
+		build().markup.html
 	}
 }
 
@@ -104,23 +104,23 @@ private func renderInLocale<V: View>(_ env: LocalizedEnvironment, _ build: () ->
 	// MARK: english renders outside any context
 
 	@Test func componentsRenderEnglishOutsideAContext() {
-		#expect(WebUIAlert(message: "m", dismissible: true).renderThroughBuffer()
+		#expect(WebUIAlert(message: "m", dismissible: true).markup.html
 			.contains("aria-label=\"Dismiss\""))
-		#expect(WebUIToast(message: "m").renderThroughBuffer()
+		#expect(WebUIToast(message: "m").markup.html
 			.contains("aria-label=\"Dismiss\""))
-		#expect(WebUIModal(title: "t") { Text("x") }.renderThroughBuffer()
+		#expect(WebUIModal(title: "t") { Text("x") }.markup.html
 			.contains("aria-label=\"Close\""))
-		let page = WebUIPagination(page: 2, pages: 5).renderThroughBuffer()
+		let page = WebUIPagination(page: 2, pages: 5).markup.html
 		#expect(page.contains("aria-label=\"Pagination\""))
 		#expect(page.contains("aria-label=\"Previous page\""))
 		#expect(page.contains("aria-label=\"Next page\""))
-		#expect(WebUIBell(count: 3).renderThroughBuffer()
+		#expect(WebUIBell(count: 3).markup.html
 			.contains("aria-label=\"Notifications, 3 unread\""))
-		#expect(WebUIOTP().renderThroughBuffer().contains("aria-label=\"One-time code\""))
-		#expect(WebUIOTP().renderThroughBuffer().contains("aria-label=\"Digit 1\""))
-		#expect(WebUIMultiSelect(options: []).renderThroughBuffer()
+		#expect(WebUIOTP().markup.html.contains("aria-label=\"One-time code\""))
+		#expect(WebUIOTP().markup.html.contains("aria-label=\"Digit 1\""))
+		#expect(WebUIMultiSelect(options: []).markup.html
 			.contains(">Select…</span>"))
-		#expect(WebUIBell(count: 0).renderThroughBuffer()
+		#expect(WebUIBell(count: 0).markup.html
 			.contains("aria-label=\"Notifications\""))
 	}
 
@@ -163,10 +163,10 @@ private func renderInLocale<V: View>(_ env: LocalizedEnvironment, _ build: () ->
 	// MARK: the last status strings (w5.0) resolve through the context
 
 	@Test func engineAndReasoningStringsResolveThroughTheContext() {
-		let status = WebUIEngineStatus().renderThroughBuffer()
+		let status = WebUIEngineStatus().markup.html
 		#expect(status.contains(">connected<"))
 		#expect(status.contains(">reconnecting…<"))
-		#expect(WebUIReasoningBlock("x").renderThroughBuffer().contains("<summary>Reasoning</summary>"))
+		#expect(WebUIReasoningBlock("x").markup.html.contains("<summary>Reasoning</summary>"))
 		var catalog = WebUIStrings.english
 		catalog.connected = "Online"
 		catalog.reasoning = "Thoughts"
@@ -206,16 +206,16 @@ private func renderInLocale<V: View>(_ env: LocalizedEnvironment, _ build: () ->
 	@Test func theDocumentCarriesLocaleAndTypedDirection() {
 		let html = WebUIDocument(
 			title: "t",
-			body: "<p>x</p>",
+			body: .trusted("<p>x</p>"),
 			locale: "ar-SA",
 			strings: .arabic,
 			direction: .rtl
-		).renderThroughBuffer()
+		).markup.html
 		#expect(html.contains("<html lang=\"ar-SA\" dir=\"rtl\">"))
 	}
 
 	@Test func theDefaultDocumentDeclaresEnglishAndNoDirection() {
-		let html = WebUIDocument(title: "t", body: "<p>x</p>").renderThroughBuffer()
+		let html = WebUIDocument(title: "t", body: .trusted("<p>x</p>")).markup.html
 		#expect(html.contains("<html lang=\"en\""))
 		#expect(!html.contains(" dir="))
 	}

@@ -285,7 +285,7 @@ func runtimeHandlesNoWebSocket() {
 
 @Test("shipped page carries a single nexus token set (no stale teal block)")
 func shippedPageCarriesOnlyNexusTokens() {
-	let page = WebUIDocument(title: "token pin", body: "").renderThroughBuffer()
+	let page = WebUIDocument(title: "token pin", body: .trusted("")).markup.html
 	let sheet = DesignSystemAssets.minifiedCss
 	#expect(!sheet.contains("#10b89f"), "stale teal primary shipped on the wire")
 	#expect(!sheet.contains("#16a34a"), "stale teal success shipped on the wire")
@@ -455,7 +455,7 @@ func declaredStackAlignmentPlacesCappedChildren() {
 		(.leading, "align-flex-start"), (.center, "align-center"), (.trailing, "align-flex-end"),
 	]
 	for (alignment, klass) in emit {
-		let html = VStack(alignment: alignment, spacing: 8) { Text("x") }.renderThroughBuffer()
+		let html = VStack(alignment: alignment, spacing: 8) { Text("x") }.markup.html
 		#expect(html.contains("vstack spacing-8 \(klass)"), "\(alignment) should emit \(klass): \(html.prefix(90))")
 	}
 }

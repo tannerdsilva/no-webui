@@ -34,7 +34,7 @@ public struct WebUICarousel: View {
         html += "<div class=\"carousel__track\" tabindex=\"0\"" + Aria.attributes([.label(label)], role: .group) + ">"
         for (i, slide) in slides.enumerated() {
             html += "<div class=\"carousel__slide\" id=\"\(htmlEscape(id))-\(i)\">"
-            html += slide.renderThroughBuffer()
+            html += slide.markup.html
             html += "</div>"
         }
         html += "</div>"

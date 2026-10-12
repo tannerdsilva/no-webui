@@ -52,8 +52,8 @@ inline comments explain code, markdown files explain architecture and APIs.
 ## build and test
 
 ```bash
-swift build             # includes the WebUIAssetPlugin + WebUIIconPlugin + WebUIWasmPlugin (auto-generates Assets+Generated.swift + DesignTokens+Generated.swift + IconLibrary.swift + Wasm+Generated.swift)
-swift test              # 816 tests — re-count rather than trust: grep -rc '@Test' Tests/ | awk -F: '{s+=$2} END {print s}'
+swift build             # includes the WebUIAssetPlugin + WebUIIconPlugin (auto-generates Assets+Generated.swift + DesignTokens+Generated.swift + IconLibrary.swift; WebUIEmbedPlugin for a target shipping its own Assets/webui-assets.json)
+swift test              # 1406 tests — re-count rather than trust: grep -rc '@Test' Tests/ | awk -F: '{s+=$2} END {print s}'
 swift run WebUIExample  # example server on :9090
 ```
 
@@ -76,9 +76,13 @@ isolated build root — the plugin invocation holds the package `.build` lock,
 so building into the package's own `.build` deadlocks), strips custom sections
 (name table + DWARF) by default (`--no-strip` keeps readable devtools stack
 traces), and copies the artifact to
-`.build/out/Products/Release-webassembly-wasm32/<product>.wasm` — the path the
-`WebUIWasmPlugin` build-tool plugin validates + hashes into `WebUIWasmInfo`
-during every host build.
+`.build/out/Products/Release-webassembly-wasm32/<product>.wasm`. the smoke server
+and the browser gate read the artifact from exactly that path — absent = `404` =
+the engine's documented degrade path, so a fresh clone runs `plugin wasm-island`
+before those probes are meaningful. `WebUIWasmTool` — the executable the
+`wasm-island` verb invokes — strips custom sections and emits the `WebUIWasmInfo`
+carrier enum over it. there is no build-tool wasm plugin, and nothing
+wasm-related runs during a normal host build.
 
 pages are engine-first: the default client runtime is `webui-engine.js`
 (`HTMLDocument`/`WebUIDocument` emit the `webui-config` meta + engine script
@@ -99,6 +103,9 @@ for the designer workflow.
 | `fullstack-smoke` | `swift package --disable-sandbox plugin fullstack-smoke` | self-contained gate: spawns the server, drives live WebSocket round-trips (click/echo/redirect/optimistic) via node, tears down. |
 | `probe` | `swift package plugin probe [port]` | connect-based port check (bind-probe is sandbox-denied). |
 | `showcase` | `swift package plugin showcase --allow-writing-to-package-directory` | regenerates `designer/previews/showcase.html` directly (declared `writeToPackageDirectory`). add `--output <path>` for ad-hoc targets. |
+| `showcase-serve` | `swift package --disable-sandbox plugin showcase-serve` | hosts the live swift-generated showcase server on :9092. binds require the sandbox to be disabled. |
+| `wasm-island` | `swift package --disable-sandbox plugin wasm-island [--product TheirIsland] [--no-strip]` | cross-builds a capability island with the wasm SDK into `.build/wasm-island-scratch` (an isolated build root), strips custom sections (unless `--no-strip`) and copies the artifact to `.build/out/Products/Release-webassembly-wasm32/<product>.wasm`. binds require the sandbox to be disabled. |
+| `budget` | `swift package plugin budget` | fails when any shipped surface (engine, sheet, shell, island artifact) exceeds its pinned size ceiling. read-only, no sandbox flag. |
 
 svg icon toolset (an executable target, not a plugin — the plugin
 `WebUIIconPlugin` runs `generate` automatically during every build):
@@ -155,7 +162,10 @@ invocation. gates host their own server, check, and tear down in one call.
 - **lowercase comments** in `Documentation/*.md` prose and in `//` line
   comments. sentences start lowercase (no sentence capitalization). preserve
   backticked identifiers, quoted string literals, CLI flags, and acronyms.
-- **tabs for indentation** in Swift source. `.spacesToTabs(4)`.
+- **prefer tabs for indentation** in new Swift source. the tree is roughly 50/50
+  tab- vs space-indented today; `.spacesToTabs(4)` converts a file. enforcing one
+  indentation orthography tree-wide would be a deliberate decision (a mechanical
+  lint plus a large no-op diff), not a stated fact.
 - **value types first** — default to struct. only use class for identity (===),
   reference semantics, or ObjC interop. only use actor for shared mutable state
   accessed from multiple tasks.
@@ -171,9 +181,16 @@ invocation. gates host their own server, check, and tear down in one call.
 
 ### web UI framework conventions
 
-- **View protocol** — `func render() -> String`. pure function, no side effects.
-- **ViewModifier protocol** — `func apply(to html: String) -> String`. wraps
-  rendered HTML with attributes or styles.
+- **View protocol** — `func render(into buffer: inout HTMLBuffer)`, the sole
+  requirement, inherited from `BufferRendering`. pure function, no side effects.
+  the materializer is `BufferRendering.markup: UnsafeMarkup` — `View` refines
+  `BufferRendering`, as do `HTMLDocument`/`WebUIDocument`/`CSSStylesheet` (a
+  document is not a view). the 1.x spelling `render() -> String` is deprecated
+  (`markup.html`); `renderThroughBuffer()`/`renderedString()` are deleted.
+- **ViewModifier protocol** — `apply(to html: String) -> String` AND
+  `decorate<C: View>(_ content: C, into buffer: inout HTMLBuffer)` (the buffered
+  path; defaulted through the buffer so an unmigrated modifier keeps its `apply`).
+  wraps rendered HTML with attributes or styles.
 - **EventRouter** — routes WebSocket events to registered handlers. thread-safe
   via `Synchronization.Mutex`. max 10,000 handlers by default. missing-handler
   events log at `.debug` (via the unified `logger.emit` funnel) and `handlerCount` is public.
@@ -360,17 +377,25 @@ see `Documentation/ICONS.md` for the full guide.
 
 ```bash
 swift build
-swift test
+swift test                                  # 1406 tests, 0 issues
+swift package plugin budget                 # shipped-surface ceilings: engine/sheet/shell/island
 swift package --disable-sandbox plugin smoke
 swift package --disable-sandbox plugin fullstack-smoke
-node designer/browser-smoke.mjs      # requires node + playwright (chromium)
-node designer/showcase-ws-smoke.mjs  # stable-id dispatch gate against the showcase server
-node designer/blocks-sweep.mjs     # p6 blocks gate: one server per block, 320/768/1440 in both themes, no-overflow + parts assertions
-node designer/chart-mobile-audit.mjs # chart width gate: 6 viewports x 2 themes; painted text >= 11px AND every plot fully visible from 390px, tips reachable, no page overflow (WEBUI_CHART_AUDIT_SERVER overrides the binary for a scratch build)
-node designer/rtl-audit.mjs        # p7 direction gate: both directions x both themes x 3 viewports, mirrored-order assertions with an ltr control
+node designer/browser-smoke.mjs             # requires node + playwright (chromium); a fresh clone needs `plugin wasm-island` first (the island probes read the prebuilt .wasm)
+node designer/showcase-ws-smoke.mjs         # stable-id dispatch gate (raw client)
+node designer/blocks-sweep.mjs              # every block at 320/768/1440, both themes, no overflow
+node designer/chart-mobile-audit.mjs        # chart text >= 11px, six viewports x both themes
+node designer/rtl-audit.mjs                 # both directions x both themes x three widths
+node designer/acceptance-demo.mjs           # dashboard + click round-trip + form POST + file upload
+node designer/event-deck-probe.mjs          # every deck event, real browser + own socket
+node designer/a11y-audit.mjs                # the six-rule accessibility gate (raw http)
+node designer/cascade-probe.mjs             # host StyleSheet wins by cascade origin
+node designer/theme-default-probe.mjs       # typed-theme contract on computed style
+node designer/engine-theme-default-probe.mjs # engine theme-default contract
+swift run WebUIShowcase --generate /tmp/showcase.html && wc -c < /tmp/showcase.html   # 168671
 ```
 
-the dispatch gate exists because the other four steps cannot see this failure: `smoke`
+the dispatch gate exists because the other gates cannot see this failure: `smoke`
 checks served bytes, `fullstack-smoke` drives the *smoke* page, and the unit pins count
 handler registrations without ever dispatching one. `showcase-ws-smoke` spawns
 `WebUIShowcaseServer`, clicks a stable-id control (`controlAttributes`, e.g. a table sort
@@ -427,9 +452,10 @@ are measuring, and make every probe assert its own preconditions.
   reports `server did not become ready — run with --disable-sandbox`.
 - **the `.build` lock** — a running plugin (e.g. `serve`) blocks every other
   `swift package` command until it exits. never launch a gate while `serve` is up.
-- **smoke pins the interactive count** — the smoke gate asserts exactly 25
+- **smoke pins the interactive count** — the smoke gate asserts exactly 26
   `data-component-id` attributes on the smoke page (3 counter + 2 progress +
-  1 echo + 1 column menu + 12 routed table controls + 6 routed chart bars). adding or removing
+  1 echo + 12 routed table controls [3 sort + select-all + 4 select + 4 expand] +
+  6 routed chart bars + 1 upload form). adding or removing
   an interactive component there means updating the expected count in
   `WebUISmokePlugin.swift` (the fullstack driver's `>=6` check is tolerant).
   the same page is what `browser-smoke` drives for optimistic + scroll

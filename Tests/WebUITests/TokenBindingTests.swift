@@ -53,7 +53,7 @@ struct TokenBindingTests {
 		let attrs = controlAttributes(id: "ctrl", handler: { _ in
 			[FragmentUpdate(id: "hit", html: "hit")]
 		})
-		return WebUIDocument(title: "token test", body: "<div\(attrs)>x</div>").renderThroughBuffer()
+		return WebUIDocument(title: "token test", body: .trusted("<div\(attrs)>x</div>")).markup.html
 	}
 
 	private func openSocket(port: Int) -> URLSessionWebSocketTask {
@@ -178,7 +178,7 @@ struct TokenBindingTests {
 
 		try await withServer(
 			requestRender: { _ in
-				WebUIDocument(title: "legacy", body: "<div>x</div>").renderThroughBuffer()
+				WebUIDocument(title: "legacy", body: .trusted("<div>x</div>")).markup.html
 			},
 			router: router,
 			assets: [],

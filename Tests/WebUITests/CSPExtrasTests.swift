@@ -21,11 +21,11 @@ struct CSPExtrasTests {
 	) -> String {
 		HTMLDocument(
 			title: "t",
-			body: "<p>x</p>",
+			body: .trusted("<p>x</p>"),
 			clientMode: ClientBoot(),
 			contentSecurityPolicy: policy,
 			contentSecurityPolicyExtras: extras
-		).renderedString()
+		).markup.html
 	}
 
 	private func policyLine(_ html: String) -> String {
@@ -74,10 +74,10 @@ struct CSPExtrasTests {
 	func noRuntimePolicyMergesExtras() {
 		let html = HTMLDocument(
 			title: "t",
-			body: "<p>x</p>",
+			body: .trusted("<p>x</p>"),
 			includeRuntime: false,
 			contentSecurityPolicyExtras: "img-src 'self' data: https:"
-		).renderedString()
+		).markup.html
 		let policy = policyLine(html)
 		#expect(policy.contains("img-src 'self' data: https:"))
 		#expect(!policy.contains("wasm-unsafe-eval"))

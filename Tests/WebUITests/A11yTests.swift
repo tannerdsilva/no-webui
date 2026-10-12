@@ -135,7 +135,7 @@ import WebUIShowcaseContent
 	}
 
 	@Test func ariaModifiersEmitTypedAttributes() {
-		let html = Text("hi").role(.status).ariaLive(.polite).ariaLabel("x").focusable().renderThroughBuffer()
+		let html = Text("hi").role(.status).ariaLive(.polite).ariaLabel("x").focusable().markup.html
 		#expect(html.contains("role=\"status\""))
 		#expect(html.contains("aria-live=\"polite\""))
 		#expect(html.contains("aria-label=\"x\""))
@@ -146,27 +146,27 @@ import WebUIShowcaseContent
 	// MARK: the last hand-written emitters (w5.0) went typed
 
 	@Test func migratedEmittersUseTheTypedSurface() {
-		let drawer = WebUIDrawer(title: "t") { Text("x") }.renderThroughBuffer()
+		let drawer = WebUIDrawer(title: "t") { Text("x") }.markup.html
 		#expect(drawer.contains("role=\"dialog\""))
 		#expect(drawer.contains("aria-modal=\"true\""))
-		#expect(WebUISeparator().renderThroughBuffer().contains("role=\"separator\""))
-		#expect(WebUIEngineStatus().renderThroughBuffer().contains("role=\"status\""))
-		let otp = WebUIOTP().renderThroughBuffer()
+		#expect(WebUISeparator().markup.html.contains("role=\"separator\""))
+		#expect(WebUIEngineStatus().markup.html.contains("role=\"status\""))
+		let otp = WebUIOTP().markup.html
 		#expect(otp.contains("aria-label=\"One-time code\""))
 		#expect(otp.contains("aria-label=\"Digit 1\""))
 		// the slider's fractional value survives the typed surface byte-identically.
-		#expect(WebUISlider(50).renderThroughBuffer().contains("aria-valuenow=\"50.0\""))
+		#expect(WebUISlider(50).markup.html.contains("aria-valuenow=\"50.0\""))
 		#expect(Aria.valuenowDouble(50.0).render() == " aria-valuenow=\"50.0\"")
 	}
 
 	@Test func migratedEmittersStayA11yClean() {
 		let rendered = [
-			WebUIEngineStatus().renderThroughBuffer(),
-			WebUISeparator().renderThroughBuffer(),
-			WebUIOTP().renderThroughBuffer(),
-			WebUIStepper(1).renderThroughBuffer(),
-			WebUIReactions(reactions: []).renderThroughBuffer(),
-			WebUITypingIndicator().renderThroughBuffer(),
+			WebUIEngineStatus().markup.html,
+			WebUISeparator().markup.html,
+			WebUIOTP().markup.html,
+			WebUIStepper(1).markup.html,
+			WebUIReactions(reactions: []).markup.html,
+			WebUITypingIndicator().markup.html,
 		]
 		for html in rendered {
 			let findings = A11yAudit.audit(html)
@@ -186,7 +186,7 @@ import WebUIShowcaseContent
 
 	@Test func showcasePageIsA11yClean() {
 		let html = RenderContext.$current.withValue(RenderContext(router: EventRouter())) {
-			ShowcasePage(state: ShowcaseState()).renderedString()
+			ShowcasePage(state: ShowcaseState()).markup.html
 		}
 		let findings = A11yAudit.audit(html)
 		// this is the teeth: zero framework-caused findings. if this fails,

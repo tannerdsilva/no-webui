@@ -27,7 +27,7 @@ struct RouterSoakTests {
                 Div {
                     Div { Text("a") }.onClick { _ in [] }
                     Div { Text("b") }.onClick { _ in [] }
-                }.renderThroughBuffer()
+                }.markup.html
             }
         }
 
@@ -47,7 +47,7 @@ struct RouterSoakTests {
             _ = RenderContext.$current.withValue(context) {
                 Div { Text("\(index)") }.onClick { _ in
                     [FragmentUpdate(id: "alive", html: "\(index)")]
-                }.renderThroughBuffer()
+                }.markup.html
             }
         }
 

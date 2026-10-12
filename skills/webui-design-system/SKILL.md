@@ -143,20 +143,16 @@ let body = VStack(spacing: 16) {
 }
 .padding(24)
 
-// the sole `View` requirement is `render(into:)` — write into a buffer, then
-// materialize the string from it (`HTMLBuffer` is public).
-var buffer = HTMLBuffer()
-body.render(into: &buffer)
-let bodyHTML = String(decoding: buffer.bytes, as: UTF8.self)
-
+// a rendered value hands its typed token straight to the document: `.markup`
+// is the `BufferRendering` door, so no hand-materialized `String` is needed
+// (the retired `HTMLBuffer` → `String(decoding:)` shim is gone).
 let doc = WebUIDocument(
     title: "Page",
-    body: bodyHTML,
+    body: body.markup,
     runtimeConfig: RuntimeConfig(renderToken: "...")   // optional
 )
-var docBuffer = HTMLBuffer()
-doc.render(into: &docBuffer)
-let html = String(decoding: docBuffer.bytes, as: UTF8.self)
+
+let html = doc.markup.html
 ```
 
 (`render() -> String` still compiles and is byte-identical — it is the

@@ -12,8 +12,10 @@ rows, every symbol grep-verified against the tree):
 
 - **`View.render()` is no longer the protocol requirement.** since the wave-2
   flip, a `View` declares `func render(into buffer: inout HTMLBuffer)` and
-  nothing else; `render() -> String` survives only as a deprecated *default*
-  that materializes the buffer through `renderThroughBuffer()`. a 1.x view
+  nothing else; `render() -> String` survives only as a deprecated *default* —
+  it is `BufferRendering.markup.html`. the two string materializers the 1.x
+  buffer path once offered were **deleted**, not deprecated (see the typed
+  markup section below). a 1.x view
   that implements only `render()` does **not** satisfy the protocol — it does
   not compile against 2.0. keep the body, change the shape: `return X` becomes
   `buffer.append(X)`. `HTMLBuffer` itself is a public type; `init`, `append`,
@@ -135,6 +137,40 @@ rows, every symbol grep-verified against the tree):
   46/0; blocks-sweep 107/0; rtl-audit 54/0. the typed view-tree spike (w2.5)
   was measured and decided — recorded in `Documentation/DESIGN_NOTES.md`, not
   shipped: containers migrate one per task, each behind the byte gate.
+
+### typed markup — markup, not render() (w6/w7)
+
+- **`BufferRendering` is the one materializer.** a public protocol with
+  `public var markup: UnsafeMarkup` (`Sources/WebUICore/BufferRendering.swift`),
+  and `View` **refines** it — so `.markup` works on any view *and* on
+  `HTMLDocument`, `WebUIDocument` and `CSSStylesheet` (a document is not a view,
+  but it sings the same door). `markup` became public so a host has a non-deprecated
+  way to materialize rendered bytes; before it, every host hand-rolled
+  `String(decoding: buffer.bytes…)`.
+- **the two string materializers (renderThroughBuffer, renderedString) are
+  deleted** — not deprecated, so a 1.x host that calls either fails to compile.
+  neither exists at HEAD. `render() -> String` survives only as a deprecated 1.x
+  spelling (`markup.html`), kept so 1.x call sites compile.
+- **`HTTPResponse.Body.html` now carries `UnsafeMarkup`, not `String`** — a bare
+  `String` can no longer become a page; the compiler rejects it. the convenience
+  `HTTPResponse(_ markup:status:headers:cookies:)` answers from a rendered value,
+  and `HTMLDocument.body` / `WebUIDocument.body` carry `UnsafeMarkup`.
+  `HTMLDocument.diagnostics(body:)` and `WebUIDocument.declaredIslandNames(in:)`
+  deliberately stay `String` — both are pure scans that render nothing.
+- **`Route.page` widened to `Route.page<D: BufferRendering>`** in both sync and
+  async form with the **same `content:` label** — the compiler disambiguates on the
+  closure's async-ness, so a trailing closure keeps working — and `PageResponder`
+  is typed on `BufferRendering`, so a document (not a view) serves as a page.
+- **`UnsafeMarkup.trusted(_:)` is the one escape hatch** for genuinely hand-written
+  markup, and it is greppable by design.
+- the arc closed the `String`-to-page seam from outside: the real consumer
+  (`~/workspace/no-webui-migrate-test`) reaches served bytes four ways with zero
+  `String`s materialized and zero calls to `UnsafeMarkup.trusted(_:)`. the naive
+  (1.x) first build surfaces four error classes — document body, route content,
+  response body, stylesheet-served-as-page — each answered `String` is not
+  `UnsafeMarkup`/`BufferRendering`; the typed doors (`markup`, `HTTPResponse(_:)`,
+  `Route.page`, `CSSStylesheet.markup`) close each. recorded in that repo's
+  `naive-diagnostics.md` and the migration guide's typed-markup section.
 
 ### the web's actual HTTP surface (w3)
 
@@ -330,7 +366,7 @@ rows, every symbol grep-verified against the tree):
   count and identical markup under a stable process — never as a
   hash-verifiable promise. a drift fails the suite naming measured vs pinned.
 - STABILITY's coverage number, stated per the cut criterion: the generated
-  `Documentation/frozen-surface.symbols` enumerates **4558 member-level
+  `Documentation/frozen-surface.symbols` enumerates **4561 member-level
   symbols** across the eight modules a consumer reaches, re-extracted
   in-process on every `swift test` and failing by name on any added or
   removed symbol. the migration contract is `Documentation/MIGRATION_2_0.md`:

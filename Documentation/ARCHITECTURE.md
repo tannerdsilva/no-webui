@@ -76,18 +76,10 @@ rendered, and discarded within a single request.
 ### View Protocol
 
 ```swift
-public protocol View: Sendable {
-    /// the sole requirement since the 2.0 flip: write this view's bytes into
-    /// the shared render buffer.
+public protocol View: BufferRendering, Sendable {
+    // the sole render requirement, inherited from `BufferRendering`: write this
+    // view's bytes into the shared render buffer.
     func render(into buffer: inout HTMLBuffer)
-}
-
-extension View {
-    /// deprecated: materialize the buffered render as a string. call sites
-    /// keep compiling and rendering identically; conforming happens through
-    /// `render(into:)` alone.
-    @available(*, deprecated, message: "implement render(into:) instead")
-    public func render() -> String
 }
 ```
 
@@ -219,7 +211,7 @@ rendering. It provides component ID generation and handler registration.
 ```swift
 var context = RenderContext(router: router)
 let html = RenderContext.$current.withValue(context) {
-    myView.render()
+    myView.markup.html
 }
 ```
 
@@ -446,7 +438,7 @@ self-contained and runnable by one human:
 | gate | run as | passes expected |
 |---|---|---|
 | build | `swift build` | clean |
-| test | `swift test` | 1398 tests / 0 issues — includes the frozen-surface gate and the showcase byte pin |
+| test | `swift test` | 1406 tests / 0 issues — includes the frozen-surface gate and the showcase byte pin |
 | smoke | `swift package --disable-sandbox plugin smoke` | 19/0 |
 | fullstack smoke | `swift package --disable-sandbox plugin fullstack-smoke` | 24/0 |
 | browser layout | `node designer/browser-smoke.mjs` | 50/0 |

@@ -19,7 +19,7 @@ import WebUIServer
 // (the `WebUIChart` product is pinned by its own `ChartTests`.)
 
 private func rendered(_ view: some View) -> String {
-	view.renderThroughBuffer()
+	view.markup.html
 }
 
 // MARK: - the asset toolkit
@@ -200,7 +200,7 @@ func eventModifierSurfacePins() {
 	_ = Text("x").onFocusOut(perform: handler)
 	_ = Text("x").onOptimisticClick(predict: { [] }, perform: handler)
 	let attrs = controlAttributes(id: "evt-click", event: .click, handler: handler)
-	let injected = injectAttributes(into: Text("x").renderThroughBuffer(), attrs)
+	let injected = injectAttributes(into: Text("x").markup.html, attrs)
 	#expect(injected.contains("data-component-id=\"evt-click\""))
 	#expect(injected.contains("data-event=\"click\""))
 }
@@ -701,14 +701,14 @@ func authSurfacePins() throws {
 func documentSurfacePins() {
 	let doc = WebUIDocument(
 		title: "T",
-		body: Text("hi").renderThroughBuffer(),
+		body: Text("hi").markup,
 		runtimeConfig: RuntimeConfig(renderToken: "rt-1")
-	).renderThroughBuffer()
+	).markup.html
 	#expect(doc.contains("<title>T</title>"))
 	#expect(doc.contains("<meta name=\"webui-config\""))
 	#expect(doc.contains("renderToken"))
 
-	let themed = WebUIDocument(body: Text("x").renderThroughBuffer(), theme: WebUITheme(defaultMode: .dark)).renderThroughBuffer()
+	let themed = WebUIDocument(body: Text("x").markup, theme: WebUITheme(defaultMode: .dark)).markup.html
 	#expect(themed.contains("color-scheme: dark"))
 }
 

@@ -79,7 +79,7 @@ struct DeckDocument: View {
     func render(into buffer: inout HTMLBuffer) {
         let document = WebUIDocument(
             title: "Event deck · wave 4",
-            body: deckBody(),
+            body: .trusted(deckBody()),
             runtimeConfig: renderToken.isEmpty ? nil : RuntimeConfig(renderToken: renderToken),
             // the deck is a probe fixture: `designer/event-deck-probe.mjs`
             // drives its media controls with data:-uri wavs, which the default
@@ -89,7 +89,7 @@ struct DeckDocument: View {
             contentSecurityPolicyExtras: "media-src 'self' data: blob:;",
             rawStyles: Self.deckStyles
         )
-        buffer.append(document.renderThroughBuffer())
+        buffer.append(document.markup.html)
     }
 
     static let deckStyles: [String] = [
@@ -280,7 +280,7 @@ func deckBody() -> String {
             }
             Raw(UnsafeMarkup.trusted(deckLog("click-log", "click log")))
         }
-    }.renderThroughBuffer()
+    }.markup.html
 }
 
 // MARK: - server entry

@@ -175,25 +175,35 @@ public struct Route: Sendable {
 		Route(method: .post, pattern: pattern, responder: ClosureResponder(r))
 	}
 
-	/// a page route: the builder's view renders as a whole document, inside
+	/// a page route: the builder's value renders as a whole document, inside
 	/// the render context the server establishes (component ids, handler
 	/// registration, csp nonce).
 	///
-	/// `content` may throw; a throw is answered by the server as a 500 with
-	/// the host's error page (`WebUIServerConfig.onRenderFailure`), never as a
-	/// dropped connection. a closure that never throws needs no `try`.
-	///
-	/// `content` is a plain closure, not `@ViewBuilder`: this package's
-	/// `ViewBuilder` is array-shaped (its `buildExpression` wraps every view
-	/// into `[any View]`), so a builder-returned `D: View` can never be
-	/// inferred from a single view expression. a document route needs exactly
-	/// one view; callers that want builder syntax build the view first and
-	/// return it here.
-	public static func page<D: View>(
+	/// typed on ``BufferRendering``, not ``View``: a `WebUIDocument` and an
+	/// `HTMLDocument` are whole pages and are *not* views, so a route typed on
+	/// `View` could not serve the framework's own document type — the gap that
+	/// pushed every document host onto the deprecated `requestRender:` init.
+	public static func page<D: BufferRendering>(
 		_ pattern: PathPattern,
 		content: @escaping @Sendable (HTTPRequest) throws -> D
 	) -> Route {
 		Route(method: .get, pattern: pattern, responder: PageResponder(content: content))
+	}
+
+	/// a page route whose content is loaded asynchronously before it renders — the
+	/// shape an agent host needs (await state, then render the document).
+	///
+	/// the same `content:` label as the sync overload, deliberately: the compiler
+	/// disambiguates on the closure's own async-ness, and a trailing closure keeps
+	/// working for an async route. the rejected fallback was a distinct
+	/// `asyncContent:` label — a trailing closure always binds to the trailing
+	/// `content:` parameter, so that spelling would forbid trailing-closure syntax
+	/// on every async route: a real ergonomic downgrade for no disambiguation gain.
+	public static func page<D: BufferRendering>(
+		_ pattern: PathPattern,
+		content: @escaping @Sendable (HTTPRequest) async throws -> D
+	) -> Route {
+		Route(method: .get, pattern: pattern, responder: AsyncPageResponder(content: content))
 	}
 }
 
@@ -208,13 +218,22 @@ private struct ClosureResponder: Responder {
 	}
 }
 
-/// the view-backed responder `Route.page` stands on: render the view through
-/// the buffer (the one View requirement) and hand the bytes out as html.
+/// the responder `Route.page` stands on: render the value through the buffer
+/// (the one `BufferRendering` requirement) and hand the bytes out as html.
 /// the render can throw — the server answers the throw, it does not drop it.
-private struct PageResponder<D: View>: Responder {
+private struct PageResponder<D: BufferRendering>: Responder {
 	let content: @Sendable (HTTPRequest) throws -> D
 	func respond(to request: HTTPRequest) async throws -> HTTPResponse {
-		HTTPResponse(body: .html(try content(request).renderThroughBuffer()))
+		HTTPResponse(try content(request).markup)
+	}
+}
+
+/// the responder `Route.page`'s async overload stands on: await the content,
+/// then render it through the buffer and hand the bytes out as html.
+private struct AsyncPageResponder<D: BufferRendering>: Responder {
+	let content: @Sendable (HTTPRequest) async throws -> D
+	func respond(to request: HTTPRequest) async throws -> HTTPResponse {
+		HTTPResponse(try await content(request).markup)
 	}
 }
 

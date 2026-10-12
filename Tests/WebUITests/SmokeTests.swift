@@ -120,7 +120,7 @@ struct StructuralTests {
 
     @Test("simple text has no tags")
     func simpleText() {
-        let html = Text("Hello").renderThroughBuffer()
+        let html = Text("Hello").markup.html
         #expect(html == "Hello")
         #expect(validateTagBalance(html))
     }
@@ -130,7 +130,7 @@ struct StructuralTests {
         let html = Div(class: "test") {
             Text("A")
             Text("B")
-        }.renderThroughBuffer()
+        }.markup.html
         #expect(validateTagBalance(html))
         #expect(html.hasPrefix("<div"))
         #expect(html.hasSuffix("</div>"))
@@ -142,7 +142,7 @@ struct StructuralTests {
             Div(class: "inner") {
                 Text("Deep")
             }
-        }.renderThroughBuffer()
+        }.markup.html
         #expect(validateTagBalance(html))
         // verify nesting order
         let outerOpen = html.range(of: "<div class=\"outer\">")!
@@ -178,13 +178,13 @@ struct StructuralTests {
             Footer(class: "footer") {
                 Text("© 2026")
             }
-        }.renderThroughBuffer()
+        }.markup.html
         #expect(validateTagBalance(html))
     }
 
     @Test("button is self-contained")
     func buttonBalanced() {
-        let html = WebUIButton("Click", variant: .primary).renderThroughBuffer()
+        let html = WebUIButton("Click", variant: .primary).markup.html
         #expect(validateTagBalance(html))
         #expect(html.hasPrefix("<button"))
         #expect(html.hasSuffix("</button>"))
@@ -192,7 +192,7 @@ struct StructuralTests {
 
     @Test("void elements are not closed")
     func voidElements() {
-        let html = Input(id: "test", placeholder: "Enter").renderThroughBuffer()
+        let html = Input(id: "test", placeholder: "Enter").markup.html
         #expect(html.hasSuffix(">"))
         #expect(!html.hasSuffix("/>"))
         #expect(!html.contains("</input>"))
@@ -201,7 +201,7 @@ struct StructuralTests {
 
     @Test("image is self-closing")
     func imageSelfClosing() {
-        let html = Image(src: "test.png", alt: "Test").renderThroughBuffer()
+        let html = Image(src: "test.png", alt: "Test").markup.html
         #expect(html.hasSuffix(">"))
         #expect(!html.contains("</img>"))
     }
@@ -214,7 +214,7 @@ struct BEMTests {
 
     @Test("WebUIButton uses correct BEM classes")
     func buttonBEM() {
-        let html = WebUIButton("Submit", variant: .primary, size: .lg).renderThroughBuffer()
+        let html = WebUIButton("Submit", variant: .primary, size: .lg).markup.html
         #expect(html.contains("class=\"button button--primary button--lg\""))
         #expect(validateBEMClasses(html).isEmpty)
     }
@@ -223,33 +223,33 @@ struct BEMTests {
     func buttonAllVariants() {
         let variants: [WebUIButton.Variant] = [.primary, .secondary, .outline, .ghost, .danger, .success, .warning]
         for variant in variants {
-            let html = WebUIButton("Test", variant: variant).renderThroughBuffer()
+            let html = WebUIButton("Test", variant: variant).markup.html
             #expect(html.contains("button--\(variant.rawValue.split(separator: "--").last!)"))
         }
     }
 
     @Test("WebUICard uses correct BEM classes")
     func cardBEM() {
-        let html = WebUICard(variant: .elevated) { Text("Content") }.renderThroughBuffer()
+        let html = WebUICard(variant: .elevated) { Text("Content") }.markup.html
         #expect(html.contains("class=\"card card--elevated\""))
     }
 
     @Test("WebUIBadge uses correct BEM classes")
     func badgeBEM() {
-        let html = WebUIBadge("New", variant: .success, size: .sm).renderThroughBuffer()
+        let html = WebUIBadge("New", variant: .success, size: .sm).markup.html
         #expect(html.contains("class=\"badge badge--success badge--sm\""))
     }
 
     @Test("WebUIAlert uses correct BEM classes")
     func alertBEM() {
-        let html = WebUIAlert(variant: .warning, message: "Warning!").renderThroughBuffer()
+        let html = WebUIAlert(variant: .warning, message: "Warning!").markup.html
         #expect(html.contains("class=\"alert alert--warning\""))
         #expect(html.contains("role=\"alert\""))
     }
 
     @Test("WebUITabs uses correct BEM classes")
     func tabsBEM() {
-        let html = WebUITabs(tabs: [TabItem(id: "a", label: "A"), TabItem(id: "b", label: "B")], activeTab: "a").renderThroughBuffer()
+        let html = WebUITabs(tabs: [TabItem(id: "a", label: "A"), TabItem(id: "b", label: "B")], activeTab: "a").markup.html
         #expect(html.contains("class=\"tabs\""))
         #expect(html.contains("class=\"tabs__tab tabs__tab--active\""))
         #expect(html.contains("aria-selected=\"true\""))
@@ -258,14 +258,14 @@ struct BEMTests {
 
     @Test("WebUIAvatar uses correct BEM classes")
     func avatarBEM() {
-        let html = WebUIAvatar(initials: "TS", size: .xl).renderThroughBuffer()
+        let html = WebUIAvatar(initials: "TS", size: .xl).markup.html
         #expect(html.contains("class=\"avatar avatar--xl\""))
         #expect(html.contains("class=\"avatar__initials\""))
     }
 
     @Test("WebUIProgress uses correct BEM classes")
     func progressBEM() {
-        let html = WebUIProgress(value: 0.75, variant: .success, showLabel: true).renderThroughBuffer()
+        let html = WebUIProgress(value: 0.75, variant: .success, showLabel: true).markup.html
         #expect(html.contains("class=\"progress progress--success progress--md\""))
         #expect(html.contains("class=\"progress__bar\""))
         #expect(html.contains("class=\"progress__label\""))
@@ -275,14 +275,14 @@ struct BEMTests {
 
     @Test("WebUISkeleton uses correct BEM classes")
     func skeletonBEM() {
-        let html = WebUISkeleton(variant: .card).renderThroughBuffer()
+        let html = WebUISkeleton(variant: .card).markup.html
         #expect(html.contains("class=\"skeleton skeleton--card\""))
         #expect(html.contains("aria-hidden=\"true\""))
     }
 
     @Test("WebUIToast uses correct BEM classes")
     func toastBEM() {
-        let html = WebUIToast(variant: .success, message: "Saved!").renderThroughBuffer()
+        let html = WebUIToast(variant: .success, message: "Saved!").markup.html
         #expect(html.contains("class=\"toast toast--success\""))
         #expect(html.contains("class=\"toast__message\""))
         #expect(html.contains("class=\"toast__close\""))
@@ -291,7 +291,7 @@ struct BEMTests {
 
     @Test("WebUIModal uses correct BEM classes")
     func modalBEM() {
-        let html = WebUIModal(title: "Dialog") { Text("Content") }.renderThroughBuffer()
+        let html = WebUIModal(title: "Dialog") { Text("Content") }.markup.html
         #expect(html.contains("class=\"modal-overlay\""))
         #expect(html.contains("class=\"modal\""))
         #expect(html.contains("class=\"modal__header\""))
@@ -304,21 +304,21 @@ struct BEMTests {
 
     @Test("WebUITable uses correct BEM classes")
     func tableBEM() {
-        let html = WebUITable(headers: ["A"], rows: [[Text("1")]], striped: true, hoverable: false, compact: true).renderThroughBuffer()
+        let html = WebUITable(headers: ["A"], rows: [[Text("1")]], striped: true, hoverable: false, compact: true).markup.html
         #expect(html.contains("class=\"table table--striped table--compact\""))
         #expect(!html.contains("table--hoverable"))
     }
 
     @Test("WebUITable wrapped emits the table-wrap container")
     func tableWrapped() {
-        let html = WebUITable(headers: ["A"], rows: [[Text("1")]], wrapped: true).renderThroughBuffer()
+        let html = WebUITable(headers: ["A"], rows: [[Text("1")]], wrapped: true).markup.html
         #expect(html.hasPrefix("<div class=\"table-wrap\"><table class=\"table table--striped table--hoverable\">"))
         #expect(html.hasSuffix("</table></div>"))
     }
 
     @Test("WebUITable responsive emits class and per-cell data-label")
     func tableResponsive() {
-        let html = WebUITable(headers: ["Name", "Age"], rows: [[Text("Alice"), Text("30")]], responsive: true).renderThroughBuffer()
+        let html = WebUITable(headers: ["Name", "Age"], rows: [[Text("Alice"), Text("30")]], responsive: true).markup.html
         #expect(html.contains("table--responsive"))
         #expect(html.contains("<td data-label=\"Name\">Alice</td>"))
         #expect(html.contains("<td data-label=\"Age\">30</td>"))
@@ -330,7 +330,7 @@ struct BEMTests {
             headers: ["Item", "Qty"],
             rows: [[Text("Widget"), Text("2")]],
             footer: [Text("Total"), Text("2")]
-        ).renderThroughBuffer()
+        ).markup.html
         #expect(html.contains("<tfoot><tr><td>Total</td><td>2</td></tr></tfoot>"))
     }
 
@@ -340,7 +340,7 @@ struct BEMTests {
             headers: ["Name", "Status", "Qty"],
             rows: [[Text("A"), Text("ok"), Text("3")]],
             alignments: [.leading, .center, .trailing]
-        ).renderThroughBuffer()
+        ).markup.html
         #expect(html.contains("<th>Name</th>"))
         #expect(html.contains("<th class=\"align-center\">Status</th>"))
         #expect(html.contains("<th class=\"num\">Qty</th>"))
@@ -355,7 +355,7 @@ struct BEMTests {
             headers: ["Name", "Age", "City"],
             rows: [],
             emptyState: WebUITable.EmptyState(icon: .inbox, title: "No people", message: "Try a different filter.")
-        ).renderThroughBuffer()
+        ).markup.html
         #expect(html.contains("<td colspan=\"3\" class=\"table__empty\">"))
         #expect(html.contains("class=\"table__empty-icon fill-slot\">"))
         #expect(html.contains("<svg"))
@@ -370,7 +370,7 @@ struct BEMTests {
             headers: ["A"],
             rows: [],
             emptyState: WebUITable.EmptyState(icon: .search, title: "<b>Bold</b>", message: "<script>")
-        ).renderThroughBuffer()
+        ).markup.html
         #expect(html.contains("<div class=\"table__empty-title\">&lt;b&gt;Bold&lt;/b&gt;</div>"))
         #expect(html.contains("&lt;script&gt;"))
         #expect(!html.contains("<script>"))
@@ -382,7 +382,7 @@ struct BEMTests {
             headers: ["A"],
             rows: [[Text("1")]],
             emptyState: WebUITable.EmptyState(title: "No data", message: "")
-        ).renderThroughBuffer()
+        ).markup.html
         #expect(!html.contains("table__empty"))
         #expect(html.contains("<td>1</td>"))
     }
@@ -394,7 +394,7 @@ struct BEMTests {
             rows: [[Text("A"), Text("1")], [Text("B"), Text("2")]],
             id: "staff",
             sortableColumns: [0, 1]
-        ).renderThroughBuffer()
+        ).markup.html
         #expect(html.contains("<table id=\"staff\""))
         #expect(html.contains("<span class=\"sort\" id=\"staff-sort-0\">Name"))
         #expect(html.contains("<span class=\"sort\" id=\"staff-sort-1\">Age"))
@@ -412,7 +412,7 @@ struct BEMTests {
             id: "staff",
             sortableColumns: [0, 1],
             sort: (column: 0, direction: .descending)
-        ).renderThroughBuffer()
+        ).markup.html
         #expect(html.contains("<th class=\"sort-cell\" aria-sort=\"descending\">"))
         #expect(html.contains("<span class=\"sort sort--active sort--desc\" id=\"staff-sort-0\">Name"))
         // inactive sortable column ("Age"): sort affordance but no aria-sort
@@ -431,7 +431,7 @@ struct BEMTests {
             selectable: true,
             rowIds: ["a", "b"],
             selectedRows: ["b"]
-        ).renderThroughBuffer()
+        ).markup.html
         // select-all: partially selected => mixed
         #expect(html.contains("<span class=\"table__select\" id=\"staff-select-all\" role=\"checkbox\" aria-checked=\"mixed\""))
         // per-row controls (server is source of truth for state)
@@ -453,7 +453,7 @@ struct BEMTests {
             selectable: true,
             rowIds: ["a", "b"],
             selectedRows: ["a", "b"]
-        ).renderThroughBuffer()
+        ).markup.html
         #expect(html.contains("id=\"staff-select-all\" role=\"checkbox\" aria-checked=\"true\""))
     }
 
@@ -466,7 +466,7 @@ struct BEMTests {
             rowIds: ["a", "b"],
             expandedRows: ["a"],
             rowDetails: ["a": Text("details for a")]
-        ).renderThroughBuffer()
+        ).markup.html
         // expand button present on every data row; only detail-bearing rows
         // carry aria-expanded, the rest are disabled
         #expect(html.contains("id=\"staff-expand-a\" aria-expanded=\"true\""))
@@ -482,7 +482,7 @@ struct BEMTests {
             headers: ["Name", "Age"],
             rows: [],
             emptyState: WebUITable.EmptyState(title: "None", message: "Try adjusting your filters")
-        ).renderThroughBuffer()
+        ).markup.html
         // no rows => no select/expand columns; colspan spans the headers
         #expect(html.contains("<td colspan=\"2\" class=\"table__empty\">"))
         #expect(html.contains("table__empty-title"))
@@ -501,7 +501,7 @@ struct BEMTests {
                 #expect(event.string("targetId") == "inner")
                 return []
             }
-            .renderThroughBuffer()
+            .markup.html
         }
         #expect(html.contains("data-component-id=\"stable-table\""))
         #expect(html.contains("data-event=\"click\""))
@@ -519,19 +519,19 @@ struct BEMTests {
         let router = EventRouter()
         let context = RenderContext(router: router)
         let a: String = RenderContext.$current.withValue(context) {
-            Div(class: "t") { Text("hi") }.onClick(id: "stable-table") { _ in [] }.renderThroughBuffer()
+            Div(class: "t") { Text("hi") }.onClick(id: "stable-table") { _ in [] }.markup.html
         }
         let b: String = RenderContext.$current.withValue(context) {
-            Div(class: "t") { Text("hi") }.onClick(id: "stable-table") { _ in [] }.renderThroughBuffer()
+            Div(class: "t") { Text("hi") }.onClick(id: "stable-table") { _ in [] }.markup.html
         }
         #expect(a == b)
         #expect(a.contains("data-component-id=\"stable-table\""))
         // contrast: the auto-incremented modifier mints a NEW id each render
         let x: String = RenderContext.$current.withValue(context) {
-            Div(class: "t") { Text("hi") }.onClick { _ in [] }.renderThroughBuffer()
+            Div(class: "t") { Text("hi") }.onClick { _ in [] }.markup.html
         }
         let y: String = RenderContext.$current.withValue(context) {
-            Div(class: "t") { Text("hi") }.onClick { _ in [] }.renderThroughBuffer()
+            Div(class: "t") { Text("hi") }.onClick { _ in [] }.markup.html
         }
         #expect(x != y)
         #expect(x.contains("data-component-id="))
@@ -540,7 +540,7 @@ struct BEMTests {
 
     @Test("WebUIChip uses correct BEM classes")
     func chipBEM() {
-        let html = WebUIChip("Tag", variant: .info, removable: true).renderThroughBuffer()
+        let html = WebUIChip("Tag", variant: .info, removable: true).markup.html
         #expect(html.contains("class=\"chip chip--info\""))
         #expect(html.contains("class=\"chip__label\""))
         #expect(html.contains("class=\"chip__remove\""))
@@ -548,7 +548,7 @@ struct BEMTests {
 
     @Test("WebUIEmptyState uses correct BEM classes")
     func emptyStateBEM() {
-        let html = WebUIEmptyState(icon: .inbox, title: "Empty", message: "Nothing here").renderThroughBuffer()
+        let html = WebUIEmptyState(icon: .inbox, title: "Empty", message: "Nothing here").markup.html
         #expect(html.contains("class=\"empty-state\""))
         #expect(html.contains("class=\"empty-state__icon fill-slot\""))
         #expect(html.contains("class=\"empty-state__title\""))
@@ -559,7 +559,7 @@ struct BEMTests {
 
     @Test("WebUISpinner uses correct BEM classes")
     func spinnerBEM() {
-        let html = WebUISpinner(size: .sm, label: "Loading").renderThroughBuffer()
+        let html = WebUISpinner(size: .sm, label: "Loading").markup.html
         #expect(html.contains("class=\"spinner spinner--sm\""))
         #expect(html.contains("class=\"spinner__ring\""))
         #expect(html.contains("class=\"spinner__label\""))
@@ -568,7 +568,7 @@ struct BEMTests {
 
     @Test("WebUITooltip uses correct BEM classes")
     func tooltipBEM() {
-        let html = WebUITooltip("Info", position: .right) { Text("Hover") }.renderThroughBuffer()
+        let html = WebUITooltip("Info", position: .right) { Text("Hover") }.markup.html
         #expect(html.contains("class=\"tooltip-container\""))
         #expect(html.contains("class=\"tooltip tooltip--right\""))
         #expect(html.contains("class=\"tooltip__arrow\""))
@@ -602,7 +602,7 @@ struct BEMTests {
             WebUIDescriptionList([("K", "V")]),
         ]
         for view in views {
-            let html = view.renderThroughBuffer()
+            let html = view.markup.html
             let issues = validateBEMClasses(html)
             #expect(issues.isEmpty, "BEM issues in \(type(of: view)): \(issues)")
         }
@@ -619,7 +619,7 @@ struct AttributeTests {
         let html = Input(id: "test", placeholder: "hello", type: .text, attributes: [
             ("data-value", "some value"),
             ("aria-label", "test input"),
-        ]).renderThroughBuffer()
+        ]).markup.html
         // every attribute value should be in double quotes
         #expect(html.contains("id=\"test\""))
         #expect(html.contains("placeholder=\"hello\""))
@@ -630,7 +630,7 @@ struct AttributeTests {
 
     @Test("boolean attributes use minimized syntax")
     func booleanAttributes() {
-        let html = WebUIButton("Disabled", disabled: true).renderThroughBuffer()
+        let html = WebUIButton("Disabled", disabled: true).markup.html
         #expect(html.contains(" disabled"))
         // should NOT be disabled="true" or disabled="disabled"
         #expect(!html.contains("disabled="))
@@ -638,33 +638,33 @@ struct AttributeTests {
 
     @Test("aria attributes are correct")
     func ariaAttributes() {
-        let modal = WebUIModal(title: "Test") { Text("Content") }.renderThroughBuffer()
+        let modal = WebUIModal(title: "Test") { Text("Content") }.markup.html
         #expect(modal.contains("role=\"dialog\""))
         #expect(modal.contains("aria-modal=\"true\""))
 
-        let progress = WebUIProgress(value: 0.5).renderThroughBuffer()
+        let progress = WebUIProgress(value: 0.5).markup.html
         #expect(progress.contains("role=\"progressbar\""))
         #expect(progress.contains("aria-valuenow=\"50\""))
         #expect(progress.contains("aria-valuemin=\"0\""))
         #expect(progress.contains("aria-valuemax=\"100\""))
 
-        let alert = WebUIAlert(variant: .danger, message: "Error").renderThroughBuffer()
+        let alert = WebUIAlert(variant: .danger, message: "Error").markup.html
         #expect(alert.contains("role=\"alert\""))
 
-        let skeleton = WebUISkeleton().renderThroughBuffer()
+        let skeleton = WebUISkeleton().markup.html
         #expect(skeleton.contains("aria-hidden=\"true\""))
 
-        let spinner = WebUISpinner(label: "Loading").renderThroughBuffer()
+        let spinner = WebUISpinner(label: "Loading").markup.html
         #expect(spinner.contains("role=\"status\""))
 
-        let tabs = WebUITabs(tabs: [TabItem(id: "a", label: "A")], activeTab: "a").renderThroughBuffer()
+        let tabs = WebUITabs(tabs: [TabItem(id: "a", label: "A")], activeTab: "a").markup.html
         #expect(tabs.contains("role=\"tablist\""))
         #expect(tabs.contains("role=\"tab\""))
     }
 
     @Test("loading state adds aria-busy")
     func loadingAria() {
-        let html = WebUIButton("Save", loading: true).renderThroughBuffer()
+        let html = WebUIButton("Save", loading: true).markup.html
         #expect(html.contains("aria-busy=\"true\""))
         #expect(html.contains("button--loading"))
         #expect(html.contains("button__spinner"))
@@ -675,7 +675,7 @@ struct AttributeTests {
         let html = Input(id: "test", attributes: [
             ("data-custom", "value"),
             ("data-id", "123"),
-        ]).renderThroughBuffer()
+        ]).markup.html
         #expect(html.contains("data-custom=\"value\""))
         #expect(html.contains("data-id=\"123\""))
     }
@@ -688,7 +688,7 @@ struct EscapingTests {
 
     @Test("Text escapes HTML special characters")
     func textEscapesHTML() {
-        let html = Text("<script>alert('xss')</script>").renderThroughBuffer()
+        let html = Text("<script>alert('xss')</script>").markup.html
         #expect(html == "&lt;script&gt;alert(&#39;xss&#39;)&lt;/script&gt;")
         #expect(!html.contains("<script>"))
         #expect(!html.contains("</script>"))
@@ -696,32 +696,32 @@ struct EscapingTests {
 
     @Test("Text escapes ampersands")
     func textEscapesAmpersand() {
-        let html = Text("A & B").renderThroughBuffer()
+        let html = Text("A & B").markup.html
         #expect(html == "A &amp; B")
     }
 
     @Test("Text escapes double quotes")
     func textEscapesQuotes() {
-        let html = Text("Say \"hello\"").renderThroughBuffer()
+        let html = Text("Say \"hello\"").markup.html
         #expect(html == "Say &quot;hello&quot;")
     }
 
     @Test("Raw does not escape")
     func rawNoEscape() {
-        let html = Raw("<strong>Bold</strong>").renderThroughBuffer()
+        let html = Raw("<strong>Bold</strong>").markup.html
         #expect(html == "<strong>Bold</strong>")
     }
 
     @Test("Button label is escaped")
     func buttonLabelEscaped() {
-        let html = Button("<script>alert(1)</script>").renderThroughBuffer()
+        let html = Button("<script>alert(1)</script>").markup.html
         #expect(html.contains("&lt;script&gt;"))
         #expect(!html.contains("<script>"))
     }
 
     @Test("Input placeholder is escaped")
     func inputPlaceholderEscaped() {
-        let html = Input(placeholder: "\" onclick=\"alert(1)").renderThroughBuffer()
+        let html = Input(placeholder: "\" onclick=\"alert(1)").markup.html
         #expect(html.contains("&quot;"))
         // the quote is escaped, so the attribute boundary is preserved
         #expect(!html.contains("placeholder=\"\""))
@@ -729,14 +729,14 @@ struct EscapingTests {
 
     @Test("Link href is escaped")
     func linkHrefEscaped() {
-        let html = Link("Click", href: "\" onclick=\"alert(1)").renderThroughBuffer()
+        let html = Link("Click", href: "\" onclick=\"alert(1)").markup.html
         #expect(html.contains("&quot;"))
         #expect(!html.contains("href=\"\""))
     }
 
     @Test("Image src and alt are escaped")
     func imageAttrsEscaped() {
-        let html = Image(src: "\" onerror=\"alert(1)", alt: "\" onerror=\"alert(1)").renderThroughBuffer()
+        let html = Image(src: "\" onerror=\"alert(1)", alt: "\" onerror=\"alert(1)").markup.html
         #expect(html.contains("&quot;"))
         #expect(!html.contains("src=\"\""))
         #expect(!html.contains("alt=\"\""))
@@ -744,70 +744,70 @@ struct EscapingTests {
 
     @Test("Heading text is escaped")
     func headingEscaped() {
-        let html = Heading("<script>", level: .h1).renderThroughBuffer()
+        let html = Heading("<script>", level: .h1).markup.html
         #expect(html.contains("&lt;script&gt;"))
     }
 
     @Test("Paragraph text is escaped")
     func paragraphEscaped() {
-        let html = Paragraph("<b>not bold</b>").renderThroughBuffer()
+        let html = Paragraph("<b>not bold</b>").markup.html
         #expect(html.contains("&lt;b&gt;"))
         #expect(!html.contains("<b>"))
     }
 
     @Test("WebUIButton label is escaped")
     func webuiButtonLabelEscaped() {
-        let html = WebUIButton("<script>").renderThroughBuffer()
+        let html = WebUIButton("<script>").markup.html
         #expect(html.contains("&lt;script&gt;"))
         #expect(!html.contains("<script>"))
     }
 
     @Test("WebUIAlert message is escaped")
     func webuiAlertEscaped() {
-        let html = WebUIAlert(variant: .info, message: "<script>").renderThroughBuffer()
+        let html = WebUIAlert(variant: .info, message: "<script>").markup.html
         #expect(html.contains("&lt;script&gt;"))
     }
 
     @Test("WebUIBadge text is escaped")
     func webuiBadgeEscaped() {
-        let html = WebUIBadge("<script>").renderThroughBuffer()
+        let html = WebUIBadge("<script>").markup.html
         #expect(html.contains("&lt;script&gt;"))
     }
 
     @Test("WebUIChip text is escaped")
     func webuiChipEscaped() {
-        let html = WebUIChip("<script>").renderThroughBuffer()
+        let html = WebUIChip("<script>").markup.html
         #expect(html.contains("&lt;script&gt;"))
     }
 
     @Test("WebUIEmptyState title and message are escaped")
     func webuiEmptyStateEscaped() {
-        let html = WebUIEmptyState(title: "<title>", message: "<message>").renderThroughBuffer()
+        let html = WebUIEmptyState(title: "<title>", message: "<message>").markup.html
         #expect(html.contains("&lt;title&gt;"))
         #expect(html.contains("&lt;message&gt;"))
     }
 
     @Test("WebUIToast message is escaped")
     func webuiToastEscaped() {
-        let html = WebUIToast(variant: .info, message: "<script>").renderThroughBuffer()
+        let html = WebUIToast(variant: .info, message: "<script>").markup.html
         #expect(html.contains("&lt;script&gt;"))
     }
 
     @Test("WebUITooltip text is escaped")
     func webuiTooltipEscaped() {
-        let html = WebUITooltip("<script>") { Text("Hover") }.renderThroughBuffer()
+        let html = WebUITooltip("<script>") { Text("Hover") }.markup.html
         #expect(html.contains("&lt;script&gt;"))
     }
 
     @Test("WebUIModal title is escaped")
     func webuiModalEscaped() {
-        let html = WebUIModal(title: "<script>") { Text("") }.renderThroughBuffer()
+        let html = WebUIModal(title: "<script>") { Text("") }.markup.html
         #expect(html.contains("&lt;script&gt;"))
     }
 
     @Test("Table cell content is escaped")
     func tableCellEscaped() {
-        let html = WebUITable(headers: ["<h>"], rows: [[Text("<script>")]]).renderThroughBuffer()
+        let html = WebUITable(headers: ["<h>"], rows: [[Text("<script>")]]).markup.html
         #expect(html.contains("&lt;h&gt;"))
         #expect(html.contains("&lt;script&gt;"))
     }
@@ -832,7 +832,7 @@ struct ModifierChainTests {
 
     @Test("single modifier wraps content in span")
     func singleModifier() {
-        let html = Text("Hello").foregroundColor("red").renderThroughBuffer()
+        let html = Text("Hello").foregroundColor("red").markup.html
         #expect(html == "<span style=\"color: red;\">Hello</span>")
         #expect(validateTagBalance(html))
     }
@@ -842,7 +842,7 @@ struct ModifierChainTests {
         let html = Text("Hello")
             .foregroundColor("red")
             .backgroundColor("blue")
-            .renderThroughBuffer()
+            .markup.html
         // a SINGLE `style` attribute carrying BOTH declarations — the old
         // duplicate `style` attribute was dead bytes (browsers honor only
         // the first occurrence), so the later modifier never applied
@@ -856,14 +856,14 @@ struct ModifierChainTests {
             .padding(8)
             .cornerRadius("4px")
             .backgroundColor("var(--color-surface-2)")
-            .renderThroughBuffer()
+            .markup.html
         #expect(html == "<span style=\"padding: 8px; border-radius: 4px; background-color: var(--color-surface-2);\">Box</span>")
         #expect(validateTagBalance(html))
     }
 
     @Test("font modifier composes two inline styles")
     func fontModifier() {
-        let html = Text("Hello").font(size: 16, weight: "700").renderThroughBuffer()
+        let html = Text("Hello").font(size: 16, weight: "700").markup.html
         #expect(html.contains("font-size: 16px"))
         #expect(html.contains("font-weight: 700"))
         #expect(validateTagBalance(html))
@@ -875,7 +875,7 @@ struct ModifierChainTests {
             .padding(12)
             .foregroundColor("var(--color-text)")
             .font(size: 14, weight: "500")
-            .renderThroughBuffer()
+            .markup.html
         #expect(html.contains("padding: 12px"))
         #expect(html.contains("color: var(--color-text)"))
         #expect(html.contains("font-size: 14px"))
@@ -885,49 +885,49 @@ struct ModifierChainTests {
 
     @Test("id modifier adds attribute")
     func idModifier() {
-        let html = Text("Hello").id("my-id").renderThroughBuffer()
+        let html = Text("Hello").id("my-id").markup.html
         #expect(html.contains("id=\"my-id\""))
     }
 
     @Test("class modifier adds class attribute")
     func classModifier() {
-        let html = Text("Hello").class("my-class").renderThroughBuffer()
+        let html = Text("Hello").class("my-class").markup.html
         #expect(html.contains("class=\"my-class\""))
     }
 
     @Test("showIf(true) is no-op")
     func showIfTrue() {
-        let html = Text("Visible").showIf(true).renderThroughBuffer()
+        let html = Text("Visible").showIf(true).markup.html
         #expect(html == "Visible")
     }
 
     @Test("showIf(false) adds display:none")
     func showIfFalse() {
-        let html = Text("Hidden").showIf(false).renderThroughBuffer()
+        let html = Text("Hidden").showIf(false).markup.html
         #expect(html.contains("display: none"))
     }
 
     @Test("width modifier")
     func widthModifier() {
-        let html = Text("Wide").width("100%").renderThroughBuffer()
+        let html = Text("Wide").width("100%").markup.html
         #expect(html.contains("width: 100%"))
     }
 
     @Test("border modifier")
     func borderModifier() {
-        let html = Text("Boxed").border("1px solid red").renderThroughBuffer()
+        let html = Text("Boxed").border("1px solid red").markup.html
         #expect(html.contains("border: 1px solid red"))
     }
 
     @Test("cornerRadius modifier")
     func cornerRadiusModifier() {
-        let html = Text("Rounded").cornerRadius("8px").renderThroughBuffer()
+        let html = Text("Rounded").cornerRadius("8px").markup.html
         #expect(html.contains("border-radius: 8px"))
     }
 
     @Test("fill() emits flex-grow, min-size floors, and cross-axis stretch")
     func fillModifier() {
-        let html = Text("Fill").fill().renderThroughBuffer()
+        let html = Text("Fill").fill().markup.html
         #expect(html.contains("flex: 1 1 0%"))
         #expect(html.contains("min-width: 0"))
         #expect(html.contains("min-height: 0"))
@@ -936,7 +936,7 @@ struct ModifierChainTests {
 
     @Test("stretch() emits cross-axis stretch without flex-grow")
     func stretchModifier() {
-        let html = Text("Stretch").width("220px").stretch().renderThroughBuffer()
+        let html = Text("Stretch").width("220px").stretch().markup.html
         #expect(html.contains("align-self: stretch"))
         #expect(html.contains("min-width: 0"))
         #expect(!html.contains("flex: 1"))
@@ -945,7 +945,7 @@ struct ModifierChainTests {
 
     @Test("style() emits an arbitrary declaration")
     func styleModifier() {
-        let html = Text("Rule").style("border-bottom", "1px solid var(--color-border)").renderThroughBuffer()
+        let html = Text("Rule").style("border-bottom", "1px solid var(--color-border)").markup.html
         #expect(html.contains("border-bottom: 1px solid var(--color-border)"))
     }
 }
@@ -960,7 +960,7 @@ struct LayoutTests {
         let html = VStack(alignment: .center, spacing: 12) {
             Text("A")
             Text("B")
-        }.renderThroughBuffer()
+        }.markup.html
         #expect(html.contains("<div class=\"vstack spacing-12 align-center\">"))
         #expect(html.contains("A"))
         #expect(html.contains("B"))
@@ -974,7 +974,7 @@ struct LayoutTests {
             Text("Left")
             Spacer()
             Text("Right")
-        }.renderThroughBuffer()
+        }.markup.html
         #expect(html.contains("<div class=\"hstack spacing-8 align-flex-start\">"))
         #expect(html.contains("class=\"spacer\""))
         #expect(validateTagBalance(html))
@@ -985,7 +985,7 @@ struct LayoutTests {
         let html = ZStack(alignment: .center, verticalAlignment: .center) {
             Text("Back")
             Text("Front")
-        }.renderThroughBuffer()
+        }.markup.html
         #expect(html.contains("style=\"display:grid;"))
         #expect(html.contains("place-items:center center"))
         #expect(validateTagBalance(html))
@@ -995,7 +995,7 @@ struct LayoutTests {
     func scrollViewStructure() {
         let html = ScrollView {
             Text("Content")
-        }.renderThroughBuffer()
+        }.markup.html
         #expect(html.contains("<div class=\"scrollview\">"))
         #expect(html.hasSuffix("</div>"))
         #expect(validateTagBalance(html))
@@ -1006,7 +1006,7 @@ struct LayoutTests {
         let html = Grid(columns: .custom("200px 1fr"), spacing: 16) {
             Text("Sidebar")
             Text("Main")
-        }.renderThroughBuffer()
+        }.markup.html
         #expect(html.contains("grid-template-columns:200px 1fr"))
         #expect(html.contains("gap:16px"))
         #expect(validateTagBalance(html))
@@ -1028,7 +1028,7 @@ struct LayoutTests {
             Footer(class: "page-footer") {
                 Text("Footer")
             }
-        }.renderThroughBuffer()
+        }.markup.html
         #expect(html.contains("<section"))
         #expect(html.contains("<header"))
         #expect(html.contains("<nav"))
@@ -1044,7 +1044,7 @@ struct LayoutTests {
             Text("A")
             Text("B")
             Text("C")
-        }.renderThroughBuffer()
+        }.markup.html
         #expect(html.contains("<ul class=\"items\">"))
         #expect(html.contains("<li>A</li>"))
         #expect(html.contains("<li>B</li>"))
@@ -1058,7 +1058,7 @@ struct LayoutTests {
         let html = OrderedList {
             Text("First")
             Text("Second")
-        }.renderThroughBuffer()
+        }.markup.html
         #expect(html.hasPrefix("<ol>"))
         #expect(html.hasSuffix("</ol>"))
         #expect(validateTagBalance(html))
@@ -1074,11 +1074,11 @@ struct DocumentTests {
     func validDocumentStructure() {
         let doc = HTMLDocument(
             title: "Test",
-            body: "<p>Hello</p>",
+            body: .trusted("<p>Hello</p>"),
             styles: CSSStylesheet([CSSRule("p", [CSSDeclaration("color", "red")])]),
             scripts: "console.log('test');"
         )
-        let html = doc.renderedString()
+        let html = doc.markup.html
         #expect(html.hasPrefix("<!DOCTYPE html>"))
         #expect(html.contains("<html lang=\"en\">"))
         #expect(html.contains("<head>"))
@@ -1102,12 +1102,12 @@ struct DocumentTests {
     func devModeStructure() {
         let doc = HTMLDocument(
             title: "Dev",
-            body: "<p>Dev</p>",
+            body: .trusted("<p>Dev</p>"),
             styles: CSSStylesheet([CSSRule("p", [CSSDeclaration("color", "red")])]),
             scripts: "console.log('dev');",
             devMode: true
         )
-        let html = doc.renderedString()
+        let html = doc.markup.html
         #expect(html.contains("<link rel=\"stylesheet\" href=\"/ui/styles.css\">"))
         #expect(html.contains("<script src=\"/ui/webui-engine.js\">"))
         #expect(!html.contains("<style>"))
@@ -1119,10 +1119,10 @@ struct DocumentTests {
     func customHead() {
         let doc = HTMLDocument(
             title: "Custom",
-            body: "",
+            body: .trusted(""),
             head: "<meta name=\"theme-color\" content=\"#10b89f\">"
         )
-        let html = doc.renderedString()
+        let html = doc.markup.html
         #expect(html.contains("<meta name=\"theme-color\" content=\"#10b89f\">"))
         #expect(validateTagBalance(html))
     }
@@ -1131,24 +1131,24 @@ struct DocumentTests {
     func bodyAttributes() {
         let doc = HTMLDocument(
             title: "Styled",
-            body: "",
+            body: .trusted(""),
             bodyAttributes: "class=\"dark\" data-theme=\"dark\""
         )
-        let html = doc.renderedString()
+        let html = doc.markup.html
         #expect(html.contains("<body class=\"dark\" data-theme=\"dark\">"))
     }
 
     @Test("HTMLDocument title is escaped")
     func documentTitleEscaped() {
-        let doc = HTMLDocument(title: "<script>", body: "")
-        let html = doc.renderedString()
+        let doc = HTMLDocument(title: "<script>", body: .trusted(""))
+        let html = doc.markup.html
         #expect(html.contains("<title>&lt;script&gt;</title>"))
     }
 
     @Test("HTMLDocument with empty styles and scripts")
     func emptyStylesAndScripts() {
-        let doc = HTMLDocument(title: "Minimal", body: "<p>Hi</p>", includeRuntime: false)
-        let html = doc.renderedString()
+        let doc = HTMLDocument(title: "Minimal", body: .trusted("<p>Hi</p>"), includeRuntime: false)
+        let html = doc.markup.html
         #expect(!html.contains("<style>"))
         #expect(!html.contains("<script"))
         #expect(!html.contains("webui-config"))
@@ -1158,8 +1158,8 @@ struct DocumentTests {
 
     @Test("HTMLDocument includes JS runtime by default")
     func includesRuntimeByDefault() {
-        let doc = HTMLDocument(title: "Runtime", body: "<p>Test</p>")
-        let html = doc.renderedString()
+        let doc = HTMLDocument(title: "Runtime", body: .trusted("<p>Test</p>"))
+        let html = doc.markup.html
         #expect(html.contains("<meta name=\"webui-config\""))
         #expect(!html.contains("WebUIRuntime"))
         #expect(validateTagBalance(html))
@@ -1177,7 +1177,7 @@ struct CSSSystemTests {
             CSSRule("body", [CSSDeclaration("margin", "0"), CSSDeclaration("padding", "0")]),
             CSSRule("p", [CSSDeclaration("color", "#333")]),
         ])
-        let css = sheet.renderedString()
+        let css = sheet.markup.html
         #expect(css.contains("body {"))
         #expect(css.contains("margin: 0;"))
         #expect(css.contains("padding: 0;"))
@@ -1191,7 +1191,7 @@ struct CSSSystemTests {
             CSSRule(":root", [CSSDeclaration("--bg", "#000")]),
             CSSRule("body", [CSSDeclaration("color", "#fff")]),
         ])
-        let css = mq.renderedString()
+        let css = mq.markup.html
         #expect(css.contains("@media (prefers-color-scheme: dark) {"))
         #expect(css.contains("--bg: #000;"))
         #expect(css.contains("color: #fff;"))
@@ -1203,7 +1203,7 @@ struct CSSSystemTests {
             ("from", [CSSDeclaration("transform", "translateX(-100%)"), CSSDeclaration("opacity", "0")]),
             ("to", [CSSDeclaration("transform", "translateX(0)"), CSSDeclaration("opacity", "1")]),
         ])
-        let css = kf.renderedString()
+        let css = kf.markup.html
         #expect(css.contains("@keyframes slideIn {"))
         #expect(css.contains("from {"))
         #expect(css.contains("transform: translateX(-100%);"))
@@ -1217,7 +1217,7 @@ struct CSSSystemTests {
             CSSDeclaration("font-family", "\"Custom Font\""),
             CSSDeclaration("src", "url('/fonts/custom.woff2')"),
         ])
-        let css = ff.renderedString()
+        let css = ff.markup.html
         #expect(css.contains("@font-face {"))
         #expect(css.contains("font-family: \"Custom Font\";"))
         #expect(css.contains("src: url('/fonts/custom.woff2');"))
@@ -1305,7 +1305,7 @@ struct EdgeCaseTests {
 
     @Test("EmptyView renders nothing")
     func emptyView() {
-        #expect(EmptyView().renderThroughBuffer() == "")
+        #expect(EmptyView().markup.html == "")
     }
 
     @Test("ViewBuilder with empty block")
@@ -1320,7 +1320,7 @@ struct EdgeCaseTests {
             if false {
                 Text("Hidden")
             }
-        }.renderThroughBuffer()
+        }.markup.html
         #expect(html == "<div></div>")
         #expect(validateTagBalance(html))
     }
@@ -1331,7 +1331,7 @@ struct EdgeCaseTests {
             if true {
                 Text("Visible")
             }
-        }.renderThroughBuffer()
+        }.markup.html
         #expect(html == "<div>Visible</div>")
     }
 
@@ -1344,7 +1344,7 @@ struct EdgeCaseTests {
             } else {
                 Text("B")
             }
-        }.renderThroughBuffer()
+        }.markup.html
         #expect(html == "<div>B</div>")
     }
 
@@ -1355,42 +1355,42 @@ struct EdgeCaseTests {
             for item in items {
                 Text(item)
             }
-        }.renderThroughBuffer()
+        }.markup.html
         #expect(html == "<div>ABC</div>")
     }
 
     @Test("Spacer with zero minSize")
     func spacerZero() {
-        let html = Spacer().renderThroughBuffer()
+        let html = Spacer().markup.html
         #expect(html.contains("flex:1"))
         #expect(html.contains("min-width:0px"))
     }
 
     @Test("WebUIButton with fullWidth")
     func buttonFullWidth() {
-        let html = WebUIButton("Full", fullWidth: true).renderThroughBuffer()
+        let html = WebUIButton("Full", fullWidth: true).markup.html
         #expect(html.contains("button--full"))
     }
 
     @Test("WebUIProgress clamps value to [0, 1]")
     func progressClamping() {
-        let over = WebUIProgress(value: 1.5).renderThroughBuffer()
+        let over = WebUIProgress(value: 1.5).markup.html
         #expect(over.contains("width: 100%"))
-        let under = WebUIProgress(value: -0.5).renderThroughBuffer()
+        let under = WebUIProgress(value: -0.5).markup.html
         #expect(under.contains("width: 0%"))
     }
 
     @Test("Heading level renders correct HTML tag")
     func headingLevelRendersCorrectTag() {
-        let h1 = Heading("Title", level: .h1).renderThroughBuffer()
+        let h1 = Heading("Title", level: .h1).markup.html
         #expect(h1.hasPrefix("<h1"))
-        let h6 = Heading("Subtitle", level: .h6).renderThroughBuffer()
+        let h6 = Heading("Subtitle", level: .h6).markup.html
         #expect(h6.hasPrefix("<h6"))
     }
 
     @Test("Skeleton count is at least 1")
     func skeletonMinCount() {
-        let html = WebUISkeleton(count: 0).renderThroughBuffer()
+        let html = WebUISkeleton(count: 0).markup.html
         // count occurrences of the full class attribute
         let count = html.components(separatedBy: "skeleton--text").count - 1
         #expect(count == 1)
@@ -1402,7 +1402,7 @@ struct EdgeCaseTests {
             id: "color",
             options: [SelectOption(value: "r", label: "Red"), SelectOption(value: "g", label: "Green"), SelectOption(value: "b", label: "Blue")],
             selected: "g"
-        ).renderThroughBuffer()
+        ).markup.html
         #expect(html.contains("<select id=\"color\">"))
         #expect(html.contains("<option value=\"r\">Red</option>"))
         #expect(html.contains("<option value=\"g\" selected>Green</option>"))
@@ -1413,7 +1413,7 @@ struct EdgeCaseTests {
 
     @Test("TextArea renders correctly")
     func textAreaRenders() {
-        let html = TextArea(id: "bio", placeholder: "Tell us...", rows: 5).renderThroughBuffer()
+        let html = TextArea(id: "bio", placeholder: "Tell us...", rows: 5).markup.html
         #expect(html.contains("<textarea id=\"bio\" rows=\"5\" placeholder=\"Tell us...\">"))
         #expect(html.hasSuffix("</textarea>"))
         #expect(validateTagBalance(html))
@@ -1421,7 +1421,7 @@ struct EdgeCaseTests {
 
     @Test("Label renders with for attribute")
     func labelRenders() {
-        let html = Label("Name", for: "name-input").renderThroughBuffer()
+        let html = Label("Name", for: "name-input").markup.html
         #expect(html == "<label for=\"name-input\">Name</label>")
     }
 }
@@ -1470,7 +1470,7 @@ struct IntegrationTests {
             Footer(class: "app-footer") {
                 Text("© 2026 WebUI UI")
             }
-        }.renderThroughBuffer()
+        }.markup.html
 
         #expect(validateTagBalance(body), "Page HTML has unbalanced tags")
         #expect(validateBEMClasses(body).isEmpty, "Page HTML has BEM class issues")
@@ -1506,17 +1506,17 @@ struct IntegrationTests {
             WebUICard(variant: .elevated) {
                 WebUIAlert(variant: .success, message: "Everything is working!")
             }
-        }.renderThroughBuffer()
+        }.markup.html
 
         let doc = HTMLDocument(
             title: "WebUI Smoke Test",
-            body: body,
+            body: .trusted(body),
             styles: CSSStylesheet([CSSRule(":root", [CSSDeclaration("--color-primary-500", "#6366f1")])]),
             scripts: "console.log('smoke test');",
             head: "<meta name=\"description\" content=\"Smoke test\">"
         )
 
-        let html = doc.renderedString()
+        let html = doc.markup.html
         #expect(validateTagBalance(html), "Full document has unbalanced tags")
         #expect(html.hasPrefix("<!DOCTYPE html>"))
         #expect(html.contains("<title>WebUI Smoke Test</title>"))
@@ -1570,7 +1570,7 @@ struct IntegrationTests {
                 WebUIBreadcrumb.Item("Tables", href: "/tables"),
             ], current: WebUIBreadcrumb.Item("Interactive"))
             WebUIDescriptionList([("Status", "Active"), ("Region", "us-east-1"), ("Uptime", "99.98%")])
-        }.renderThroughBuffer()
+        }.markup.html
 
         #expect(validateTagBalance(html), "All components together has unbalanced tags")
         let issues = validateBEMClasses(html)
@@ -1593,7 +1593,7 @@ struct CompanionPrimitiveTests {
             trendDirection: .up,
             compare: "vs last week",
             spark: [3, 5, 4, 8, 7, 10, 12]
-        ).renderThroughBuffer()
+        ).markup.html
         #expect(html.contains("class=\"stat stat--lg\""))
         #expect(html.contains("<span class=\"stat__label\">Requests</span>"))
         #expect(html.contains("<span class=\"stat__value\">12.4M</span>"))
@@ -1603,7 +1603,7 @@ struct CompanionPrimitiveTests {
         #expect(html.contains("stat__spark-line"))
         #expect(html.contains("stat__spark-area"))
         // down trend emits the downward arrow path
-        let down = WebUIStat(label: "Errors", value: "0.2%", trend: "-1.3%", trendDirection: .down).renderThroughBuffer()
+        let down = WebUIStat(label: "Errors", value: "0.2%", trend: "-1.3%", trendDirection: .down).markup.html
         #expect(down.contains("stat__trend--down"))
         #expect(validateTagBalance(html))
         #expect(validateTagBalance(down))
@@ -1611,7 +1611,7 @@ struct CompanionPrimitiveTests {
 
     @Test("WebUIStat minimal (no trend/spark) renders just label+value")
     func statMinimal() {
-        let html = WebUIStat(label: "Uptime", value: "99.99%").renderThroughBuffer()
+        let html = WebUIStat(label: "Uptime", value: "99.99%").markup.html
         #expect(html.contains("class=\"stat\""))
         #expect(html.contains("<span class=\"stat__label\">Uptime</span>"))
         #expect(html.contains("<span class=\"stat__value\">99.99%</span>"))
@@ -1623,16 +1623,16 @@ struct CompanionPrimitiveTests {
     @Test("WebUIPagination windowing with prev/next disabled at bounds")
     func paginationWindowing() {
         // page 1 => prev disabled
-        let p1 = WebUIPagination(page: 1, pages: 12).renderThroughBuffer()
+        let p1 = WebUIPagination(page: 1, pages: 12).markup.html
         #expect(p1.contains("aria-label=\"Previous page\" disabled"))
         #expect(p1.contains("pagination__btn--active"))
         #expect(p1.contains("pagination__ellipsis"))
         // page 12 => next disabled
-        let p12 = WebUIPagination(page: 12, pages: 12).renderThroughBuffer()
+        let p12 = WebUIPagination(page: 12, pages: 12).markup.html
         #expect(p12.contains("aria-label=\"Next page\" disabled"))
         #expect(p12.contains("id=\"page-12\"") || p12.contains("aria-current=\"page\""))
         // few pages => no ellipsis, all shown
-        let small = WebUIPagination(page: 2, pages: 4).renderThroughBuffer()
+        let small = WebUIPagination(page: 2, pages: 4).markup.html
         #expect(small.range(of: "pagination__ellipsis") == nil)
         #expect(small.contains(">1</button>"))
         #expect(small.contains(">4</button>"))
@@ -1642,7 +1642,7 @@ struct CompanionPrimitiveTests {
 
     @Test("WebUIPagination rows-per-page meta renders a select with the chosen option selected")
     func paginationMeta() {
-        let html = WebUIPagination(page: 3, pages: 8, id: "pg", rowsPerPage: 25, rowsPerPageOptions: [10, 25, 50]).renderThroughBuffer()
+        let html = WebUIPagination(page: 3, pages: 8, id: "pg", rowsPerPage: 25, rowsPerPageOptions: [10, 25, 50]).markup.html
         #expect(html.contains("pagination__meta"))
         #expect(html.contains("id=\"pg-rows\""))
         #expect(html.contains("<option value=\"25\" selected>25</option>"))
@@ -1656,7 +1656,7 @@ struct CompanionPrimitiveTests {
             WebUITimeline.Event(time: "12:00", title: "Shipped", status: .completed),
             WebUITimeline.Event(time: "12:30", title: "Deploying", desc: "canary 10%", status: .current),
             WebUITimeline.Event(time: "13:00", title: "Queued"),
-        ]).renderThroughBuffer()
+        ]).markup.html
         #expect(html.contains("class=\"timeline\""))
         #expect(html.contains("timeline__event--completed"))
         #expect(html.contains("timeline__event--current"))
@@ -1665,7 +1665,7 @@ struct CompanionPrimitiveTests {
         #expect(html.contains("timeline__dot"))
         #expect(validateTagBalance(html))
         // horizontal orientation
-        let h = WebUITimeline(events: [WebUITimeline.Event(time: "1", title: "A")], orientation: .horizontal).renderThroughBuffer()
+        let h = WebUITimeline(events: [WebUITimeline.Event(time: "1", title: "A")], orientation: .horizontal).markup.html
         #expect(h.contains("timeline--horizontal"))
     }
 
@@ -1679,7 +1679,7 @@ struct CompanionPrimitiveTests {
                 ]),
             ]),
         ]
-        let html = WebUITree(nodes: nodes, id: "t", expanded: ["src"], selected: "main").renderThroughBuffer()
+        let html = WebUITree(nodes: nodes, id: "t", expanded: ["src"], selected: "main").markup.html
         #expect(html.contains("class=\"tree\""))
         #expect(html.contains("tree__node tree__node--open"))
         #expect(html.contains("tree__node\""))
@@ -1690,7 +1690,7 @@ struct CompanionPrimitiveTests {
         // closed child (ui) still present in DOM, hidden via CSS
         #expect(html.contains("id=\"t-node-ui\""))
         // escaped label
-        let bad = WebUITree(nodes: [WebUITree.Node(id: "x", label: "<i>bad</i>")]).renderThroughBuffer()
+        let bad = WebUITree(nodes: [WebUITree.Node(id: "x", label: "<i>bad</i>")]).markup.html
         #expect(bad.range(of: "<i>bad</i>") == nil)
         #expect(bad.contains("&lt;i&gt;bad&lt;/i&gt;"))
         #expect(validateTagBalance(html))
@@ -1702,7 +1702,7 @@ struct CompanionPrimitiveTests {
             nodes: [WebUITree.Node(id: "a", label: "A", children: [WebUITree.Node(id: "b", label: "B")])],
             id: "wt",
             onToggle: { _ in [] }
-        ).renderThroughBuffer()
+        ).markup.html
         #expect(html.contains("tree tree--interactive"))
         #expect(html.contains("data-component-id=\"wt\""))
         #expect(html.contains("data-event=\"click\""))
@@ -1713,7 +1713,7 @@ struct CompanionPrimitiveTests {
     @Test("WebUIBreadcrumb collapses long trails and marks current")
     func breadcrumb() {
         let items = (1...6).map { WebUIBreadcrumb.Item("Step \($0)", href: "/s\($0)") }
-        let html = WebUIBreadcrumb(items: items, current: WebUIBreadcrumb.Item("Final")).renderThroughBuffer()
+        let html = WebUIBreadcrumb(items: items, current: WebUIBreadcrumb.Item("Final")).markup.html
         // 6 + current = 7 > maxItems(5) => collapse
         #expect(html.contains("breadcrumb__ellipsis"))
         #expect(html.contains("breadcrumb__item--current"))
@@ -1726,7 +1726,7 @@ struct CompanionPrimitiveTests {
         let short = WebUIBreadcrumb(
             items: [WebUIBreadcrumb.Item("Home", href: "/")],
             current: WebUIBreadcrumb.Item("Here")
-        ).renderThroughBuffer()
+        ).markup.html
         #expect(short.range(of: "breadcrumb__ellipsis") == nil)
         #expect(short.contains("class=\"breadcrumb\""))
         #expect(short.contains(">Here</span>"), "current segment missing: \(short)")
@@ -1736,7 +1736,7 @@ struct CompanionPrimitiveTests {
 
     @Test("a breadcrumb with no parent items renders just the current segment")
     func breadcrumbBareCurrent() {
-        let html = WebUIBreadcrumb(items: [], current: WebUIBreadcrumb.Item("Only")).renderThroughBuffer()
+        let html = WebUIBreadcrumb(items: [], current: WebUIBreadcrumb.Item("Only")).markup.html
         #expect(html.contains(">Only</span>"), "current segment missing: \(html)")
         #expect(html.contains("breadcrumb__item--current"))
         // no parent items means nothing to separate
@@ -1750,13 +1750,13 @@ struct CompanionPrimitiveTests {
             items: [WebUIBreadcrumb.Item("A", href: "/a")],
             current: WebUIBreadcrumb.Item("B"),
             slash: true
-        ).renderThroughBuffer()
+        ).markup.html
         #expect(slash.contains("breadcrumb--slash"))
         // javascript: href blocked => rendered as a span, not an anchor
         let js = WebUIBreadcrumb(
             items: [WebUIBreadcrumb.Item("Bad", href: "javascript:alert(1)")],
             current: WebUIBreadcrumb.Item("Ok")
-        ).renderThroughBuffer()
+        ).markup.html
         #expect(js.range(of: "href=\"javascript") == nil)
         #expect(js.contains("class=\"breadcrumb__item\">Bad</span>"))
     }
@@ -1767,7 +1767,7 @@ struct CompanionPrimitiveTests {
             ("Status", "Active"),
             ("Region", "us-east-1"),
             ("Note", "<b>bold</b> & safe"),
-        ]).renderThroughBuffer()
+        ]).markup.html
         #expect(html.contains("<dl class=\"list--desc\">"))
         #expect(html.contains("<dt>Status</dt>"))
         #expect(html.contains("<dd>Active</dd>"))

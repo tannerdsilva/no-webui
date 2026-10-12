@@ -10,7 +10,7 @@
 # forced it. `Tests/WebUITests/FrozenSurfaceTests.swift` fails when this
 # file and a fresh extraction diverge, naming every added and removed symbol.
 #
-# re-measured 2026-10-09: 4558 symbols across 8 modules.
+# re-measured 2026-10-09: 4562 symbols across 8 modules.
 
 ## WebUISharedCore
 
@@ -82,6 +82,7 @@ HTTPResponse.Body.text(_:)
 HTTPResponse.body
 HTTPResponse.cookies
 HTTPResponse.headers
+HTTPResponse.init(_:status:headers:cookies:)
 HTTPResponse.init(status:headers:cookies:body:)
 HTTPResponse.status
 HTTPStatus
@@ -120,6 +121,9 @@ JSONValue.object(_:)
 JSONValue.parse(_:)
 JSONValue.serialize()
 JSONValue.string(_:)
+UnsafeMarkup
+UnsafeMarkup.html
+UnsafeMarkup.trusted(_:)
 htmlEscape(_:)
 
 ## WebUICore
@@ -285,6 +289,9 @@ Base64.decode(_:)
 Base64.decodeURL(_:)
 Base64.encode(_:)
 Base64.encodeURL(_:)
+BufferRendering
+BufferRendering.markup
+BufferRendering.render(into:)
 Button
 Button.ButtonType
 Button.ButtonType.button
@@ -1751,9 +1758,6 @@ UnorderedList.class
 UnorderedList.init(class:items:)
 UnorderedList.items
 UnorderedList.render(into:)
-UnsafeMarkup
-UnsafeMarkup.html
-UnsafeMarkup.trusted(_:)
 VStack
 VStack.alignment
 VStack.children
@@ -1855,7 +1859,6 @@ View.onWheel(perform:)
 View.padding(_:)
 View.padding(horizontal:vertical:)
 View.render()
-View.render(into:)
 View.role(_:)
 View.showIf(_:)
 View.stretch()
@@ -4553,6 +4556,7 @@ WebUIServer.connectedPages
 WebUIServer.init(render:router:config:logger:)
 WebUIServer.init(requestRender:router:config:logger:)
 WebUIServer.init(router:config:logger:)
+WebUIServer.init(router:eventRouter:config:logger:)
 WebUIServer.start()
 WebUIServer.stop()
 WebUIServerAsset

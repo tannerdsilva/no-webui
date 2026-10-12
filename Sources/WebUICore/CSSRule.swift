@@ -42,7 +42,7 @@ public struct CSSMediaQuery: Sendable, BufferRendering {
     }
     public func render(into buffer: inout HTMLBuffer) {
         // `CSSStylesheet` is a stylesheet, not a `View`, so it has no
-        // `renderThroughBuffer` helper: it renders into its own buffer.
+        // buffer-materializing helper: it renders into its own buffer.
         var innerBuffer = HTMLBuffer()
         CSSStylesheet(rules).render(into: &innerBuffer)
         let inner = String(decoding: innerBuffer.bytes, as: UTF8.self)

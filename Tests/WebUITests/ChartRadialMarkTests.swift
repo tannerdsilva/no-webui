@@ -28,7 +28,7 @@ func allCaptures(_ regex: String, in haystack: String, group: Int = 1) -> [Strin
 			BarMark(x: .value("month", "up"), y: .value("change", 30)).makeMark(),
 			BarMark(x: .value("month", "down"), y: .value("change", -30)).makeMark(),
 		]
-		let html = Chart(marks, id: "neg").renderThroughBuffer()
+		let html = Chart(marks, id: "neg").markup.html
 		let heights = allCaptures(#"chart__bar"[^>]*height="([0-9.]+)""#, in: html).compactMap(Double.init)
 		#expect(heights.count == 2, "expected one bar per datum, got \(heights)")
 		if heights.count == 2 {
@@ -44,7 +44,7 @@ func allCaptures(_ regex: String, in haystack: String, group: Int = 1) -> [Strin
 			BarMark(x: .value("m", "a"), y: .value("v", 10)).makeMark(),
 			BarMark(x: .value("m", "b"), y: .value("v", -40)).makeMark(),
 		]
-		let html = Chart(marks, id: "neg2").renderThroughBuffer()
+		let html = Chart(marks, id: "neg2").markup.html
 		let heights = allCaptures(#"chart__bar"[^>]*height="([0-9.]+)""#, in: html).compactMap(Double.init)
 		#expect(heights.count == 2)
 		if heights.count == 2 {
@@ -59,7 +59,7 @@ func allCaptures(_ regex: String, in haystack: String, group: Int = 1) -> [Strin
 			RadarMark([("speed", 8), ("reliability", 6), ("cost", 4), ("support", 7)], series: "eu").makeMark(),
 			RadarMark([("speed", 5), ("reliability", 9), ("cost", 7), ("support", 3)], series: "us").makeMark(),
 		]
-		let html = Chart(marks, id: "radar").renderThroughBuffer()
+		let html = Chart(marks, id: "radar").markup.html
 		#expect(html.contains("figure class=\"chart chart--radar\""))
 		#expect(occ(html, "<polygon class=\"chart__mark chart__radar ") == 2, "one polygon per series")
 		#expect(occ(html, "chart__grid-ring") == 4, "four grid rings")
@@ -72,7 +72,7 @@ func allCaptures(_ regex: String, in haystack: String, group: Int = 1) -> [Strin
 	}
 
 	@Test func radarNeedsThreeAxes() {
-		let html = Chart([RadarMark([("a", 1), ("b", 2)], series: "s").makeMark()], id: "thin").renderThroughBuffer()
+		let html = Chart([RadarMark([("a", 1), ("b", 2)], series: "s").makeMark()], id: "thin").markup.html
 		#expect(html.contains("chart--radar"))
 		#expect(!html.contains("chart__radar\""), "a two-axis radar draws no polygon")
 	}
@@ -80,7 +80,7 @@ func allCaptures(_ regex: String, in haystack: String, group: Int = 1) -> [Strin
 	// MARK: t2  radial
 
 	@Test func radialRendersAStrokedArcRingWithCenterValue() {
-		let html = Chart([RadialMark(value: 72, of: 100, series: "cpu").makeMark()], id: "gauge").renderThroughBuffer()
+		let html = Chart([RadialMark(value: 72, of: 100, series: "cpu").makeMark()], id: "gauge").markup.html
 		#expect(html.contains("figure class=\"chart chart--radial\""))
 		#expect(occ(html, "chart__radial-track") == 1, "one track per ring")
 		#expect(occ(html, "<circle class=\"chart__mark chart__radial ") == 1, "one value arc")
@@ -90,8 +90,8 @@ func allCaptures(_ regex: String, in haystack: String, group: Int = 1) -> [Strin
 	}
 
 	@Test func radialClampsOverAndUnderOneHundredPercent() {
-		let over = Chart([RadialMark(value: 250, of: 100).makeMark()], id: "over").renderThroughBuffer()
-		let under = Chart([RadialMark(value: -5, of: 100).makeMark()], id: "under").renderThroughBuffer()
+		let over = Chart([RadialMark(value: 250, of: 100).makeMark()], id: "over").markup.html
+		let under = Chart([RadialMark(value: -5, of: 100).makeMark()], id: "under").markup.html
 		#expect(over.contains(">100%<"), "a value over the total clamps to a full ring")
 		#expect(under.contains(">0%<"), "a negative value clamps to an empty ring")
 	}
@@ -101,7 +101,7 @@ func allCaptures(_ regex: String, in haystack: String, group: Int = 1) -> [Strin
 	@Test func areaGradientEmitsScopedDefsAndIsReferenced() {
 		let gradient = ChartGradient([.explicit("var(--color-chart-2)"), .explicit("transparent")])
 		let mark = AreaMark(x: .value("x", 1), y: .value("y", 10)).makeMark().areaGradient(gradient)
-		let html = Chart([mark], id: "area-a").renderThroughBuffer()
+		let html = Chart([mark], id: "area-a").markup.html
 		#expect(html.contains("<defs><linearGradient id=\"chart-grad-"))
 		#expect(html.contains("fill=\"url(#chart-grad-"), "the area path references its gradient")
 		#expect(html.contains("stop-color:var(--color-chart-2)"))
@@ -112,7 +112,7 @@ func allCaptures(_ regex: String, in haystack: String, group: Int = 1) -> [Strin
 	@Test func gradientIdsDoNotCollideAcrossCharts() {
 		func rendered(_ token: String, id: String) -> String {
 			Chart([AreaMark(x: .value("x", 1), y: .value("y", 10)).makeMark()
-				.areaGradient(ChartGradient([.explicit(token), .explicit("transparent")]))], id: id).renderThroughBuffer()
+				.areaGradient(ChartGradient([.explicit(token), .explicit("transparent")]))], id: id).markup.html
 		}
 		let a = rendered("var(--color-chart-2)", id: "one")
 		let b = rendered("var(--color-chart-4)", id: "two")
@@ -126,13 +126,13 @@ func allCaptures(_ regex: String, in haystack: String, group: Int = 1) -> [Strin
 	@Test func gradientIdsAreDeterministicAcrossRenders() {
 		func rendered() -> String {
 			Chart([AreaMark(x: .value("x", 1), y: .value("y", 10)).makeMark()
-				.areaGradient(ChartGradient.fade(.explicit("var(--color-chart-3)")))], id: "same").renderThroughBuffer()
+				.areaGradient(ChartGradient.fade(.explicit("var(--color-chart-3)")))], id: "same").markup.html
 		}
 		#expect(rendered() == rendered(), "render must be byte-identical for the same input")
 	}
 
 	@Test func flatAreaIsUnchangedWithoutAGradient() {
-		let html = Chart([AreaMark(x: .value("x", 1), y: .value("y", 10)).makeMark()], id: "flat").renderThroughBuffer()
+		let html = Chart([AreaMark(x: .value("x", 1), y: .value("y", 10)).makeMark()], id: "flat").markup.html
 		#expect(html.contains("class=\"chart__mark chart__area chart__c1\""), "the default flat fill is preserved")
 		#expect(!html.contains("<defs>"), "no defs without a gradient")
 	}
@@ -140,7 +140,7 @@ func allCaptures(_ regex: String, in haystack: String, group: Int = 1) -> [Strin
 	@Test func gradientStopColorsAreFiltered() {
 		let gradient = ChartGradient([.explicit("red;}\u{22}><script>alert(1)</script>")])
 		let html = Chart([AreaMark(x: .value("x", 1), y: .value("y", 10)).makeMark()
-			.areaGradient(gradient)], id: "inject").renderThroughBuffer()
+			.areaGradient(gradient)], id: "inject").markup.html
 		#expect(!html.contains("<script"), "an explicit color must not be able to inject markup")
 		let stopValue = allCaptures(#"style="stop-color:([^"]*)""#, in: html).first ?? ""
 		#expect(!stopValue.contains(";") && !stopValue.contains("<"), "a style value must not carry css or markup: \(stopValue)")
@@ -153,7 +153,7 @@ func allCaptures(_ regex: String, in haystack: String, group: Int = 1) -> [Strin
 			BarMark(x: .value("m", "a"), y: .value("v", 5)).makeMark(),
 			BarMark(x: .value("m", "b"), y: .value("v", 8)).makeMark(),
 		]
-		let html = Chart(marks, id: "tips").renderThroughBuffer()
+		let html = Chart(marks, id: "tips").markup.html
 		#expect(occ(html, "class=\"chart__tip\"") == 2, "one tip per bar")
 		// the css contract is *adjacency*: the tip is the mark's next sibling, so
 		// the pair renders as `.../><g class="chart__tip"`. instead of a regex
@@ -166,17 +166,17 @@ func allCaptures(_ regex: String, in haystack: String, group: Int = 1) -> [Strin
 	@Test func tipTextIsEscapedAndNoScriptLeaks() {
 		let mark = BarMark(x: .value("m", "a"), y: .value("v", 5)).makeMark()
 			.tooltip("<b>bold</b> & \"quoted\"")
-		let html = Chart([mark], id: "tiptext").renderThroughBuffer()
+		let html = Chart([mark], id: "tiptext").markup.html
 		#expect(html.contains("&lt;b&gt;"), "markup in a tip is escaped")
 		#expect(!html.contains("<b>bold</b>"))
 		#expect(!html.contains("<script"))
 	}
 
 	@Test func pointsAndSectorsCarryTipsToo() {
-		let points = Chart([PointMark(x: .value("x", 1), y: .value("y", 3)).makeMark()], id: "pts").renderThroughBuffer()
+		let points = Chart([PointMark(x: .value("x", 1), y: .value("y", 3)).makeMark()], id: "pts").markup.html
 		#expect(occ(points, "class=\"chart__tip\"") == 1, "a point gets a tip")
 		let sectors = Chart([SectorMark(angle: .value("share", 30), innerRadiusRatio: 0.0).makeMark()],
-			id: "pie").renderThroughBuffer()
+			id: "pie").markup.html
 		#expect(occ(sectors, "class=\"chart__tip\"") == 1, "a sector gets a tip")
 	}
 }

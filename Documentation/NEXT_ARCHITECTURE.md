@@ -35,9 +35,11 @@ the wasm machinery they describe is not lost — it is repackaged as capability 
 5. **no capability ships when it isn't used.** progressive enhancement is the default
    posture: every feature (wasm island, offline, worker offload) is opt-in per page and
    degrades to the base path when absent.
-6. **the frozen consumer surface does not change.** `View`, `render() -> String`,
+6. **the frozen consumer surface does not change.** `View`, `BufferRendering.markup`,
    modifiers, components, `FragmentUpdate` — the public contract and its pins
-   (`APISurfaceTests.swift`) keep passing. everything below is internal.
+   (`APISurfaceTests.swift`) keep passing. `render() -> String` is no longer the
+   contract: the typed door is `markup` (an `UnsafeMarkup`), and `render()` survives
+   only as a deprecated 1.x (`markup.html`). everything below is internal.
 
 ## 2. target architecture
 
@@ -60,7 +62,9 @@ the wasm machinery they describe is not lost — it is repackaged as capability 
 
 ### layer a — authoring (unchanged for the consumer)
 
-`View { func render() -> String }` stays the public contract. internally, nothing
+`View { func render(into buffer: inout HTMLBuffer) }` stays the public contract — a
+view writes its own bytes, and the typed materializer `BufferRendering.markup` turns
+them into an `UnsafeMarkup` on demand. internally, nothing
 forces a rewrite: the restart does **not** introduce a view IR as a gate. an internal
 `Element` tree is added only where it pays (see p3, optional): tree diffing for patch
 minimization, and a typed contract for wasm islands to avoid string marshaling in hot

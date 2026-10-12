@@ -61,7 +61,7 @@ struct RenderIntoBufferTests {
 		// test, so the deprecation warning it raises is the signal, not noise.
 		#expect(BufferOverride().render() == "from buffer")
 		// and through a container's child loop
-		#expect(Div { BufferOverride() }.renderThroughBuffer() == "<div>from buffer</div>")
+		#expect(Div { BufferOverride() }.markup.html == "<div>from buffer</div>")
 	}
 
 	@Test("a migrated view's render() is exactly the buffer roundtrip")
@@ -69,7 +69,7 @@ struct RenderIntoBufferTests {
 		let view = Grid { Div { Text("x") } }
 		var buffer = HTMLBuffer()
 		view.render(into: &buffer)
-		#expect(buffer.finish() == view.renderThroughBuffer())
+		#expect(buffer.finish() == view.markup.html)
 	}
 
 	private struct ModifierOverride: ViewModifier {
@@ -87,7 +87,7 @@ struct RenderIntoBufferTests {
 
 	@Test("a modifier's decorate override wins through ModifiedView")
 	func modifierDispatchThroughModifiedView() {
-		#expect(ModifiedView(content: Text("x"), modifier: ModifierOverride()).renderThroughBuffer() == "from buffer")
+		#expect(ModifiedView(content: Text("x"), modifier: ModifierOverride()).markup.html == "from buffer")
 	}
 
 	@Test("a modifier's decorate override wins through a generic call")
@@ -99,54 +99,54 @@ struct RenderIntoBufferTests {
 	func modifierFallback() {
 		// the S1 fallback re-parses the content's html; S2 replaces this path
 		// for the migrated modifier set, and this pin flips with it
-		#expect(Div { Text("x") }.padding(4).renderThroughBuffer() == "<div style=\"padding: 4px;\">x</div>")
+		#expect(Div { Text("x") }.padding(4).markup.html == "<div style=\"padding: 4px;\">x</div>")
 	}
 
 	// MARK: - container byte-identity
 
 	@Test("div and span frame their own element")
 	func divAndSpan() {
-		#expect(Div { Text("in") }.renderThroughBuffer() == "<div>in</div>")
-		#expect(Div(id: "d", class: "c") { Text("in") }.renderThroughBuffer() == "<div id=\"d\" class=\"c\">in</div>")
-		#expect(Span(class: "s") { Text("x") }.renderThroughBuffer() == "<span class=\"s\">x</span>")
+		#expect(Div { Text("in") }.markup.html == "<div>in</div>")
+		#expect(Div(id: "d", class: "c") { Text("in") }.markup.html == "<div id=\"d\" class=\"c\">in</div>")
+		#expect(Span(class: "s") { Text("x") }.markup.html == "<span class=\"s\">x</span>")
 	}
 
 	@Test("section, the list family, and ForEach frame like the string path")
 	func sectionListsAndForEach() {
-		#expect(Section(id: "s", class: "sec") { Text("x") }.renderThroughBuffer() == "<section id=\"s\" class=\"sec\">x</section>")
-		#expect(UnorderedList { Text("a"); Text("b") }.renderThroughBuffer() == "<ul><li>a</li><li>b</li></ul>")
-		#expect(OrderedList(class: "ol") { Text("a") }.renderThroughBuffer() == "<ol class=\"ol\"><li>a</li></ol>")
-		#expect(ForEach([1, 2, 3]) { Text("\($0)") }.renderThroughBuffer() == "123")
+		#expect(Section(id: "s", class: "sec") { Text("x") }.markup.html == "<section id=\"s\" class=\"sec\">x</section>")
+		#expect(UnorderedList { Text("a"); Text("b") }.markup.html == "<ul><li>a</li><li>b</li></ul>")
+		#expect(OrderedList(class: "ol") { Text("a") }.markup.html == "<ol class=\"ol\"><li>a</li></ol>")
+		#expect(ForEach([1, 2, 3]) { Text("\($0)") }.markup.html == "123")
 	}
 
 	@Test("the stacks keep the literal newlines the string path emitted")
 	func stackNewlines() {
-		#expect(VStack { Text("a"); Text("b") }.renderThroughBuffer()
+		#expect(VStack { Text("a"); Text("b") }.markup.html
 			== "<div class=\"vstack spacing-8 align-flex-start\">\nab\n</div>")
-		#expect(HStack { Text("a") }.renderThroughBuffer()
+		#expect(HStack { Text("a") }.markup.html
 			== "<div class=\"hstack spacing-8 align-center\">\na\n</div>")
-		#expect(ZStack { Text("z") }.renderThroughBuffer()
+		#expect(ZStack { Text("z") }.markup.html
 			== "<div class=\"zstack\" style=\"display:grid;place-items:center center;\">\nz\n</div>")
-		#expect(Grid { Text("g") }.renderThroughBuffer()
+		#expect(Grid { Text("g") }.markup.html
 			== "<div class=\"grid\" style=\"display:grid;grid-template-columns:repeat(2, 1fr);gap:16px;\">\ng\n</div>")
 	}
 
 	@Test("an empty stack keeps its literal newlines")
 	func emptyStack() {
-		#expect(VStack { }.renderThroughBuffer() == "<div class=\"vstack spacing-8 align-flex-start\">\n\n</div>")
+		#expect(VStack { }.markup.html == "<div class=\"vstack spacing-8 align-flex-start\">\n\n</div>")
 	}
 
 	@Test("nested containers share one buffer and keep their bytes")
 	func nestedContainers() {
 		let view = VStack { Div { Text("x") }; Span { Text("y") } }
-		#expect(view.renderThroughBuffer()
+		#expect(view.markup.html
 			== "<div class=\"vstack spacing-8 align-flex-start\">\n<div>x</div><span>y</span>\n</div>")
 	}
 
 	@Test("a migrated view renders the same bytes on every call")
 	func deterministic() {
 		let view = VStack { Div(id: "i") { Text("x") } }
-		#expect(view.renderThroughBuffer() == view.renderThroughBuffer())
+		#expect(view.markup.html == view.markup.html)
 	}
 
 	@Test("a contribution drains into the container's own element")
@@ -160,8 +160,8 @@ struct RenderIntoBufferTests {
 
 	@Test("a container reaches its children through any View")
 	func containerDispatchesToChildren() {
-		#expect(Div { BufferOverride() }.renderThroughBuffer() == "<div>from buffer</div>")
-		#expect(VStack { BufferOverride() }.renderThroughBuffer()
+		#expect(Div { BufferOverride() }.markup.html == "<div>from buffer</div>")
+		#expect(VStack { BufferOverride() }.markup.html
 			== "<div class=\"vstack spacing-8 align-flex-start\">\nfrom buffer\n</div>")
 	}
 

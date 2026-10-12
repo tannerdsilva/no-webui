@@ -8,7 +8,7 @@ import WebUIDesignSystem
 struct WebUIEngineStatusTests {
 	@Test("renders the mirror contract with both states and an honest default")
 	func rendersContract() {
-		let html = WebUIEngineStatus().renderThroughBuffer()
+		let html = WebUIEngineStatus().markup.html
 		#expect(html.contains("data-webui-status"))
 		#expect(html.contains("data-webui-state=\"reconnecting\""))
 		#expect(html.contains("__state--connected"))
@@ -23,7 +23,7 @@ struct WebUIEngineStatusTests {
 struct WebUIThemeToggleTests {
 	@Test("renders the three choices with the engine contract")
 	func rendersContract() {
-		let html = WebUIThemeToggle().renderThroughBuffer()
+		let html = WebUIThemeToggle().markup.html
 		#expect(html.contains("data-theme-choice=\"system\""))
 		#expect(html.contains("data-theme-choice=\"light\""))
 		#expect(html.contains("data-theme-choice=\"dark\""))

@@ -65,11 +65,11 @@ public enum WebUIBlocks {
 	/// the socket-backed status chip and the theme toggle behave like a page).
 	public static func page(for block: Block, dir: String? = nil) -> String {
 		WebUIDocument(title: "WebUI block - " + block.title,
- body: body(for: block),
+        body: .trusted(body(for: block)),
  dir: dir,
  includeRuntime: true,
  checkClasses: true
-).renderThroughBuffer()
+).markup.html
 	}
 
 	/// The block's page body (no document chrome).
@@ -108,11 +108,11 @@ public enum WebUIBlocks {
 				}
 			}
 			.padding(24)
-			.renderThroughBuffer(),
- dir: dir,
+			.markup,
+			dir: dir,
  includeRuntime: true,
  checkClasses: true
-).renderThroughBuffer()
+).markup.html
 	}
 
 	// MARK: Shared chrome
@@ -201,7 +201,7 @@ public enum WebUIBlocks {
 			}
 		}
 		.padding(24)
-		.renderThroughBuffer()
+		.markup.html
 	}
 
 	// MARK: Auth
@@ -243,7 +243,7 @@ public enum WebUIBlocks {
 )
 		}
 		.padding(24)
-		.renderThroughBuffer()
+		.markup.html
 	}
 
 	private static func signupBody() -> String {
@@ -275,7 +275,7 @@ public enum WebUIBlocks {
 )
 		}
 		.padding(24)
-		.renderThroughBuffer()
+		.markup.html
 	}
 
 // MARK: Patterns (p7 long tail)
@@ -354,7 +354,7 @@ public enum WebUIBlocks {
 			}
 		}
 		.padding(24)
-		.renderThroughBuffer()
+		.markup.html
 	}
 
 	// MARK: Sidebar family
@@ -413,8 +413,8 @@ public enum WebUIBlocks {
 				}
 			}
 			.padding(16)
-			.renderThroughBuffer()
+			.markup.html
 		}
-		return shell.renderThroughBuffer()
+		return shell.markup.html
 	}
 }

@@ -260,7 +260,7 @@ func counterValueHTML(_ n: Int) -> String {
 }
 
 func progressValueHTML(_ value: Double) -> String {
-	let bar = WebUIProgress(value: value, variant: .primary, showLabel: true, size: .md).renderThroughBuffer()
+	let bar = WebUIProgress(value: value, variant: .primary, showLabel: true, size: .md).markup.html
 	return "<div id=\"progress-value\">\(bar)</div>"
 }
 
@@ -344,17 +344,17 @@ func renderDashboard(state: AuthDemoState, auth: AuthContext, logoutToken: Strin
 					}
 				}
 			}
-			.renderThroughBuffer()
+			.markup.html
 		}
 	}
 	let document = WebUIDocument(
 		title: "Member Dashboard",
-		body: html,
+		body: .trusted(html),
 		// the per-render websocket token: the runtime echoes it with every
 		// event/ping, and the server only routes messages carrying a token it
 		// minted for this session (cross-session replay protection).
 		runtimeConfig: RuntimeConfig(renderToken: renderToken)
-	).renderThroughBuffer()
+	).markup.html
 	return (html: document, router: router)
 }
 
@@ -400,14 +400,14 @@ func renderLoginPage(error: String?, csrfToken: String) -> String {
 	}
 	return WebUIDocument(
 		title: "Sign in",
-		body: body.renderThroughBuffer(),
+		body: body.markup,
 		includeRuntime: false,
 		// form-action + base-uri are meta-valid CSP directives; clickjacking
 		// control is delivered as an X-Frame-Options header on the response
 		// (frame-ancestors is header-only and inert in a meta element).
 		contentSecurityPolicy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; form-action 'self'; base-uri 'self'",
 		rawStyles: [loginLayoutStyles]
-	).renderThroughBuffer()
+	).markup.html
 }
 
 // MARK: - URL-encoded body parsing (single-purpose, for POST /login)

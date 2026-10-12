@@ -81,7 +81,7 @@ public struct WebUINavbar: View {
         }
         if !actions.isEmpty {
             html += "<div class=\"navbar__actions\">"
-            for a in actions { html += a.renderThroughBuffer() }
+            for a in actions { html += a.markup.html }
             html += "</div>"
         }
         if mobileMenu {
@@ -126,7 +126,7 @@ public struct WebUIBottomNav: View {
         for (index, item) in items.enumerated() {
             let itemID = id.map { " id=\"\(htmlEscape("\($0)-item-\(index)"))\"" } ?? ""
             html += "<a class=\"bottom-nav__item\(item.active ? " bottom-nav__item--active" : "")\"\(itemID) href=\"#\">"
-            html += "<span class=\"bottom-nav__icon\">\(WebUIIcon(item.icon, size: .medium).renderThroughBuffer())</span>"
+            html += "<span class=\"bottom-nav__icon\">\(WebUIIcon(item.icon, size: .medium).markup.html)</span>"
             if let badge = item.badge {
                 html += "<span class=\"bottom-nav__badge\">\(htmlEscape(badge))</span>"
             }
@@ -198,7 +198,7 @@ public struct WebUIFab: View {    @available(*, deprecated, renamed: "Tone")
         if let id { html += " id=\"\(htmlEscape(id))\"" }
         html += "\(tapAttrs)"
         html += Aria.label(label ?? "").render() + ">"
-        html += "<span class=\"fab__icon\">\(WebUIIcon(icon, size: .medium).renderThroughBuffer())</span>"
+        html += "<span class=\"fab__icon\">\(WebUIIcon(icon, size: .medium).markup.html)</span>"
         if let label {
             html += "<span class=\"fab__label\">\(htmlEscape(label))</span>"
         }
@@ -215,7 +215,7 @@ public struct WebUISpeedDial: View {
 
     public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"fab-stage fab-stage--dial\">"
-        for c in children { html += c.renderThroughBuffer() }
+        for c in children { html += c.markup.html }
         html += "</div>"
         buffer.append(html)
     }
@@ -314,7 +314,7 @@ public struct WebUIButtonGroup: View {
 
     public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"button-group\"" + AriaRole.group.render() + ">"
-        for c in children { html += c.renderThroughBuffer() }
+        for c in children { html += c.markup.html }
         html += "</div>"
         buffer.append(html)
     }
@@ -402,7 +402,7 @@ public struct WebUIAccordion: View {
         public let open: Bool
         public let children: String
         public init(_ title: String, open: Bool = false, @ViewBuilder content: () -> [any View]) {
-            self.title = title; self.open = open; self.children = content().map { $0.renderThroughBuffer() }.joined()
+            self.title = title; self.open = open; self.children = content().map { $0.markup.html }.joined()
         }
     }
     public let items: [Item]
@@ -469,7 +469,7 @@ public struct WebUICollapse: View {
         let headerID = id.map { " id=\"\(htmlEscape($0))\"" } ?? ""
         html += "<button class=\"collapse__header\"\(headerID)" + Aria.expanded(open ? .yes : .no).render() + "><span class=\"collapse__chevron\"></span>\(htmlEscape(header))</button>"
         html += "<div class=\"collapse__content\"><div class=\"collapse__inner\">"
-        for c in children { html += c.renderThroughBuffer() }
+        for c in children { html += c.markup.html }
         html += "</div></div></div>"
         buffer.append(html)
     }
@@ -571,11 +571,11 @@ public struct WebUIBottomSheet: View {
             html += "<div class=\"bottom-sheet__header\"><div class=\"bottom-sheet__title\">\(htmlEscape(title))</div><button class=\"bottom-sheet__close\"\(closeID)" + Aria.label(RenderContext.currentStrings.close).render() + ">×</button></div>"
         }
         html += "<div class=\"bottom-sheet__body\">"
-        for c in children { html += c.renderThroughBuffer() }
+        for c in children { html += c.markup.html }
         html += "</div>"
         if !footer.isEmpty {
             html += "<div class=\"bottom-sheet__footer\">"
-            for f in footer { html += f.renderThroughBuffer() }
+            for f in footer { html += f.markup.html }
             html += "</div>"
         }
         html += "</div>"
@@ -642,11 +642,11 @@ public struct WebUIDrawer: View {
             html += "<div class=\"drawer__header\"><div class=\"drawer__title\">\(htmlEscape(title))</div><button class=\"drawer__close\"\(closeID)" + Aria.label(RenderContext.currentStrings.close).render() + ">×</button></div>"
         }
         html += "<div class=\"drawer__content\">"
-        for c in children { html += c.renderThroughBuffer() }
+        for c in children { html += c.markup.html }
         html += "</div>"
         if !footer.isEmpty {
             html += "<div class=\"drawer__footer\">"
-            for f in footer { html += f.renderThroughBuffer() }
+            for f in footer { html += f.markup.html }
             html += "</div>"
         }
         html += "</div></div>"
@@ -690,7 +690,7 @@ public struct WebUIPopover: View {
         if let text { html += "<div class=\"popover__text\">\(htmlEscape(text))</div>" }
         if !children.isEmpty {
             html += "<div class=\"popover__actions\">"
-            for c in children { html += c.renderThroughBuffer() }
+            for c in children { html += c.markup.html }
             html += "</div>"
         }
         html += "</div>"
@@ -726,7 +726,7 @@ public struct WebUIHoverCard: View {
         if !domain.isEmpty { html += "<div class=\"hovercard__domain\">\(htmlEscape(domain))</div>" }
         if !children.isEmpty {
             html += "<div class=\"hovercard__actions\">"
-            for c in children { html += c.renderThroughBuffer() }
+            for c in children { html += c.markup.html }
             html += "</div>"
         }
         html += "</div></div>"
@@ -904,7 +904,7 @@ public struct WebUIMenu: View {
             if let avatar = item.avatar {
                 html += "<span class=\"menu__avatar\"><span class=\"avatar avatar--initials avatar--sm\">\(htmlEscape(avatar))</span></span>"
             }
-            if let icon = item.icon { html += "<span class=\"menu__icon\">\(WebUIIcon(icon, size: .small).renderThroughBuffer())</span>" }
+            if let icon = item.icon { html += "<span class=\"menu__icon\">\(WebUIIcon(icon, size: .small).markup.html)</span>" }
             html += "<span class=\"menu__label\">\(htmlEscape(item.label))</span>"
             if let hint = item.hint { html += "<span class=\"menu__hint\">\(htmlEscape(hint))</span>" }
             if let shortcut = item.shortcut { html += "<span class=\"menu__shortcut\">\(htmlEscape(shortcut))</span>" }
@@ -929,7 +929,7 @@ public struct WebUIContextMenu: View {
 
     public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"context-menu\">"
-        let menu = WebUIMenu(items: items, id: id, onSelect: onSelect).renderThroughBuffer()
+        let menu = WebUIMenu(items: items, id: id, onSelect: onSelect).markup.html
         html += menu
         html += "</div>"
         buffer.append(html)
@@ -961,7 +961,7 @@ public struct WebUIDropdown: View {
         let triggerID = id.map { " id=\"\(htmlEscape("\($0)-trigger"))\"" } ?? ""
         html += "<button class=\"dropdown__trigger\"\(triggerID)>\(htmlEscape(trigger))<span class=\"dropdown__chevron\">▾</span></button>"
         html += "<div class=\"dropdown__panel\">"
-        for c in children { html += c.renderThroughBuffer() }
+        for c in children { html += c.markup.html }
         html += "</div></div>"
         buffer.append(html)
     }
@@ -1112,7 +1112,7 @@ public struct WebUISeparator: View {
                 return
             }
             if let icon {
-                let glyph = WebUIIcon(icon, size: .slot).renderThroughBuffer()
+                let glyph = WebUIIcon(icon, size: .slot).markup.html
                 buffer.append("<div class=\"divider divider--icon\(strong ? " divider--strong" : "")\"" + AriaRole.separator.render() + "><span class=\"divider__label\">\(glyph)</span></div>")
                 return
             }
@@ -1230,7 +1230,7 @@ public struct WebUIScrollTop: View {
             html += "<circle class=\"ring__fill\" cx=\"18\" cy=\"18\" r=\"15.915\" stroke-dasharray=\"100\" stroke-dashoffset=\"\(offset)\"/>"
             html += "</svg>"
         }
-        html += "<span class=\"scroll-top__icon\">" + WebUIIcon(icon, size: .medium).renderThroughBuffer() + "</span>"
+        html += "<span class=\"scroll-top__icon\">" + WebUIIcon(icon, size: .medium).markup.html + "</span>"
         html += "</button>"
         buffer.append(html)
     }

@@ -59,8 +59,11 @@ Each fork in the design is resolved here with a decision and a rationale.
 | Phishing-resistant device binding | by construction | only via WebAuthn (roadmap); passwords are v1 |
 | Multi-identity per network endpoint | one device → one user per IP | per-browser identity — a strict improvement for "whose reservation is this" |
 
-**What does not change:** the rendering core. `View.render() -> String` stays
-pure, views stay `Sendable` value types, one router per render pass stays the
+**What does not change:** the rendering core. `View` stays pure — a view writes its
+bytes through the buffered render requirement, and `BufferRendering.markup`
+materializes them as an `UnsafeMarkup`; the 1.x spelling `View.render() -> String`
+is deprecated but still compiles (`markup.html`). views stay `Sendable` value types,
+one router per render pass stays the
 house rule, CSP nonces, the sanitizer stack, `CSRFProtection`'s mechanism, and
 the absence of a `script` WS message all survive verbatim. Auth is a new layer,
 not a restructuring of the render model.

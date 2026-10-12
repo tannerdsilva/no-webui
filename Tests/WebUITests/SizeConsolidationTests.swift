@@ -23,7 +23,7 @@ import WebUIDesignSystem
 // the migration, so every commit is green.
 
 private func render(_ view: some View) -> String {
-    RenderContext.$current.withValue(RenderContext(router: EventRouter())) { view.renderThroughBuffer() }
+    RenderContext.$current.withValue(RenderContext(router: EventRouter())) { view.markup.html }
 }
 
 @Suite("one ControlSize")

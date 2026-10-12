@@ -1,28 +1,10 @@
-// the typed escape hatches (W2.3).
+// the view-level escape hatch.
 //
-// shipping bytes into a page from a call site is the one thing the framework
-// cannot verify — so it is the one thing that must be loud. `UnsafeMarkup` has no
-// public initializer: the only way to obtain one is `.trusted(_:)`. that makes
-// every unverified byte in a page one grep away, and `UnsafeMarkup.trusted` names
-// the exact lines where someone took responsibility.
-
-/// html known to be safe by construction.
-///
-/// the only way to obtain one is ``trusted(_:)`` — an explicit, grep-able act —
-/// or a value the framework itself produced (a sanitizer, or a `View`'s own
-/// render).
-public struct UnsafeMarkup: Sendable, Equatable {
-    /// the markup, verbatim.
-    ///
-    /// readable so a host can inspect what it trusted; there is deliberately no
-    /// public initializer, so it cannot be *created* from outside.
-    public let html: String
-
-    private init(_ html: String) { self.html = html }
-
-    /// take responsibility for these bytes.
-    public static func trusted(_ html: String) -> UnsafeMarkup { UnsafeMarkup(html) }
-}
+// every byte that reaches a page is escaped by the framework's encoders except
+// through this one type: `Raw` emits its payload verbatim. the payload is the
+// leaf's trust token, `UnsafeMarkup` (from `WebUISharedCore`) — the only public
+// way to obtain one is `.trusted(_:)`, which makes the lines where someone took
+// responsibility for unescaped bytes one grep away.
 
 /// a view whose content is emitted verbatim, with no escaping.
 public struct Raw: View {

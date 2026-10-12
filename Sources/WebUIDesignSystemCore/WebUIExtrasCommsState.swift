@@ -96,7 +96,7 @@ public struct WebUINotification: View {
     public func render(into buffer: inout HTMLBuffer) {
         let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onTap) } ?? ""
         var html = "<div class=\"notification\(read ? " notification--read" : "")\"\(attrs)>"
-        if let icon { html += "<span class=\"notification__icon\">\(WebUIIcon(icon, size: .medium).renderThroughBuffer())</span>" }
+        if let icon { html += "<span class=\"notification__icon\">\(WebUIIcon(icon, size: .medium).markup.html)</span>" }
         else { html += "<span class=\"notification__icon\"><span class=\"notification__unread\"></span></span>" }
         html += "<div class=\"notification__body\">"
         if let title { html += "<div class=\"notification__title\">\(htmlEscape(title))</div>" }
@@ -115,7 +115,7 @@ public struct WebUIToastStack: View {
 
     public func render(into buffer: inout HTMLBuffer) {
         var html = "<div class=\"toast-stack\"" + Aria.live(.polite).render() + ">"
-        for c in children { html += c.renderThroughBuffer() }
+        for c in children { html += c.markup.html }
         html += "</div>"
         buffer.append(html)
     }
@@ -135,7 +135,7 @@ public struct WebUIBell: View {
     public func render(into buffer: inout HTMLBuffer) {
         let attrs = id.map { controlAttributes(id: $0, event: .click, handler: onTap) } ?? ""
         var html = "<button class=\"bell\"\(attrs)" + Aria.label(RenderContext.currentStrings.notifications + (count > 0 ? RenderContext.currentStrings.unreadCount(count) : "")).render() + ">"
-        html += "<span class=\"bell__icon\">\(WebUIIcon(icon, size: .medium).renderThroughBuffer())</span>"
+        html += "<span class=\"bell__icon\">\(WebUIIcon(icon, size: .medium).markup.html)</span>"
         if count > 0 { html += "<span class=\"bell__badge\">\(count)</span>" }
         html += "</button>"
         buffer.append(html)
@@ -269,7 +269,7 @@ public struct WebUICookieConsent: View {
         if let title { html += "<div class=\"cookie-consent__title\">\(htmlEscape(title))</div>" }
         html += "<div class=\"cookie-consent__text\">\(htmlEscape(text))</div>"
         html += "<div class=\"cookie-consent__actions\">"
-        for c in children { html += c.renderThroughBuffer() }
+        for c in children { html += c.markup.html }
         html += "</div></div></div>"
         buffer.append(html)
     }
@@ -395,7 +395,7 @@ public struct WebUIBadgeCount: View {
 
     public func render(into buffer: inout HTMLBuffer) {
         var html = "<span class=\"badge-count\">"
-        html += "<span class=\"badge-count__icon\">\(WebUIIcon(icon, size: .medium).renderThroughBuffer())</span>"
+        html += "<span class=\"badge-count__icon\">\(WebUIIcon(icon, size: .medium).markup.html)</span>"
         html += "<span class=\"badge-count__num\">\(count)</span>"
         html += "</span>"
         buffer.append(html)
@@ -535,7 +535,7 @@ public struct WebUIBanner: View, Dismissible {    @available(*, deprecated, rena
             html += " id=\"\(htmlEscape(elementID))\""
         }
         html += ">"
-        html += "<div class=\"banner__icon fill-slot\">" + WebUIIcon(icon, size: .slot).renderThroughBuffer() + "</div>"
+        html += "<div class=\"banner__icon fill-slot\">" + WebUIIcon(icon, size: .slot).markup.html + "</div>"
         html += "<div class=\"banner__body\">"
         if let title {
             html += "<span class=\"banner__title\">\(htmlEscape(title))</span>"
@@ -587,7 +587,7 @@ public struct WebUIActivityFeed: View {
             html += "<div class=\"activity__group\">\(htmlEscape(group.title))</div>"
             for item in group.items {
                 html += "<div class=\"activity__item\">"
-                html += "<div class=\"activity__icon fill-slot\">" + WebUIIcon(item.icon, size: .slot).renderThroughBuffer() + "</div>"
+                html += "<div class=\"activity__icon fill-slot\">" + WebUIIcon(item.icon, size: .slot).markup.html + "</div>"
                 html += "<div class=\"activity__text\">\(htmlEscape(item.text))</div>"
                 if let time = item.time {
                     html += "<span class=\"activity__time\">\(htmlEscape(time))</span>"
@@ -640,7 +640,7 @@ public struct WebUIMessageScroller: View {
         html += " style=\"height: \(size); max-height: \(size)\""
         html += Aria.attributes([.live(.polite), .label(ariaLabel)], role: .log) + " tabindex=\"0\">"
         for child in children.reversed() {
-            html += child.renderThroughBuffer()
+            html += child.markup.html
         }
         html += "</div>"
         buffer.append(html)
@@ -668,7 +668,7 @@ public struct WebUIMarker: View {
         var html = "<div class=\"marker\(sticky ? " marker--sticky" : "")\"" + AriaRole.separator.render() + ">"
         if spread { html += "<span class=\"marker__rule\"></span>" }
         if let icon {
-            html += "<span class=\"marker__glyph\">" + WebUIIcon(icon, size: .slot).renderThroughBuffer() + "</span>"
+            html += "<span class=\"marker__glyph\">" + WebUIIcon(icon, size: .slot).markup.html + "</span>"
         }
         html += "<span class=\"marker__label\">\(htmlEscape(label))</span>"
         if spread { html += "<span class=\"marker__rule\"></span>" }
@@ -737,7 +737,7 @@ public struct WebUIAttachment: View, Dismissible {
             html += " id=\"\(htmlEscape(elementID))\""
         }
         html += ">"
-        html += "<span class=\"attachment__icon\">" + WebUIIcon(icon, size: .small).renderThroughBuffer() + "</span>"
+        html += "<span class=\"attachment__icon\">" + WebUIIcon(icon, size: .small).markup.html + "</span>"
         html += "<span class=\"attachment__body\">"
         html += "<span class=\"attachment__name\">\(htmlEscape(name))</span>"
         if let meta {
@@ -832,7 +832,7 @@ public struct WebUIChatBubble: View {
             extraClass = " chat__receipt--read"
         }
         return "<span class=\"chat__receipt\(extraClass)\"" + Aria.attributes([.label(label)], role: .img) + ">"
-            + WebUIIcon(icon, size: .small).renderThroughBuffer() + "</span>"
+            + WebUIIcon(icon, size: .small).markup.html + "</span>"
     }
 
     public func render(into buffer: inout HTMLBuffer) {

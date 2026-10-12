@@ -9,7 +9,7 @@ import WebUIDesignSystem
 // and every 1.x spelling still resolves and still renders the same bytes.
 
 private func render(_ view: some View) -> String {
-    RenderContext.$current.withValue(RenderContext(router: EventRouter())) { view.renderThroughBuffer() }
+    RenderContext.$current.withValue(RenderContext(router: EventRouter())) { view.markup.html }
 }
 
 @Suite("the duplicated types are one type each")

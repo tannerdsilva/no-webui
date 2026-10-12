@@ -63,15 +63,18 @@ part of `DesignToken`: they are scoped to their selector and would ignore a
 a theme carries **both modes** plus a default, and can inherit:
 
 ```swift
+import WebUI
+import WebUIDesignSystem
+
 @Theme(base: NexusBase.self)
 struct Poseidon {
     static let defaultMode = ThemeMode.dark      // `.automatic` follows the OS
     static let colorPrimarySolid = "#268BD2"     // a `static let <token>` is an override
     static let customTokens = ["--chat-bubble-bg": "#2a2a2e"]
-    static let rules: [CSSRule] = [.chatBubble]  // escape hatch, last resort
+    static let rules: [CSSRule] = [CSSRule(".chat-bubble", [CSSDeclaration("border-radius", "8px")])]  // escape hatch, last resort
 }
 
-WebUIDocument(body: page, theme: Poseidon.theme)
+WebUIDocument(body: VStack { Text("hello") }.markup, theme: Poseidon.theme)
 ```
 
 reserved members map to the axes — `palette` (the base palette), `dark` (the

@@ -27,7 +27,7 @@ struct EventDeckTests {
     /// forgets the context sees an inert control and fails its own probe.
     private func rendered(_ v: ModifiedView<Text, EventHandlerModifier>) -> String {
         RenderContext.$current.withValue(RenderContext(router: EventRouter())) {
-            v.renderThroughBuffer()
+            v.markup.html
         }
     }
 
@@ -197,7 +197,7 @@ struct EventDeckTests {
                     seen.withLock { $0.append("paste \(p.text ?? "?") \(p.html ?? "?")") }
                     return []
                 }
-            }.renderThroughBuffer()
+            }.markup.html
         }
 
         // every control must have registered, and each rendered marker names

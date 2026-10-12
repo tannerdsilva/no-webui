@@ -36,53 +36,53 @@ import WebUIDesignSystem
 private func sugar(for event: HTMLEvent, _ handler: @escaping EventHandler) -> String {
     RenderContext.$current.withValue(RenderContext(router: EventRouter())) {
         switch event {
-        case .click:     return Text("x").onClick(perform: handler).renderThroughBuffer()
-        case .submit:    return Text("x").onSubmit(perform: handler).renderThroughBuffer()
-        case .input:     return Text("x").onInput(perform: handler).renderThroughBuffer()
-        case .change:    return Text("x").onChange(perform: handler).renderThroughBuffer()
-        case .mouseover: return Text("x").onMouseOver(perform: handler).renderThroughBuffer()
-        case .mouseout:  return Text("x").onMouseOut(perform: handler).renderThroughBuffer()
-        case .mousedown: return Text("x").onMouseDown(perform: handler).renderThroughBuffer()
-        case .mouseup:   return Text("x").onMouseUp(perform: handler).renderThroughBuffer()
-        case .keydown:   return Text("x").onKeyDown(perform: handler).renderThroughBuffer()
-        case .keyup:     return Text("x").onKeyUp(perform: handler).renderThroughBuffer()
-        case .keypress:  return Text("x").onKeyPress(perform: handler).renderThroughBuffer()
-        case .focus:     return Text("x").onFocus(perform: handler).renderThroughBuffer()
-        case .blur:      return Text("x").onBlur(perform: handler).renderThroughBuffer()
-        case .focusin:   return Text("x").onFocusIn(perform: handler).renderThroughBuffer()
-        case .focusout:  return Text("x").onFocusOut(perform: handler).renderThroughBuffer()
-        case .pointerdown: return Text("x").onPointerDown(perform: handler).renderThroughBuffer()
-        case .pointermove: return Text("x").onPointerMove(perform: handler).renderThroughBuffer()
-        case .pointerup:   return Text("x").onPointerUp(perform: handler).renderThroughBuffer()
-        case .pointercancel: return Text("x").onPointerCancel(perform: handler).renderThroughBuffer()
-        case .pointerenter:  return Text("x").onPointerEnter(perform: handler).renderThroughBuffer()
-        case .pointerleave:  return Text("x").onPointerLeave(perform: handler).renderThroughBuffer()
-        case .touchstart: return Text("x").onTouchStart(perform: handler).renderThroughBuffer()
-        case .touchmove:  return Text("x").onTouchMove(perform: handler).renderThroughBuffer()
-        case .touchend:   return Text("x").onTouchEnd(perform: handler).renderThroughBuffer()
-        case .dragstart:  return Text("x").onDragStart(perform: handler).renderThroughBuffer()
-        case .drag:       return Text("x").onDrag(perform: handler).renderThroughBuffer()
-        case .dragend:    return Text("x").onDragEnd(perform: handler).renderThroughBuffer()
-        case .dragenter:  return Text("x").onDragEnter(perform: handler).renderThroughBuffer()
-        case .dragover:   return Text("x").onDragOver(perform: handler).renderThroughBuffer()
-        case .dragleave:  return Text("x").onDragLeave(perform: handler).renderThroughBuffer()
-        case .drop:       return Text("x").onDrop(perform: handler).renderThroughBuffer()
-        case .copy:       return Text("x").onCopy(perform: handler).renderThroughBuffer()
-        case .cut:        return Text("x").onCut(perform: handler).renderThroughBuffer()
-        case .paste:      return Text("x").onPaste(perform: handler).renderThroughBuffer()
-        case .wheel:      return Text("x").onWheel(perform: handler).renderThroughBuffer()
-        case .scroll:     return Text("x").onScroll(perform: handler).renderThroughBuffer()
-        case .dblclick:   return Text("x").onDoubleClick(perform: handler).renderThroughBuffer()
-        case .contextmenu: return Text("x").onContextMenu(perform: handler).renderThroughBuffer()
-        case .animationend: return Text("x").onAnimationEnd(perform: handler).renderThroughBuffer()
-        case .transitionend: return Text("x").onTransitionEnd(perform: handler).renderThroughBuffer()
-        case .play:       return Text("x").onPlay(perform: handler).renderThroughBuffer()
-        case .pause:      return Text("x").onPause(perform: handler).renderThroughBuffer()
-        case .ended:      return Text("x").onEnded(perform: handler).renderThroughBuffer()
-        case .timeupdate: return Text("x").onTimeUpdate(perform: handler).renderThroughBuffer()
-        case .loadedmetadata: return Text("x").onLoadedMetadata(perform: handler).renderThroughBuffer()
-        case .error:      return Text("x").onError(perform: handler).renderThroughBuffer()
-        case .custom:    return Text("x").on(event, perform: handler).renderThroughBuffer()
+        case .click:     return Text("x").onClick(perform: handler).markup.html
+        case .submit:    return Text("x").onSubmit(perform: handler).markup.html
+        case .input:     return Text("x").onInput(perform: handler).markup.html
+        case .change:    return Text("x").onChange(perform: handler).markup.html
+        case .mouseover: return Text("x").onMouseOver(perform: handler).markup.html
+        case .mouseout:  return Text("x").onMouseOut(perform: handler).markup.html
+        case .mousedown: return Text("x").onMouseDown(perform: handler).markup.html
+        case .mouseup:   return Text("x").onMouseUp(perform: handler).markup.html
+        case .keydown:   return Text("x").onKeyDown(perform: handler).markup.html
+        case .keyup:     return Text("x").onKeyUp(perform: handler).markup.html
+        case .keypress:  return Text("x").onKeyPress(perform: handler).markup.html
+        case .focus:     return Text("x").onFocus(perform: handler).markup.html
+        case .blur:      return Text("x").onBlur(perform: handler).markup.html
+        case .focusin:   return Text("x").onFocusIn(perform: handler).markup.html
+        case .focusout:  return Text("x").onFocusOut(perform: handler).markup.html
+        case .pointerdown: return Text("x").onPointerDown(perform: handler).markup.html
+        case .pointermove: return Text("x").onPointerMove(perform: handler).markup.html
+        case .pointerup:   return Text("x").onPointerUp(perform: handler).markup.html
+        case .pointercancel: return Text("x").onPointerCancel(perform: handler).markup.html
+        case .pointerenter:  return Text("x").onPointerEnter(perform: handler).markup.html
+        case .pointerleave:  return Text("x").onPointerLeave(perform: handler).markup.html
+        case .touchstart: return Text("x").onTouchStart(perform: handler).markup.html
+        case .touchmove:  return Text("x").onTouchMove(perform: handler).markup.html
+        case .touchend:   return Text("x").onTouchEnd(perform: handler).markup.html
+        case .dragstart:  return Text("x").onDragStart(perform: handler).markup.html
+        case .drag:       return Text("x").onDrag(perform: handler).markup.html
+        case .dragend:    return Text("x").onDragEnd(perform: handler).markup.html
+        case .dragenter:  return Text("x").onDragEnter(perform: handler).markup.html
+        case .dragover:   return Text("x").onDragOver(perform: handler).markup.html
+        case .dragleave:  return Text("x").onDragLeave(perform: handler).markup.html
+        case .drop:       return Text("x").onDrop(perform: handler).markup.html
+        case .copy:       return Text("x").onCopy(perform: handler).markup.html
+        case .cut:        return Text("x").onCut(perform: handler).markup.html
+        case .paste:      return Text("x").onPaste(perform: handler).markup.html
+        case .wheel:      return Text("x").onWheel(perform: handler).markup.html
+        case .scroll:     return Text("x").onScroll(perform: handler).markup.html
+        case .dblclick:   return Text("x").onDoubleClick(perform: handler).markup.html
+        case .contextmenu: return Text("x").onContextMenu(perform: handler).markup.html
+        case .animationend: return Text("x").onAnimationEnd(perform: handler).markup.html
+        case .transitionend: return Text("x").onTransitionEnd(perform: handler).markup.html
+        case .play:       return Text("x").onPlay(perform: handler).markup.html
+        case .pause:      return Text("x").onPause(perform: handler).markup.html
+        case .ended:      return Text("x").onEnded(perform: handler).markup.html
+        case .timeupdate: return Text("x").onTimeUpdate(perform: handler).markup.html
+        case .loadedmetadata: return Text("x").onLoadedMetadata(perform: handler).markup.html
+        case .error:      return Text("x").onError(perform: handler).markup.html
+        case .custom:    return Text("x").on(event, perform: handler).markup.html
         }
     }
 }
@@ -144,7 +144,7 @@ struct InteractivityIdiomTests {
         // modifier path registers through the context, so with no context there is
         // nothing to route to. it warns rather than failing, which is why a silent
         // dead control is possible at all.
-        let html = Text("x").onClick { _ in [] }.renderThroughBuffer()
+        let html = Text("x").onClick { _ in [] }.markup.html
         #expect(!html.contains("data-event="), "outside a context there is nothing to emit: \(html)")
     }
 
@@ -160,7 +160,7 @@ struct InteractivityIdiomTests {
         let componentHTML = await RenderContext.$current.withValue(context) {
             WebUIInput(placeholder: "p", id: "field").onInput { _ in
                 [FragmentUpdate(id: "out", html: "ok")]
-            }.renderThroughBuffer()
+            }.markup.html
         }
 
         #expect(modifierHTML.contains("data-event=\"input\""))

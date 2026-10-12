@@ -78,7 +78,7 @@ struct EventPayloadTests {
             WebUIInput(placeholder: "p", id: "field").onInput { event in
                 seen.withLock { $0.append(event.value) }
                 return []
-            }.renderThroughBuffer()
+            }.markup.html
         }
 
         // the rendered attribute names the component the runtime will dispatch to.

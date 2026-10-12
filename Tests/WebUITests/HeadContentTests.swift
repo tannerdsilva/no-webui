@@ -14,7 +14,7 @@ struct HeadContentTests {
 
     @Test("Raw's typed initializer emits verbatim")
     func rawTyped() {
-        #expect(Raw(UnsafeMarkup.trusted("<b>x</b>")).renderThroughBuffer() == "<b>x</b>")
+        #expect(Raw(UnsafeMarkup.trusted("<b>x</b>")).markup.html == "<b>x</b>")
     }
 
     @Test("the payload is readable, so a host can audit what it trusted")
@@ -75,8 +75,8 @@ struct HeadContentTests {
 
     @Test("the document injects its own nonce into head scripts")
     func documentInjectsNonce() {
-        let doc = HTMLDocument(body: "<p>x</p>", headContent: .script(src: "/a.js"))
-        let html = doc.renderedString()
+        let doc = HTMLDocument(body: .trusted("<p>x</p>"), headContent: .script(src: "/a.js"))
+        let html = doc.markup.html
         #expect(html.contains("nonce=\"\(doc.nonce)\""))
         #expect(html.contains("src=\"/a.js\""))
     }
@@ -124,12 +124,12 @@ struct HeadContentTests {
 
     @Test("direction is typed now, and still validated")
     func typedDirection() {
-        #expect(HTMLDocument(body: "x", direction: .rtl).renderedString().contains(" dir=\"rtl\""))
-        #expect(HTMLDocument(body: "x", direction: .ltr).renderedString().contains(" dir=\"ltr\""))
+        #expect(HTMLDocument(body: .trusted("x"), direction: .rtl).markup.html.contains(" dir=\"rtl\""))
+        #expect(HTMLDocument(body: .trusted("x"), direction: .ltr).markup.html.contains(" dir=\"ltr\""))
         // the raw string path keeps working, and still drops an unusable value.
-        #expect(HTMLDocument(body: "x", dir: "rtl").renderedString().contains(" dir=\"rtl\""))
-        #expect(!HTMLDocument(body: "x", dir: "sideways").renderedString().contains(" dir="))
+        #expect(HTMLDocument(body: .trusted("x"), dir: "rtl").markup.html.contains(" dir=\"rtl\""))
+        #expect(!HTMLDocument(body: .trusted("x"), dir: "sideways").markup.html.contains(" dir="))
         // the typed slot wins over the raw one.
-        #expect(HTMLDocument(body: "x", dir: "ltr", direction: .rtl).renderedString().contains(" dir=\"rtl\""))
+        #expect(HTMLDocument(body: .trusted("x"), dir: "ltr", direction: .rtl).markup.html.contains(" dir=\"rtl\""))
     }
 }

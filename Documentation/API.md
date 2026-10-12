@@ -7,7 +7,8 @@
 | Protocol | Requirement | Notes |
 |---|---|---|
 | `View` | `func render(into buffer: inout HTMLBuffer)` | the **sole requirement** since the 2.0 flip: writes this view's bytes into a shared render buffer. a requirement deliberately — an extension method would resolve statically, so a view's own implementation would never run through `any View`; the dispatch is pinned by `RenderIntoBufferTests` |
-| `View` | `func render() -> String` | **deprecated extension default**: renders through the buffer and materializes the string. existing call sites keep compiling and rendering identically — the deprecation is the migration signal. it is not a way to *conform*: a type that implements only `render() -> String` does not satisfy the protocol |
+| `View` | `func render() -> String` | **deprecated extension default**: `markup.html`. existing call sites keep compiling and rendering identically — the deprecation is the migration signal. it is not a way to *conform*: a type that implements only `render() -> String` does not satisfy the protocol |
+| `BufferRendering` | `var markup: UnsafeMarkup` | the materializer: renders this value's bytes into an `UnsafeMarkup` the framework vouches for. `View` refines `BufferRendering`, and so do `HTMLDocument`, `WebUIDocument` and `CSSStylesheet` — a document is not a `View`, but it sings the same door |
 | `ViewModifier` | `func apply(to html: String) -> String` | wraps rendered html with attributes or styles |
 | `ViewModifier` | `func decorate<C: View>(_ content: C, into buffer: inout HTMLBuffer)` | *defaulted* requirement: applies the modifier through the buffer; the default applies `apply(to:)` to the content's string render |
 | `ModifiedView<Content: View, M: ViewModifier>` | `View` | type-preserving wrapper returned by every modifier |
@@ -209,6 +210,13 @@ first, then a sheet that must win collisions — same specificity, later source 
 which is why that slot exists rather than a `<link>` in `head:` (a `head` sheet
 renders *before* the base sheet and silently loses the collisions).
 
+`body` (on both `HTMLDocument` and `WebUIDocument`) carries **`UnsafeMarkup`**, not
+`String` — pass a rendered value's `.markup` (`HTMLDocument(body: view.markup)`), or
+for genuinely hand-written bytes wrap them once with `UnsafeMarkup.trusted(_:)`. the
+two seams below, however, deliberately take `String`: `HTMLDocument.diagnostics(body:)`
+and `WebUIDocument.declaredIslandNames(in:)` are pure scans that render nothing, so
+they read the rendered html directly. do not "fix" them.
+
 `HTMLDocument.diagnostics(body:head:stylesheetURL:inlinedComponentStyles:)` answers,
 purely and without logging, which wiring misconfigurations apply to a document;
 `render()` logs each through the `webui.document` logger, unconditionally rather than
@@ -375,6 +383,7 @@ outranks the layered base sheet, and in turn loses to the app's own css.
 | `@Theme` | attached macro: turns a struct of `static let` members into a `WebUIThemeProvider`. reserved members `palette`, `dark`, `defaultMode`, `rules`, `customTokens` map to the axes of `WebUITheme`; every other `static let <name> = <value>` is a token override whose member name must be a `DesignToken` case (compile error otherwise). `@Theme(base: Other.self)` layers the declared overrides over another provider, per palette. |
 
 ```swift
+import WebUI
 import WebUIDesignSystem
 
 @Theme(base: NexusBase.self)
@@ -382,18 +391,18 @@ struct Poseidon {
     static let defaultMode = ThemeMode.dark
     static let colorPrimarySolid = "#268BD2"
     static let customTokens = ["--chat-user-bubble": "#2a2a2e"]
-    static let rules: [CSSRule] = [.chatBubble]
+    static let rules: [CSSRule] = [CSSRule(".chat-bubble", [CSSDeclaration("border-radius", "8px")])]
     static let aliases = [TokenAlias("--bg", .colorBg)]
 }
 
-let page = WebUIDocument(body: body, theme: Poseidon.theme)
+let page = WebUIDocument(body: VStack { Text("hello") }.markup, theme: Poseidon.theme)
 ```
 
 a dynamic overlay rides on top of a static theme:
 
 ```swift
 let doc = WebUIDocument(
-    body: body,
+    body: VStack { Text("hello") }.markup,
     theme: Poseidon.theme.overlaying(
         WebUITheme(palette: ThemePalette(tokens: [.colorPrimarySolid: userAccent]))
     )
@@ -465,7 +474,7 @@ Chart {
             .foregroundStyle(by: d.product)   // series → palette slot + legend
             .stacking(.unstacked)             // .normal (stack) is the default
     }
-}.render()
+}.markup
 ```
 
 - **marks:** `BarMark`, `LineMark`, `AreaMark`, `PointMark`, `RectangleMark`,
@@ -529,7 +538,7 @@ admission cap — replaces the NIO boilerplate reference hosts used to copy.
 ```swift
 let router = Router {
     Route.page("/") { _ in
-        WebUIDocument(title: "demo", body: VStack { Text("hello") })
+        WebUIDocument(title: "demo", body: VStack { Text("hello") }.markup)
     }
     Route.post("/login") { request in handleLogin(request: request) }
 }
@@ -552,6 +561,14 @@ try await server.start()                       // serves until stop() / process 
   keep their signatures and stand on a single-route `Router` for
   `config.pagePath`, so an existing 1.x page renders byte-identically
   (`WebUIServer.swift`).
+- `Route.page<D: BufferRendering>` is generic and typed: its `content:` closure
+  returns any `BufferRendering` value — a `View` *or* a whole document — in both a
+  sync and an async form with the **same `content:` label**, so a trailing closure
+  keeps working and the compiler disambiguates on the closure's async-ness.
+  `PageResponder` is typed on `BufferRendering`. a page handler that answers
+  rendered markup uses `HTTPResponse(_ markup:status:headers:cookies:)` (or
+  `.html(markup)`) — `HTTPResponse.Body.html` carries **`UnsafeMarkup`**, so a bare
+  `String` can no longer become a page.
 - `WebUIServerConfig` tunes host/port, admission cap, read-idle seconds,
   asset cache seconds, the page path (default `/`), and `assets` — the host's
   own served files (see below).

@@ -29,7 +29,7 @@ designer/icons/icon-manifest.json        (authored: name, category, title, tags,
         ▼
    public API: IconName, WebUIIcon, WebUIIconCustom, IconSize, modifiers
         │
-        ▼  render()
+        ▼  markup
    <svg class="icon icon--md" viewBox="0 0 24 24" stroke="currentColor" …>
 ```
 
@@ -74,11 +74,18 @@ a typed icon rendered as a self-contained inline svg.
 
 ```swift
 WebUIIcon(.search)
-    .render()
+    .markup                 // UnsafeMarkup — the typed door
 // <svg class="icon icon--md" viewBox="0 0 24 24" fill="none"
 //      stroke="currentColor" stroke-width="2" stroke-linecap="butt"
 //      stroke-linejoin="miter" aria-hidden="true"><circle …/><line …/></svg>
 ```
+
+`WebUIIcon` is a `View`, and `View` refines `BufferRendering`, so the materializer is
+`BufferRendering.markup` — an `UnsafeMarkup`, not a `String`. the 1.x spelling
+`.render()` (which returned the markup as a `String`) is the **deprecated** door:
+`render() -> String` is kept only as `markup.html` so 1.x call sites keep compiling,
+and its message points here. write `.markup` — or `.markup.html` where the caller
+genuinely needs a string.
 
 ```swift
 WebUIIcon(.download, size: .large, title: "Download file")

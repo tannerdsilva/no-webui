@@ -55,14 +55,14 @@ import WebUIDesignSystem
 let page = WebUIDocument(
     title: "My App",
     body: VStack(spacing: 16) {
-        WebUIButton("Click me", variant: .primary, size: .lg)
-        WebUICard(variant: .elevated) {
+        WebUIButton("Click me", appearance: .primary, size: .lg)
+        WebUICard(elevation: .elevated) {
             Text("Hello, world!")
         }
-    }
+    }.markup
 )
 
-print(page.render())
+print(page.markup.html)
 ```
 
 See `Sources/WebUIExample/main.swift` and `Documentation/GETTING_STARTED.md`.
@@ -71,7 +71,7 @@ See `Sources/WebUIExample/main.swift` and `Documentation/GETTING_STARTED.md`.
 
 ```bash
 swift build          # WebUIAssetPlugin auto-generates Assets+Generated.swift
-swift test           # 1398 tests, 7 test targets
+swift test           # 1406 tests, 7 test targets
 swift run WebUIExample  # example server on :9090
 ```
 

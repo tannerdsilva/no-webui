@@ -37,7 +37,7 @@ public enum HTMLDocumentDiagnostic: String, Sendable, CaseIterable {
 // MARK: - HTMLDocument
 public struct HTMLDocument: Sendable, BufferRendering {
     public let title: String
-    public let body: String
+    public let body: UnsafeMarkup
     public let styles: CSSStylesheet
     public let rawStyles: [String]
     /// Host-defined ``StyleSheet``s, emitted after every other css so their
@@ -187,7 +187,7 @@ public struct HTMLDocument: Sendable, BufferRendering {
     }
     public init(
         title: String = "WebUI",
-        body: String,
+        body: UnsafeMarkup,
         styles: CSSStylesheet = CSSStylesheet([]),
         rawStyles: [String] = [],
         styleSheets: [StyleSheet] = [],
@@ -310,7 +310,7 @@ public struct HTMLDocument: Sendable, BufferRendering {
             scriptTag = appSrc
         } else {
             var cssParts: [String] = []
-            let cssContent = styles.renderedString()
+            let cssContent = styles.markup.html
             if !cssContent.isEmpty { cssParts.append(cssContent) }
             cssParts.append(contentsOf: rawStyles)
             // host sheets come last: their order statement re-states the
@@ -374,7 +374,7 @@ public struct HTMLDocument: Sendable, BufferRendering {
         // silent (unstyled markup renders "fine" until a glyph detonates), so it
         // warns unconditionally rather than only in debug builds.
         for diagnostic in Self.diagnostics(
-            body: body,
+            body: body.html,
             head: head + typedHead,
             stylesheetURL: stylesheetURL,
             inlinedComponentStyles: inlinedComponentStyles
@@ -393,7 +393,7 @@ public struct HTMLDocument: Sendable, BufferRendering {
           \(stylesheetTag)\(themeStylesheetTag)\(styleTag)
         </head>
         <body\(bodyAttr)>
-          \(body)
+          \(body.html)
           \(scriptTag)
         </body>
         </html>

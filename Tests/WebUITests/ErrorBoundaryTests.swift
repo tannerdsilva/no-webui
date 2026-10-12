@@ -76,7 +76,7 @@ struct ErrorBoundaryTests {
 		let router = EventRouter()
 		let box = IDBox()
 		let html = RenderContext.$current.withValue(RenderContext(router: router)) {
-			BoundaryPage(box: box).renderThroughBuffer()
+			BoundaryPage(box: box).markup.html
 		}
 
 		// the boundary wraps its content in a patchable element.
@@ -100,7 +100,7 @@ struct ErrorBoundaryTests {
 		let router = EventRouter()
 		let box = IDBox()
 		RenderContext.$current.withValue(RenderContext(router: router)) {
-			_ = BoundaryPage(box: box).renderThroughBuffer()
+			_ = BoundaryPage(box: box).markup.html
 		}
 
 		let outcome = await router.dispatch(EventData(component: box.get("outside"), event: "click"))
@@ -115,7 +115,7 @@ struct ErrorBoundaryTests {
 		let router = EventRouter()
 		let box = IDBox()
 		RenderContext.$current.withValue(RenderContext(router: router)) {
-			_ = ModifierPage(box: box).renderThroughBuffer()
+			_ = ModifierPage(box: box).markup.html
 		}
 
 		let outcome = await router.dispatch(EventData(component: box.get("inside"), event: "click"))
@@ -134,7 +134,7 @@ struct ErrorBoundaryTests {
 		let html = ErrorBoundary(
 			content: { Text("plain content") },
 			fallback: { Text("never") }
-		).renderThroughBuffer()
+		).markup.html
 		#expect(html == "plain content")
 	}
 }
@@ -151,7 +151,7 @@ struct RenderFailureWireTests {
 	@Test("a throwing render answers 500 with the host's error page")
 	func throwingRenderAnswers500() async throws {
 		let router = Router {
-			Route.get("/") { _ in HTTPResponse(body: .html("ok")) }
+			Route.get("/") { _ in HTTPResponse(body: .html(.trusted("ok"))) }
 			Route.page("/boom") { (_: HTTPRequest) -> Text in
 				throw RenderBoom.exploded
 			}
@@ -172,7 +172,7 @@ struct RenderFailureWireTests {
 	@Test("without onRenderFailure a failed render answers a plain-text 500")
 	func failedRenderStillAnswers500() async throws {
 		let router = Router {
-			Route.get("/") { _ in HTTPResponse(body: .html("ok")) }
+			Route.get("/") { _ in HTTPResponse(body: .html(.trusted("ok"))) }
 			Route.page("/boom") { (_: HTTPRequest) -> Text in
 				throw RenderBoom.exploded
 			}

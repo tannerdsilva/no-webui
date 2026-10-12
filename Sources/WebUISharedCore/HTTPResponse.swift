@@ -50,10 +50,28 @@ public struct HTTPResponse: Sendable {
 		self.body = body
 	}
 
+	/// a page render, ready to serve.
+	///
+	/// the typed bridge: a rendered view or document answers a route with this,
+	/// and no string ever exists in the host's hands.
+	public init(
+		_ markup: UnsafeMarkup,
+		status: HTTPStatus = .ok,
+		headers: [String: String] = [:],
+		cookies: [HTTPCookie] = []
+	) {
+		self.init(status: status, headers: headers, cookies: cookies, body: .html(markup))
+	}
+
 	public enum Body: Sendable {
 		/// an html document or fragment; the server adds `text/html` (and the
 		/// csp machinery) when it encodes the response.
-		case html(String)
+		///
+		/// takes ``UnsafeMarkup``, not `String`: this is the boundary where a
+		/// string becomes a page, so it is the one place a host must say out
+		/// loud that it is bypassing escaping. `UnsafeMarkup.trusted(_:)` is
+		/// grep-able; a bare `String` was not.
+		case html(UnsafeMarkup)
 		case text(String)
 		case bytes([UInt8], contentType: String)
 		case empty

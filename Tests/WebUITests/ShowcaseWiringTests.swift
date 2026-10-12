@@ -22,7 +22,7 @@ struct ShowcaseWiringTests {
 	@Test func showcaseInteractiveControlsAreWired() {
 		let router = EventRouter()
 		let html = RenderContext.$current.withValue(RenderContext(router: router)) {
-			ShowcasePage(state: ShowcaseState()).renderedString()
+			ShowcasePage(state: ShowcaseState()).markup.html
 		}
 
 		// stable control ids: typed self-wired controls (WebUIButton onTap,
@@ -78,10 +78,10 @@ struct ShowcaseWiringTests {
 	// justified update to the single constant above, not a silent pass.
 	@Test func showcaseArtifactByteCountIsPinned() {
 		let snapshot = RenderContext.$current.withValue(RenderContext(router: EventRouter())) {
-			ShowcasePage(state: ShowcaseState()).renderedString()
+			ShowcasePage(state: ShowcaseState()).markup.html
 		}
-		let doc = WebUIDocument(title: "WebUI Showcase", body: snapshot, includeRuntime: false)
-		let html = doc.renderThroughBuffer()
+		let doc = WebUIDocument(title: "WebUI Showcase", body: .trusted(snapshot), includeRuntime: false)
+		let html = doc.markup.html
 		#expect(html.utf8.count == showcaseBytePin,
 			"showcase artifact drifted: \(html.utf8.count) bytes, pinned \(showcaseBytePin). a legitimate move is one justified commit updating this single constant.")
 	}

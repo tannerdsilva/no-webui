@@ -27,7 +27,7 @@ struct RenderSessionTests {
             Div {
                 Div { Text("one") }.onClick { _ in [] }
                 Div { Text("two") }.onClick { _ in [] }
-            }.renderThroughBuffer()
+            }.markup.html
         }
     }
 
@@ -62,7 +62,7 @@ struct RenderSessionTests {
             _ = RenderContext.$current.withValue(context) {
                 Div { Text(label) }.onClick { _ in
                     [FragmentUpdate(id: label, html: label)]
-                }.renderThroughBuffer()
+                }.markup.html
             }
         }
         render(pageA, label: "a")
@@ -102,7 +102,7 @@ struct RenderSessionTests {
         let router = EventRouter()
         let context = RenderContext(router: router)
         _ = RenderContext.$current.withValue(context) {
-            Div { Text("x") }.onClick { _ in [FragmentUpdate(id: "hit", html: "hit")] }.renderThroughBuffer()
+            Div { Text("x") }.onClick { _ in [FragmentUpdate(id: "hit", html: "hit")] }.markup.html
         }
 
         let updates = await router.handle(EventData(component: ComponentID("c0"), event: "click"))

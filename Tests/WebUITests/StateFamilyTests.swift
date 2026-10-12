@@ -14,7 +14,7 @@ import WebUIDesignSystem
 // `plain` -> `pending`) cannot silently change a class.
 
 private func render(_ view: some View) -> String {
-    RenderContext.$current.withValue(RenderContext(router: EventRouter())) { view.renderThroughBuffer() }
+    RenderContext.$current.withValue(RenderContext(router: EventRouter())) { view.markup.html }
 }
 
 @Suite("the state vocabulary is one set of shared types")

@@ -131,6 +131,42 @@ func withRouterServer(
 	try await assertClosed(port: port)
 }
 
+/// start a server whose page comes from a typed route table but whose events
+/// route through an `EventRouter` the *host* owns
+/// (`init(router:eventRouter:config:logger:)`), run `body`, then stop it.
+///
+/// this is the seam a host with hand-wired `register(_:for:)` handlers needs.
+/// those registrations land in the router's default session, and the typed
+/// `init(router:config:logger:)` mints a router of its own — so without this
+/// init the host's router is one nothing consults, and every interaction goes
+/// silently dead. same shape as `withRouterServer`, so the wire-asserting
+/// suites drive all three boots with the same helpers.
+func withHostRouterServer(
+	_ router: Router,
+	eventRouter: EventRouter,
+	portBase: Int = 31000,
+	config: WebUIServerConfig? = nil,
+	_ body: (Int) async throws -> Void
+) async throws {
+	let port = try await freePort(base: portBase)
+	var serverConfig = config ?? WebUIServerConfig()
+	serverConfig.host = "127.0.0.1"
+	serverConfig.port = port
+	let server = WebUIServer(router: router, eventRouter: eventRouter, config: serverConfig)
+	let task = Task { try await server.start() }
+	_ = try await waitForServe(port: port)
+	do {
+		try await body(port)
+	} catch {
+		await server.stop()
+		task.cancel()
+		throw error
+	}
+	await server.stop()
+	task.cancel()
+	try await assertClosed(port: port)
+}
+
 /// probe upward for a port nothing is listening on.
 func freePort(base: Int = 21000) async throws -> Int {
 	for offset in 0..<20 {

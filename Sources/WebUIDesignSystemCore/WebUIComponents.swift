@@ -440,7 +440,7 @@ public struct WebUICard: View {
             if let title { buffer.append("<div class=\"card__title\">\(htmlEscape(title))</div>") }
             buffer.append("</div>")
             if let headerIcon {
-                buffer.append("<span class=\"card__icon\">" + WebUIIcon(headerIcon, size: .medium).renderThroughBuffer() + "</span>")
+                buffer.append("<span class=\"card__icon\">" + WebUIIcon(headerIcon, size: .medium).markup.html + "</span>")
             }
             buffer.append("</div>")
         }
@@ -642,7 +642,7 @@ public struct WebUIAlert: View, Dismissible {    @available(*, deprecated, renam
         if dismissible || onDismiss != nil { attributeText += " data-dismissible" }
         buffer.beginElement("div", attributeText)
         buffer.endOpenTag()
-        buffer.append("<div class=\"alert__icon fill-slot\">" + WebUIIcon(icon, size: .slot).renderThroughBuffer() + "</div>")
+        buffer.append("<div class=\"alert__icon fill-slot\">" + WebUIIcon(icon, size: .slot).markup.html + "</div>")
         buffer.append("<div class=\"alert__body\">")
         if let title {
             buffer.append("<div class=\"alert__title\">\(htmlEscape(title))</div>")
@@ -1281,7 +1281,7 @@ public struct WebUITable: View {
         if rows.isEmpty, let empty = emptyState {
             let colspan = totalColumns > 0 ? totalColumns : 1
             html += "<tr><td colspan=\"\(colspan)\" class=\"table__empty\">"
-            html += "<div class=\"table__empty-icon fill-slot\">" + WebUIIcon(empty.icon, size: .slot).renderThroughBuffer() + "</div>"
+            html += "<div class=\"table__empty-icon fill-slot\">" + WebUIIcon(empty.icon, size: .slot).markup.html + "</div>"
             html += "<div class=\"table__empty-title\">\(htmlEscape(empty.title))</div>"
             if !empty.message.isEmpty {
                 html += "<div class=\"table__empty-message\">\(htmlEscape(empty.message))</div>"
@@ -1338,11 +1338,11 @@ public struct WebUITable: View {
                         }
                     }
                     let tdAttrs = attrs.isEmpty ? "" : " " + attrs
-                    html += "<td\(tdAttrs)>\(cell.renderThroughBuffer())</td>"
+                    html += "<td\(tdAttrs)>\(cell.markup.html)</td>"
                 }
                 html += "</tr>"
                 if hasExpand, expanded, let detail = rowDetails?[rowId] {
-                    html += "<tr class=\"table__detail-row\"><td colspan=\"\(totalColumns)\"><div class=\"table__detail\">\(detail.renderThroughBuffer())</div></td></tr>"
+                    html += "<tr class=\"table__detail-row\"><td colspan=\"\(totalColumns)\"><div class=\"table__detail\">\(detail.markup.html)</div></td></tr>"
                 }
             }
         }
@@ -1351,9 +1351,9 @@ public struct WebUITable: View {
             html += "<tfoot><tr>"
             for (i, cell) in footer.enumerated() {
                 if let a = alignmentClass(i) {
-                    html += "<td class=\"\(a)\">\(cell.renderThroughBuffer())</td>"
+                    html += "<td class=\"\(a)\">\(cell.markup.html)</td>"
                 } else {
-                    html += "<td>\(cell.renderThroughBuffer())</td>"
+                    html += "<td>\(cell.markup.html)</td>"
                 }
             }
             html += "</tr></tfoot>"
@@ -1497,7 +1497,7 @@ public struct WebUIEmptyState: View {
         let attributeText = " class=\"empty-state\""
         buffer.beginElement("div", attributeText)
         buffer.endOpenTag()
-        buffer.append("<div class=\"empty-state__icon fill-slot\">" + WebUIIcon(icon, size: .slot).renderThroughBuffer() + "</div>")
+        buffer.append("<div class=\"empty-state__icon fill-slot\">" + WebUIIcon(icon, size: .slot).markup.html + "</div>")
         buffer.append("<h3 class=\"empty-state__title\">\(htmlEscape(title))</h3>")
         buffer.append("<p class=\"empty-state__message\">\(htmlEscape(message))</p>")
         if let (label, actionId) = action {
@@ -2014,7 +2014,7 @@ public struct WebUITree: View {
         html += "<div class=\"" + rowCls + "\"" + rowAttrs + ">"
         html += "<span class=\"" + caretCls + "\"></span>"
         if let icon = node.icon {
-            html += "<span class=\"tree__icon fill-slot\">" + WebUIIcon(icon, size: .slot).renderThroughBuffer() + "</span>"
+            html += "<span class=\"tree__icon fill-slot\">" + WebUIIcon(icon, size: .slot).markup.html + "</span>"
         }
         html += "<span class=\"tree__label\">" + htmlEscape(node.label) + "</span>"
         html += "</div>"

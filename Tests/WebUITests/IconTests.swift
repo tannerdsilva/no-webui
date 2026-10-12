@@ -100,7 +100,7 @@ struct IconCatalogTests {
 struct WebUIIconTests {
 	@Test("renders a currentColor inline svg with size class")
 	func rendersSvg() {
-		let html = WebUIIcon(.search, size: .large).renderThroughBuffer()
+		let html = WebUIIcon(.search, size: .large).markup.html
 		#expect(html.hasPrefix("<svg class=\"icon icon--lg\""))
 		#expect(html.contains("viewBox=\"0 0 24 24\""))
 		#expect(html.contains("stroke=\"currentColor\""))
@@ -114,14 +114,14 @@ struct WebUIIconTests {
 
 	@Test("slot size emits the bare icon class")
 	func slotSize() {
-		let html = WebUIIcon(.inbox, size: .slot).renderThroughBuffer()
+		let html = WebUIIcon(.inbox, size: .slot).markup.html
 		#expect(html.hasPrefix("<svg class=\"icon\""))
 		#expect(!html.contains("icon--"))
 	}
 
 	@Test("title switches to a labeled img")
 	func titled() {
-		let html = WebUIIcon(.trash, size: .medium, title: "Delete").renderThroughBuffer()
+		let html = WebUIIcon(.trash, size: .medium, title: "Delete").markup.html
 		#expect(html.contains("role=\"img\""))
 		#expect(html.contains("aria-label=\"Delete\""))
 		#expect(!html.contains("aria-hidden"))
@@ -130,7 +130,7 @@ struct WebUIIconTests {
 	@Test("a hostile title cannot break out of the aria-label attribute")
 	func escapedTitle() {
 		// quotes in the title must be escaped so the attribute boundary holds
-		let html = WebUIIcon(.x, title: "onmouseover=\"alert(1)\"").renderThroughBuffer()
+		let html = WebUIIcon(.x, title: "onmouseover=\"alert(1)\"").markup.html
 		#expect(html.contains("&quot;"))
 		// exactly one aria-label attribute survives (no breakout into a 2nd attribute)
 		let labelCount = html.components(separatedBy: "aria-label=").count - 1
@@ -140,7 +140,7 @@ struct WebUIIconTests {
 
 	@Test("iconSize modifier overrides the size class")
 	func sizeModifier() {
-		let html = WebUIIcon(.heart).iconSize(.small).renderThroughBuffer()
+		let html = WebUIIcon(.heart).iconSize(.small).markup.html
 		#expect(html.contains("icon--sm"))
 		#expect(!html.contains("icon--md"))
 	}
@@ -153,7 +153,7 @@ struct WebUIIconCustomTests {
 	@Test("script tags are stripped from custom geometry")
 	func stripsScript() {
 		let icon = WebUIIconCustom(name: "ok", body: "<path d=\"M1 1h10\"/><script>alert(1)</script>", size: .medium)
-		let html = icon.renderThroughBuffer()
+		let html = icon.markup.html
 		#expect(!html.contains("<script"))
 		#expect(html.contains("<path d=\"M1 1h10\"/>"))
 		#expect(html.contains("data-icon=\"ok\""))
@@ -179,7 +179,7 @@ struct WebUIIconCustomTests {
 
 	@Test("custom icon still inherits currentColor + size class")
 	func inherits() {
-		let html = WebUIIconCustom(name: "my-star", body: "<path d=\"M12 2l3 7 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z\"/>").iconSize(.extraLarge).renderThroughBuffer()
+		let html = WebUIIconCustom(name: "my-star", body: "<path d=\"M12 2l3 7 7 1-5 5 1 7-6-3-6 3 1-7-5-5 7-1z\"/>").iconSize(.extraLarge).markup.html
 		#expect(html.contains("stroke=\"currentColor\""))
 		#expect(html.contains("icon--xl"))
 	}
@@ -326,7 +326,7 @@ struct IconEmojiBridgeTests {
 struct ComponentMigrationTests {
 	@Test("alert renders its semantic glyph, never an emoji")
 	func alertUsesSvg() {
-		let html = WebUIAlert(variant: .warning, message: "Careful").renderThroughBuffer()
+		let html = WebUIAlert(variant: .warning, message: "Careful").markup.html
 		#expect(html.contains("alert__icon fill-slot"))
 		#expect(html.contains("<svg"))
 		// warning's semantic glyph is alert-triangle
@@ -336,14 +336,14 @@ struct ComponentMigrationTests {
 
 	@Test("alert danger default is the x-circle glyph")
 	func alertDanger() {
-		let html = WebUIAlert(variant: .danger, message: "Nope").renderThroughBuffer()
+		let html = WebUIAlert(variant: .danger, message: "Nope").markup.html
 		#expect(html.contains("alert__icon fill-slot"))
 		#expect(!html.contains("❌"))
 	}
 
 	@Test("table empty state renders an svg, not an emoji")
 	func tableEmpty() {
-		let html = WebUITable(headers: ["A"], rows: [], emptyState: .init(icon: .search, title: "None", message: "Try again")).renderThroughBuffer()
+		let html = WebUITable(headers: ["A"], rows: [], emptyState: .init(icon: .search, title: "None", message: "Try again")).markup.html
 		#expect(html.contains("table__empty-icon fill-slot"))
 		#expect(html.contains("<svg"))
 		#expect(!html.contains("🔎"))
@@ -351,7 +351,7 @@ struct ComponentMigrationTests {
 
 	@Test("standalone empty state renders an svg, not an emoji")
 	func emptyState() {
-		let html = WebUIEmptyState(icon: .package, title: "Empty", message: "m", action: ("Add", "a")).renderThroughBuffer()
+		let html = WebUIEmptyState(icon: .package, title: "Empty", message: "m", action: ("Add", "a")).markup.html
 		#expect(html.contains("empty-state__icon fill-slot"))
 		#expect(html.contains("<svg"))
 		#expect(!html.contains("📦"))
@@ -359,7 +359,7 @@ struct ComponentMigrationTests {
 
 	@Test("tree node icon renders an svg, not an emoji")
 	func tree() {
-		let html = WebUITree(nodes: [WebUITree.Node(id: "f", label: "f", icon: .folder, children: [WebUITree.Node(id: "i", label: "i", icon: .fileText)])], id: "t", expanded: ["f"]).renderThroughBuffer()
+		let html = WebUITree(nodes: [WebUITree.Node(id: "f", label: "f", icon: .folder, children: [WebUITree.Node(id: "i", label: "i", icon: .fileText)])], id: "t", expanded: ["f"]).markup.html
 		#expect(html.contains("tree__icon fill-slot"))
 		#expect(html.contains("<svg"))
 		#expect(!html.contains("📁") && !html.contains("📄"))
@@ -368,13 +368,13 @@ struct ComponentMigrationTests {
 	@Test("no shipped icon slot emits an emoji code point")
 	func noEmojiAnyWhere() {
 		let samples = [
-			WebUIAlert(variant: .info, message: "a").renderThroughBuffer(),
-			WebUIAlert(variant: .success, message: "b").renderThroughBuffer(),
-			WebUIAlert(variant: .warning, message: "c").renderThroughBuffer(),
-			WebUIAlert(variant: .danger, message: "d").renderThroughBuffer(),
-			WebUIEmptyState(icon: .inbox, title: "e", message: "m").renderThroughBuffer(),
-			WebUITable(headers: ["h"], rows: [], emptyState: .init(icon: .search, title: "f", message: "g")).renderThroughBuffer(),
-			WebUITree(nodes: [WebUITree.Node(id: "x", label: "y", icon: .folder)]).renderThroughBuffer(),
+			WebUIAlert(variant: .info, message: "a").markup.html,
+			WebUIAlert(variant: .success, message: "b").markup.html,
+			WebUIAlert(variant: .warning, message: "c").markup.html,
+			WebUIAlert(variant: .danger, message: "d").markup.html,
+			WebUIEmptyState(icon: .inbox, title: "e", message: "m").markup.html,
+			WebUITable(headers: ["h"], rows: [], emptyState: .init(icon: .search, title: "f", message: "g")).markup.html,
+			WebUITree(nodes: [WebUITree.Node(id: "x", label: "y", icon: .folder)]).markup.html,
 		]
 		let emojiRanges: [ClosedRange<UInt32>] = [
 			0x2190...0x21FF, 0x2600...0x27BF, 0x2B00...0x2BFF,

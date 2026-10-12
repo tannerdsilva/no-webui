@@ -19,14 +19,14 @@ select) and the runtime's `change` → `{ value }` extract. Options are
 public struct WebUISelect: View {
     public struct Option: Sendable, Equatable { public let value: String; public let label: String }
     public let id: String; public let options: [Option]; public let value: String?; public let onChange: EventHandler?
-    public func render() -> String {
+    public func render(into buffer: inout HTMLBuffer) {
         let attrs = controlAttributes(id: id, event: .change, handler: onChange)
         var html = "<select id=\"" + htmlEscape(id) + "\" class=\"select\"" + attrs + ">"
         for opt in options {
             let sel = opt.value == value ? " selected" : ""
             html += "<option value=\"" + htmlEscape(opt.value) + "\"" + sel + ">" + htmlEscape(opt.label) + "</option>"
         }
-        return html + "</select>"
+        buffer.append(html + "</select>")
     }
 }
 ```

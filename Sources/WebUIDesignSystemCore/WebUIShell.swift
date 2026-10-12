@@ -79,7 +79,7 @@ public struct WebUISidebar: View {
             }
             html += ">"
             html += "<span class=\"sidebar__icon fill-slot\">"
-            html += WebUIIcon(item.icon, size: .slot).renderThroughBuffer()
+            html += WebUIIcon(item.icon, size: .slot).markup.html
             html += "</span>"
             html += "<span class=\"sidebar__item-label\">\(htmlEscape(item.label))</span>"
             if let badge = item.badge {
@@ -189,7 +189,7 @@ public struct WebUISearchField: View {
         let attrs = controlAttributes(id: id, event: .input, handler: onInput)
         var html = "<div class=\"search-field\"\(attrs)>"
         html += "<span class=\"search-field__icon\">"
-        html += WebUIIcon(.search, size: .slot).renderThroughBuffer()
+        html += WebUIIcon(.search, size: .slot).markup.html
         html += "</span>"
         html += "<input class=\"search-field__input\" type=\"search\""
         if let ariaLabel { html += Aria.label(ariaLabel).render() }
@@ -294,7 +294,7 @@ public struct WebUIListView: View {
             html += "<li class=\"list__item\(selected)\" id=\"\(htmlEscape(item.id))\">"
             if let icon = item.icon {
                 html += "<span class=\"list__icon fill-slot\">"
-                html += WebUIIcon(icon, size: .slot).renderThroughBuffer()
+                html += WebUIIcon(icon, size: .slot).markup.html
                 html += "</span>"
             }
             html += "<span class=\"list__body\">"
@@ -373,13 +373,13 @@ public struct WebUIComposer: View {
             : " disabled" + Aria.disabled(true).render()
         let toolClass = onAttach != nil ? "composer__tool" : "composer__tool composer__tool--disabled"
         html += "<button type=\"button\" class=\"\(toolClass)\"" + Aria.label("attach").render() + "\(attachAttrs)>"
-        html += WebUIIcon(.paperclip, size: .slot).renderThroughBuffer()
+        html += WebUIIcon(.paperclip, size: .slot).markup.html
         html += "</button>"
         html += "</div>"
         html += "<button type=\"submit\" class=\"composer__send\"" + Aria.label("send").render()
         if disabled { html += " disabled" }
         html += ">"
-        html += WebUIIcon(.send, size: .slot).renderThroughBuffer()
+        html += WebUIIcon(.send, size: .slot).markup.html
         html += "</button>"
         html += "</div>"
         if let hint {
@@ -447,14 +447,14 @@ public struct WebUIPanel: View {
         if !actions.isEmpty {
             html += "<div class=\"panel__actions\">"
             for action in actions {
-                html += action.renderThroughBuffer()
+                html += action.markup.html
             }
             html += "</div>"
         }
         html += "</header>"
         html += "<div class=\"panel__body\">"
         for child in content {
-            html += child.renderThroughBuffer()
+            html += child.markup.html
         }
         html += "</div>"
         html += "</section>"
@@ -546,7 +546,7 @@ public struct WebUIItem: View {
         if let id { html += " id=\"\(htmlEscape(id))\"" }
         html += ">"
         if let icon {
-            html += "<span class=\"list__icon\">" + WebUIIcon(icon, size: .small).renderThroughBuffer() + "</span>"
+            html += "<span class=\"list__icon\">" + WebUIIcon(icon, size: .small).markup.html + "</span>"
         }
         html += "<span class=\"list__body\"><span class=\"list__title\">\(htmlEscape(title))</span>"
         if let subtitle { html += "<span class=\"list__sub\">\(htmlEscape(subtitle))</span>" }
@@ -554,7 +554,7 @@ public struct WebUIItem: View {
         if let meta { html += "<span class=\"list__meta\">\(htmlEscape(meta))</span>" }
         if !actions.isEmpty {
             html += "<span class=\"list__actions\">"
-            for action in actions { html += "<span class=\"list__action\">" + action.renderThroughBuffer() + "</span>" }
+            for action in actions { html += "<span class=\"list__action\">" + action.markup.html + "</span>" }
             html += "</span>"
         }
         html += "</div>"

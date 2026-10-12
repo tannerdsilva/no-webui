@@ -46,22 +46,22 @@ struct CapabilityProtocolTests {
 
     @Test("a view that implements rendering alone conforms to View")
     func bareViewConforms() {
-        #expect(BareView().renderThroughBuffer() == "bare")
+        #expect(BareView().markup.html == "bare")
     }
 
     @Test("every capability conforms in one word")
     func capabilitiesAreOneWord() {
-        #expect(BareInteractive().renderThroughBuffer() == "i")
-        #expect(BareStreaming().renderThroughBuffer() == "s")
-        #expect(BareAsync().renderThroughBuffer() == "a")
-        #expect(BareIdentified().renderThroughBuffer() == "id")
-        #expect(BareRecoverable().renderThroughBuffer() == "r")
+        #expect(BareInteractive().markup.html == "i")
+        #expect(BareStreaming().markup.html == "s")
+        #expect(BareAsync().markup.html == "a")
+        #expect(BareIdentified().markup.html == "id")
+        #expect(BareRecoverable().markup.html == "r")
     }
 
     @Test("the defaulted capability requirements answer without work")
     func defaultsAnswer() {
         #expect(BareIdentified().stableID == nil)
-        #expect(BareRecoverable().fallback.renderThroughBuffer() == "")
+        #expect(BareRecoverable().fallback.markup.html == "")
     }
 
     @Test("a capability is a distinct thing a caller can ask for")

@@ -545,7 +545,7 @@ public struct WebUITag: View {
         let rootAttrs = id.map { controlAttributes(id: $0, event: .click, handler: onRemove) } ?? ""
         let removeID = id.map { " id=\"\(htmlEscape("\($0)-remove"))\"" } ?? ""
         var html = "<span class=\"\(classes)\"\(rootAttrs)>"
-        if let icon { html += "<span class=\"tag__icon\">\(WebUIIcon(icon, size: .small).renderThroughBuffer())</span>" }
+        if let icon { html += "<span class=\"tag__icon\">\(WebUIIcon(icon, size: .small).markup.html)</span>" }
         html += "<span class=\"tag__label\">\(htmlEscape(label))</span>"
         if let count { html += "<span class=\"tag__count\">\(count)</span>" }
         if removable { html += "<button class=\"tag__remove\"\(removeID)" + Aria.label(RenderContext.currentStrings.removeItem(label)).render() + ">×</button>" }
@@ -688,7 +688,7 @@ public struct WebUIInputGroup: View {
         if !stateClass.isEmpty { html += " \(stateClass)" }
         html += "\">"
         if let icon {
-            html += "<span class=\"input__affix input__affix--left\">" + WebUIIcon(icon, size: .small).renderThroughBuffer() + "</span>"
+            html += "<span class=\"input__affix input__affix--left\">" + WebUIIcon(icon, size: .small).markup.html + "</span>"
         }
         if let prefix {
             html += "<span class=\"input__prefix\">\(htmlEscape(prefix))</span>"
@@ -776,7 +776,7 @@ public struct WebUIField: View {
             }
             html += "</div>"
         }
-        for child in children { html += child.renderThroughBuffer() }
+        for child in children { html += child.markup.html }
         if let helper {
             html += "<span class=\"field__helper\(helperIsError ? " field__helper--error" : "")\">\(htmlEscape(helper))</span>"
         }

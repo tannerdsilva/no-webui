@@ -106,13 +106,13 @@ struct AttributeMergeTests {
 	func primitiveOwnClassSurvives() {
 		// before 2.0 the modifier replaced the attribute, so this rendered
 		// class="mine" and the element silently lost its styling.
-		let out = Div(class: "own") { Text("x") }.class("mine").renderThroughBuffer()
+		let out = Div(class: "own") { Text("x") }.class("mine").markup.html
 		#expect(out.contains("class=\"own mine\""))
 	}
 
 	@Test("a component's own classes survive a caller's added class")
 	func componentOwnClassesSurvive() {
-		let html = WebUIButton("b", appearance: .primary).class("mine").renderThroughBuffer()
+		let html = WebUIButton("b", appearance: .primary).class("mine").markup.html
 		#expect(html.contains("button--primary"))
 		#expect(html.contains("mine"))
 		#expect(!html.contains("class=\"mine\""), "the component's own classes were replaced, not merged")
@@ -120,24 +120,24 @@ struct AttributeMergeTests {
 
 	@Test("chained classes keep both, in call order")
 	func chainedClassesMerge() {
-		let out = Div(class: "own") { Text("x") }.class("a").class("b").renderThroughBuffer()
+		let out = Div(class: "own") { Text("x") }.class("a").class("b").markup.html
 		#expect(out.contains("class=\"own a b\""))
 	}
 
 	@Test("a repeated class name is not emitted twice")
 	func repeatedClassNameIsFolded() {
-		let out = Div(class: "own") { Text("x") }.class("own").renderThroughBuffer()
+		let out = Div(class: "own") { Text("x") }.class("own").markup.html
 		#expect(out.contains("class=\"own\""))
 		#expect(!out.contains("own own"))
 	}
 
 	@Test("classes(_:) and addClass(_:) are the typed spelling")
 	func typedClassHelpers() {
-		#expect(Div { Text("x") }.classes("a", "b").renderThroughBuffer().contains("class=\"a b\""))
-		#expect(Div { Text("x") }.addClass("a").renderThroughBuffer().contains("class=\"a\""))
+		#expect(Div { Text("x") }.classes("a", "b").markup.html.contains("class=\"a b\""))
+		#expect(Div { Text("x") }.addClass("a").markup.html.contains("class=\"a\""))
 		// ClassName is a string literal, so a call site reads exactly as before.
 		let literal: ClassName = "c"
 		#expect(literal.value == "c")
-		#expect(Div { Text("x") }.classes("a").addClass("b").renderThroughBuffer().contains("class=\"a b\""))
+		#expect(Div { Text("x") }.classes("a").addClass("b").markup.html.contains("class=\"a b\""))
 	}
 }

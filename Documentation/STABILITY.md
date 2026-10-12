@@ -49,10 +49,20 @@ left the tree. the list is generated, not hand-maintained: intentionally
 moving the surface means regenerating it (`FROZEN_SURFACE_EMIT=1 swift test
 --filter FrozenSurfaceTests` rewrites the file in place) and committing the
 regeneration in the same commit as the api change that forced it, justified
-there. re-measured 2026-10-09: 4558 symbols across 8 modules.
+there. re-measured 2026-10-10: 4562 symbols across 8 modules.
 compiler-synthesized members are excluded — a synthesized `==` is generated,
 not a declared contract, and including it would make the list churn on every
 equatable addition.
+
+a stated limit of this pin: it is **name/label-keyed, not type-keyed**. a
+parameter's type is part of the emitted signature label, but the canonicalization
+keys each line by its name — W4 proved that changing a parameter *type* (`body:
+String` → `body: UnsafeMarkup`) moves **zero** pin lines. the pin therefore cannot
+detect the arc's own type tightening: it enumerates that a public symbol exists and
+keeps its name, not that its parameter types are unchanged. a type change still
+breaks a consumer at compile time, but the frozen-surface gate will not flag it —
+that is exactly what the compile-time reference pins and the surface suites are
+for.
 
 **the compile-time reference pins.** `Tests/WebUITests/APISurfaceTests.swift`
 (the W1-era suite, hand-maintained) references the primitives, layouts,
@@ -75,6 +85,10 @@ or it does not, and no marker is asserted there.
 
 the frozen surface is:
 
+- the render protocol: `BufferRendering` and its public `markup: UnsafeMarkup`
+  materializer. `View`, `HTMLDocument`, `WebUIDocument` and `CSSStylesheet` all
+  refine it, so `.markup` is the one public door to a rendered value, and
+  `HTMLDocument.body`/`WebUIDocument.body` carry `UnsafeMarkup`.
 - view primitives: `Text`, `Raw`, `Div`, `Span`, `Button`, `Input`,
   `TextArea`, `Image`, `Form`, `Label`, `Heading`, `Link`, `Paragraph`,
   `Section`, `Navigation`, `Header`, `Main`, `Footer`, `UnorderedList`,
@@ -125,7 +139,7 @@ the frozen surface is:
   client-runtime suites and the served-bytes gates (`smoke`'s asset-byte
   checks and the showcase byte-count pin).
 
-### measured consumption (re-measured 2026-10-09)
+### measured consumption (re-measured 2026-10-10)
 
 the frozen list in the two paragraphs above is the *shape* contract, and the
 generated pin enforces it mechanically. this survey is the *usage* report — it
