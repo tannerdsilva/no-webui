@@ -1665,8 +1665,12 @@ window.WebUIEngine = (function () {
       bootIslands();
     }
 
+    var lastReportedRoute = location.pathname + location.search;
     var popstateHandler = function () {
-      wsClient.send({ type: 'navigate', url: location.pathname + location.search });
+      var route = location.pathname + location.search;
+      if (route === lastReportedRoute) { return; }
+      lastReportedRoute = route;
+      wsClient.send({ type: 'navigate', url: route });
     };
     window.addEventListener('popstate', popstateHandler);
 

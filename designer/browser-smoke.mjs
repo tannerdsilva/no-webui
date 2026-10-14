@@ -108,6 +108,14 @@ page.on("response", (r) => {
   if (r.status() === 404 && /never-built|typed-greet/i.test(r.url())) expectedIsland404s++;
 });
 
+// the page's websocket frames, observed by playwright from OUTSIDE the page —
+// never by patching `WebSocket` inside it. a post-boot hook misses the engine's
+// own onmessage assignment, and a pre-boot hook perturbs the page it measures.
+const wsFrames = [];
+page.on("websocket", (ws) => {
+  ws.on("framesent", (f) => wsFrames.push(String(f.payload)));
+});
+
 await page.goto(BASE + "/", { waitUntil: "domcontentloaded" });
 await page.waitForTimeout(600);
 
@@ -672,6 +680,46 @@ await page.evaluate(() => { document.querySelectorAll('link[rel="stylesheet"]').
     } else {
       bad(`layers: consumer override lost — ${candidate.prop} = ${applied} (framework rule ${candidate.selector})`);
     }
+  }
+}
+
+// 6. Wave 2: a SAME-ROUTE popstate must not be reported as a navigation. the
+//    engine used to send `navigate` on every popstate, including a same-document
+//    history change that reports the page it is already on — a whole page-region
+//    re-render for a change that is not a navigation. the assertion here is an
+//    ABSENCE, so three things are proven first: the frame recorder is live, the
+//    traversal really did fire `popstate`, and only then does "0 navigate frames"
+//    mean the guard worked rather than the probe being blind.
+{
+  const isFrame = (type) => (p) => new RegExp(`"type"\\s*:\\s*"${type}"`).test(p);
+
+  const beforeClick = wsFrames.length;
+  await page.click("#btn-inc");
+  await page.waitForTimeout(500);
+  const clickFrames = wsFrames.slice(beforeClick).filter(isFrame("event"));
+  if (clickFrames.length > 0) ok(`ws frame recorder is live (a click produced ${clickFrames.length} event frame(s))`);
+  else bad("ws frame recorder saw no event frame for a click — the instrument is blind, so the guard assertion below would be vacuous");
+
+  const beforePop = wsFrames.length;
+  await page.evaluate(() => {
+    window.__popstates = 0;
+    window.addEventListener("popstate", () => { window.__popstates += 1; });
+    // a same-document traversal to the CURRENT route: push a duplicate entry and
+    // go back. this fires `popstate` and reports the page it is already on —
+    // exactly the shape the engine used to forward as a navigation.
+    history.pushState({}, "", location.pathname + location.search);
+    history.back();
+  });
+  await page.waitForTimeout(600);
+  const popstates = await page.evaluate(() => window.__popstates);
+  const navigates = wsFrames.slice(beforePop).filter(isFrame("navigate"));
+
+  if (popstates < 1) {
+    bad(`popstate precondition: the same-route traversal did not fire popstate (${popstates}) — probe precondition failed, not a guard verdict`);
+  } else if (navigates.length === 0) {
+    ok("a same-route popstate is not reported as a navigation (popstate fired, 0 navigate frames sent)");
+  } else {
+    bad(`a same-route popstate sent ${navigates.length} navigate frame(s) — the same-route guard is not suppressing it: ${navigates[0].slice(0, 100)}`);
   }
 }
 
