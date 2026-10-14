@@ -31,6 +31,24 @@ struct RenderSessionTests {
         }
     }
 
+    /// the same auto-wired page, rendered through a PRESERVING begin — the shape
+    /// `WebUIServer`'s `navigate` answer uses. only the flag differs, so a
+    /// difference in behaviour is attributable to the flag alone.
+    @discardableResult
+    private func renderAutoWiredPagePreserving(
+        _ router: EventRouter,
+        _ session: RenderSessionID
+    ) -> String {
+        router.begin(session, preservingRegistrations: true)
+        let context = RenderContext(router: router, session: session)
+        return RenderContext.$current.withValue(context) {
+            Div {
+                Div { Text("one") }.onClick { _ in [] }
+                Div { Text("two") }.onClick { _ in [] }
+            }.markup.html
+        }
+    }
+
     @Test("a re-render in the same session does not grow the handler table")
     func reRenderIsIdempotent() {
         let router = EventRouter()
@@ -137,5 +155,77 @@ struct RenderSessionTests {
         // regardless of how many times the page rendered.
         #expect(router.sessionCount == 1)
         #expect(router.handlerCount(in: session) == 2)
+    }
+
+    // MARK: preserving begin (the navigate re-render)
+
+    // `WebUIServer.answerNavigate` re-renders a live page's own region IN PLACE.
+    // it must not discard the handlers a host registered outside a render pass —
+    // that is the whole point of `init(router:eventRouter:…)`, and dropping them
+    // silences every control in the session with nothing on the wire to say so
+    // (arc-agent's "stuck in Settings" freeze, UX-60).
+
+    @Test("preserving begin keeps the host's table and still restarts the mint counters")
+    func preservingBeginKeepsRegistrations() async {
+        let router = EventRouter()
+        // the hand-wired shape: registered outside any render pass.
+        router.register(
+            { _ in [FragmentUpdate(id: "hit", html: "hit")] },
+            for: ComponentID("boot"), in: .default
+        )
+        #expect(router.handlerCount(in: .default) == 1)
+
+        router.begin(.default, preservingRegistrations: true)
+        #expect(
+            router.handlerCount(in: .default) == 1,
+            "an in-place re-render must not drop handlers the render did not register"
+        )
+
+        let first = renderAutoWiredPagePreserving(router, .default)
+        #expect(router.handlerCount(in: .default) == 3, "the host's handler + the render's c0, c1")
+        let second = renderAutoWiredPagePreserving(router, .default)
+        #expect(
+            router.handlerCount(in: .default) == 3,
+            "the mint counter must still restart — the render's c0/c1 are reused, not appended"
+        )
+        #expect(first == second, "the same page must mint the same ids on every render")
+
+        // the host's handler still routes after the re-render.
+        let out = await router.handle(EventData(component: ComponentID("boot"), event: "click"))
+        #expect(out.first?.id == "hit")
+
+        router.begin(.default)  // the plain reset is unchanged
+        #expect(router.handlerCount(in: .default) == 0, "the default reset must still wipe")
+    }
+
+    @Test("a re-render's own registration replaces a preserved one for the same id")
+    func rerenderRegistrationWins() async {
+        // render-time semantics must be preserved: the render's handler is
+        // authoritative for the id it mints.
+        let router = EventRouter()
+        router.register(
+            { _ in [FragmentUpdate(id: "old", html: "old")] },
+            for: ComponentID("c0"), in: .default
+        )
+        router.begin(.default, preservingRegistrations: true)
+        router.register(
+            { _ in [FragmentUpdate(id: "new", html: "new")] },
+            for: ComponentID("c0"), in: .default
+        )
+        let out = await router.handle(EventData(component: ComponentID("c0"), event: "click"))
+        #expect(out.first?.id == "new")
+        #expect(router.handlerCount(in: .default) == 1)
+    }
+
+    @Test("preserving begin is bounded across many re-renders")
+    func preservingBeginStaysBounded() {
+        let router = EventRouter()
+        let session = RenderSessionID("churn")
+        router.register({ _ in [] }, for: ComponentID("boot"), in: session)
+        for _ in 0..<2_000 {
+            router.begin(session, preservingRegistrations: true)
+            router.register({ _ in [] }, for: ComponentID("c0"), in: session)
+        }
+        #expect(router.handlerCount(in: session) == 2, "keys are overwritten, not appended")
     }
 }

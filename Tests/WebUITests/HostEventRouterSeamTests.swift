@@ -38,6 +38,25 @@ private final class HitBox: Sendable {
 	var value: Bool { hit.withLock { $0 } }
 }
 
+/// counts handler-body runs, so a test can tell "the handler answered" from
+/// "a re-registered handler answered".
+private final class CallCounter: Sendable {
+	private let count = Mutex(0)
+
+	func bump() { count.withLock { $0 += 1 } }
+	var value: Int { count.withLock { $0 } }
+}
+
+/// thrown when a required frame never arrives — the wire-level signature of a
+/// page that has gone quiet.
+private struct FrameTimeout: Error, CustomStringConvertible {
+	let seconds: TimeInterval
+	/// names the wait that timed out, so a red run says WHICH frame never came
+	/// rather than only that one did not.
+	let label: String
+	var description: String { "no websocket frame arrived within \(seconds)s (\(label))" }
+}
+
 #if !os(Linux)
 
 // the websocket leg is apple-only: `URLSessionWebSocketTask` does not exist in
@@ -60,6 +79,55 @@ struct HostEventRouterSeamTests {
 		case .data(let data): return String(decoding: data, as: UTF8.self)
 		case .string(let string): return string
 		@unknown default: return ""
+		}
+	}
+
+	/// receive one frame, or throw if none arrives inside `timeout`.
+	///
+	/// the timeout is not decoration: the defect the navigate test below pins
+	/// manifests as a frame that is NEVER sent, so an unbounded `receive()`
+	/// HANGS instead of failing — and a hung test reads as an infrastructure
+	/// problem rather than a red assertion.
+	///
+	/// a `withThrowingTaskGroup` race would be the structured shape, but it
+	/// JOINS the losing child on scope exit, and `URLSessionWebSocketTask.receive()`
+	/// is not cancellation-aware — the losing `receive()` would never return and
+	/// the join would hang, which is the very failure this helper exists to
+	/// avoid. resolving one continuation from whichever side wins first, and
+	/// never awaiting the loser, is the only shape that cannot hang.
+	private func receiveText(
+		_ socket: URLSessionWebSocketTask,
+		timeout: TimeInterval,
+		_ label: String
+	) async throws -> String {
+		try await withCheckedThrowingContinuation { continuation in
+			let pending = Mutex(true)
+			socket.receive { result in
+				let claim = pending.withLock { held -> Bool in
+					defer { held = false }
+					return held
+				}
+				guard claim else { return }
+				switch result {
+				case .success(let message):
+					switch message {
+					case .data(let data): continuation.resume(returning: String(decoding: data, as: UTF8.self))
+					case .string(let string): continuation.resume(returning: string)
+					@unknown default: continuation.resume(returning: "")
+					}
+				case .failure(let error):
+					continuation.resume(throwing: error)
+				}
+			}
+			Task {
+				try? await Task.sleep(for: .seconds(timeout))
+				let claim = pending.withLock { held -> Bool in
+					defer { held = false }
+					return held
+				}
+				guard claim else { return }
+				continuation.resume(throwing: FrameTimeout(seconds: timeout, label: label))
+			}
 		}
 	}
 
@@ -140,6 +208,68 @@ struct HostEventRouterSeamTests {
 			let (_, otherStatus) = try await get("http://127.0.0.1:\(port)/other")
 			#expect(otherStatus == 404, "pagePath must not mint a route on the typed path; got \(otherStatus)")
 		}
+	}
+
+	/// the `navigate` frame re-renders a page's region IN PLACE in a live
+	/// session. it must not discard the handlers a host registered outside a
+	/// render pass — that is the whole point of
+	/// `WebUIServer.init(router:eventRouter:…)`, and dropping them silences
+	/// every control in the session (arc-agent's "stuck in Settings" freeze,
+	/// UX-60).
+	@Test("a navigate frame does not orphan a host-registered handler")
+	func navigateKeepsBootRegisteredHandlers() async throws {
+		// a page route that registers NOTHING of its own — the hand-wired host
+		// shape, where every handler comes from `register(_:for:)`.
+		let pageRouter = Router {
+			Route.page("/") { _ in
+				WebUIDocument(
+					title: "nav",
+					body: .trusted("<div id=\"webui-page\"><p>page</p></div>")
+				)
+			}
+		}
+		let calls = CallCounter()
+		let events = EventRouter()
+		events.register({ _ in
+			calls.bump()
+			return [FragmentUpdate(id: "boot-target", html: "<span id=\"boot-target\">boot-ok</span>")]
+		}, for: "boot-btn")
+		#expect(events.handlerCount(in: .default) == 1)
+
+		let click = #"{"type":"event","component":"boot-btn","event":"click","data":{}}"#
+
+		try await withHostRouterServer(pageRouter, eventRouter: events, portBase: 31_600) { port in
+			let socket = openSocket(port: port)
+			defer { socket.cancel(with: .normalClosure, reason: nil) }
+
+			// PRECONDITION: the handler routes before the navigate. assert it,
+			// or a harness mistake would read as the bug under test.
+			try await socket.send(.string(click))
+			let before = try await receiveText(socket, timeout: 3, "precondition: the boot click must answer")
+			#expect(before.contains("boot-ok"), "precondition: the boot handler must route; got \(before)")
+
+			// the engine reports a popstate as a navigate frame. a hash-only
+			// history change sends exactly this, with the page's own path.
+			try await socket.send(.string(#"{"type":"navigate","url":"/"}"#))
+			let navigateReply = try await receiveText(socket, timeout: 3, "the navigate must be answered")
+			#expect(
+				navigateReply.contains("\"update\""),
+				"the navigate must be answered with the page-region patch; got \(navigateReply)"
+			)
+
+			// THE ASSERTION: the host's handler still routes afterwards.
+			try await socket.send(.string(click))
+			let after = try await receiveText(socket, timeout: 3, "the click AFTER the navigate must still answer")
+			#expect(
+				after.contains("boot-ok"),
+				"a navigate re-render must not drop handlers registered outside a render pass; got \(after)"
+			)
+		}
+
+		// the frame alone would not prove *which* handler answered — a
+		// re-registered one could return the same markup. the counter is the
+		// assertion that the host's own handler ran both times.
+		#expect(calls.value == 2, "the hand-wired handler must answer both clicks; ran \(calls.value)×")
 	}
 }
 #endif

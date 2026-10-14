@@ -897,8 +897,17 @@ final class Runner: Sendable {
 			renderToken: RenderToken("")
 		)
 		// the re-render takes the same path a fresh page request takes: a
-		// session pass, the render context established for its duration.
-		router.begin(session)
+		// session pass, the render context established for its duration — but
+		// PRESERVING, because this is an IN-PLACE re-render of a page that was
+		// never left. the navigate frame carries no token, so `session` is the
+		// shared `.default` a host that wired its handlers by hand
+		// (`init(router:eventRouter:…)`) registered them into; a plain reset here
+		// would drop every control in that session server-wide, and `dispatch`
+		// answers a dropped handler with an empty fragment list — nothing on the
+		// wire, so the page would just stop reacting with no error to show. the
+		// mint counters still restart, so a render-time host keeps its
+		// idempotence.
+		router.begin(session, preservingRegistrations: true)
 		let response: HTTPResponse
 		do {
 			response = try await RenderContext.$current.withValue(
