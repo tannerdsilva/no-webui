@@ -194,6 +194,10 @@ invocation. gates host their own server, check, and tear down in one call.
 - **EventRouter** — routes WebSocket events to registered handlers. thread-safe
   via `Synchronization.Mutex`. max 10,000 handlers by default. missing-handler
   events log at `.debug` (via the unified `logger.emit` funnel) and `handlerCount` is public.
+  a re-render preserves registrations made outside a render pass:
+  `begin(_:preservingRegistrations:)` keeps the session's handlers and fallbacks
+  and restarts only the mint counters, which is the shape the `navigate` answer
+  uses (see `Documentation/ARCHITECTURE.md`).
 - **event modifiers** — `.onClick`/`.onSubmit`/`.onInput`/`.onChange` plus
   keyboard, mouse, and focus variants (`.onKeyUp`, `.onMouseDown`,
   `.onFocus`/`.onBlur`, `.onFocusIn`/`.onFocusOut`, ...) emit
