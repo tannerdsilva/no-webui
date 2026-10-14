@@ -318,10 +318,25 @@ public final class EventRouter: Sendable {
         /// is what makes a re-render idempotent: the mint counters restart, so the
         /// same views mint the same ids and every registration is a dictionary
         /// assignment onto a key that already exists.
-        func begin(_ session: RenderSessionID) {
+        ///
+        /// `preservingRegistrations` keeps the handlers and fallbacks already
+        /// registered in the session and resets only the mint counters and the LRU
+        /// clock. that is the right shape for an IN-PLACE re-render of a page that
+        /// was never left — `WebUIServer.answerNavigate` re-renders a live page's
+        /// own region — because registrations a host made *outside* a render pass
+        /// (`WebUIServer.init(router:eventRouter:…)`, the hand-wired
+        /// `register(_:for:)` shape) must survive it. the default (`false`) is the
+        /// original reset.
+        func begin(_ session: RenderSessionID, preservingRegistrations: Bool = false) {
             values.withLock { values in
                 values.clock += 1
                 var fresh = Session()
+                if preservingRegistrations, let existing = values.sessions[session] {
+                    // keep both tables; the counters stay fresh, so the render's
+                    // own ids are reused rather than appended.
+                    fresh.handlers = existing.handlers
+                    fresh.fallbacks = existing.fallbacks
+                }
                 fresh.tick = values.clock
                 values.sessions[session] = fresh
                 values.lru.append((session, values.clock))
@@ -470,8 +485,23 @@ public final class EventRouter: Sendable {
     /// render's own identity (see `WebUIServer`). re-rendering the same page then
     /// mints the same component ids and every registration lands on a key that
     /// already exists — which is why the table stops growing.
-    public func begin(_ session: RenderSessionID) {
-        state.begin(session)
+    ///
+    /// `preservingRegistrations` keeps the handlers and fallbacks the session
+    /// already holds and resets only the mint counters and the LRU clock. that is
+    /// the right shape for an IN-PLACE re-render of a page that was never left —
+    /// `WebUIServer` uses it for the `navigate` answer, which re-renders a live
+    /// page's own region — because registrations a host made *outside* a render
+    /// pass must survive it. the default (`false`) is the original reset, which is
+    /// what makes a re-render idempotent for render-time registrations.
+    ///
+    /// the honest cost of preserving: a re-render at a *different* route no longer
+    /// drops the previous route's handlers. because the mint counters restart, the
+    /// new render mints `c0…cn` and overwrites those keys; any leftover keys above
+    /// `n` name components that are not in the DOM and can never be triggered,
+    /// bounded by the previous render's control count. a host that truly leaves a
+    /// page can still call ``end(_:)``.
+    public func begin(_ session: RenderSessionID, preservingRegistrations: Bool = false) {
+        state.begin(session, preservingRegistrations: preservingRegistrations)
         let evicted = state.evict(maxSessions: maxSessions)
         if !evicted.isEmpty {
             logger.emit(

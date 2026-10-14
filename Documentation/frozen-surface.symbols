@@ -486,7 +486,7 @@ EventHandlerModifier.event
 EventHandlerModifier.handler
 EventHandlerModifier.init(event:handler:)
 EventRouter
-EventRouter.begin(_:)
+EventRouter.begin(_:preservingRegistrations:)
 EventRouter.contains(_:)
 EventRouter.dispatch(_:)
 EventRouter.dispatch(_:in:)

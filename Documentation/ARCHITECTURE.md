@@ -203,6 +203,26 @@ page. render each page once with a dedicated router, or call `reset()` before
 rendering a fresh page (see the "one router per render pass" rule in
 `GETTING_STARTED.md`).
 
+**in-place re-render preserves registrations.** `EventRouter.begin(_:preservingRegistrations:)`
+resets a session's *mint counters* but keeps its *handler and fallback tables*.
+the server uses that shape for the `navigate` answer
+(`WebUIServer.answerNavigate`), which re-renders a live page's own region rather
+than a fresh page. it has to: the `navigate` frame carries no render token, so it
+routes to the shared default session — the session a host that wired its handlers
+by hand with `register(_:for:)` registered into — and a full reset there would
+drop every control in that session, server-wide, with nothing on the wire to say
+so (`dispatch` answers a missing handler with an empty fragment list). the default
+(`false`) is the original full reset, which is what makes a re-render idempotent
+for render-time registrations. a fresh page instance (`WebUIServer.routePage`,
+a token-derived session) still takes the full reset.
+
+the honest cost: after a `navigate` to a *different* route, the previous route's
+handlers are no longer dropped. because the mint counters restart, the new render
+mints `c0…cn` and overwrites those keys; any leftover keys above `n` name
+components that are not in the DOM and can never be triggered, bounded by the
+previous render's control count. a host that truly leaves a page can still call
+`end(_:)`.
+
 ### RenderContext
 
 `RenderContext` is a `@TaskLocal` value that flows through the view tree during
@@ -306,7 +326,7 @@ A Swift enum with a static `source` property containing the embedded JS runtime
 |---|---|---|
 | `event` | `{ component, event, data }` | DOM event forwarded to handler |
 | `ping` | — | Keepalive heartbeat |
-| `navigate` | `{ url }` | Client-side navigation (popstate) |
+| `navigate` | `{ url }` | Client-side navigation (popstate). answered by re-rendering the matched route into the socket's session as an in-place `update` patch of the page region; a path the router cannot answer is answered with a full-page `redirect`. the re-render PRESERVES registrations made outside a render pass — see "in-place re-render preserves registrations" in Layer 2 |
 
 ### JS Runtime Modules
 

@@ -99,6 +99,55 @@ function dispatch(id, eventName) {
   });
 }
 
+// the navigate round-trip ON ONE SOCKET: click → navigate → click, all three
+// answered on the same connection. it has to be one socket — the defect class
+// this guards (a re-render discarding the session a page's handlers live in)
+// leaves the CONNECTION healthy and only the routing dead, so a probe that
+// reopens per step observes nothing.
+//
+// scope note, so this comment does not claim more than it checks: on THIS page
+// the controls live in its render token's session, and the engine sends
+// `navigate` without a token, so the frame lands in the shared default session.
+// what this pins is therefore that a navigate never breaks subsequent dispatch
+// on the connection; the session-reset defect itself is pinned by
+// `HostEventRouterSeamTests.navigateKeepsBootRegisteredHandlers`.
+async function navigateRoundTrip(id) {
+  const socket = new WebSocket(WS_URL);
+  const inbox = [];
+  let waiter = null;
+  let openResolve;
+  const opened = new Promise((r) => { openResolve = r; });
+  socket.addEventListener("open", () => openResolve(true));
+  socket.addEventListener("message", (ev) => {
+    let msg = null;
+    try { msg = JSON.parse(String(ev.data)); } catch (e) { return; }
+    if (waiter) { const w = waiter; waiter = null; w(msg); } else { inbox.push(msg); }
+  });
+  const next = () => new Promise((res) => {
+    if (inbox.length) { res(inbox.shift()); return; }
+    const timer = setTimeout(() => { waiter = null; res(null); }, 3000);
+    waiter = (msg) => { clearTimeout(timer); res(msg); };
+  });
+  const clickFrame = { type: "event", component: id, event: "click", data: { targetId: id, targetClass: "sort" } };
+  if (RENDER_TOKEN) { clickFrame.token = RENDER_TOKEN; }
+
+  const result = { connected: false, first: null, navigated: null, after: null };
+  try {
+    const isOpen = await Promise.race([opened, new Promise((r) => setTimeout(() => r(false), 3000))]);
+    result.connected = isOpen === true;
+    if (!result.connected) { return result; }
+    socket.send(JSON.stringify(clickFrame));
+    result.first = await next();
+    socket.send(JSON.stringify({ type: "navigate", url: "/" }));
+    result.navigated = await next();
+    socket.send(JSON.stringify(clickFrame));
+    result.after = await next();
+  } finally {
+    try { socket.close(); } catch (e) {}
+  }
+  return result;
+}
+
 const server = spawn(join(ROOT, ".build/debug/WebUIShowcaseServer"), ["--port", String(PORT)], {
   cwd: ROOT,
   stdio: ["ignore", "pipe", "pipe"],
@@ -223,6 +272,26 @@ try {
     bad(`navigate to an unrouted path should redirect, got: ${JSON.stringify(outScope.value).slice(0, 120)}`);
   } else {
     bad(outScope.opened ? "navigate to an unrouted path never answered within 3s" : "navigate probe could not connect");
+  }
+  await new Promise((r) => setTimeout(r, 150));
+
+  // the navigate round-trip on ONE socket (see `navigateRoundTrip`): the click
+  // must answer, the navigate must patch, and the click AFTER the navigate must
+  // still answer — on the same connection.
+  if (probes.length > 0) {
+    const rt = await navigateRoundTrip(probes[0]);
+    const answered = (m) => !!m && m.type === "update" && Array.isArray(m.fragments) && m.fragments.length > 0;
+    if (!rt.connected) {
+      bad("navigate round-trip: could not establish a websocket");
+    } else if (!answered(rt.first)) {
+      bad(`navigate round-trip: ${probes[0]} did not answer BEFORE the navigate: ${JSON.stringify(rt.first).slice(0, 120)}`);
+    } else if (!answered(rt.navigated)) {
+      bad(`navigate round-trip: the navigate was not answered with an update fragment: ${JSON.stringify(rt.navigated).slice(0, 120)}`);
+    } else if (!answered(rt.after)) {
+      bad(`navigate round-trip: ${probes[0]} sent a click AFTER the navigate and the server never answered — the re-render dropped the session's handlers`);
+    } else {
+      ok(`navigate round-trip on one socket: ${probes[0]} answered → navigate patched → ${probes[0]} answered again`);
+    }
   }
 } finally {
   server.kill("SIGTERM");
