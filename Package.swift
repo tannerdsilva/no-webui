@@ -93,15 +93,8 @@ let package = Package(
     dependencies: [
         .package(url: "https://github.com/apple/swift-log.git", "1.0.0"..<"2.0.0"),
         .package(url: "https://github.com/apple/swift-nio.git", "2.0.0"..<"3.0.0"),
-        // published and tagged 22.0.0 (2026-09); resolves by the pinned
-        // revision in Package.resolved.
-        .package(url: "https://github.com/tannerdsilva/rawdog.git", "22.0.0"..<"23.0.0"),
-        // swift-syntax for the @Theme macro implementation (603.x matches the
-        // 6.3 toolchain line).
-        .package(url: "https://github.com/apple/swift-syntax.git", "603.0.0"..<"604.0.0"),
-        // swift-service-lifecycle: hosts `WebUIServer` inside a `ServiceGroup`
-        // (`WebUIServerService`), so a long-lived server has ordered startup
-        // and graceful shutdown instead of an ad-hoc process lifecycle.
+        .package(url: "https://github.com/tannerdsilva/rawdog.git", "22.0.1"..<"23.0.0"),
+        .package(url: "https://github.com/swiftlang/swift-syntax.git", "603.0.0"..<"604.0.0"),
         .package(url: "https://github.com/swift-server/swift-service-lifecycle.git", "2.6.0"..<"3.0.0"),
     ],
     targets: [
