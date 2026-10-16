@@ -24,6 +24,12 @@
 //     in the browser, asserted on the log state, before the declared click is
 //     shown to still round-trip.
 //
+//   contextmenu: an element that DECLARED a contextmenu handler owns the
+//     right-click — the browser's native menu is cancelled over it, and only
+//     over it (a control wired for another event, and any unwired element, keep
+//     the native menu). read as `defaultPrevented` from a window-level observer,
+//     and the frame still round-trips under cancellation.
+//
 // every individual probe asserts its OWN precondition first: the control id
 // exists in the served markup with the right data-event declaration.
 //
@@ -375,6 +381,70 @@ t = await waitTip(page2, "#misc-log", "contextmenu x=");
 if (t.startsWith("contextmenu x=")) { ok(`browser: contextmenu -> "${t}"`); browserPass++; }
 else { bad(`browser: contextmenu got "${t}"`); browserFail++; }
 
+// the contextmenu contract: declaring the handler owns the right-click, so the
+// browser's native menu is cancelled over that element — and only over it.
+// `defaultPrevented` is read by a window-level BUBBLE listener: the engine
+// delegates `contextmenu` on `document` in the bubble phase, so this listener
+// runs after the engine's and sees the final cancelled state. it is a read-only
+// observer — it wraps nothing and patches nothing, so it cannot perturb the
+// dispatch it measures.
+await page2.evaluate(() => {
+  window.__ctxDefaults = [];
+  window.addEventListener("contextmenu", (e) => {
+    window.__ctxDefaults.push({ prevented: e.defaultPrevented, tag: e.target.tagName });
+  }, false);
+});
+
+// the declaring control cancels the native menu AND still round-trips. the click
+// is offset so the decoded payload differs from the one above: on the same pixel
+// the log tip is byte-identical, and an unchanged tip cannot be told apart from
+// a frame that never arrived.
+const ctxTipBefore = await tip(page2, "#misc-log");
+await page2.locator("#deck-ctx").click({ button: "right", position: { x: 4, y: 4 } });
+await page2.waitForFunction(
+  (prev) => (document.querySelector("#misc-log")?.textContent || "").trim() !== prev,
+  ctxTipBefore, { timeout: 4000 }
+).catch(() => {});
+const ctxTipAfter = await tip(page2, "#misc-log");
+const ctxOwned = await page2.evaluate(() => window.__ctxDefaults.pop() || null);
+if (ctxOwned && ctxOwned.prevented === true) { ok("browser: the declaring control cancels the native menu (defaultPrevented=true)"); browserPass++; }
+else { bad(`browser: #deck-ctx did not cancel the native menu (defaultPrevented=${ctxOwned ? ctxOwned.prevented : "no event seen"})`); browserFail++; }
+if (ctxTipAfter !== ctxTipBefore && ctxTipAfter.startsWith("contextmenu x=")) { ok(`browser: the frame still round-trips under cancellation -> "${ctxTipAfter}"`); browserPass++; }
+else { bad(`browser: cancelling the native menu broke the round trip — the tip stayed "${ctxTipAfter}"`); browserFail++; }
+
+// a control wired for ANOTHER event keeps the native menu: #deck-dbl declares
+// dblclick, so the declared-event guard returns before the cancel is reached.
+await page2.locator("#deck-dbl").click({ button: "right" });
+const otherWired = await page2.evaluate(() => window.__ctxDefaults.pop() || null);
+if (otherWired && otherWired.prevented === false) { ok("browser: a control wired for another event keeps the browser menu (scope held)"); browserPass++; }
+else { bad(`browser: the cancel leaked onto #deck-dbl (defaultPrevented=${otherWired ? otherWired.prevented : "no event seen"})`); browserFail++; }
+
+// an unwired element keeps the native menu. the click point is asserted BEFORE
+// it is clicked: whatever sits there must have no wired ancestor, or the
+// measurement says nothing about scope.
+const unwiredPoint = await page2.evaluate(() => {
+  const all = Array.from(document.querySelectorAll("body *"));
+  const el = all.find((e) => {
+    if (e.closest("[data-component-id]")) return false;
+    const r = e.getBoundingClientRect();
+    return r.width > 8 && r.height > 8 && r.top >= 0 && r.bottom <= window.innerHeight && r.left >= 0 && r.right <= window.innerWidth;
+  });
+  if (!el) return null;
+  const r = el.getBoundingClientRect();
+  const x = Math.round(r.left + r.width / 2);
+  const y = Math.round(r.top + Math.max(1, Math.min(8, r.height / 2)));
+  const hit = document.elementFromPoint(x, y);
+  return { x, y, tag: hit ? hit.tagName : null, wired: hit ? !!hit.closest("[data-component-id]") : null };
+});
+if (!unwiredPoint) { bad("browser: no unwired in-viewport element to probe the native-menu scope"); browserFail++; }
+else if (unwiredPoint.wired !== false) { bad(`browser: scope probe point (${unwiredPoint.x}, ${unwiredPoint.y}) resolves to <${unwiredPoint.tag}>, which has a wired ancestor`); browserFail++; }
+else {
+  await page2.mouse.click(unwiredPoint.x, unwiredPoint.y, { button: "right" });
+  const bare = await page2.evaluate(() => window.__ctxDefaults.pop() || null);
+  if (bare && bare.prevented === false) { ok(`browser: unwired <${unwiredPoint.tag.toLowerCase()}> keeps the browser menu (scope held)`); browserPass++; }
+  else { bad(`browser: an unwired element was cancelled (defaultPrevented=${bare ? bare.prevented : "no event seen"})`); browserFail++; }
+}
+
 await page2.evaluate(() => { document.querySelector("#deck-tran").style.width = "240px"; });
 t = await waitTip(page2, "#misc-log", "transitionend prop=width", 8000);
 if (t.startsWith("transitionend prop=width")) { ok(`browser: transitionend -> "${t}"`); browserPass++; }
@@ -523,7 +593,7 @@ for (const [id, name, data, expect] of socketCases) {
 try { await browser.close(); } catch (e) {}
 try { server.kill("SIGKILL"); } catch (e) {}
 
-console.log(`  --- event deck gate: ${browserPass}/${browserCases.length + 17} browser · ${socketPass}/${socketCases.length} socket · ${pass - browserPass - socketPass} other · ${fail} fail`);
+console.log(`  --- event deck gate: ${browserPass}/${browserCases.length + 21} browser · ${socketPass}/${socketCases.length} socket · ${pass - browserPass - socketPass} other · ${fail} fail`);
 if (browserFail || socketFail || fail > 0) {
   console.log(`event-deck-probe FAILED (${browserFail} browser + ${socketFail} socket + ${fail} other failures)`);
   process.exit(1);
