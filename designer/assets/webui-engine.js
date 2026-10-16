@@ -384,6 +384,10 @@ window.WebUIEngine = (function () {
       var declaredEvent = componentEl.getAttribute('data-event');
       if (declaredEvent && effectiveTypes(event).indexOf(declaredEvent) === -1) return;
 
+      if (event.type === 'contextmenu') {
+        event.preventDefault();
+      }
+
       if (event.type === 'click') {
         if (event.metaKey || event.ctrlKey || event.shiftKey) return;
         var link = event.target.closest('a');
