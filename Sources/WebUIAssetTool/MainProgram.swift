@@ -70,6 +70,13 @@ enum WebUIAssetTool {
                     let gz = receipt.gzipBytes.map { ", \($0) gz" } ?? ""
                     print("  \(receipt.typeName): \(receipt.bytes) bytes\(gz), sha \(receipt.stamp)")
                 }
+                // an optional entry whose file is absent ships nothing on purpose — say
+                // so, so a cold build's quiet skip is a named condition, not a mystery.
+                let receiptNames = Set(receipts.map(\.typeName))
+                for entry in manifest.entries
+                where entry.optional && entry.kind == .file && !receiptNames.contains(entry.name) {
+                    print("  \(entry.name): skipped (optional, \(entry.path ?? "?") not built yet)")
+                }
                 // the receipt a budget gate reads: what shipped, per type, plus the
                 // manifest's own pins — the gate never has to re-parse the manifest.
                 if let manifestOutputPath {

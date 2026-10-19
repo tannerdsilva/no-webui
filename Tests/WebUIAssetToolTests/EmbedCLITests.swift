@@ -85,4 +85,42 @@ struct EmbedCLITests {
 		#expect(result.out.contains("ProbeInline"), "the failure names the entry: \(result.out)")
 		#expect(result.out.contains("ceiling"), "the failure names the ceiling: \(result.out)")
 	}
+
+	@Test("an optional entry whose file is absent embeds the rest, naming the skip",
+	      .enabled(if: assetToolAvailable))
+	func optionalAbsentEntrySkipsAtCLI() throws {
+		let dir = try assetToolScratch(prefix: "webui-embed")
+		defer { try? FileManager.default.removeItem(atPath: dir) }
+		let assets = dir + "/Assets"
+		try FileManager.default.createDirectory(
+			atPath: assets + "/vendor", withIntermediateDirectories: true
+		)
+		try writeAssetToolInput(":root { --probe: 1 }\n", to: assets + "/vendor/probe.min.css")
+		// `ProbeGhost`'s file is deliberately not on disk: the cold-checkout shape the
+		// fresh-clone story depends on. the manifest also carries the required entry so
+		// the run has something real to embed.
+		try writeAssetToolInput("""
+		{
+		  "types": [
+		    { "name": "ProbeGhost", "kind": "file", "path": "vendor/absent.wasm",
+		      "contentType": "application/wasm", "optional": true },
+		    { "name": "ProbeCSS", "kind": "file", "path": "vendor/probe.min.css",
+		      "contentType": "text/css; charset=utf-8", "minify": true, "prose": "check" }
+		  ]
+		}
+		""", to: assets + "/webui-assets.json")
+
+		let out = dir + "/Embedded.swift"
+		let result = try runAssetTool([
+			"--embed-manifest", assets + "/webui-assets.json",
+			"--output", out,
+		])
+		#expect(result.status == 0, "an absent optional entry must not fail the embed: \(result.out)")
+		#expect(result.out.contains("ProbeCSS"), "the present entry embeds: \(result.out)")
+		#expect(result.out.contains("ProbeGhost"), "the skip is named in the report: \(result.out)")
+
+		let source = try String(contentsOfFile: out, encoding: .utf8)
+		#expect(source.contains("public enum ProbeCSS: WebUIShippedAsset"))
+		#expect(!source.contains("ProbeGhost"), "an absent optional entry ships no conformance")
+	}
 }

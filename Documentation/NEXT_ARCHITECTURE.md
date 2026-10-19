@@ -118,6 +118,9 @@ free core already exists; embedded tier is kB-scale per `WASM_TRAJECTORY.md` §
   (same swift, same tests). **ui** rendering is not required to be client equal —
   the server owns rendering; islands own hot re-render + logic. this is the
   inversion of the old d2 thesis, and it matches what the module could actually do.
+- hosting a built artifact is a manifest entry (`Assets/webui-assets.json`,
+  `contentType: "application/wasm"`, `optional: true` until the cross-build exists —
+  see `Documentation/ASSETS.md` recipe 3), not a hand-written server route.
 
 ### layer d — delivery
 

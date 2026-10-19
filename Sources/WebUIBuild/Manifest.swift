@@ -34,6 +34,13 @@ public struct WebUIAssetManifest: Sendable {
 		public let contentType: String
 		public let minify: Bool
 		public let prose: ProsePolicy
+		/// `true` for an entry the build tolerates absent: a cold checkout may not have
+		/// produced the payload yet (a cross-built island artifact), and a fresh clone must
+		/// not lose its whole build to one missing file. an absent optional entry ships
+		/// nothing — no conformance, no receipt — while a *present* one embeds exactly like
+		/// a required entry. `directory` entries cannot be optional: a bag that ships
+		/// partially is a lie about what the bag contains.
+		public let optional: Bool
 		/// the pinned ceiling for the payload as it ships, in bytes; `nil` pins nothing.
 		/// enforced at embed time, so a payload that outgrows its pin fails the BUILD that
 		/// would ship it, naming the entry.
@@ -76,7 +83,7 @@ public struct WebUIAssetManifest: Sendable {
 
 	static let entryKeys: Set<String> = [
 		"name", "kind", "path", "text", "extensions", "contentType", "minify", "prose",
-		"ceilingBytes", "ceilingGzipBytes",
+		"ceilingBytes", "ceilingGzipBytes", "optional",
 	]
 
 	static func entry(from raw: [String: Any], index: Int) throws -> Entry {
@@ -118,9 +125,19 @@ public struct WebUIAssetManifest: Sendable {
 		default:
 			throw WebUIBuildError.malformedManifest("entry \(name): 'prose' must be 'off' or 'check'")
 		}
+		let isOptional = raw["optional"] as? Bool ?? false
+		// the flag is only meaningful for a single file: a text entry cannot be absent
+		// (the payload is in the manifest), and a partially-shipped directory bag would
+		// be a lie about what the bag contains.
+		if isOptional, kind != .file {
+			throw WebUIBuildError.malformedManifest(
+				"entry \(name): 'optional' is only valid for kind 'file'"
+			)
+		}
 		return Entry(
 			name: name, kind: kind, path: path, text: text, extensions: extensions,
 			contentType: contentType, minify: raw["minify"] as? Bool ?? false, prose: prose,
+			optional: isOptional,
 			ceilingBytes: raw["ceilingBytes"] as? Int,
 			ceilingGzipBytes: raw["ceilingGzipBytes"] as? Int
 		)
@@ -164,10 +181,17 @@ public extension WebUIAssetBuilder {
 				receipts.append(receipt)
 
 			case .file:
-				let path = manifest.directory.appendingPathComponent(entry.path ?? "")
-				guard let raw = try? Data(contentsOf: path) else {
-					throw WebUIBuildError.missingAsset(entry: entry.name, path: path.path)
-				}
+						let path = manifest.directory.appendingPathComponent(entry.path ?? "")
+						guard let raw = try? Data(contentsOf: path) else {
+							// an optional entry's file may legitimately be absent — a cold checkout
+							// has not produced the artifact yet. the entry ships nothing (no
+							// conformance, no receipt) and the build continues; a file that exists
+							// but cannot be read is corruption, and still fails below.
+							if entry.optional, !FileManager.default.fileExists(atPath: path.path) {
+								continue
+							}
+							throw WebUIBuildError.missingAsset(entry: entry.name, path: path.path)
+						}
 				let bytes: [UInt8]
 				if isTextContent(entry.contentType) {
 					guard let text = String(data: raw, encoding: .utf8) else {

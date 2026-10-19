@@ -190,4 +190,117 @@ struct ManifestTests {
 		)
 		#expect(receipts.count == 3)
 	}
+
+	// MARK: wasm + optional entries (the island hosting seam)
+
+	/// the wasm magic header plus a distinguishing tail — a real embed shape, not a
+	/// degenerate empty payload, and independent of any `.build` state.
+	static let wasmPayload: [UInt8] = [0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00, 0x00, 0x61, 0x73, 0x6D]
+
+	@Test("an application/wasm manifest entry embeds as a servable shipped asset")
+	func wasmManifestEntryEmbeds() throws {
+		let json = """
+		{
+		  "types": [
+		    { "name": "ProbeWasm", "kind": "file", "path": "vendor/island.wasm",
+		      "contentType": "application/wasm" }
+		  ]
+		}
+		"""
+		let (root, manifestURL) = try fixture(manifestJSON: json)
+		defer { try? FileManager.default.removeItem(at: root) }
+		try Data(Self.wasmPayload).write(to: root.appendingPathComponent("Assets/vendor/island.wasm"))
+		let out = root.appendingPathComponent("Embedded.swift")
+
+		let manifest = try WebUIAssetManifest.load(from: manifestURL)
+		let receipts = try WebUIAssetBuilder.embed(manifest: manifest, to: out)
+
+		#expect(receipts.count == 1)
+		#expect(receipts[0].typeName == "ProbeWasm")
+		#expect(receipts[0].bytes == Self.wasmPayload.count)
+		#expect(receipts[0].stamp.count == 12)
+
+		let source = try String(contentsOf: out, encoding: .utf8)
+		#expect(source.contains("public enum ProbeWasm: WebUIShippedAsset"))
+		#expect(source.contains("contentType = \"application/wasm\""))
+		// a wasm blob gets no text accessor — `isTextContent` is false for it.
+		#expect(!source.contains("static var text"))
+		// the payload survives the base64 round-trip byte for byte.
+		let body = try extractBase64Literal(source, label: "bodyBase64")
+		#expect(Array(body) == Self.wasmPayload)
+	}
+
+	@Test("an optional entry whose file is absent skips the embed and ships nothing for it")
+	func optionalAbsentFileSkips() throws {
+		let json = """
+		{
+		  "types": [
+		    { "name": "ProbeGhost", "kind": "file", "path": "vendor/absent.wasm",
+		      "contentType": "application/wasm", "optional": true },
+		    { "name": "ProbeCSS", "kind": "file", "path": "vendor/probe.min.css",
+		      "contentType": "text/css; charset=utf-8", "minify": true, "prose": "check" }
+		  ]
+		}
+		"""
+		let (root, manifestURL) = try fixture(manifestJSON: json)
+		defer { try? FileManager.default.removeItem(at: root) }
+		// `vendor/absent.wasm` is deliberately not written: the cold-start shape.
+		let out = root.appendingPathComponent("Embedded.swift")
+
+		let manifest = try WebUIAssetManifest.load(from: manifestURL)
+		#expect(manifest.entries[0].optional, "the flag survives the load")
+
+		let receipts = try WebUIAssetBuilder.embed(manifest: manifest, to: out)
+		#expect(receipts.map(\.typeName) == ["ProbeCSS"], "only the present entry embeds")
+
+		let source = try String(contentsOf: out, encoding: .utf8)
+		#expect(source.contains("public enum ProbeCSS: WebUIShippedAsset"))
+		#expect(!source.contains("ProbeGhost"), "an absent optional entry ships no conformance")
+	}
+
+	@Test("an optional entry with its file present embeds like a required one")
+	func optionalPresentFileEmbeds() throws {
+		let json = """
+		{
+		  "types": [
+		    { "name": "ProbeWasm", "kind": "file", "path": "vendor/island.wasm",
+		      "contentType": "application/wasm", "optional": true }
+		  ]
+		}
+		"""
+		let (root, manifestURL) = try fixture(manifestJSON: json)
+		defer { try? FileManager.default.removeItem(at: root) }
+		try Data(Self.wasmPayload).write(to: root.appendingPathComponent("Assets/vendor/island.wasm"))
+		let out = root.appendingPathComponent("Embedded.swift")
+
+		let manifest = try WebUIAssetManifest.load(from: manifestURL)
+		let receipts = try WebUIAssetBuilder.embed(manifest: manifest, to: out)
+		#expect(receipts.map(\.typeName) == ["ProbeWasm"])
+		#expect(receipts[0].bytes == Self.wasmPayload.count)
+
+		let source = try String(contentsOf: out, encoding: .utf8)
+		#expect(source.contains("public enum ProbeWasm: WebUIShippedAsset"))
+	}
+
+	@Test("'optional' is only meaningful for a file entry")
+	func optionalOnNonFileKindFails() throws {
+		let broken = """
+		{
+		  "types": [
+		    { "name": "ProbeInline", "kind": "text", "text": "var probe = 1;\\n",
+		      "contentType": "text/javascript", "optional": true }
+		  ]
+		}
+		"""
+		let (root, manifestURL) = try fixture(manifestJSON: broken)
+		defer { try? FileManager.default.removeItem(at: root) }
+
+		do {
+			_ = try WebUIAssetManifest.load(from: manifestURL)
+			Issue.record("optional on a non-file kind must not load")
+		} catch let error as WebUIBuildError {
+			#expect(error.description.contains("optional"), "the failure names the flag: \(error)")
+			#expect(error.description.contains("ProbeInline"), "the failure names the entry: \(error)")
+		}
+	}
 }

@@ -99,4 +99,24 @@ struct AssetProtocolTests {
 		#expect(asset.stamp == String(SHA256.hex(DriftedStub.body).prefix(12)))
 		#expect(asset.stamp != DriftedStub.stamp)
 	}
+
+	@Test("a wasm asset's registration carries the sheet's immutable year-long policy")
+	func wasmRegistrationIsImmutable() {
+		// the island artifact is deterministic and content-addressed — the same
+		// cache story the stylesheet gets. W1.3's policy pin: an application/wasm
+		// shipped asset derives the same registration from the shared value, with
+		// no host-side policy call at all.
+		struct IslandStub: WebUIShippedAsset {
+			static let contentType = "application/wasm"
+			static let body: [UInt8] = [0x00, 0x61, 0x73, 0x6D, 0x01, 0x00, 0x00, 0x00]
+			static let stamp = String(SHA256.hex(body).prefix(12))
+			static let gzip: [UInt8]? = nil
+		}
+		let asset = WebUIAsset(IslandStub.self, path: "/__assets/webui-validate.wasm")
+		let registration = asset.registration
+		#expect(registration.contentType == "application/wasm")
+		#expect(registration.cacheSeconds == 31536000)
+		#expect(registration.immutable)
+		#expect(registration.path == "/__assets/webui-validate.wasm", "the registration is the bare path — the stamp rides the url only")
+	}
 }

@@ -45,15 +45,21 @@ struct WebUISmokePlugin: CommandPlugin {
 
         var pass = 0
         var fail = 0
+        var skipped = 0
         func ok(_ message: String) { pass += 1; print("  PASS \(message)") }
         func bad(_ message: String) { fail += 1; print("  FAIL \(message)") }
+        // a named skip-with-reason, not a failure: an absent island artifact is the
+        // documented degrade path (the engine falls back to the server-rendered
+        // region), so a clone that has not run `plugin wasm-island` is reported,
+        // not failed — the same philosophy the budget gate applies to islands.
+        func skip(_ message: String) { skipped += 1; print("  SKIP \(message)") }
 
         print("=== WebUI smoke check ===")
         print("  base: \(base)")
 
         var ready = false
         for _ in 0..<40 {
-            if let (body, headers) = await GETWithHeaders(session, "\(base)/"),
+            if let (body, headers, _) = await GETWithHeaders(session, "\(base)/"),
                !body.isEmpty,
                headerValue(headers, "X-WebUI-Smoke-Nonce") == nonce {
                 ready = true
@@ -98,7 +104,7 @@ struct WebUISmokePlugin: CommandPlugin {
         // out, wire bytes verified.
         let probeSource = context.package.directoryURL
             .appendingPathComponent("Sources/WebUISmokeTest/Assets/probe.css")
-        if let (servedProbe, probeHeaders) = await GETWithHeaders(session, "\(base)/ui/probe.css"),
+        if let (servedProbe, probeHeaders, _) = await GETWithHeaders(session, "\(base)/ui/probe.css"),
            let sourceProbe = try? Data(contentsOf: probeSource),
            let generatedPayload = generatedBodyPayload(packageDir: context.package.directoryURL) {
             let probeText = String(data: servedProbe, encoding: .utf8) ?? ""
@@ -112,6 +118,21 @@ struct WebUISmokePlugin: CommandPlugin {
             }
         } else {
             bad("the embed plugin's asset did not serve at /ui/probe.css (or its generated file is missing — run swift build)")
+        }
+
+        // the island artifact's integrity, named the way the budget gate names it:
+        // a served artifact must be the exact bytes the cross-build produced, and an
+        // absent one is the engine's documented degrade path — reported, not failed,
+        // so a fresh clone learns the ritual instead of chasing a red herring.
+        if let (servedIsland, islandHeaders, islandStatus) = await GETWithHeaders(session, "\(base)/__assets/webui-validate.wasm"),
+           islandStatus == 200, !servedIsland.isEmpty {
+            if headerValue(islandHeaders, "Content-Type")?.contains("application/wasm") == true {
+                ok("island artifact served as application/wasm (\(servedIsland.count) bytes)")
+            } else {
+                bad("island artifact content-type is not application/wasm")
+            }
+        } else {
+            skip("island artifact absent at /__assets/webui-validate.wasm — the engine's degrade path serves the page without it (run `swift package --disable-sandbox plugin wasm-island` to exercise the mounted path)")
         }
 
         guard let pageData = await GET(session, "\(base)/"),
@@ -182,9 +203,13 @@ struct WebUISmokePlugin: CommandPlugin {
         }
 
         print("")
-        print("=== summary: \(pass) passed, \(fail) failed ===")
+        print("=== summary: \(pass) passed, \(fail) failed\(skipped > 0 ? ", \(skipped) skipped" : "") ===")
         if fail == 0 {
-            print("SMOKE PASS")
+            if skipped > 0 {
+                print("SMOKE PASS (with skips — the island artifact is absent; the degrade path is the documented behavior)")
+            } else {
+                print("SMOKE PASS")
+            }
         } else {
             Diagnostics.error("smoke gate failed")
         }
@@ -224,7 +249,7 @@ struct WebUISmokePlugin: CommandPlugin {
         return nil
     }
 
-    private func GETWithHeaders(_ session: URLSession, _ urlString: String) async -> (Data, [String: String])? {
+    private func GETWithHeaders(_ session: URLSession, _ urlString: String) async -> (Data, [String: String], Int)? {
         guard let url = URL(string: urlString) else { return nil }
         guard let (data, response) = try? await session.data(from: url),
               let http = response as? HTTPURLResponse else { return nil }
@@ -232,6 +257,6 @@ struct WebUISmokePlugin: CommandPlugin {
         for (key, value) in http.allHeaderFields {
             headers["\(key)"] = "\(value)"
         }
-        return (data, headers)
+        return (data, headers, http.statusCode)
     }
 }

@@ -855,6 +855,9 @@ extension SmokeApp {
 					// the validate capability island (next architecture d3);
 					// the engine fetches it lazily when a page declares the
 					// capability. absent artifact = 404 = the degrade path.
+					// the policy matches the sheet's: a stripped, deterministic,
+					// content-addressed binary is immutable — a rebuilt artifact
+					// is a different fetch, never a stale one.
 					guard !self.islandValidate.isEmpty else {
 						try await respond404(channel: channel.channel)
 						return
@@ -862,7 +865,8 @@ extension SmokeApp {
 					try await respond(
 						channel: channel.channel,
 						bytes: self.islandValidate,
-						contentType: "application/wasm"
+						contentType: "application/wasm",
+						cacheControl: "public, max-age=31536000, immutable"
 					)
 					return
 				}

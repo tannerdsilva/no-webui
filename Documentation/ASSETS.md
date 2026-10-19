@@ -162,6 +162,7 @@ attach the plugin twice under different directories.
 | `minify` | all | run the framework's css minifier before embedding |
 | `prose` | all | `off` (default) or `check` — refuse comments that would ship |
 | `ceilingBytes` / `ceilingGzipBytes` | all | pinned ceilings, enforced at embed time |
+| `optional` | `file` | `true` tolerates the file being absent: the entry ships nothing (no conformance, no receipt) and the build continues — for a payload a cold checkout has not produced yet (a cross-built island artifact). a *present* optional file embeds exactly like a required one |
 
 unknown keys, unknown kinds, missing required fields, non-utf-8 text payloads and missing
 paths are all build failures that name the entry — a typo must not ship a page that links an
@@ -200,3 +201,30 @@ entries) by listing them as `text` entries.
   (what the server answers) derive from the same bytes; the server matches host assets after
   stripping the query, so registering a *stamped* path answers 404 for the whole asset — the
   failure is pinned as a test, not a comment.
+
+## recipe 3 — serving a capability island from the manifest
+
+an island artifact (a stripped, deterministic `.wasm` the engine lazy-fetches at
+`/__assets/webui-<name>.wasm`) is a manifest entry like any other binary — declare it
+`application/wasm`, point the server at the exact path the engine fetches, and the
+registration carries the immutable year-long policy the sheet gets:
+
+```json
+{ "name": "WebUIValidateIslandAsset", "kind": "file", "path": "islands/webui-validate.wasm",
+  "contentType": "application/wasm", "optional": true }
+```
+
+```swift
+let island = WebUIAsset(WebUIValidateIslandAsset.self, path: "/__assets/webui-validate.wasm")
+// `island.url` for the config, `island.registration` for the server — both derive
+// from the same bytes, so the page and the server cannot disagree.
+let config = WebUIServerConfig(port: 9090, assets: [island.registration])
+```
+
+`optional: true` is what makes a cold checkout build: the artifact does not exist until
+`swift package --disable-sandbox plugin wasm-island` produces it, and until then the entry
+ships nothing and the engine's documented degrade path serves the page without the island.
+once the artifact is present the same manifest embeds it — no code changes either way. the
+entry's *name* in the fetch path (`webui-validate`) must equal the island's `Island.name`.
+the smoke server's own `/__assets/webui-validate.wasm` route shows the hand-rolled shape this
+replaces, and its cache policy is the sheet's: `public, max-age=31536000, immutable`.
