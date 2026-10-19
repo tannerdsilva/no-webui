@@ -747,3 +747,107 @@ public struct Form: View {
         buffer.endElement()
     }
 }
+
+// MARK: - Inline elements
+
+public struct Small: View {
+    public let children: [any View]
+    public init(_ text: String) { self.children = [Text(text)] }
+    public init(@ViewBuilder content: () -> [any View]) { self.children = content() }
+    public func render(into buffer: inout HTMLBuffer) {
+        buffer.beginElement("small"); buffer.endOpenTag()
+        for child in children { child.render(into: &buffer) }
+        buffer.endElement()
+    }
+}
+
+public struct InlineCode: View {
+    public let children: [any View]
+    public init(_ text: String) { self.children = [Text(text)] }
+    public init(@ViewBuilder content: () -> [any View]) { self.children = content() }
+    public func render(into buffer: inout HTMLBuffer) {
+        buffer.beginElement("code"); buffer.endOpenTag()
+        for child in children { child.render(into: &buffer) }
+        buffer.endElement()
+    }
+}
+
+public struct Preformatted: View {
+    public let children: [any View]
+    public init(_ text: String) { self.children = [Text(text)] }
+    public init(@ViewBuilder content: () -> [any View]) { self.children = content() }
+    public func render(into buffer: inout HTMLBuffer) {
+        buffer.beginElement("pre"); buffer.endOpenTag()
+        for child in children { child.render(into: &buffer) }
+        buffer.endElement()
+    }
+}
+
+public struct Strong: View {
+    public let children: [any View]
+    public init(_ text: String) { self.children = [Text(text)] }
+    public init(@ViewBuilder content: () -> [any View]) { self.children = content() }
+    public func render(into buffer: inout HTMLBuffer) {
+        buffer.beginElement("strong"); buffer.endOpenTag()
+        for child in children { child.render(into: &buffer) }
+        buffer.endElement()
+    }
+}
+
+public struct Emphasis: View {
+    public let children: [any View]
+    public init(_ text: String) { self.children = [Text(text)] }
+    public init(@ViewBuilder content: () -> [any View]) { self.children = content() }
+    public func render(into buffer: inout HTMLBuffer) {
+        buffer.beginElement("em"); buffer.endOpenTag()
+        for child in children { child.render(into: &buffer) }
+        buffer.endElement()
+    }
+}
+
+public struct Blockquote: View {
+    public let children: [any View]
+    public init(_ text: String) { self.children = [Text(text)] }
+    public init(@ViewBuilder content: () -> [any View]) { self.children = content() }
+    public func render(into buffer: inout HTMLBuffer) {
+        buffer.beginElement("blockquote"); buffer.endOpenTag()
+        for child in children { child.render(into: &buffer) }
+        buffer.endElement()
+    }
+}
+
+public struct Article: View {
+    public let children: [any View]
+    public init(_ text: String) { self.children = [Text(text)] }
+    public init(@ViewBuilder content: () -> [any View]) { self.children = content() }
+    public func render(into buffer: inout HTMLBuffer) {
+        buffer.beginElement("article"); buffer.endOpenTag()
+        for child in children { child.render(into: &buffer) }
+        buffer.endElement()
+    }
+}
+
+public struct LineBreak: View {
+    public init() {}
+    public func render(into buffer: inout HTMLBuffer) { buffer.voidElement("br") }
+}
+
+public struct Details: View {
+    public let isOpen: Bool
+    public let summary: [any View]
+    public let content: [any View]
+    public init(open: Bool = false,
+                @ViewBuilder summary: () -> [any View],
+                @ViewBuilder content: () -> [any View]) {
+        self.isOpen = open; self.summary = summary(); self.content = content()
+    }
+    public func render(into buffer: inout HTMLBuffer) {
+        buffer.beginElement("details", isOpen ? " open" : "")
+        buffer.endOpenTag()
+        buffer.beginElement("summary"); buffer.endOpenTag()
+        for v in summary { v.render(into: &buffer) }
+        buffer.endElement()
+        for v in content { v.render(into: &buffer) }
+        buffer.endElement()
+    }
+}
