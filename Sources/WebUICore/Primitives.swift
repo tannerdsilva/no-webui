@@ -170,7 +170,7 @@ public struct Input: View {
     public let id: String?
     public let name: String?
     public let placeholder: String
-    public let type: InputType
+    public let type: InputType?
     public let value: String
     public let disabled: Bool
     public let required: Bool
@@ -181,7 +181,7 @@ public struct Input: View {
         id: String? = nil,
         name: String? = nil,
         placeholder: String = "",
-        type: InputType = .text,
+        type: InputType? = .text,
         value: String = "",
         disabled: Bool = false,
         required: Bool = false,
@@ -205,7 +205,7 @@ public struct Input: View {
         var attributeText = ""
         if let id { attributeText += " id=\"\(htmlEscape(id))\"" }
         if let name { attributeText += " name=\"\(htmlEscape(name))\"" }
-        attributeText += " type=\"\(type.rawValue)\""
+        if let type { attributeText += " type=\"\(type.rawValue)\"" }
         if !placeholder.isEmpty { attributeText += " placeholder=\"\(htmlEscape(placeholder))\"" }
         if !value.isEmpty { attributeText += " value=\"\(htmlEscape(value))\"" }
         if disabled { attributeText += " disabled" }

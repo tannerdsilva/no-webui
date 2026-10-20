@@ -155,6 +155,22 @@ struct PrimitiveRenderTests {
 		#expect(Input(name: "f", type: .file, accept: "\" onfocus=\"alert(1)").markup.html.contains("&quot;"))
 	}
 
+	@Test("an input may omit its type attribute")
+	func inputOmitsType() {
+		// (a) type: nil emits no type attribute at all — a void element
+		let bare = Input(id: "x", type: nil).markup.html
+		#expect(bare == "<input id=\"x\">")
+		// (b) the default still renders type="text" — source-compatible
+		let defaulted = Input(id: "x").markup.html
+		#expect(defaulted == "<input id=\"x\" type=\"text\">")
+		#expect(defaulted.hasSuffix(">") && !defaulted.contains("</input>"))
+		// (c) an explicit case still renders its type
+		let checked = Input(id: "x", type: .checkbox).markup.html
+		#expect(checked == "<input id=\"x\" type=\"checkbox\">")
+		// all three are void elements: no closing tag
+		#expect(!bare.contains("</input>") && !defaulted.contains("</input>") && !checked.contains("</input>"))
+	}
+
 	@Test("group composes its children with no wrapper")
 	func groupComposes() {
 		#expect(Group { Text("a"); Text("b") }.markup.html == "ab")
