@@ -70,6 +70,18 @@ forces a rewrite: the restart does **not** introduce a view IR as a gate. an int
 minimization, and a typed contract for wasm islands to avoid string marshaling in hot
 paths (charts, virtualized lists). it never leaks into the public api.
 
+**landed (2026-10-20, wasm-applogic-improve arc a):** the *string* rung of that ladder
+is real — `ResizableIsland: Island` + `ResizableIslandRegion` give a region a
+client-side re-render loop. the engine observes `[data-webui-island-resize="true"]`,
+injects the measured container width into the existing `{name, args}` envelope as an
+integer `width` (the server fallback renders `nil` — width is a client fact),
+re-invokes `webui_render_region` with 120 ms coalescing, and re-mounts island regions
+that a fragment patch replaced. the sibling-protocol shape (`ResizableIsland`, not a
+requirement on the frozen `Island`) is the precedent for the typed contract below it,
+which stays reserved: a binary envelope (rawdog frames, versioned magic) for charts
+and virtualized lists, with the sibling-`TypedIsland`-vs-requirement decision still
+open. authoring contract: `Documentation/ISLANDS.md`.
+
 ### layer b — the engine (new base client runtime)
 
 a single framework-owned javascript module (~30 kb raw / ~10 kb gz), deterministic,

@@ -291,7 +291,10 @@ frozen surface is a mistake:
    failure mode rather than a silent downgrade. the engine carries the full
    browser-mode keyboard surface — tree Enter/Space, composer enter-to-send,
    modal Escape-to-dismiss — plus modal focus trapping and focus return, probed
-   in `designer/browser-smoke.mjs`.
+   in `designer/browser-smoke.mjs`. the capability-island authoring contract —
+   including the resizable (client-re-render) door — is `Documentation/ISLANDS.md`;
+   `ResizableIsland` and `ResizableIslandRegion` are additive surface in the
+   frozen list, and the probe region in the smoke page is their live example.
 3. **modal focus management is engine-owned.** initial focus into a
    `WebUIModal` is still server-driven (the caller renders the modal open
    with the intended focus within its own markup); trapping and focus return
