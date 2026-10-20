@@ -923,11 +923,11 @@ func formRendersWithAction() {
 
 @Test("Form renders without action when empty")
 func formEmptyAction() {
-    let view = Form {
-        Text("No action")
-    }
-    let html = view.markup.html
-    #expect(html.contains("action=\"\""))
+	let view = Form {
+		Text("No action")
+	}
+	let html = view.markup.html
+	#expect(html.contains(" action=") == false, "got \\(html)")
 }
 
 @Test("WebUIDocument renders complete page with theme")

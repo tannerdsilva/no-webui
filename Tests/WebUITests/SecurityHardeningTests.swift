@@ -60,7 +60,7 @@ struct URLSanitizationHardeningTests {
 		let safe = Form(action: "https://ok.example/submit") { Text("") }.markup.html
 		#expect(safe.contains("action=\"https://ok.example/submit\""))
 		let unsafe = Form(action: " javascript:alert(1)") { Text("") }.markup.html
-		#expect(unsafe.contains("action=\"\""))
+		#expect(unsafe.contains(" action=") == false, "got \(unsafe)")
 	}
 }
 

@@ -648,11 +648,11 @@ public enum FormMethod: String, Sendable, CaseIterable {
 // MARK: - Form
 public struct Form: View {
     public let action: String
-    /// the emitted `method`.
-    ///
-    /// the default is `.post`, which is what the framework's own `WebUIServer`
-    /// does *not* answer — see the render-time diagnostic in `render(into:)`.
-    public let method: FormMethod
+    /// the emitted `method`, when non-nil. the default is `.post`, which is
+    /// what the framework's own `WebUIServer` does *not* answer — see the
+    /// render-time diagnostic in `render(into:)`. pass `method: nil` to omit
+    /// the attribute entirely (the browser then uses its GET default).
+    public let method: FormMethod?
     /// the emitted `enctype`, when non-empty. a form with a file input should
     /// set `enctype: "multipart/form-data"` so the browser's native submit
     /// sends a multipart body the server can parse (plan w3.3).
@@ -671,7 +671,7 @@ public struct Form: View {
 
     public init(
         action: String = "",
-        method: FormMethod = .post,
+        method: FormMethod? = .post,
         enctype: String = "",
         id: String? = nil,
         class: String? = nil,
@@ -709,15 +709,16 @@ public struct Form: View {
         self.children = content()
     }
 
-    /// the exact `method` attribute value this form emits.
-    private var emittedMethod: String { rawMethod ?? method.rawValue }
+    /// the exact `method` attribute value this form emits, or nil when the
+    /// attribute should be omitted entirely.
+    private var emittedMethod: String? { rawMethod ?? method?.rawValue }
 
     public func render(into buffer: inout HTMLBuffer) {
         // the framework's own default is the one its own server refuses: a POST
         // form with no render context has nothing to intercept its submit, so the
         // browser sends a real POST and `WebUIServer` answers 405 with no
         // explanation anywhere. say so once, where the welder can act on it.
-        if emittedMethod.lowercased() == "post", RenderContext.current == nil {
+        if let m = emittedMethod, m.lowercased() == "post", RenderContext.current == nil {
             RenderDiagnostics.warnOnce(
                 "form.post-without-render-context",
                 """
@@ -733,8 +734,12 @@ public struct Form: View {
         if let id { attributeText += " id=\"\(htmlEscape(id))\"" }
         if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
         let safeAction = sanitizeURL(action) ?? ""
-        attributeText += " action=\"\(htmlEscape(safeAction))\""
-        attributeText += " method=\"\(htmlEscape(emittedMethod))\""
+        if !safeAction.isEmpty {
+            attributeText += " action=\"\(htmlEscape(safeAction))\""
+        }
+        if let m = emittedMethod {
+            attributeText += " method=\"\(htmlEscape(m))\""
+        }
         if !enctype.isEmpty { attributeText += " enctype=\"\(htmlEscape(enctype))\"" }
         buffer.beginElement("form", attributeText)
         buffer.endOpenTag()

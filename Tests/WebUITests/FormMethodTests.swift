@@ -60,9 +60,41 @@ struct FormMethodTests {
         #expect(html.contains("&quot;"), "got \(html)")
     }
 
+    @Test("a form with defaults still emits method=post")
+    func defaultFormStillEmitsMethod() {
+        let html = Form(action: "/go") { Text("x") }.markup.html
+        #expect(html.contains(" action=\"/go\""))
+        #expect(html.contains(" method=\"post\""))
+    }
+
+    @Test("method: nil emits no method attribute (browser GET default)")
+    func nilMethodOmitsAttribute() {
+        // arc's submit is intercepted by the engine, so the verb never
+        // reaches HTTP — omitting method is the correct spelling there.
+        let m: FormMethod? = nil
+        let html = Form(action: "/go", method: m) { Text("x") }.markup.html
+        #expect(html.contains(" action=\"/go\""))
+        #expect(html.contains(" method=") == false, "got \(html)")
+    }
+
+    @Test("an empty action emits no action attribute")
+    func emptyActionOmitsAttribute() {
+        let html = Form() { Text("x") }.markup.html
+        #expect(html.contains(" action=") == false, "got \(html)")
+        #expect(html.contains(" method=\"post\""))
+    }
+
+    @Test("a non-empty action is emitted and escaped")
+    func nonEmptyActionEmitsEscaped() {
+        let html = Form(action: "/go?a=1&b=2", method: .get) { Text("x") }.markup.html
+        #expect(html.contains(" action=\"/go?a=1&amp;b=2\""))
+        #expect(html.contains(" method=\"get\""))
+    }
+
     @Test("the action still routes through sanitizeURL")
     func actionSanitized() {
-        #expect(Form(action: "javascript:alert(1)") { Text("x") }.markup.html.contains("action=\"\""))
+        // a rejected action is dropped entirely (omitted), never emitted raw.
+        #expect(Form(action: "javascript:alert(1)") { Text("x") }.markup.html.contains(" action=") == false)
         #expect(Form(action: "/go") { Text("x") }.markup.html.contains("action=\"/go\""))
     }
 }

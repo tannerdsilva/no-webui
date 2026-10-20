@@ -130,7 +130,7 @@ struct PrimitiveRenderTests {
 	@Test("form sanitizes the action and carries the csrf field")
 	func formContract() {
 		#expect(Form(action: "javascript:x", method: "post", id: "f", csrfToken: "tok<") { }.markup.html
-			== "<form id=\"f\" action=\"\" method=\"post\"><input type=\"hidden\" name=\"_csrf\" value=\"tok&lt;\"></form>")
+			== "<form id=\"f\" method=\"post\"><input type=\"hidden\" name=\"_csrf\" value=\"tok&lt;\"></form>")
 		#expect(Form(action: "/go", method: "get", class: "c") { Text("x") }.markup.html
 			== "<form class=\"c\" action=\"/go\" method=\"get\">x</form>")
 	}
