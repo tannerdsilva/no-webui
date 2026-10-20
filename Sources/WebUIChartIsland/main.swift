@@ -1,4 +1,5 @@
-import WebUIIslandCore
+import WebUIChartSpec
+import WebUIIslandRuntime
 
 // arc b's proof product: a typed chart spec arrives as a versioned rawdog
 // frame inside the mount envelope, decodes without a json parse, and renders

@@ -1,4 +1,5 @@
-import WebUIIslandCore
+import WebUIIslandFixtures
+import WebUIIslandRuntime
 import WebUISharedCore
 
 // the host build just needs a main (the target is wasm-only in practice);

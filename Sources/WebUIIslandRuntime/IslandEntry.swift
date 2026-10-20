@@ -10,6 +10,7 @@
 // wasm32-wasi.
 
 #if os(WASI)
+import WebUIIslandWire
 import WebUISharedCore
 
 /// the shared wasi entry harness behind every capability island artifact.

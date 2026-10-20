@@ -1,6 +1,6 @@
 import Testing
 import Foundation
-import WebUIIslandCore
+import WebUIIslandFixtures
 // ClientFieldValidator lives in the zero-dep shared core leaf; it used to be
 // reachable through the (now deleted) wasm client runtime.
 import WebUISharedCore

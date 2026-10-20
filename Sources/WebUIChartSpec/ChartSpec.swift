@@ -15,6 +15,7 @@
 // mid-scalar fails the strict decode on the island, which lands on the
 // server-rendered fallback — the safe degrade, never a crash.
 
+import WebUIIslandWire
 import WebUISharedCore
 
 public struct ChartSpec: Sendable, Equatable {

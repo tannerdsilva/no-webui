@@ -1,5 +1,6 @@
 import Testing
-import WebUIIslandCore
+import WebUIIslandWire
+import WebUIChartSpec
 
 // the envelope's job: a value goes in, a base64 frame comes out, and only a
 // frame with the right magic, the right version, a consistent declared

@@ -11,8 +11,9 @@ server state or persistence: the server stays authoritative, and a round trip is
 correct price.
 
 this guide is the end-user contract. the machinery lives in `Sources/WebUICore/Island.swift`
-(protocols + region views), `Sources/WebUIIslandCore/` (shared logic + the wasi entry
-harness), and the engine's island block in `designer/assets/webui-engine.js`.
+(protocols + region views), `Sources/WebUIIslandWire/` (the wire contract both sides
+implement), `Sources/WebUIIslandRuntime/` (the wasi entry harness), one target per
+capability, and the engine's island block in `designer/assets/webui-engine.js`.
 
 ---
 
@@ -66,14 +67,16 @@ no manual capability list. the region emits:
 ## 3. authoring recipe (five steps)
 
 the reference implementation is the width probe, and this recipe matches it
-line-for-line: `Sources/WebUIIslandCore/WidthProbeIsland.swift` (shared logic) +
-`Sources/WebUIWidthProbeIsland/main.swift` (the product) + its `Package.swift` entry.
+line-for-line: `Sources/WebUIIslandFixtures/WidthProbeIsland.swift` (the capability
+module) + `Sources/WebUIWidthProbeIsland/main.swift` (the product) + its
+`Package.swift` entry.
 
-### step 1 — shared logic in `WebUIIslandCore`
+### step 1 — your capability module (a leaf)
 
-put the logic where both sides can reach it. **the island core must stay
-Foundation-free** (it builds for wasm32-wasi): use `WebUISharedCore`'s `JSONValue`,
-`htmlEscape`, and the render primitives — never Foundation.
+put the logic in its own target so both sides reach it and nothing else does.
+**it must stay Foundation-free** (it builds for wasm32-wasi), and it depends only
+on `WebUIIslandWire`: use `WebUISharedCore`'s `JSONValue`, `htmlEscape`, and the
+render primitives — never Foundation, never another capability module.
 
 ```swift
 public enum MyIsland {
@@ -101,8 +104,7 @@ public enum MyResizableIsland {
 `Sources/WebUIMyIsland/main.swift`:
 
 ```swift
-import WebUIIslandCore
-import WebUISharedCore
+import WebUIIslandRuntime
 
 @main
 struct WebUIMyIsland {
@@ -116,7 +118,7 @@ struct WebUIMyIsland {
 }
 ```
 
-`IslandEntry` (in `WebUIIslandCore`) owns the wasi plumbing — the input/frame buffers,
+`IslandEntry` (in `WebUIIslandRuntime`) owns the wasi plumbing — the input/frame buffers,
 utf-8 decode, and the four standard exports (`webui_input_ptr`, `webui_frame_ptr`,
 `webui_frame_len`, `webui_render_region`). your `main` runs as `_start`, which the
 engine invokes before any export, so the hook is installed before the first render.
@@ -126,9 +128,10 @@ adds just that one `@_expose(wasm, …)` function.
 ### step 3 — the manifest
 
 ```swift
+.target(name: "MyCapability", dependencies: ["WebUIIslandWire"]),
 .executableTarget(
 	name: "WebUIMyIsland",
-	dependencies: ["WebUIIslandCore", "WebUISharedCore"]
+	dependencies: ["WebUIIslandRuntime", "MyCapability"]
 ),
 ```
 
@@ -182,7 +185,7 @@ declaring one emits the capability, the resize flag where applicable, and:
      data-webui-args='{"frame":"V1VJMQ…"}'>…fallback markup…</div>
 ```
 
-**the wire frame** (`IslandEnvelope`, in `WebUIIslandCore`):
+**the wire frame** (`IslandEnvelope`, in `WebUIIslandWire`):
 
 ```
 frame   := "WUI1" | u16be version | u16be reserved | u32be payload length | payload
@@ -209,7 +212,7 @@ extension MyPayload: IslandPayloadEncodable, IslandPayloadDecodable {
 
 `IslandUTF8.decode(_:)` is the strict foundation-free text reader for string
 fields (replace-with-U+FFFD is `decodeReplacingInvalid`, the lenient harness
-policy). your codec must stay within `WebUIIslandCore`'s dependency budget:
+policy). your codec must stay within `WebUIIslandWire`'s dependency budget:
 **no Foundation, and no rawdog** — rawdog's module cannot compile for embedded
 wasm (`RAW` uses `Codable`, which embedded Swift does not have; `CRAW` needs
 mmap emulation), so a rawdog-conforming type cannot be decoded inside an
@@ -231,6 +234,40 @@ mechanism.
 (five values, a title) mounts at the measured width, re-renders on resize, and
 its output passes the fragment sanitizer. `browser-smoke.mjs` asserts the mount,
 the frame magic in the args attribute, and the resize re-render.
+
+## 3c. targets and the artifact gate
+
+the island side is four narrow targets, not one shared blob:
+
+| target | holds | depends on |
+|---|---|---|
+| `WebUIIslandWire` | the contract both sides implement: `IslandPayload*`, `IslandEnvelope`, base64 armor, the utf-8 scanner, the `@_exported` leaf seam | the leaf |
+| `WebUIIslandRuntime` | the wasi harness (`IslandEntry`) and entry installers (`TypedIslandEntry`) — wasm-only code | wire |
+| your capability module | the renderer both sides call (one target per capability) | wire |
+| your product | `main` (hook assignment + any `@_expose` extra) | runtime + your capability |
+
+an island's dependency set *is* its capability set. editing the chart renderer does not
+rebuild the width probe, and a dependency added to one capability cannot silently change
+another.
+
+`plugin wasm-island` enforces that shape instead of trusting it, and it fails the build
+that produced the violation:
+
+- **graph rules (before the cross-build).** a capability module is a leaf — it may depend
+  only on the shared layer; a product owns at most one capability module; a shared module
+  never depends on a capability module. without them the symbol audit's "foreign" set is
+  self-referential: an accidental edge folds the leaked module into the product's own
+  closure and the gate would call the leak legitimate.
+- **symbol audit (on the unstripped artifact, where the name section still exists).**
+  every defined symbol's module must be shared or in this product's own closure; a foreign
+  module fails the build. reads `llvm-nm`, resolved from `WEBUI_LLVM_NM`, the active
+  toolchain, `xcrun`, or the installed toolchains.
+- **export audit (on the artifact that ships).** exports must equal the runtime's
+  `@_expose` set plus this product's own, modulo `memory` and `_start`. a fifth export
+  nobody declared is a wire change that belongs in source.
+
+every expectation is derived from the manifest and the sources — there is no per-product
+allowlist to maintain, and a new capability is covered the moment its target exists.
 
 ## 4. what the engine does (the mount contract)
 
@@ -256,10 +293,11 @@ re-observes the replacement (the old node is unobserved — no leak).
 - **one capability per artifact.** the product's entry is single-purpose; the four
   standard exports are shared, but extra exports (`webui_validate`) belong to that
   product. two capabilities wanting the same logic share the *code*, not the artifact.
+  the build gate enforces all of it — see §3c.
 - **`Island.name` must equal the route's `<name>`.** `name = "width-probe"` fetches
   `/__assets/webui-width-probe.wasm`. a mismatch is a silent `unmapped`.
-- **the core stays Foundation-free.** a `Foundation` import in `WebUIIslandCore` breaks
-  the wasm build.
+- **the island targets stay Foundation-free.** a `Foundation` import in
+  `WebUIIslandWire`, `WebUIIslandRuntime`, or any capability target breaks the wasm build.
 - **width is a client fact.** never trust a width for anything but layout; the server
   render has none.
 - **re-render replaces the region's children**, so a CSS transition on them restarts.
@@ -278,7 +316,7 @@ re-observes the replacement (the old node is unobserved — no leak).
 | `swift package plugin budget` | every shipped surface (engine, sheet, shell, island artifacts) within its pinned ceiling |
 | `swift package --disable-sandbox plugin smoke` | the artifact serves as `application/wasm`; the page pins its interactive count |
 | `node designer/browser-smoke.mjs` | real-browser mount at measured width, viewport-resize re-render, non-flagged isolation, same-width no-op, patch re-mount |
-| `plugin wasm-island` | the artifact builds and carries the standard exports |
+| `plugin wasm-island` | the artifact builds, its dependency graph holds the island shape, no foreign capability symbols survive, and the export surface equals its declarations |
 
 the smoke page's `#island-width` region is the live example; its "Re-render island"
 control exercises the patch path. the full arc record lives in

@@ -1,4 +1,5 @@
-import WebUIIslandCore
+import WebUIIslandFixtures
+import WebUIIslandRuntime
 import WebUISharedCore
 
 // the width-probe capability island: the reference product for the resizable

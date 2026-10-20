@@ -1,4 +1,5 @@
 #if os(WASI)
+import WebUIIslandWire
 
 // MARK: - the typed entry installer
 //

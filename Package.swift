@@ -58,8 +58,12 @@ let package = Package(
             targets: ["WebUIEmbedPlugin"]
         ),
         .library(
-            name: "WebUIIslandCore",
-            targets: ["WebUIIslandCore"]
+            name: "WebUIIslandWire",
+            targets: ["WebUIIslandWire"]
+        ),
+        .library(
+            name: "WebUIIslandRuntime",
+            targets: ["WebUIIslandRuntime"]
         ),
         .executable(
             name: "WebUIExample",
@@ -114,10 +118,9 @@ let package = Package(
             name: "WebUICore",
             dependencies: [
                 "WebUISharedCore",
-                // the typed island contract: the envelope codec and the shared
-                // island logic live in the island core, which host targets
-                // reach through this seam (never the reverse).
-                "WebUIIslandCore",
+                // the typed island contract: host targets need the wire
+                // (protocols + envelope), never the wasi runtime.
+                "WebUIIslandWire",
                 .product(name: "Logging", package: "swift-log"),
             ],
             plugins: [
@@ -137,13 +140,38 @@ let package = Package(
                 "WebUIAssetPlugin",
             ]
         ),
-        // the capability-island core: same-swift logic that compiles to a
-        // small standalone wasm module (next architecture d3). libraries
-        // here must stay foundation-free — they build for wasm32-wasi.
-        // deliberately depends only on the zero-dep leaf, so island builds
-        // never compile swift-log (not embedded-compatible).
+        // ── capability islands ───────────────────────────────────
+        // four narrow targets instead of one grab-bag:
+        //   wire      the contract both sides implement (envelope, payload
+        //             pair, base64 armor, the one utf-8 scanner)
+        //   runtime   the wasi harness + entry installers (wasm-only code)
+        //   capability logic, one target per capability
+        //   fixtures  the smoke/test capability implementations
+        // an island product depends on wire + runtime + ITS OWN logic, so its
+        // dependency set (and its build invalidation) is its capability set.
+        // everything here must stay foundation-free: it builds for wasm32-wasi.
         .target(
-            name: "WebUIIslandCore",
+            name: "WebUIIslandWire",
+            dependencies: [
+                "WebUISharedCore",
+            ]
+        ),
+        .target(
+            name: "WebUIIslandRuntime",
+            dependencies: [
+                "WebUIIslandWire",
+            ]
+        ),
+        // arc b's proof capability: a typed chart spec + its renderer.
+        .target(
+            name: "WebUIChartSpec",
+            dependencies: [
+                "WebUIIslandWire",
+            ]
+        ),
+        // the smoke-page capability implementations (validate + width probe).
+        .target(
+            name: "WebUIIslandFixtures",
             dependencies: [
                 "WebUISharedCore",
             ]
@@ -151,8 +179,8 @@ let package = Package(
         .executableTarget(
             name: "WebUIValidateIsland",
             dependencies: [
-                "WebUIIslandCore",
-                "WebUISharedCore",
+                "WebUIIslandRuntime",
+                "WebUIIslandFixtures",
             ]
         ),
         // the reference product for the resizable-island contract: its entry
@@ -160,16 +188,17 @@ let package = Package(
         .executableTarget(
             name: "WebUIWidthProbeIsland",
             dependencies: [
-                "WebUIIslandCore",
-                "WebUISharedCore",
+                "WebUIIslandRuntime",
+                "WebUIIslandFixtures",
             ]
         ),
         // arc b's proof product: a typed chart spec crosses the boundary as a
-        // versioned rawdog frame and re-renders at the measured width.
+        // versioned binary frame and re-renders at the measured width.
         .executableTarget(
             name: "WebUIChartIsland",
             dependencies: [
-                "WebUIIslandCore",
+                "WebUIIslandRuntime",
+                "WebUIChartSpec",
             ]
         ),
         .target(
@@ -357,7 +386,8 @@ let package = Package(
                 "WebUIBlocks",
                 "WebUIServer",
                 // the resizable probe's shared logic (host + wasm sides).
-                "WebUIIslandCore",
+                "WebUIIslandFixtures",
+                "WebUIChartSpec",
                 // the typed island conformers escape their fallback markup
                 // with the shared leaf's htmlEscape.
                 "WebUISharedCore",
@@ -549,7 +579,8 @@ let package = Package(
             dependencies: [
                 "WebUI",
                 "WebUISharedCore",
-                "WebUIIslandCore",
+                "WebUIIslandWire",
+                "WebUIChartSpec",
                 "WebUIDesignSystem",
                 "WebUIChart",
                 "WebUIAuth",
@@ -589,9 +620,9 @@ let package = Package(
             ]
         ),
         .testTarget(
-            name: "WebUIIslandCoreTests",
+            name: "WebUIIslandFixturesTests",
             dependencies: [
-                "WebUIIslandCore",
+                "WebUIIslandFixtures",
                 "WebUISharedCore",
             ]
         ),

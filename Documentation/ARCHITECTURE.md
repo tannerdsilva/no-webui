@@ -359,9 +359,10 @@ engine, the legacy runtime and the shell.
 
 what remains is **islands**: a page declares a capability, and that island's
 compiled artifact is fetched lazily when the capability first needs it. pure-Swift
-logic (`WebUIIslandCore`, e.g. `WebUIValidateIsland`) cross-compiles with the
-officially hosted swift 6.4 wasm sdk and is served as a `.wasm` the engine mounts
-into a declared region.
+logic (a capability target on `WebUIIslandWire`, e.g. `WebUIValidateIsland`)
+cross-compiles with the officially hosted swift 6.4 wasm sdk and is served as a
+`.wasm` the engine mounts into a declared region. `plugin wasm-island` refuses to
+ship an artifact whose graph, symbols, or exports leave that capability's shape.
 
 | mode | rendering brain | event routing | ws |
 |---|---|---|---|

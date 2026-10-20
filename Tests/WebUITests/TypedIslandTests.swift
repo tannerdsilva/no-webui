@@ -1,7 +1,8 @@
 import Testing
 import WebUI
 import WebUICore
-import WebUIIslandCore
+import WebUIIslandWire
+import WebUIChartSpec
 
 // the typed region's job: declare the capability, encode the input as a
 // frame inside the args attribute, and render the same swift the island will

@@ -1,4 +1,4 @@
-import WebUIIslandCore
+import WebUIIslandWire
 
 // MARK: - Typed Islands
 //

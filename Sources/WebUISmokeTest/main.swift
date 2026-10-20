@@ -14,7 +14,8 @@ import WebUI
 import WebUIDesignSystem
 import WebUIBlocks
 import WebUIChart
-import WebUIIslandCore
+import WebUIChartSpec
+import WebUIIslandFixtures
 import WebUIServer
 import WebUISharedCore
 import WebUISmokeShared
