@@ -344,6 +344,8 @@ let package = Package(
                 "WebUISmokeShared",
                 "WebUIBlocks",
                 "WebUIServer",
+                // the resizable probe's shared logic (host + wasm sides).
+                "WebUIIslandCore",
                 // the typed island conformers escape their fallback markup
                 // with the shared leaf's htmlEscape.
                 "WebUISharedCore",

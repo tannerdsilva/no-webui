@@ -14,6 +14,7 @@ import WebUI
 import WebUIDesignSystem
 import WebUIBlocks
 import WebUIChart
+import WebUIIslandCore
 import WebUIServer
 import WebUISharedCore
 import WebUISmokeShared
@@ -278,6 +279,19 @@ enum SmokeGreetIsland: Island {
 	}
 }
 
+/// the resizable capability: the same `WidthProbeIsland` logic its wasm
+/// product ships, so the server fallback (width nil) and the mounted region
+/// agree by construction.
+enum SmokeWidthProbeIsland: ResizableIsland {
+	static let name = "width-probe"
+	static func render(_ input: String) -> String {
+		WidthProbeIsland.render(input, width: nil)
+	}
+	static func render(_ input: String, width: Int?) -> String {
+		WidthProbeIsland.render(input, width: width)
+	}
+}
+
 // MARK: - Page assembly (renders interactive views, registers handlers)
 
 func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
@@ -468,6 +482,20 @@ func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
 				Div(id: "island-greet") {
 					IslandRegion<SmokeGreetIsland>("world")
 				}
+				// the resizable region: `data-webui-island-resize` makes the
+				// engine re-render it at the measured container width on
+				// mount and on every resize. the wrapper carries the id the
+				// patch-harness control below replaces.
+				Div(id: "island-width") {
+					ResizableIslandRegion<SmokeWidthProbeIsland>("width probe")
+				}
+				Div(class: "smoke__actions") {
+					WebUIButton("Re-render island", variant: .secondary, size: .sm, id: "btn-island-rerender")
+						.onClick { _ in
+							let region = ResizableIslandRegion<SmokeWidthProbeIsland>("width probe").markup.html
+							return [FragmentUpdate(id: "island-width", html: "<div id=\"island-width\">" + region + "</div>")]
+						}
+				}
 					Div(class: "smoke__chart-hint") {
 						Text("The chip above is composed by a lazily loaded wasm island (no round trip).")
 					}
@@ -565,6 +593,7 @@ struct SmokeApp {
 	let pageHTML: String
 	let connectionGate: ConnectionGate
 	let islandValidate: [UInt8]
+	let islandWidthProbe: [UInt8]
 }
 
 /// read a release wasm product (built separately with the wasm sdk) so the
@@ -618,12 +647,14 @@ extension SmokeApp {
 		let page = renderSmokePage(state: state, router: router)
 		let connectionGate = ConnectionGate(maximum: intFlag(named: "--max-connections", default: 256))
 		let islandValidate = readWasmArtifact("WebUIValidateIsland")
+		let islandWidthProbe = readWasmArtifact("WebUIWidthProbeIsland")
 		let app = SmokeApp(
 			state: state,
 			router: router,
 			pageHTML: page,
 			connectionGate: connectionGate,
 			islandValidate: islandValidate,
+			islandWidthProbe: islandWidthProbe,
 		)
 		let logger = Logger(label: "webui.smoketest")
 		logger.info("full-stack smoke page rendered (\(page.utf8.count) bytes)")
@@ -849,6 +880,23 @@ extension SmokeApp {
 						}
 					}
 					try await respond405(channel: channel.channel)
+					return
+				}
+				if head.uri == "/__assets/webui-width-probe.wasm" {
+					// the resizable capability island (wasm-applogic-improve);
+					// the engine fetches it lazily when a page declares the
+					// capability, then re-renders the region at measured
+					// widths. absent artifact = 404 = the degrade path.
+					guard !self.islandWidthProbe.isEmpty else {
+						try await respond404(channel: channel.channel)
+						return
+					}
+					try await respond(
+						channel: channel.channel,
+						bytes: self.islandWidthProbe,
+						contentType: "application/wasm",
+						cacheControl: "public, max-age=31536000, immutable"
+					)
 					return
 				}
 				if head.uri == "/__assets/webui-validate.wasm" {

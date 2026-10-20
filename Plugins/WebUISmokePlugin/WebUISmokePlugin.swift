@@ -135,6 +135,18 @@ struct WebUISmokePlugin: CommandPlugin {
             skip("island artifact absent at /__assets/webui-validate.wasm — the engine's degrade path serves the page without it (run `swift package --disable-sandbox plugin wasm-island` to exercise the mounted path)")
         }
 
+        // the resizable island's artifact: same contract, own route.
+        if let (servedProbe, probeHeaders, probeStatus) = await GETWithHeaders(session, "\(base)/__assets/webui-width-probe.wasm"),
+           probeStatus == 200, !servedProbe.isEmpty {
+            if headerValue(probeHeaders, "Content-Type")?.contains("application/wasm") == true {
+                ok("width-probe island artifact served as application/wasm (\(servedProbe.count) bytes)")
+            } else {
+                bad("width-probe island artifact content-type is not application/wasm")
+            }
+        } else {
+            skip("width-probe artifact absent at /__assets/webui-width-probe.wasm — the engine's degrade path serves the page without it (run `swift package --disable-sandbox plugin wasm-island --product WebUIWidthProbeIsland`)")
+        }
+
         guard let pageData = await GET(session, "\(base)/"),
               let html = String(data: pageData, encoding: .utf8) else {
             Diagnostics.error("page not reachable at \(base)/")
@@ -189,11 +201,12 @@ struct WebUISmokePlugin: CommandPlugin {
 
         let interactiveCount = html.components(separatedBy: "data-component-id=\"").count - 1
         // 3 counter + 2 progress + 1 echo + 12 table controls (3 sort + select-all
-        // + 4 select + 4 expand) + 6 chart bars + 1 upload form = 26 routed components.
-        if interactiveCount == 26 {
-            ok("served page exposes 26 interactive components, incl. per-control table routing (handler wiring intact)")
+        // + 4 select + 4 expand) + 6 chart bars + 1 upload form + 1 island
+        // re-render control = 27 routed components.
+        if interactiveCount == 27 {
+            ok("served page exposes 27 interactive components, incl. per-control table routing (handler wiring intact)")
         } else {
-            bad("expected 26 data-component-id attributes, found \(interactiveCount)")
+            bad("expected 27 data-component-id attributes, found \(interactiveCount)")
         }
 
         if html.contains("http-equiv=\"Content-Security-Policy\"") {
