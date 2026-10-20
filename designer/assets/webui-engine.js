@@ -1444,6 +1444,7 @@ window.WebUIEngine = (function () {
   var _islandConfig = null;
   var islandModules = {};
   var islandLoading = {};
+  var _islandObserver = null;
   function buildImports(module) {
     var imports = {};
     var declared = WebAssembly.Module.imports(module);
@@ -1566,6 +1567,35 @@ window.WebUIEngine = (function () {
       islandRender(region, name);
     });
   }
+  function scheduleIslandRerender(el, name) {
+    if (el.__webuiIslandTimer) { clearTimeout(el.__webuiIslandTimer); }
+    el.__webuiIslandTimer = setTimeout(function () {
+      el.__webuiIslandTimer = null;
+      if (!el.isConnected) { return; }
+      if (el.getAttribute('data-webui-island-state') !== 'mounted') { return; }
+      var width = Math.round(el.getBoundingClientRect().width);
+      if (width <= 0 || width === el.__webuiIslandWidth) { return; }
+      islandRender(el, name);
+    }, 120);
+  }
+  function observeIslandRegions() {
+    if (typeof ResizeObserver !== 'function') { return; }
+    if (!_islandObserver) {
+      _islandObserver = new ResizeObserver(function (entries) {
+        for (var i = 0; i < entries.length; i++) {
+          var el = entries[i].target;
+          if (el.getAttribute('data-webui-island-state') !== 'mounted') { continue; }
+          var name = el.getAttribute('data-webui-island');
+          if (!name || !islandModules[name]) { continue; }
+          var width = Math.round(el.getBoundingClientRect().width);
+          if (width <= 0 || width === el.__webuiIslandWidth) { continue; }
+          scheduleIslandRerender(el, name);
+        }
+      });
+    }
+    var regions = document.querySelectorAll('[data-webui-island][data-webui-island-resize="true"]');
+    for (var j = 0; j < regions.length; j++) { _islandObserver.observe(regions[j]); }
+  }
   function _islandLog(msg, level) {
     try {
       if (level === 'warn') { console.warn('[WebUIEngine] ' + msg); }
@@ -1666,7 +1696,7 @@ window.WebUIEngine = (function () {
       window.addEventListener('online', function () {
         if (instance && instance.wsClient) { instance.wsClient.connect(); }
       });
-      wireIslandInputs(); mountAllIslands();
+      wireIslandInputs(); mountAllIslands(); observeIslandRegions();
     };
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', bootIslands);
