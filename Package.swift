@@ -151,6 +151,15 @@ let package = Package(
                 "WebUISharedCore",
             ]
         ),
+        // the reference product for the resizable-island contract: its entry
+        // is a hook assignment over the shared `IslandEntry` harness.
+        .executableTarget(
+            name: "WebUIWidthProbeIsland",
+            dependencies: [
+                "WebUIIslandCore",
+                "WebUISharedCore",
+            ]
+        ),
         .target(
             name: "WebUISmokeShared",
             dependencies: [
