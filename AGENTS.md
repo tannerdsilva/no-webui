@@ -90,6 +90,14 @@ automatically; `includeRuntime: false` ships no client at all — no script, no
 config meta). the wasm monolith client was deleted — the engine is the client runtime, and
 wasm survives as capability islands declared per page (see `NEXT_ARCHITECTURE.md`).
 
+capability islands have three doors: `Island` (render once), `ResizableIsland` (the
+client re-render loop), and `TypedIsland`/`TypedResizableIsland` (a versioned binary
+frame in `data-webui-args`, decoded without a json parse). the island side is four
+narrow targets — `WebUIIslandWire` (the contract both sides implement),
+`WebUIIslandRuntime` (the wasi harness), one target per capability, and the fixtures —
+with library products `WebUIIslandWire` + `WebUIIslandRuntime` (there is no
+`WebUIIslandCore`). the authoring contract is `Documentation/ISLANDS.md`.
+
 all project tooling is command plugins — there are no shell scripts. see
 `Documentation/ASSEMBLY.md` for the full stage map and `designer/README.md`
 for the designer workflow.
@@ -104,7 +112,7 @@ for the designer workflow.
 | `probe` | `swift package plugin probe [port]` | connect-based port check (bind-probe is sandbox-denied). |
 | `showcase` | `swift package plugin showcase --allow-writing-to-package-directory` | regenerates `designer/previews/showcase.html` directly (declared `writeToPackageDirectory`). add `--output <path>` for ad-hoc targets. |
 | `showcase-serve` | `swift package --disable-sandbox plugin showcase-serve` | hosts the live swift-generated showcase server on :9092. binds require the sandbox to be disabled. |
-| `wasm-island` | `swift package --disable-sandbox plugin wasm-island [--product TheirIsland] [--no-strip]` | cross-builds a capability island with the wasm SDK into `.build/wasm-island-scratch` (an isolated build root), strips custom sections (unless `--no-strip`) and copies the artifact to `.build/out/Products/Release-webassembly-wasm32/<product>.wasm`. binds require the sandbox to be disabled. |
+| `wasm-island` | `swift package --disable-sandbox plugin wasm-island [--product TheirIsland] [--no-strip]` | cross-builds a capability island with the wasm SDK into `.build/wasm-island-scratch` (an isolated build root), gates the artifact (dependency-graph shape, symbol provenance, export surface — any violation fails the build), strips custom sections (unless `--no-strip`) and copies the artifact to `.build/out/Products/Release-webassembly-wasm32/<product>.wasm`. binds require the sandbox to be disabled. |
 | `budget` | `swift package plugin budget` | fails when any shipped surface (engine, sheet, shell, island artifact) exceeds its pinned size ceiling. read-only, no sandbox flag. |
 
 svg icon toolset (an executable target, not a plugin — the plugin
@@ -381,11 +389,15 @@ see `Documentation/ICONS.md` for the full guide.
 
 ```bash
 swift build
-swift test                                  # 1406 tests, 0 issues
+swift test                                  # 1459 tests, 0 issues
 swift package plugin budget                 # shipped-surface ceilings: engine/sheet/shell/island
 swift package --disable-sandbox plugin smoke
 swift package --disable-sandbox plugin fullstack-smoke
-node designer/browser-smoke.mjs             # requires node + playwright (chromium); a fresh clone needs `plugin wasm-island` first (the island probes read the prebuilt .wasm)
+# a fresh clone builds the island artifacts first — the gates below read them:
+#   swift package --disable-sandbox plugin wasm-island --product WebUIValidateIsland
+#   swift package --disable-sandbox plugin wasm-island --product WebUIWidthProbeIsland
+#   swift package --disable-sandbox plugin wasm-island --product WebUIChartIsland
+node designer/browser-smoke.mjs             # requires node + playwright (chromium); the island probes read the prebuilt .wasm
 node designer/showcase-ws-smoke.mjs         # stable-id dispatch gate (raw client)
 node designer/blocks-sweep.mjs              # every block at 320/768/1440, both themes, no overflow
 node designer/chart-mobile-audit.mjs        # chart text >= 11px, six viewports x both themes
@@ -456,6 +468,21 @@ are measuring, and make every probe assert its own preconditions.
   reports `server did not become ready — run with --disable-sandbox`.
 - **the `.build` lock** — a running plugin (e.g. `serve`) blocks every other
   `swift package` command until it exits. never launch a gate while `serve` is up.
+- **island code is foundation-free and rawdog-free.** `WebUIIslandWire`,
+  `WebUIIslandRuntime`, and every capability target build for wasm32-wasi: no
+  Foundation, and no `WebUICore` (it links swift-log). rawdog cannot compile for
+  embedded wasm either — `RAW` uses `Codable`, `CRAW` needs mmap emulation — so island
+  payloads implement the `IslandPayloadEncodable`/`IslandPayloadDecodable` pair; a
+  rawdog-conforming type is host-side only.
+- **the island gate is `plugin wasm-island`, and it fails the build.** before the
+  cross-build it checks the dependency graph (capability targets are leaves, a product
+  owns at most one capability, shared targets never depend on a capability); after it,
+  the unstripped artifact's symbols must be shared or in the product's own closure, and
+  the shipped artifact's exports must equal the canonical wire set plus the product's
+  own `@_expose` names. a new capability target is covered automatically — do not add
+  exceptions. a consumer package invokes the verb through the dependency graph;
+  attaching a command plugin to a target via `plugins:` is planned as a build tool and
+  fails.
 - **smoke pins the interactive count** — the smoke gate asserts exactly 26
   `data-component-id` attributes on the smoke page (3 counter + 2 progress +
   1 echo + 12 routed table controls [3 sort + select-all + 4 select + 4 expand] +
