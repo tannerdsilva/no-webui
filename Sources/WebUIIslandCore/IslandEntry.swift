@@ -35,49 +35,13 @@ public enum IslandEntry {
 
 	/// decode `len` utf-8 bytes at `ptr` into a `String`.
 	///
-	/// strict-enough utf-8 decode into a `String` without touching the
-	/// normalization tables: `String(decoding:as:)` canonicalizes, which the
+	/// the lenient policy lives in `IslandUTF8` (the island core's single
+	/// scanner): invalid sequences become U+FFFD, and normalization tables are
+	/// never touched — `String(decoding:as:)` canonicalizes, which the
 	/// embedded runtime omits, so the island link would fail on the
-	/// `_swift_stdlib_nfd_*` symbols. invalid sequences become U+FFFD.
+	/// `_swift_stdlib_nfd_*` symbols.
 	public static func decode(_ ptr: UnsafeRawPointer, _ len: Int) -> String {
-		let bytes = UnsafeRawBufferPointer(start: ptr, count: len)
-		var out = ""
-		var i = 0
-		while i < len {
-			let b = bytes[i]
-			let scalar: UInt32
-			let width: Int
-			if b < 0x80 {
-				scalar = UInt32(b)
-				width = 1
-			} else if (b & 0xE0) == 0xC0, i + 1 < len, (bytes[i + 1] & 0xC0) == 0x80 {
-				scalar = (UInt32(b & 0x1F) << 6) | UInt32(bytes[i + 1] & 0x3F)
-				width = 2
-			} else if (b & 0xF0) == 0xE0, i + 2 < len, (bytes[i + 1] & 0xC0) == 0x80, (bytes[i + 2] & 0xC0) == 0x80 {
-				scalar = (UInt32(b & 0x0F) << 12) | (UInt32(bytes[i + 1] & 0x3F) << 6) | UInt32(bytes[i + 2] & 0x3F)
-				width = 3
-			} else if (b & 0xF8) == 0xF0, i + 3 < len,
-			          (bytes[i + 1] & 0xC0) == 0x80, (bytes[i + 2] & 0xC0) == 0x80, (bytes[i + 3] & 0xC0) == 0x80 {
-				scalar = (UInt32(b & 0x07) << 18) | (UInt32(bytes[i + 1] & 0x3F) << 12)
-					| (UInt32(bytes[i + 2] & 0x3F) << 6) | UInt32(bytes[i + 3] & 0x3F)
-				width = 4
-			} else {
-				out.unicodeScalars.append("\u{FFFD}")
-				i += 1
-				continue
-			}
-			// `Unicode.Scalar(_:)` rejects exactly what utf-8 forbids here:
-			// values above U+10FFFF and the surrogate range, so the failable
-			// init is the validity check itself — no force unwrap, no
-			// separate range test.
-			if let scalarValue = Unicode.Scalar(scalar) {
-				out.unicodeScalars.append(scalarValue)
-			} else {
-				out.unicodeScalars.append("\u{FFFD}")
-			}
-			i += width
-		}
-		return out
+		IslandUTF8.decodeReplacingInvalid(UnsafeRawBufferPointer(start: ptr, count: len))
 	}
 
 	/// write `text` into the frame buffer (truncated at the frame capacity)

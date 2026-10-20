@@ -292,6 +292,20 @@ enum SmokeWidthProbeIsland: ResizableIsland {
 	}
 }
 
+/// arc b's typed capability: a `ChartSpec` crosses the wasm boundary as a
+/// versioned binary frame — base64 inside the same `data-webui-args`
+/// attribute — so the module decodes typed values instead of parsing json,
+/// and re-renders at the measured container width like any resizable region.
+enum SmokeChartProbeIsland: TypedResizableIsland {
+	static let name = "chart-probe"
+	static func render(_ input: ChartSpec) -> String {
+		ChartSpecIsland.render(input, width: nil)
+	}
+	static func render(_ input: ChartSpec, width: Int?) -> String {
+		ChartSpecIsland.render(input, width: width)
+	}
+}
+
 // MARK: - Page assembly (renders interactive views, registers handlers)
 
 func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
@@ -489,6 +503,16 @@ func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
 				Div(id: "island-width") {
 					ResizableIslandRegion<SmokeWidthProbeIsland>("width probe")
 				}
+				// the typed region: the args attribute carries a base64 rawdog
+				// frame instead of json, which the engine passes through
+				// untouched — the resize loop re-invokes it exactly like any
+				// other resizable region. `data-chart-width` is the browser
+				// gate's witness that the marker followed the measurement.
+				Div(id: "island-chart") {
+					TypedResizableIslandRegion<SmokeChartProbeIsland>(
+						ChartSpec(title: "quarterly", values: [3, 7, 2, 9, 5])
+					)
+				}
 				Div(class: "smoke__actions") {
 					WebUIButton("Re-render island", variant: .secondary, size: .sm, id: "btn-island-rerender")
 						.onClick { _ in
@@ -594,6 +618,7 @@ struct SmokeApp {
 	let connectionGate: ConnectionGate
 	let islandValidate: [UInt8]
 	let islandWidthProbe: [UInt8]
+	let islandChart: [UInt8]
 }
 
 /// read a release wasm product (built separately with the wasm sdk) so the
@@ -648,6 +673,7 @@ extension SmokeApp {
 		let connectionGate = ConnectionGate(maximum: intFlag(named: "--max-connections", default: 256))
 		let islandValidate = readWasmArtifact("WebUIValidateIsland")
 		let islandWidthProbe = readWasmArtifact("WebUIWidthProbeIsland")
+		let islandChart = readWasmArtifact("WebUIChartIsland")
 		let app = SmokeApp(
 			state: state,
 			router: router,
@@ -655,6 +681,7 @@ extension SmokeApp {
 			connectionGate: connectionGate,
 			islandValidate: islandValidate,
 			islandWidthProbe: islandWidthProbe,
+			islandChart: islandChart,
 		)
 		let logger = Logger(label: "webui.smoketest")
 		logger.info("full-stack smoke page rendered (\(page.utf8.count) bytes)")
@@ -894,6 +921,23 @@ extension SmokeApp {
 					try await respond(
 						channel: channel.channel,
 						bytes: self.islandWidthProbe,
+						contentType: "application/wasm",
+						cacheControl: "public, max-age=31536000, immutable"
+					)
+					return
+				}
+				if head.uri == "/__assets/webui-chart-probe.wasm" {
+					// the typed capability island (arc b): a base64 rawdog
+					// frame rides the mount envelope; the artifact is the same
+					// stripped, immutable binary contract as the other two.
+					// absent artifact = 404 = the degrade path.
+					guard !self.islandChart.isEmpty else {
+						try await respond404(channel: channel.channel)
+						return
+					}
+					try await respond(
+						channel: channel.channel,
+						bytes: self.islandChart,
 						contentType: "application/wasm",
 						cacheControl: "public, max-age=31536000, immutable"
 					)

@@ -147,6 +147,18 @@ struct WebUISmokePlugin: CommandPlugin {
             skip("width-probe artifact absent at /__assets/webui-width-probe.wasm — the engine's degrade path serves the page without it (run `swift package --disable-sandbox plugin wasm-island --product WebUIWidthProbeIsland`)")
         }
 
+        // arc b's typed island: same artifact contract, own route.
+        if let (servedChart, chartHeaders, chartStatus) = await GETWithHeaders(session, "\(base)/__assets/webui-chart-probe.wasm"),
+           chartStatus == 200, !servedChart.isEmpty {
+            if headerValue(chartHeaders, "Content-Type")?.contains("application/wasm") == true {
+                ok("chart-probe island artifact served as application/wasm (\(servedChart.count) bytes)")
+            } else {
+                bad("chart-probe island artifact content-type is not application/wasm")
+            }
+        } else {
+            skip("chart-probe artifact absent at /__assets/webui-chart-probe.wasm — the engine's degrade path serves the page without it (run `swift package --disable-sandbox plugin wasm-island --product WebUIChartIsland`)")
+        }
+
         guard let pageData = await GET(session, "\(base)/"),
               let html = String(data: pageData, encoding: .utf8) else {
             Diagnostics.error("page not reachable at \(base)/")

@@ -10,7 +10,7 @@
 # forced it. `Tests/WebUITests/FrozenSurfaceTests.swift` fails when this
 # file and a fresh extraction diverge, naming every added and removed symbol.
 #
-# re-measured 2026-10-09: 4611 symbols across 8 modules.
+# re-measured 2026-10-09: 4625 symbols across 8 modules.
 
 ## WebUISharedCore
 
@@ -1802,6 +1802,20 @@ TransitionPayload
 TransitionPayload.elapsedTime
 TransitionPayload.init(propertyName:elapsedTime:)
 TransitionPayload.propertyName
+TypedIsland
+TypedIsland.Input
+TypedIsland.name
+TypedIsland.render(_:)
+TypedIslandRegion
+TypedIslandRegion.init(_:)
+TypedIslandRegion.render(into:)
+TypedResizableIsland
+TypedResizableIsland.Input
+TypedResizableIsland.name
+TypedResizableIsland.render(_:width:)
+TypedResizableIslandRegion
+TypedResizableIslandRegion.init(_:)
+TypedResizableIslandRegion.render(into:)
 UnorderedList
 UnorderedList.class
 UnorderedList.init(class:items:)

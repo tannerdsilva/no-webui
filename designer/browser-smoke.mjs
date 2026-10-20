@@ -101,6 +101,8 @@ let expectedIsland404s = 0;
 let validateFetchCount = 0;
 let validateFetchStatus = null;
 let validateFetchDegrade = false;
+// the typed island's artifact presence, for the same degrade branch.
+let chartFetchDegrade = false;
 page.on("console", (m) => {
   if (m.type() === "error") consoleErrors.push(m.text());
 });
@@ -113,6 +115,11 @@ page.on("response", (r) => {
     // expected on a clone that has not run `plugin wasm-island`, not a
     // failed resource load. the island assertions below branch on it.
     if (r.status() === 404) validateFetchDegrade = true;
+    else if (r.status() >= 400) failedRequests.push(`${r.status()} ${r.url()}`);
+    return;
+  }
+  if (/webui-chart-probe\.wasm/i.test(r.url())) {
+    if (r.status() === 404) chartFetchDegrade = true;
     else if (r.status() >= 400) failedRequests.push(`${r.status()} ${r.url()}`);
     return;
   }
@@ -452,6 +459,53 @@ if (probeInitial && probePatched && probePatched.state === "mounted" &&
 } else {
   bad(`patched island region not re-mounted: ${JSON.stringify(probePatched)}`);
 }
+
+// 6b-quater. the typed island (arc b): the args attribute is a base64 binary
+// frame (`{"frame":"…"}`), not a json input object — the engine passes it
+// through untouched and the module decodes typed bytes. the chart region
+// mounts at the measured width, re-renders on resize like any flagged region,
+// and its output survives the fragment sanitizer.
+const readChart = () => page.evaluate(() => {
+  const el = document.querySelector('#island-chart [data-webui-island="chart-probe"]');
+  const inner = el ? el.querySelector("[data-chart-width]") : null;
+  return el ? {
+    state: el.getAttribute("data-webui-island-state") ?? null,
+    width: inner ? inner.getAttribute("data-chart-width") : null,
+    bars: el.querySelectorAll("rect").length,
+    scripts: el.querySelectorAll("script").length,
+    args: el.getAttribute("data-webui-args") ?? null,
+  } : null;
+});
+await page.waitForSelector('#island-chart [data-webui-island-state]', { timeout: 15000 }).catch(() => {});
+await page.waitForTimeout(300);
+const chartInitial = await readChart();
+if (chartInitial && chartInitial.state === "mounted" &&
+    Number(chartInitial.width) > 0 && chartInitial.bars === 5 && chartInitial.scripts === 0) {
+  ok(`typed island mounted from a binary frame at the measured width (${chartInitial.width}px, ${chartInitial.bars} bars, sanitized)`);
+} else if (chartFetchDegrade && chartInitial && chartInitial.state === "unmapped") {
+  skipWithReason("typed island DEGRADED to the server-rendered fallback (chart-probe artifact absent — run `plugin wasm-island --product WebUIChartIsland`)");
+} else {
+  bad(`typed island did not mount: ${JSON.stringify(chartInitial)}`);
+}
+if (chartInitial && chartInitial.args && chartInitial.args.indexOf('{"frame":"V1VJ') === 0) {
+  ok("typed region args carry a versioned frame (magic WUI1, base64 armor)");
+} else if (chartInitial) {
+  bad(`typed region args are not a frame: ${chartInitial.args}`);
+}
+
+await page.setViewportSize({ width: 700, height: 900 });
+await page.waitForTimeout(500);
+const chartResized = await readChart();
+if (chartInitial && chartResized && chartResized.state === "mounted" &&
+    chartResized.width !== chartInitial.width && chartResized.bars === 5) {
+  ok(`typed island re-rendered on resize (${chartInitial.width}px -> ${chartResized.width}px)`);
+} else if (chartFetchDegrade && chartInitial?.state === "unmapped") {
+  skipWithReason("typed resize re-render needs the mounted module (artifact absent)");
+} else {
+  bad(`typed island did not follow the resize: ${JSON.stringify({ before: chartInitial, after: chartResized })}`);
+}
+await page.setViewportSize({ width: 1280, height: 900 });
+await page.waitForTimeout(500);
 
 // 6c. Progressive capability (p4, engine mode): offline shell service worker
 // registers from the declared capability, claims, and controls a reload; view

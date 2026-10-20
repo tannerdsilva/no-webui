@@ -114,6 +114,10 @@ let package = Package(
             name: "WebUICore",
             dependencies: [
                 "WebUISharedCore",
+                // the typed island contract: the envelope codec and the shared
+                // island logic live in the island core, which host targets
+                // reach through this seam (never the reverse).
+                "WebUIIslandCore",
                 .product(name: "Logging", package: "swift-log"),
             ],
             plugins: [
@@ -158,6 +162,14 @@ let package = Package(
             dependencies: [
                 "WebUIIslandCore",
                 "WebUISharedCore",
+            ]
+        ),
+        // arc b's proof product: a typed chart spec crosses the boundary as a
+        // versioned rawdog frame and re-renders at the measured width.
+        .executableTarget(
+            name: "WebUIChartIsland",
+            dependencies: [
+                "WebUIIslandCore",
             ]
         ),
         .target(
@@ -537,6 +549,7 @@ let package = Package(
             dependencies: [
                 "WebUI",
                 "WebUISharedCore",
+                "WebUIIslandCore",
                 "WebUIDesignSystem",
                 "WebUIChart",
                 "WebUIAuth",

@@ -118,8 +118,13 @@ package func islandArgsJSON(_ input: String) -> String {
 	"{\"input\":" + islandJSONString(input) + "}"
 }
 
-/// a foundation-free json string literal (WebUICore never imports
-/// Foundation): backslash and quote escaped, control characters as
+/// the engine's mount envelope for a typed region: `{"frame": <base64>}`.
+	package func islandFrameArgsJSON(_ armoredFrame: String) -> String {
+		"{\"frame\":" + islandJSONString(armoredFrame) + "}"
+	}
+
+	/// a foundation-free json string literal (WebUICore never imports
+	/// Foundation): backslash and quote escaped, control characters as
 /// `\uXXXX` — the same hand-rolled encoder `RuntimeConfig` uses.
 private func islandJSONString(_ string: String) -> String {
 	var result = "\""
