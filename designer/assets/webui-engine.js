@@ -1479,6 +1479,11 @@ window.WebUIEngine = (function () {
     }
     var args = {};
     try { args = JSON.parse(el.getAttribute('data-webui-args') || '{}'); } catch (e) { }
+    if (el.getAttribute('data-webui-island-resize') === 'true') {
+      var measured = Math.round(el.getBoundingClientRect().width);
+      args.width = measured;
+      el.__webuiIslandWidth = measured;
+    }
     var payload = new TextEncoder().encode(JSON.stringify({ name: name, args: args }));
     if (payload.length > 65536) { islandState(el, 'unmapped'); return false; }
     var ptr = mod.exports.webui_input_ptr();
