@@ -10,7 +10,7 @@
 # forced it. `Tests/WebUITests/FrozenSurfaceTests.swift` fails when this
 # file and a fresh extraction diverge, naming every added and removed symbol.
 #
-# re-measured 2026-10-09: 4606 symbols across 8 modules.
+# re-measured 2026-10-09: 4611 symbols across 8 modules.
 
 ## WebUISharedCore
 
@@ -1647,6 +1647,11 @@ RenderSessionID.default
 RenderSessionID.description
 RenderSessionID.init(_:)
 RenderSessionID.rawValue
+ResizableIsland
+ResizableIsland.render(_:width:)
+ResizableIslandRegion
+ResizableIslandRegion.init(_:)
+ResizableIslandRegion.render(into:)
 RuntimeConfig
 RuntimeConfig.addingCapabilities(_:)
 RuntimeConfig.capabilities
