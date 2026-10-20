@@ -906,7 +906,7 @@ window.WebUIEngine = (function () {
         var node = document.getElementById(f.id);
         if (node) { changed.push(node); }
       }
-      if (changed.length) { runHooks(afterPatchHooks, changed); }
+      if (changed.length) { refreshIslandRegions(changed); runHooks(afterPatchHooks, changed); }
     }
 
     function setTextContent(id, value) {
@@ -1024,6 +1024,13 @@ window.WebUIEngine = (function () {
       }
 
       var savedState = saveInputState(el);
+
+      if (_islandObserver) {
+        _islandObserver.unobserve(el);
+        var oldIslands = el.querySelectorAll ? el.querySelectorAll('[data-webui-island]') : [];
+        for (var oi = 0; oi < oldIslands.length; oi++) { _islandObserver.unobserve(oldIslands[oi]); }
+      }
+      if (el.__webuiIslandTimer) { clearTimeout(el.__webuiIslandTimer); el.__webuiIslandTimer = null; }
 
       el.parentNode.replaceChild(fragment, el);
 
@@ -1595,6 +1602,40 @@ window.WebUIEngine = (function () {
     }
     var regions = document.querySelectorAll('[data-webui-island][data-webui-island-resize="true"]');
     for (var j = 0; j < regions.length; j++) { _islandObserver.observe(regions[j]); }
+  }
+  function refreshIslandRegions(nodes) {
+    var found = [];
+    for (var i = 0; i < nodes.length; i++) {
+      var node = nodes[i];
+      if (!node || node.nodeType !== 1) { continue; }
+      if (node.hasAttribute && node.hasAttribute('data-webui-island')) { found.push(node); }
+      if (node.querySelectorAll) {
+        var inner = node.querySelectorAll('[data-webui-island]');
+        for (var j = 0; j < inner.length; j++) { found.push(inner[j]); }
+      }
+    }
+    for (var k = 0; k < found.length; k++) {
+      var el = found[k];
+      var name = el.getAttribute('data-webui-island');
+      if (!name) { continue; }
+      if (_islandConfig && _islandConfig.capabilities && _islandConfig.capabilities.indexOf(name) === -1) {
+        islandState(el, 'unmapped');
+        continue;
+      }
+      if (islandModules[name]) {
+        islandRender(el, name);
+      } else {
+        loadIsland(name).then((function (target, islandName) {
+          return function (mod) {
+            if (mod) { islandRender(target, islandName); }
+            else { islandState(target, 'unmapped'); }
+          };
+        })(el, name));
+      }
+      if (el.getAttribute('data-webui-island-resize') === 'true' && _islandObserver) {
+        _islandObserver.observe(el);
+      }
+    }
   }
   function _islandLog(msg, level) {
     try {
