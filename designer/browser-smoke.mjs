@@ -358,6 +358,101 @@ if (typed.granted.includes("typed-greet") && typed.granted.includes("validate"))
   ok("the emitted webui-config grants the declared capabilities (declaration is the wiring)");
 else bad(`webui-config capabilities: ${JSON.stringify(typed.granted)}`);
 
+// 6b-ter. the resizable island (wasm-applogic-improve): the region mounts
+// from the width-probe artifact at the measured container width, re-renders
+// when the viewport resizes (the engine's ResizeObserver loop, coalesced),
+// leaves a non-flagged region untouched, and survives a fragment patch that
+// replaces its wrapper (refreshIslandRegions) — staying mounted at the
+// current width instead of regressing to the server fallback.
+const readProbe = () => page.evaluate(() => {
+  const el = document.querySelector('#island-width [data-webui-island="width-probe"]');
+  const inner = el ? el.querySelector("[data-probe-width]") : null;
+  return el ? {
+    state: el.getAttribute("data-webui-island-state") ?? null,
+    probe: inner ? inner.getAttribute("data-probe-width") : null,
+    text: inner ? inner.textContent : (el.textContent ?? ""),
+  } : null;
+});
+await page.waitForSelector('#island-width [data-webui-island-state]', { timeout: 15000 }).catch(() => {});
+await page.waitForTimeout(300);
+const probeInitial = await readProbe();
+if (probeInitial && probeInitial.state === "mounted" && probeInitial.probe !== "nil" && Number(probeInitial.probe) > 0) {
+  ok(`resizable island mounted at the measured width (${probeInitial.probe}px)`);
+} else if (validateFetchDegrade && probeInitial && probeInitial.state === "unmapped" && probeInitial.probe === "nil") {
+  skipWithReason("resizable island DEGRADED to the server-rendered fallback (width-probe artifact absent — run `plugin wasm-island --product WebUIWidthProbeIsland`)");
+} else {
+  bad(`resizable island did not mount at a measured width: ${JSON.stringify(probeInitial)}`);
+}
+
+// tag a non-flagged region so the resize loop's blast radius is measurable:
+// it must be the SAME node afterwards (never re-rendered).
+await page.evaluate(() => {
+  const el = document.querySelector('#island-typed [data-webui-island="validate"]');
+  if (el) el.__untouchedTag = "keep";
+});
+const beforeResizeWidth = probeInitial?.probe;
+await page.setViewportSize({ width: 760, height: 900 });
+await page.waitForTimeout(500);
+const probeResized = await readProbe();
+const nonFlaggedAfterResize = await page.evaluate(() => {
+  const el = document.querySelector('#island-typed [data-webui-island="validate"]');
+  return el ? { sameNode: el.__untouchedTag === "keep", state: el.getAttribute("data-webui-island-state") } : null;
+});
+if (probeInitial && probeResized && probeResized.state === "mounted" &&
+    probeResized.probe !== beforeResizeWidth && Number(probeResized.probe) > 0) {
+  ok(`resizable island re-rendered on viewport resize (${beforeResizeWidth}px -> ${probeResized.probe}px)`);
+} else if (validateFetchDegrade && probeInitial?.state === "unmapped") {
+  skipWithReason("resize re-render needs the mounted module — the degrade path keeps the server-rendered region");
+} else {
+  bad(`resizable island did not follow the resize: ${JSON.stringify({ before: probeInitial, after: probeResized })}`);
+}
+if (nonFlaggedAfterResize && nonFlaggedAfterResize.sameNode && nonFlaggedAfterResize.state === "mounted") {
+  ok("non-resizable island region untouched by the resize loop (same node, still mounted)");
+} else {
+  bad(`resize loop touched a non-flagged region: ${JSON.stringify(nonFlaggedAfterResize)}`);
+}
+await page.setViewportSize({ width: 1280, height: 900 });
+await page.waitForTimeout(500);
+
+// same-width settle: the memoized width makes the observer a no-op, so the
+// region node survives (identity tag) and its marker holds.
+const stableA = await page.evaluate(() => {
+  const el = document.querySelector('#island-width [data-webui-island="width-probe"]');
+  if (!el) return null;
+  el.__stableTag = "keep";
+  const inner = el.querySelector("[data-probe-width]");
+  return inner ? inner.getAttribute("data-probe-width") : null;
+});
+await page.waitForTimeout(400);
+const stableB = await page.evaluate(() => {
+  const el = document.querySelector('#island-width [data-webui-island="width-probe"]');
+  if (!el) return null;
+  const inner = el.querySelector("[data-probe-width]");
+  return { width: inner ? inner.getAttribute("data-probe-width") : null, sameNode: el.__stableTag === "keep" };
+});
+if (stableA && stableB && stableB.width === stableA && stableB.sameNode) {
+  ok("same-width settle does not re-render the resizable island (width memo holds)");
+} else if (validateFetchDegrade && probeInitial?.state === "unmapped") {
+  skipWithReason("width-memo assertion needs the mounted module (artifact absent)");
+} else {
+  bad(`same-width settle re-rendered or lost the region: ${JSON.stringify({ stableA, stableB })}`);
+}
+
+// the patch path: the Re-render control replaces the region wrapper over the
+// websocket; the engine must re-mount from the cached module at the CURRENT
+// width, not leave the server fallback (`probe="nil"`).
+await page.click("#btn-island-rerender");
+await page.waitForTimeout(700);
+const probePatched = await readProbe();
+if (probeInitial && probePatched && probePatched.state === "mounted" &&
+    probePatched.probe !== "nil" && Number(probePatched.probe) > 0) {
+  ok(`patched island region re-mounted from the cached module at the current width (${probePatched.probe}px)`);
+} else if (validateFetchDegrade && probeInitial?.state === "unmapped") {
+  skipWithReason("patch re-mount needs the mounted module — the degrade path keeps the server-rendered fallback");
+} else {
+  bad(`patched island region not re-mounted: ${JSON.stringify(probePatched)}`);
+}
+
 // 6c. Progressive capability (p4, engine mode): offline shell service worker
 // registers from the declared capability, claims, and controls a reload; view
 // transitions API is present and the reduced-motion guard keeps patches fast.
