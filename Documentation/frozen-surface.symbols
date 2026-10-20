@@ -10,7 +10,7 @@
 # forced it. `Tests/WebUITests/FrozenSurfaceTests.swift` fails when this
 # file and a fresh extraction diverge, naming every added and removed symbol.
 #
-# re-measured 2026-10-09: 4562 symbols across 8 modules.
+# re-measured 2026-10-09: 4606 symbols across 8 modules.
 
 ## WebUISharedCore
 
@@ -269,6 +269,11 @@ AriaSort.descending
 AriaSort.init(rawValue:)
 AriaSort.none
 AriaSort.other
+Article
+Article.children
+Article.init(_:)
+Article.init(content:)
+Article.render(into:)
 Aside
 Aside.children
 Aside.class
@@ -289,6 +294,11 @@ Base64.decode(_:)
 Base64.decodeURL(_:)
 Base64.encode(_:)
 Base64.encodeURL(_:)
+Blockquote
+Blockquote.children
+Blockquote.init(_:)
+Blockquote.init(content:)
+Blockquote.render(into:)
 BufferRendering
 BufferRendering.markup
 BufferRendering.render(into:)
@@ -412,6 +422,12 @@ ComposedModifier.decorate(_:into:)
 ComposedModifier.first
 ComposedModifier.init(first:second:)
 ComposedModifier.second
+Details
+Details.content
+Details.init(open:summary:content:)
+Details.isOpen
+Details.render(into:)
+Details.summary
 Directionality
 Directionality.init(rawValue:)
 Directionality.ltr
@@ -447,6 +463,11 @@ ElementRef.remove()
 ElementRef.replace(with:)
 ElementRef.stable(_:)
 ElementRef.update(_:)
+Emphasis
+Emphasis.children
+Emphasis.init(_:)
+Emphasis.init(content:)
+Emphasis.render(into:)
 EmptyView
 EmptyView.init()
 EmptyView.render(into:)
@@ -1393,6 +1414,11 @@ Image.init(src:alt:class:loading:decoding:)
 Image.loading
 Image.render(into:)
 Image.src
+InlineCode
+InlineCode.children
+InlineCode.init(_:)
+InlineCode.init(content:)
+InlineCode.render(into:)
 InlineStyle
 InlineStyle.apply(to:)
 InlineStyle.decorate(_:into:)
@@ -1459,6 +1485,9 @@ LayoutStyles.spacer
 LayoutStyles.vstack
 LayoutStyles.zstack
 LayoutStyles.zstackOverlap
+LineBreak
+LineBreak.init()
+LineBreak.render(into:)
 Link
 Link.class
 Link.href
@@ -1583,6 +1612,11 @@ PointerPayload.buttons
 PointerPayload.init(x:y:button:buttons:)
 PointerPayload.x
 PointerPayload.y
+Preformatted
+Preformatted.children
+Preformatted.init(_:)
+Preformatted.init(content:)
+Preformatted.render(into:)
 Raw
 Raw.content
 Raw.init(_:)
@@ -1658,6 +1692,11 @@ SelectOption.init(value:label:)
 SelectOption.label
 SelectOption.value
 Set.strict
+Small
+Small.children
+Small.init(_:)
+Small.init(content:)
+Small.render(into:)
 Source
 Source.init(src:type:media:)
 Source.media
@@ -1697,6 +1736,11 @@ StableIDEventHandlerModifier.event
 StableIDEventHandlerModifier.handler
 StableIDEventHandlerModifier.init(componentID:event:handler:)
 StreamingContent
+Strong
+Strong.children
+Strong.init(_:)
+Strong.init(content:)
+Strong.render(into:)
 StyleSheet
 StyleSheet.css
 StyleSheet.init(name:layer:_:)
