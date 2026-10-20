@@ -77,10 +77,19 @@ injects the measured container width into the existing `{name, args}` envelope a
 integer `width` (the server fallback renders `nil` — width is a client fact),
 re-invokes `webui_render_region` with 120 ms coalescing, and re-mounts island regions
 that a fragment patch replaced. the sibling-protocol shape (`ResizableIsland`, not a
-requirement on the frozen `Island`) is the precedent for the typed contract below it,
-which stays reserved: a binary envelope (rawdog frames, versioned magic) for charts
-and virtualized lists, with the sibling-`TypedIsland`-vs-requirement decision still
-open. authoring contract: `Documentation/ISLANDS.md`.
+requirement on the frozen `Island`) is the precedent for the typed contract, and the
+measured-width fallback is what the typed door reuses.
+
+**landed (2026-10-20, arc b):** the typed contract is real too — `TypedIsland` /
+`TypedResizableIsland` + `IslandEnvelope` carry a *versioned binary frame* instead of
+json args (`{"frame":"…"}` in the same attribute, so the engine is unchanged and the
+typed door costs zero engine bytes). one finding re-shaped the codec: **rawdog cannot
+compile for embedded wasm** (`RAW` uses `Codable`, unavailable there; `CRAW` needs mmap
+emulation), so the payload pair (`IslandPayloadEncodable`/`IslandPayloadDecodable`) is
+the wasm-safe subset with rawdog's discipline — count, destination-advancing write,
+all-or-nothing read — rather than rawdog itself. the remaining rung is the chart/table
+*consumer* (adopting the typed door in the chart pipeline and virtualized lists), not
+the wire. authoring contract: `Documentation/ISLANDS.md` §3b.
 
 ### layer b — the engine (new base client runtime)
 

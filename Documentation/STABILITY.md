@@ -295,6 +295,10 @@ frozen surface is a mistake:
    including the resizable (client-re-render) door — is `Documentation/ISLANDS.md`;
    `ResizableIsland` and `ResizableIslandRegion` are additive surface in the
    frozen list, and the probe region in the smoke page is their live example.
+   the typed door — `TypedIsland`/`TypedResizableIsland` and their regions, plus
+   the `IslandEnvelope` frame — is additive surface too (+14 symbols in the
+   frozen list), with `Documentation/ISLANDS.md` §3b as its contract and the
+   `#island-chart` smoke region as the live example.
 3. **modal focus management is engine-owned.** initial focus into a
    `WebUIModal` is still server-driven (the caller renders the modal open
    with the intended focus within its own markup); trapping and focus return

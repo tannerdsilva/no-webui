@@ -152,6 +152,86 @@ where `<name>` is the value of `Island.name`. serve the artifact bytes as
 `/__assets/webui-width-probe.wasm` route, backed by `readWasmArtifact`); a
 `WebUIServer` host registers it as a `WebUIServerAsset` binary entry.
 
+## 3b. typed islands — payloads that are not strings
+
+a string island parses its input out of a json args object. a **typed island**
+ships the input as a versioned binary frame instead: encoded once on the
+server, carried through the engine untouched, decoded in the module with no
+json parse. use it when the payload is structured data — a chart series, a page
+of rows — and the parse/allocation cost or the wire size matters.
+
+```swift
+public protocol TypedIsland: Sendable {
+	associatedtype Input: IslandPayloadEncodable & IslandPayloadDecodable
+	static var name: String { get }
+	static func render(_ input: Input) -> String
+}
+
+public protocol TypedResizableIsland: Sendable {   // + width: Int? in render
+	associatedtype Input: IslandPayloadEncodable & IslandPayloadDecodable
+	static var name: String { get }
+	static func render(_ input: Input, width: Int?) -> String
+}
+```
+
+the region views are `TypedIslandRegion<I>` and `TypedResizableIslandRegion<I>`.
+declaring one emits the capability, the resize flag where applicable, and:
+
+```html
+<div data-webui-island="chart-probe" data-webui-island-resize="true"
+     data-webui-args='{"frame":"V1VJMQ…"}'>…fallback markup…</div>
+```
+
+**the wire frame** (`IslandEnvelope`, in `WebUIIslandCore`):
+
+```
+frame   := "WUI1" | u16be version | u16be reserved | u32be payload length | payload
+payload := the value's IslandPayloadEncodable bytes, exactly payload length
+```
+
+the frame is base64-armored inside the args object — the engine parses that
+object, adds the measured width, and hands the module its mount envelope
+exactly as it does for a string island. **no javascript knows what a frame is**,
+which is why the typed door cost zero engine bytes.
+
+**the payload pair.** `IslandPayloadEncodable` reports a byte count and writes
+to a destination pointer; `IslandPayloadDecodable` rebuilds from exactly one
+buffer (`nil` on any length or content mismatch). the discipline is deliberate:
+fixed layout, big-endian, all-or-nothing consumption. write a codec by hand:
+
+```swift
+extension MyPayload: IslandPayloadEncodable, IslandPayloadDecodable {
+	func islandEncode(count: inout Int) { count = 2 + label.utf8.count + 8 }
+	func islandEncode(_: UnsafeMutableRawPointer.Type, destination: UnsafeMutableRawPointer) -> UnsafeMutableRawPointer { … }
+	init?(islandDecode buffer: UnsafeRawBufferPointer) { … }
+}
+```
+
+`IslandUTF8.decode(_:)` is the strict foundation-free text reader for string
+fields (replace-with-U+FFFD is `decodeReplacingInvalid`, the lenient harness
+policy). your codec must stay within `WebUIIslandCore`'s dependency budget:
+**no Foundation, and no rawdog** — rawdog's module cannot compile for embedded
+wasm (`RAW` uses `Codable`, which embedded Swift does not have; `CRAW` needs
+mmap emulation), so a rawdog-conforming type cannot be decoded inside an
+island. bridge a rawdog type host-side if you need one for storage, but the
+island payload is this pair.
+
+**the product** is one call:
+
+```swift
+TypedIslandEntry.installResizable(MyPayload.self, render: MyRenderer.render)
+```
+
+`TypedIslandEntry.install` covers the static case. both decode the mount args,
+merge the engine-measured width, and return an empty frame on any decode
+failure — which is the engine's existing "keep the fallback" path, not a new
+mechanism.
+
+**the live example** is the smoke page's `#island-chart` region: a `ChartSpec`
+(five values, a title) mounts at the measured width, re-renders on resize, and
+its output passes the fragment sanitizer. `browser-smoke.mjs` asserts the mount,
+the frame magic in the args attribute, and the resize re-render.
+
 ## 4. what the engine does (the mount contract)
 
 for each `[data-webui-island]` region the page's config grants:
