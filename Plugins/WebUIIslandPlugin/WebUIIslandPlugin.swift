@@ -63,12 +63,11 @@ struct WebUIIslandPlugin: CommandPlugin {
 		let packageDir = context.package.directoryURL.path
 		let scratch = packageDir + "/.build/wasm-island-scratch"
 
-		// embedded wasm keeps the unicode (nfd + grapheme) tables in a separate
-		// static archive the default link line omits — without it a String that
-		// reaches canonical-equality/dictionary-key comparison fails to link on
-		// the `_swift_stdlib_*` normalization symbols. locate it from the sdk's
-		// own `-print-target-info` (resource dir) so no path is hardcoded.
-		let unicodeTableArgs = unicodeTableLinkArgs(swiftBin: swiftBin, sdk: sdk)
+		// the embedded unicode tables are declared as a wasi-scoped linker
+		// setting on `WebUIIslandRuntime` (see Package.swift), not passed here:
+		// a global `-Xswiftc -lswiftUnicodeDataTables` also lands on the host
+		// link of any macro target in the graph (rawdog's RAW_macros), where ld
+		// rejects the wasm archive ("not a mach-o file").
 
 		print("WebUIIsland: cross-building '\(product)' with \(sdk) (via \(swiftBin))")
 		let build = Process()
@@ -81,7 +80,7 @@ struct WebUIIslandPlugin: CommandPlugin {
 			"--package-path", packageDir,
 			"--product", product,
 			"-Xswiftc", "-Osize",
-		] + unicodeTableArgs
+		]
 		let pipe = Pipe()
 		build.standardOutput = pipe
 		build.standardError = pipe
@@ -233,7 +232,9 @@ struct WebUIIslandPlugin: CommandPlugin {
 	}
 
 	/// the shared layer every island links. nothing here may depend on a capability.
-	private static let sharedModules: Set<String> = ["WebUISharedCore", "WebUIIslandWire", "WebUIIslandRuntime"]
+	private static let sharedModules: Set<String> = [
+		"WebUISharedCore", "WebUIIslandWire", "WebUIIslandWireRAW", "WebUIIslandRuntime",
+	]
 
 	/// graph rules, checked before any build:
 	///   r1  a capability module is a leaf — it depends only on the shared layer
@@ -425,34 +426,6 @@ struct WebUIIslandPlugin: CommandPlugin {
 		return String(data: data, encoding: .utf8) ?? ""
 	}
 
-	/// resolves the embedded unicode data tables archive from the installed
-	/// wasm-sdk artifact bundles (a bounded scan of `swift-sdks/*/*/…`) and
-	/// returns the `-Xswiftc` argument list that links it, or an empty list
-	/// when no archive exists (full-stdlib sdk / older toolchains).
-	private func unicodeTableLinkArgs(swiftBin: String, sdk: String) -> [String] {
-		guard ProcessInfo.processInfo.environment["WEBUI_SKIP_UNICODE_TABLES"] == nil else { return [] }
-		let home = ProcessInfo.processInfo.environment["HOME"] ?? ""
-		let sdksDir = home + "/Library/org.swift.swiftpm/swift-sdks"
-		guard FileManager.default.fileExists(atPath: sdksDir) else { return [] }
-		let bundles = (try? FileManager.default.contentsOfDirectory(atPath: sdksDir)) ?? []
-		for bundle in bundles {
-			guard bundle.hasSuffix(".artifactbundle") else { continue }
-			let root = sdksDir + "/" + bundle
-			let enumerator = FileManager.default.enumerator(atPath: root)
-			while let relative = enumerator?.nextObject() as? String {
-				guard relative.hasSuffix("libswiftUnicodeDataTables.a"),
-				      relative.contains("/embedded/wasm32-unknown-wasip1/") else { continue }
-				let archive = root + "/" + relative
-				let libDir = URL(fileURLWithPath: archive).deletingLastPathComponent().path
-				print("WebUIIsland: linking embedded unicode tables from \(libDir)")
-				return [
-					"-Xswiftc", "-Xlinker", "-Xswiftc", "-L\(libDir)",
-					"-Xswiftc", "-Xlinker", "-Xswiftc", "-lswiftUnicodeDataTables",
-				]
-			}
-		}
-		return []
-	}
 
 	private static func copyFile(from: String, to: String) throws {
 		try FileManager.default.createDirectory(

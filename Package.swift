@@ -65,6 +65,12 @@ let package = Package(
             name: "WebUIIslandRuntime",
             targets: ["WebUIIslandRuntime"]
         ),
+        // opt-in: rawdog-native fixed-layout payloads, linked only by islands
+        // that ask for it (string islands stay rawdog-free).
+        .library(
+            name: "WebUIIslandWireRAW",
+            targets: ["WebUIIslandWireRAW"]
+        ),
         .executable(
             name: "WebUIExample",
             targets: ["WebUIExample"]
@@ -160,6 +166,17 @@ let package = Package(
             name: "WebUIIslandRuntime",
             dependencies: [
                 "WebUIIslandWire",
+            ],
+            linkerSettings: [
+                // embedded swift on wasm leaves the stdlib's unicode
+                // normalization tables out of the link (the `_swift_stdlib_*`
+                // symbols jsonvalue and string comparison reference); the sdk
+                // ships them as a static archive. declared here, scoped to wasi,
+                // so every island product inherits it — and so a host link (a
+                // macro dylib, say) never sees a wasm archive. this used to ride
+                // the plugin as a global -Xswiftc flag, which broke exactly that
+                // host link once an island depended on a macro-bearing package.
+                .linkedLibrary("swiftUnicodeDataTables", .when(platforms: [.wasi])),
             ]
         ),
         // arc b's proof capability: a typed chart spec + its renderer.
@@ -174,6 +191,15 @@ let package = Package(
             name: "WebUIIslandFixtures",
             dependencies: [
                 "WebUISharedCore",
+            ]
+        ),
+        // opt-in bridge: rawdog's encode/decode protocols to the island payload pair.
+        // fixed-layout payloads only; see the file's doc comment.
+        .target(
+            name: "WebUIIslandWireRAW",
+            dependencies: [
+                "WebUIIslandWire",
+                .product(name: "RAW", package: "rawdog"),
             ]
         ),
         .executableTarget(
@@ -580,8 +606,10 @@ let package = Package(
                 "WebUI",
                 "WebUISharedCore",
                 "WebUIIslandWire",
+                "WebUIIslandWireRAW",
                 "WebUIChartSpec",
                 "WebUIDesignSystem",
+                .product(name: "RAW", package: "rawdog"),
                 "WebUIChart",
                 "WebUIAuth",
                 "WebUIShowcaseContent",

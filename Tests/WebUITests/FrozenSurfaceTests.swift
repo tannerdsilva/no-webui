@@ -31,6 +31,8 @@ enum FrozenSurface {
 		"WebUISharedCore", "WebUICore", "WebUI",
 		"WebUIDesignSystemCore", "WebUIDesignSystem",
 		"WebUIAuth", "WebUIChart", "WebUIServer",
+		// the opt-in rawdog payload bridge: public surface, pinned like the rest.
+		"WebUIIslandWireRAW",
 	]
 
 	static let fileName = "Documentation/frozen-surface.symbols"
@@ -162,8 +164,34 @@ enum FrozenSurface {
 			}
 		}
 		includeDirs = Array(Set(includeDirs))
-		moduleMaps = Array(Set(moduleMaps))
-		return (includeDirs.sorted(), moduleMaps.sorted())
+		// dedupe by MODULE NAME, not path: two build directories can carry the
+		// same module's map, and passing both makes clang abort with
+		// "module X … previously defined here". the canonical generated map is
+		// preferred, then any other generated one, then a checkout-shipped map.
+		func priority(_ path: String) -> Int {
+			if path.contains("/Intermediates.noindex/GeneratedModuleMaps/") { return 0 }
+			if path.contains("GeneratedModuleMaps") { return 1 }
+			return 2
+		}
+		var byModule: [String: String] = [:]
+		for path in moduleMaps.sorted(by: { priority($0) < priority($1) }) {
+			guard let name = Self.moduleName(inModuleMap: path), byModule[name] == nil else { continue }
+			byModule[name] = path
+		}
+		return (includeDirs.sorted(), byModule.values.sorted())
+	}
+
+	/// the declared module name of a clang modulemap (`module CRAW [system] {`).
+	private static func moduleName(inModuleMap path: String) -> String? {
+		guard let text = try? String(contentsOfFile: path, encoding: .utf8) else { return nil }
+		for line in text.split(separator: "\n") {
+			let trimmed = line.trimmingCharacters(in: .whitespaces)
+			guard trimmed.hasPrefix("module ") else { continue }
+			let rest = trimmed.dropFirst("module ".count)
+			let name = rest.prefix { $0.isLetter || $0.isNumber || $0 == "_" }
+			return name.isEmpty ? nil : String(name)
+		}
+		return nil
 	}
 
 	// MARK: - extraction

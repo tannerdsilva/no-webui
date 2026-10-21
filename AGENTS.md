@@ -468,12 +468,17 @@ are measuring, and make every probe assert its own preconditions.
   reports `server did not become ready — run with --disable-sandbox`.
 - **the `.build` lock** — a running plugin (e.g. `serve`) blocks every other
   `swift package` command until it exits. never launch a gate while `serve` is up.
-- **island code is foundation-free and rawdog-free.** `WebUIIslandWire`,
+- **island code is foundation-free; rawdog is opt-in.** `WebUIIslandWire`,
   `WebUIIslandRuntime`, and every capability target build for wasm32-wasi: no
-  Foundation, and no `WebUICore` (it links swift-log). rawdog cannot compile for
-  embedded wasm either — `RAW` uses `Codable`, `CRAW` needs mmap emulation — so island
-  payloads implement the `IslandPayloadEncodable`/`IslandPayloadDecodable` pair; a
-  rawdog-conforming type is host-side only.
+  Foundation, and no `WebUICore` (it links swift-log). rawdog 22.1 builds for embedded
+  wasm, so a fixed-layout `@RAW_staticbuff` type satisfies the payload pair through
+  `RAWIslandPayload` (the opt-in `WebUIIslandWireRAW` product — string islands never
+  link it); variable-length payloads still hand-roll the pair.
+- **the embedded unicode tables are a target linker setting, not a global flag.**
+  `WebUIIslandRuntime` declares `swiftUnicodeDataTables` `.when(platforms: [.wasi])`.
+  never move that back into the plugin's `-Xswiftc` arguments: a global flag also lands
+  on the host link of any macro target in the graph (rawdog's `RAW_macros`), where ld
+  rejects the wasm archive with `not a mach-o file`.
 - **the island gate is `plugin wasm-island`, and it fails the build.** before the
   cross-build it checks the dependency graph (capability targets are leaves, a product
   owns at most one capability, shared targets never depend on a capability); after it,

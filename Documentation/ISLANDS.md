@@ -212,12 +212,30 @@ extension MyPayload: IslandPayloadEncodable, IslandPayloadDecodable {
 
 `IslandUTF8.decode(_:)` is the strict foundation-free text reader for string
 fields (replace-with-U+FFFD is `decodeReplacingInvalid`, the lenient harness
-policy). your codec must stay within `WebUIIslandWire`'s dependency budget:
-**no Foundation, and no rawdog** — rawdog's module cannot compile for embedded
-wasm (`RAW` uses `Codable`, which embedded Swift does not have; `CRAW` needs
-mmap emulation), so a rawdog-conforming type cannot be decoded inside an
-island. bridge a rawdog type host-side if you need one for storage, but the
-island payload is this pair.
+policy). a payload codec must stay foundation-free: no Foundation, and no
+`WebUICore` (it links swift-log).
+
+**fixed-layout payloads need no codec at all.** as of rawdog 22.1, `RAW` builds
+for `wasm32-unknown-wasip1` under the embedded sdk (`Codable` is gated on
+`!hasFeature(Embedded)`, which an island payload never needs), so a
+`@RAW_staticbuff` type can cross the boundary directly: conform it to
+`RAWIslandPayload` from the opt-in `WebUIIslandWireRAW` product and the pair is
+satisfied by rawdog's own `RAW_encode`/`RAW_decode` — the identical contract
+(count, destination-advancing writer, all-or-nothing reader).
+
+```swift
+import WebUIIslandWireRAW   // re-exports RAW, so the macros come with it
+
+@RAW_staticbuff(bytes: 4)
+@RAW_staticbuff_fixedwidthinteger_type<UInt32>(bigEndian: true)
+struct Counter: Sendable, RAW_native, Hashable, Comparable, Equatable, RAWIslandPayload {}
+```
+
+that target is opt-in by construction: an island that never imports it never
+links rawdog, so its artifact stays at the string baseline. variable-length
+payloads (a title plus an array) still implement the pair directly — a
+staticbuff's byte count is compile-time by definition, and there is no
+length-prefixed container in rawdog 22.1.
 
 **the product** is one call:
 
@@ -243,6 +261,7 @@ the island side is four narrow targets, not one shared blob:
 |---|---|---|
 | `WebUIIslandWire` | the contract both sides implement: `IslandPayload*`, `IslandEnvelope`, base64 armor, the utf-8 scanner, the `@_exported` leaf seam | the leaf |
 | `WebUIIslandRuntime` | the wasi harness (`IslandEntry`) and entry installers (`TypedIslandEntry`) — wasm-only code | wire |
+| `WebUIIslandWireRAW` | optional: `RAWIslandPayload`, rawdog's encode/decode as the pair (fixed-layout payloads) | wire + `RAW` |
 | your capability module | the renderer both sides call (one target per capability) | wire |
 | your product | `main` (hook assignment + any `@_expose` extra) | runtime + your capability |
 
