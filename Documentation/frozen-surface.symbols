@@ -10,7 +10,7 @@
 # forced it. `Tests/WebUITests/FrozenSurfaceTests.swift` fails when this
 # file and a fresh extraction diverge, naming every added and removed symbol.
 #
-# re-measured 2026-10-09: 4629 symbols across 9 modules.
+# re-measured 2026-10-09: 4647 symbols across 9 modules.
 
 ## WebUISharedCore
 
@@ -533,6 +533,21 @@ EventRouter.register(outcome:for:)
 EventRouter.register(outcome:for:in:)
 EventRouter.reset()
 EventRouter.sessionCount
+FieldID
+FieldID.description
+FieldID.init(_:)
+FieldID.init(stringLiteral:)
+FieldID.rawValue
+FieldID.selector
+FieldValues
+FieldValues.count
+FieldValues.init()
+FieldValues.init(_:)
+FieldValues.init(dictionaryLiteral:)
+FieldValues.isEmpty
+FieldValues.removeAll()
+FieldValues.subscript(_:)
+FieldValues.subscript(_:default:)
 FontWeight
 FontWeight.black
 FontWeight.bold
@@ -1430,6 +1445,7 @@ Input.accept
 Input.attributes
 Input.disabled
 Input.id
+Input.init(field:placeholder:type:value:disabled:required:accept:multiple:attributes:)
 Input.init(id:name:placeholder:type:value:disabled:required:accept:multiple:attributes:)
 Input.multiple
 Input.name
@@ -1687,6 +1703,7 @@ Section.render(into:)
 Select
 Select.class
 Select.id
+Select.init(field:options:selected:class:)
 Select.init(id:name:options:selected:class:)
 Select.name
 Select.options
@@ -1771,6 +1788,7 @@ TextAlignment.right
 TextArea
 TextArea.class
 TextArea.id
+TextArea.init(field:placeholder:value:rows:class:)
 TextArea.init(id:name:placeholder:value:rows:class:)
 TextArea.name
 TextArea.placeholder
