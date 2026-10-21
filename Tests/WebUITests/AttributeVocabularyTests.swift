@@ -150,6 +150,26 @@ struct AttributeVocabularyTests {
 		#expect(unused == ["b", "c"], "got: \(unused)")
 	}
 
+	@Test("a variable can be conditional")
+	func cssVarConditional() {
+		let off = markup(Div { Text("x") }.cssVar("--ws-depth", .number(3), when: false))
+		#expect(!off.contains("--ws-depth: 3"), "no declaration when false: \(off)")
+	}
+
+	@Test("an identified view wires under its own stable id")
+	func identifiedWire() {
+		struct Row: View, Identified {
+			var stableID: String? { "row-7" }
+			func render(into buffer: inout HTMLBuffer) {
+				buffer.beginElement("div", " class=\"row\""); buffer.endOpenTag()
+				buffer.appendEscaped("x"); buffer.endElement()
+			}
+		}
+		let html = markup(Row().wire())
+		#expect(html.contains("data-component-id=\"row-7\""), "got: \(html)")
+		#expect(html.contains("data-event=\"click\""), "got: \(html)")
+	}
+
 	// MARK: element authoring
 
 	@Test("element emits tag, class and content")

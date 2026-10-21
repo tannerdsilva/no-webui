@@ -156,6 +156,22 @@ extension View {
 	}
 }
 
+extension View where Self: Identified {
+	/// wire this view under the id it already promises across renders.
+	///
+	/// `Identified.stableID` exists so a view can name itself once; asking the
+	/// same view for its component id at every wire site is how the two drift.
+	public func wire(on event: HTMLEvent = .click) -> some View {
+		Group {
+			if let id = stableID {
+				wire(ComponentID(id), on: event)
+			} else {
+				self
+			}
+		}
+	}
+}
+
 // MARK: - engine identity
 
 extension View {
@@ -219,10 +235,10 @@ extension View {
 	/// the sheet cannot know (a depth, a colour the user picked), while every
 	/// layout decision stays in the stylesheet. chained calls fold into ONE
 	/// `style` attribute with the declarations in order.
-	public func cssVar(_ variable: CSSVariable, _ value: CSSValue) -> some View {
+	public func cssVar(_ variable: CSSVariable, _ value: CSSValue, when condition: Bool = true) -> some View {
 		ModifiedView(
 			content: self,
-			modifier: InlineStyle(.custom(variable.name), value.text)
+			modifier: InlineStyle(.custom(variable.name), condition ? value.text : "")
 		)
 	}
 }
