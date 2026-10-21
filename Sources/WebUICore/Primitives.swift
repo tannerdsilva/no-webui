@@ -596,6 +596,22 @@ public struct Select: View {
 }
 
 // MARK: - ForEach
+//
+// `@Sendable` on the builder closure is load-bearing: `View` is `Sendable`, so
+// anything a view renders may cross an isolation boundary, and the closure is
+// part of the view. it therefore cannot read actor-isolated state.
+//
+// when a list's contents live on an actor, use a plain `for` INSIDE the
+// surrounding `@ViewBuilder` — the builder flattens its elements exactly as
+// `ForEach` does, and the loop body stays on the actor that owns the data:
+//
+//     Group {
+//         for row in store.rows { RowView(row) }     // correct
+//         // ForEach(store.rows) { RowView($0) }    // does not compile
+//     }
+//
+// `ForEach` remains the right tool for data that is already `Sendable` and
+// non-isolated (a literal, a value passed in).
 public struct ForEach<Data: RandomAccessCollection & Sendable>: View {
     public let data: Data
     public let content: @Sendable (Data.Element) -> [any View]

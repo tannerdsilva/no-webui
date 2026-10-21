@@ -10,7 +10,7 @@
 # forced it. `Tests/WebUITests/FrozenSurfaceTests.swift` fails when this
 # file and a fresh extraction diverge, naming every added and removed symbol.
 #
-# re-measured 2026-10-09: 4647 symbols across 9 modules.
+# re-measured 2026-10-09: 4741 symbols across 9 modules.
 
 ## WebUISharedCore
 
@@ -280,6 +280,11 @@ Aside.class
 Aside.init(class:content:)
 Aside.render(into:)
 AsyncContent
+AttributeContribution
+AttributeContribution.apply(to:)
+AttributeContribution.decorate(_:into:)
+AttributeContribution.init(_:)
+AttributeContribution.text
 Audio
 Audio.autoplay
 Audio.controls
@@ -375,6 +380,17 @@ CSSStylesheet
 CSSStylesheet.init(_:)
 CSSStylesheet.render(into:)
 CSSStylesheet.rules
+CSSValue
+CSSValue.color(_:)
+CSSValue.length(_:)
+CSSValue.number(_:)
+CSSValue.raw(_:)
+CSSValue.text
+CSSVariable
+CSSVariable.description
+CSSVariable.init(_:)
+CSSVariable.init(stringLiteral:)
+CSSVariable.name
 Canvas
 Canvas.height
 Canvas.id
@@ -391,6 +407,9 @@ ClassName
 ClassName.init(_:)
 ClassName.init(stringLiteral:)
 ClassName.value
+ClassNameAudit
+ClassNameAudit.undeclared(used:declared:)
+ClassNameAudit.unused(declared:used:)
 ColorToken
 ColorToken.background
 ColorToken.backgroundInset
@@ -458,6 +477,13 @@ DroppedFile.init(name:size:type:)
 DroppedFile.name
 DroppedFile.size
 DroppedFile.type
+Element
+Element.className
+Element.content
+Element.id
+Element.init(_:class:id:content:)
+Element.render(into:)
+Element.tag
 ElementRef
 ElementRef.remove()
 ElementRef.replace(with:)
@@ -1633,6 +1659,19 @@ Preformatted.children
 Preformatted.init(_:)
 Preformatted.init(content:)
 Preformatted.render(into:)
+PresenceAttribute
+PresenceAttribute.autofocus
+PresenceAttribute.checked
+PresenceAttribute.disabled
+PresenceAttribute.hidden
+PresenceAttribute.inert
+PresenceAttribute.init(rawValue:)
+PresenceAttribute.multiple
+PresenceAttribute.novalidate
+PresenceAttribute.open
+PresenceAttribute.readonly
+PresenceAttribute.required
+PresenceAttribute.selected
 Raw
 Raw.content
 Raw.init(_:)
@@ -1775,6 +1814,39 @@ Table.headers
 Table.init(headers:rows:class:)
 Table.render(into:)
 Table.rows
+Tag
+Tag.article
+Tag.aside
+Tag.dd
+Tag.div
+Tag.dl
+Tag.dt
+Tag.figcaption
+Tag.figure
+Tag.footer
+Tag.h1
+Tag.h2
+Tag.h3
+Tag.h4
+Tag.h5
+Tag.h6
+Tag.header
+Tag.init(rawValue:)
+Tag.li
+Tag.main
+Tag.nav
+Tag.ol
+Tag.p
+Tag.pre
+Tag.section
+Tag.span
+Tag.table
+Tag.tbody
+Tag.td
+Tag.th
+Tag.thead
+Tag.tr
+Tag.ul
 Text
 Text.content
 Text.init(_:)
@@ -1820,6 +1892,17 @@ TransitionPayload
 TransitionPayload.elapsedTime
 TransitionPayload.init(propertyName:elapsedTime:)
 TransitionPayload.propertyName
+TrustedMarkup
+TrustedMarkup.html
+TrustedMarkup.init(_:from:)
+TrustedMarkup.render(into:)
+TrustedMarkup.source
+TrustedSource
+TrustedSource.icon
+TrustedSource.label
+TrustedSource.markdown
+TrustedSource.other(_:)
+TrustedSource.plugin(_:)
 TypedIsland
 TypedIsland.Input
 TypedIsland.name
@@ -1865,6 +1948,7 @@ View
 View.a11yAudit()
 View.addClass(_:)
 View.aria(_:)
+View.aria(_:when:)
 View.ariaLabel(_:)
 View.ariaLive(_:)
 View.attribute(_:_:)
@@ -1873,9 +1957,12 @@ View.border(_:)
 View.class(_:)
 View.classes(_:)
 View.cornerRadius(_:)
+View.cssVar(_:_:)
+View.data(_:_:when:)
 View.display(_:)
 View.errorBoundary(_:)
 View.fill()
+View.flag(_:when:)
 View.flex(_:)
 View.focusable(_:)
 View.font(size:weight:)
@@ -1945,7 +2032,10 @@ View.showIf(_:)
 View.stretch()
 View.style(_:_:)
 View.textAlign(_:)
+View.webuiKey(_:when:)
 View.width(_:)
+View.wire(_:)
+View.wire(_:on:)
 ViewBuilder
 ViewBuilder.buildArray(_:)
 ViewBuilder.buildBlock(_:)
@@ -2102,6 +2192,10 @@ WheelPayload
 WheelPayload.deltaX
 WheelPayload.deltaY
 WheelPayload.init(deltaX:deltaY:)
+Wire
+Wire.component
+Wire.event
+Wire.init(_:on:)
 ZStack
 ZStack.alignment
 ZStack.children
