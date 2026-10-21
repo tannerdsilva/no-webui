@@ -61,7 +61,7 @@ public typealias DismissHandler = @Sendable (ElementRef, EventData) async -> [Fr
 /// when no handler is set, `makeDismissal()` produces the legacy static marker
 /// (`data-dismiss`/`data-remove`, no component id) — byte-identical to the
 /// un-wired output the container-handler pattern already consumes.
-public protocol Dismissible: View {
+public protocol Dismissible: View, Interactive {
     /// the css class the close/remove button carries (e.g. `toast__close`).
     var dismissButtonClass: String { get }
 
@@ -137,7 +137,7 @@ public extension Dismissible {
         }, for: buttonID)
         return Dismissal(
             elementID: elementID,
-            buttonHTML: "<button class=\"\(cls)\" \(dismissMarker) data-component-id=\"\(buttonID.value)\" data-event=\"click\"\(Aria.label(ariaLabel).render())>&times;</button>"
+            buttonHTML: "<button class=\"\(cls)\" \(dismissMarker)\(Wire(buttonID, on: .click).attributeText)\(Aria.label(ariaLabel).render())>&times;</button>"
         )
     }
 }

@@ -170,6 +170,25 @@ struct AttributeVocabularyTests {
 		#expect(html.contains("data-event=\"click\""), "got: \(html)")
 	}
 
+	@Test("the wire text is identical whether it rides a modifier or a string")
+	func wireTextIsShared() {
+		// the design system still builds some components as html strings; the
+		// modifier and the splice must be the same bytes or the two worlds drift.
+		let wire = Wire("row-7", on: .input)
+		let viaModifier = markup(Div { Text("x") }.wire(wire))
+		#expect(viaModifier.contains(wire.attributeText), "modifier uses the shared text: \(viaModifier)")
+		#expect(wire.attributeText == " data-component-id=\"row-7\" data-event=\"input\"",
+		        "got: \(wire.attributeText)")
+	}
+
+	@Test("Dismissible is Interactive, so its event is a capability")
+	func dismissibleIsInteractive() {
+		// a view that declares a DOM event IS interactive; the capability exists
+		// to say so, and the compiler can now check it.
+		func requiresInteractive<T: Interactive>(_: T.Type) {}
+		requiresInteractive(DismissibleProbe.self)
+	}
+
 	// MARK: element authoring
 
 	@Test("element emits tag, class and content")

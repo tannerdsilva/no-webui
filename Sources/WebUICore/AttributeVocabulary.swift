@@ -45,7 +45,7 @@ public struct AttributeContribution: ViewModifier {
 	}
 }
 
-private func attributeText(_ pairs: [(String, String)]) -> String {
+private func renderedAttributes(_ pairs: [(String, String)]) -> String {
 	pairs.map { " \(htmlEscape($0.0))=\"\(htmlEscape($0.1))\"" }.joined()
 }
 
@@ -82,7 +82,7 @@ extension View {
 		let clean = name.hasPrefix("data-") ? String(name.dropFirst(5)) : name
 		return ModifiedView(
 			content: self,
-			modifier: AttributeContribution(condition ? attributeText([("data-" + clean, value)]) : "")
+			modifier: AttributeContribution(condition ? renderedAttributes([("data-" + clean, value)]) : "")
 		)
 	}
 }
@@ -137,17 +137,23 @@ public struct Wire: Sendable, Hashable {
 	}
 }
 
+extension Wire {
+	/// ` data-component-id="…" data-event="…"` — the one spelling of the pair.
+	///
+	/// the design system still builds some components as html strings, so the
+	/// attributes exist in two worlds. this property is what keeps them one
+	/// text: the modifier contributes it, and a string builder splices it.
+	public var attributeText: String {
+		renderedAttributes([("data-component-id", component.value),
+		                    ("data-event", event.rawValue)])
+	}
+}
+
 extension View {
 	/// address this element from the client: `data-component-id` +
 	/// `data-event`.
 	public func wire(_ wire: Wire) -> some View {
-		ModifiedView(
-			content: self,
-			modifier: AttributeContribution(
-				attributeText([("data-component-id", wire.component.value),
-				               ("data-event", wire.event.rawValue)])
-			)
-		)
+		ModifiedView(content: self, modifier: AttributeContribution(wire.attributeText))
 	}
 
 	/// the common case: a click, addressed by component id.
@@ -183,7 +189,7 @@ extension View {
 	public func webuiKey(_ key: String, when condition: Bool = true) -> some View {
 		ModifiedView(
 			content: self,
-			modifier: AttributeContribution(condition ? attributeText([("data-webui-key", key)]) : "")
+			modifier: AttributeContribution(condition ? renderedAttributes([("data-webui-key", key)]) : "")
 		)
 	}
 }

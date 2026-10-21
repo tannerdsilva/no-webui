@@ -10,7 +10,7 @@
 # forced it. `Tests/WebUITests/FrozenSurfaceTests.swift` fails when this
 # file and a fresh extraction diverge, naming every added and removed symbol.
 #
-# re-measured 2026-10-09: 4742 symbols across 9 modules.
+# re-measured 2026-10-09: 4743 symbols across 9 modules.
 
 ## WebUISharedCore
 
@@ -2194,6 +2194,7 @@ WheelPayload.deltaX
 WheelPayload.deltaY
 WheelPayload.init(deltaX:deltaY:)
 Wire
+Wire.attributeText
 Wire.component
 Wire.event
 Wire.init(_:on:)
