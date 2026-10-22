@@ -1,6 +1,7 @@
 import Testing
 import WebUI
 import WebUIDesignSystem
+import WebUICore
 
 // MARK: - compiled fixtures
 //
@@ -153,5 +154,56 @@ struct ProbeWiring {
 	@Wired("cb-send", events: [.click, .submit])
 	func cbSend(_ event: EventData) async -> [FragmentUpdate] {
 		[FragmentUpdate(id: "cb-send", html: "<p>sent</p>")]
+	}
+}
+
+// MARK: - @HTMLComponent compiled runtime
+
+/// an ArcButton-shaped component proving the generated inits are disjoint:
+/// the text source cannot be passed to the builder init and vice versa,
+/// and `content`/`Content` stay private to the type.
+@Suite("@HTMLComponent compiled runtime")
+struct HTMLComponentCompiledRuntimeTests {
+
+	@Test("text source renders distinct bytes from builder source")
+	func textAndBuilderRenderDistinctBytes() {
+		let asText = ArcButton("Submit")
+		let asBuilder = ArcButton(id: nil, disabled: false, views: { [Text("Submit")] })
+
+		#expect(asText.markup.html != asBuilder.markup.html,
+			"text source and builder source must produce distinct bytes")
+		#expect(asText.markup.html.contains("Submit"),
+			"text source emits the label text")
+		#expect(asBuilder.markup.html.contains("Submit"),
+			"builder source emits the label text")
+	}
+
+	@Test("a defaulted shared property is preserved in both inits")
+	func defaultedSharedPropertyPreserved() {
+		let explicit = ArcButton("x", id: "btn-1", disabled: true)
+		let defaulted = ArcButton("Cancel")
+
+		#expect(explicit.markup.html.contains("btn-1"), "explicit id is emitted")
+		#expect(defaulted.markup.html.contains("Cancel"), "default path emits the label")
+	}
+}
+
+/// ArcButton-shaped component: shared props (`id`, `disabled`) plus one
+/// unlabeled text case and one builder case. renders as a button wrapper.
+/// the inits, `content` storage, and `Content` enum are macro-generated.
+@HTMLComponent(.text("label", unlabeled: true), .builder("views"))
+struct ArcButton: View {
+	var id: String? = nil
+	var disabled: Bool = false
+
+	public func render(into buffer: inout HTMLBuffer) {
+		switch content {
+		case .label(let label):
+			Button(label, id: id, disabled: disabled).render(into: &buffer)
+		case .views(let views):
+			for view in views {
+				view.render(into: &buffer)
+			}
+		}
 	}
 }

@@ -7,5 +7,6 @@ struct WebUIDesignSystemMacroPlugin: CompilerPlugin {
         WebUIThemeMacro.self,
         WiredMacro.self,
         WireGroupMacro.self,
+        ComponentMacro.self,
     ]
 }

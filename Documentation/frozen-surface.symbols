@@ -10,7 +10,7 @@
 # forced it. `Tests/WebUITests/FrozenSurfaceTests.swift` fails when this
 # file and a fresh extraction diverge, naming every added and removed symbol.
 #
-# re-measured 2026-10-09: 4745 symbols across 9 modules.
+# re-measured 2026-10-09: 4755 symbols across 9 modules.
 
 ## WebUISharedCore
 
@@ -4143,6 +4143,15 @@ WebUIWizard.vertical
 
 ## WebUIDesignSystem
 
+ContentCase
+ContentCase.Style
+ContentCase.Style.builder
+ContentCase.Style.text
+ContentCase.builder(_:)
+ContentCase.name
+ContentCase.style
+ContentCase.text(_:unlabeled:)
+ContentCase.unlabeled
 DesignSystemAssets
 DesignSystemAssets.cssSHA256
 DesignSystemAssets.minifiedCss
@@ -4157,6 +4166,7 @@ HTMLClassValidator.orphanClasses(in:extra:)
 HTMLClassValidator.registerKnownPrefix(_:)
 HTMLClassValidator.report(html:extra:)
 HTMLClassValidator.undefinedClasses(in:extra:)
+HTMLComponent(_:)
 Theme(base:)
 ThemeContrast
 ThemeContrast.audit(_:minimum:pairs:)

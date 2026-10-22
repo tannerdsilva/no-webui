@@ -39,3 +39,40 @@ public macro Wired(_ id: String, events: [HTMLEvent] = [.click]) =
 @attached(member, names: arbitrary)
 public macro WireGroup(_ name: String) =
     #externalMacro(module: "WebUIDesignSystemMacros", type: "WireGroupMacro")
+
+// MARK: - @HTMLComponent
+
+/// the content-case vocabulary for ``HTMLComponent``: one case per content
+/// source. the case name is both the init parameter label and the generated
+/// `Content` enum case.
+public struct ContentCase: Sendable {
+    public enum Style: Sendable { case text, builder }
+    public let name: String
+    public let style: Style
+    public let unlabeled: Bool
+
+    public static func text(_ name: String, unlabeled: Bool = false) -> ContentCase {
+        ContentCase(name: name, style: .text, unlabeled: unlabeled)
+    }
+
+    public static func builder(_ name: String) -> ContentCase {
+        ContentCase(name: name, style: .builder, unlabeled: false)
+    }
+}
+
+/// one init is generated per content case; every stored property of the host
+/// struct becomes a shared parameter (declaration order and default
+/// expressions preserved verbatim); computed properties are skipped.
+///
+/// ```swift
+/// @HTMLComponent(.text("label", unlabeled: true), .builder("views"))
+/// struct ArcButton: WebUI.View {
+///     var id: String? = nil
+///     var body: some View { … }
+/// }
+/// ```
+/// - Parameter cases: the content cases, one of which may be a `.builder`; it
+///   is always the trailing parameter and carries `@ViewBuilder`.
+@attached(member, names: named(init), named(content), named(Content))
+public macro HTMLComponent(_ cases: ContentCase...) =
+    #externalMacro(module: "WebUIDesignSystemMacros", type: "ComponentMacro")
