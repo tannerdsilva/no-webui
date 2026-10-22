@@ -84,7 +84,7 @@ compile error. `@Theme(base: Other.self)` layers the declared overrides over
 another provider per palette: the shape a many-scheme app wants, where each
 scheme restates a handful of tokens instead of a whole palette.
 
-a theme *set* ships as a catalog: `WebUIThemeProvider` gives each theme identity
+a scheme *set* ships as a catalog: `WebUIThemeProvider` gives each theme identity
 (`themeID`/`themeLabel`/`themeSwatch`), `ThemeCatalog` collects them (`all` +
 `defaultTheme`), and `WebUITheme`/`ThemePalette`/`ThemeEntry` are `Codable`, so
 the same catalog serializes to the client as data. `stylesheet(scope:)` emits it
@@ -94,6 +94,146 @@ behaviour) or `.attribute(id:)`, which scopes the declarations to
 scheme × both modes and the engine switches with no round trip. the catalog sheet
 is served content-addressed (`/__assets/theme.<sha256>`), so a second navigation
 transfers no theme bytes, and it is *unlayered*, so it outranks the base sheet.
+
+## Macros (`@Wired`, `@WireGroup`, `@HTMLComponent`)
+
+three macros ship in `WebUIDesignSystem`, declared beside `@Theme` in
+`Sources/WebUIDesignSystem/`. the implementations live in
+`WebUIDesignSystemMacros`. no new target: `WebUIDesignSystem` already lists
+`WebUIDesignSystemMacros` in `Package.swift`.
+
+### `@Wired` / `@WireGroup` — registration synthesis
+
+`@Wired` is a peer marker on an `async` handler func that returns
+`[FragmentUpdate]`. it expands to nothing — all generation happens in the
+enclosing `@WireGroup` member macro, which emits one `wireGroup_<name>(_ router:)`
+registrar method per group, with one `router.register(...)` call per annotated
+handler, in declaration order.
+
+```swift
+@WireGroup("chat")
+extension Controller {
+    @Wired("cb-file", events: [.click])
+    func handleAttachFile(_ event: EventData) async -> [FragmentUpdate] { … }
+
+    @Wired("cb-send", events: [.click, .submit])
+    func handleSend(_ event: EventData) async -> [FragmentUpdate] { … }
+}
+// controller.wireGroup_chat(router)
+```
+
+the generated registrar:
+
+```swift
+func wireGroup_chat(_ router: EventRouter) {
+    router.register({ event in
+        guard ["click"].contains(event.event) else { return [] }
+        return await self.handleAttachFile(event)
+    }, for: ComponentID("cb-file"))
+    router.register({ event in
+        guard ["click", "submit"].contains(event.event) else { return [] }
+        return await self.handleSend(event)
+    }, for: ComponentID("cb-send"))
+}
+```
+
+**contract:**
+
+- one registration per annotated handler, in declaration order;
+- the event filter is `guard events.contains(event.event)`; the annotation's
+  `[.click]` resolves to its raw-value spelling at expansion time, so the
+  declaration stays typed and the emitted comparison is byte-identical to the
+  hand-written path;
+- the generated registrar is `internal`, `sync`, non-throwing
+  (`func wireGroup_<name>(_ router: EventRouter)`), matching same-module hosts;
+- group name must match `[a-z][a-z0-9_]*` — otherwise a diagnostic;
+- **duplicate id within a group** is a compile error naming the two handlers;
+- `@Wired` on a non-func, a non-`async` func, or one whose return type is not
+  `[FragmentUpdate]` is a diagnostic;
+- an empty group (no `@Wired` members) emits a warning (legitimate mid-migration);
+- duplicate ids **across groups** are out of the macro's sight — the strict-dom
+  pairing test remains the cross-group arbiter.
+
+**branch decision (W0 probe, 2026-10-22):** `branch: A` — `@WireGroup` attaches
+to an `extension`. The compiler accepts member macros on extensions, so the
+host can be `extension Controller` and the generated `wireGroup_<name>` method
+is callable on `Controller` directly. branch B (a `struct` host with stored
+`app`/`push` dependencies) is the fallback and is not needed.
+
+```swift
+// branch B (fallback, not used):
+@WireGroup("chat")
+struct ChatWiring: Sendable {
+    let app: AppState
+    let push: @Sendable ([FragmentUpdate]) async -> Void
+    @Wired("cb-file", events: [.click])
+    func handleAttachFile(_ event: EventData) async -> [FragmentUpdate] { … }
+}
+// ChatWiring(app:app, push:push).wireGroup_chat(router)
+```
+
+### `@HTMLComponent` — disjoint-content component declarations
+
+`@HTMLComponent` is a member macro on a `struct` that replaces the
+three-initializer + private `Content`-enum ceremony with a single attribute
+declaration. one init is generated per content case; every stored property of
+the host struct becomes a shared parameter (declaration order and default
+expressions preserved verbatim); computed properties (`var body`) are skipped.
+
+```swift
+@HTMLComponent(.text("label", unlabeled: true), .builder("views"))
+struct ArcButton: WebUI.View {
+    var id: String? = nil
+    var `class`: ClassName = .none
+    var type: ButtonType = .button
+    var disabled = false
+    var hidden = false
+
+    var body: some WebUI.View { … switch content { … } }
+}
+```
+
+the generated expansion:
+
+```swift
+private enum Content {
+    case label(String)
+    case views([any WebUI.View])
+}
+private let content: Content
+
+init(_ label: String, id: String? = nil, `class`: ClassName = .none,
+     type: ButtonType = .button, disabled: Bool = false, hidden: Bool = false) {
+    self.id = id; self.`class` = `class`
+    self.type = type; self.disabled = disabled; self.hidden = hidden
+    self.content = .label(label)
+}
+
+init(id: String? = nil, `class`: ClassName = .none, type: ButtonType = .button,
+     disabled: Bool = false, hidden: Bool = false,
+     @ViewBuilder views: () -> [any WebUI.View]) {
+    … self.content = .views(views())
+}
+```
+
+**contract (each enforced by a diagnostic, never `fatalError`):**
+
+- every stored property is a shared parameter — declaration order and default
+  expressions preserved verbatim; computed properties are skipped;
+- 1–2 content cases; at most one `.builder`, which is always the last parameter
+  and carries `@ViewBuilder`;
+- `.text` cases whose `unlabeled: true` are the leading `_`-labeled parameters,
+  in declaration order; labeled text cases sit after them;
+- generated inits copy the host type's access level; the memberwise init is
+  thereby replaced, so passing a second content source is inexpressible at every
+  call site;
+- `body` stays author-written and switches on `content`;
+- diagnostics: zero cases, 2+ builders, duplicate case names, `unlabeled:` on a
+  builder, a stored property with no type annotation.
+
+app-side: `@HTMLComponent` inits replace the memberwise init, so any call site
+relying on memberwise construction of an adopted component breaks. arc's
+components are constructed only through their explicit inits today.
 
 app-invented property names bind to the token vocabulary with `TokenAlias`:
 `TokenAlias("--bg", .colorBg)` emits `--bg: var(--color-bg)` — an indirection, so
