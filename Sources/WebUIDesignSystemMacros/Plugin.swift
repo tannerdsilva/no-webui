@@ -5,5 +5,7 @@ import SwiftSyntaxMacros
 struct WebUIDesignSystemMacroPlugin: CompilerPlugin {
     let providingMacros: [Macro.Type] = [
         WebUIThemeMacro.self,
+        WiredMacro.self,
+        WireGroupMacro.self,
     ]
 }

@@ -110,3 +110,48 @@ struct ThemeCompiledRuntimeTests {
 		#expect(css.contains("--transition-fast: 150ms ease;"))
 	}
 }
+
+// MARK: - @Wired / @WireGroup compiled runtime
+
+/// a compiled runtime fixture proving the macro-generated registrar type-checks
+/// and routes events correctly against a real `EventRouter`.
+@Suite("@Wired / @WireGroup compiled runtime")
+struct WiredCompiledRuntimeTests {
+
+	@Test("generated registrar routes listed events and filters non-listed")
+	func registrarRoutesAndFilters() async throws {
+		let router = EventRouter()
+		let session = RenderSessionID.default
+
+		let wiring = ProbeWiring()
+		wiring.wireGroup_chat(router)
+
+		// a listed event reaches the handler
+		let listed = await router.handle(
+			EventData(component: ComponentID("cb-file"), event: "click")
+		)
+		#expect(!listed.isEmpty, "listed event should produce fragments")
+
+		// a non-listed event returns empty (the filter is the contract)
+		let nonListed = await router.handle(
+			EventData(component: ComponentID("cb-file"), event: "mouseover")
+		)
+		#expect(nonListed.isEmpty, "non-listed event should produce no fragments")
+
+		// handlerCount matches the handler count
+		#expect(router.handlerCount(in: session) == 2)
+	}
+}
+
+@WireGroup("chat")
+struct ProbeWiring {
+	@Wired("cb-file", events: [.click])
+	func cbFile(_ event: EventData) async -> [FragmentUpdate] {
+		[FragmentUpdate(id: "cb-file", html: "<p>file attached</p>")]
+	}
+
+	@Wired("cb-send", events: [.click, .submit])
+	func cbSend(_ event: EventData) async -> [FragmentUpdate] {
+		[FragmentUpdate(id: "cb-send", html: "<p>sent</p>")]
+	}
+}
