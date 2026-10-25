@@ -877,6 +877,27 @@ code, .inline-code {
   transition: transform var(--transition-base);
 }
 .dropdown--open .dropdown__chevron { transform: rotate(180deg); }
+/* the panel had no rule at all until now, so a dropdown rendered its options
+   inline and permanently — visible, unstyled, and never "closed". it is the
+   same floating surface as .menu--context (same tokens, same job), anchored
+   under the trigger and right-aligned so a right-edge trigger doesn't push its
+   menu off-canvas. closed by default: only the server's `isOpen` (which emits
+   `dropdown--open` on the wrapper) may paint it. nothing in the engine toggles
+   a dropdown, so this must never be visible without that class. */
+.dropdown__panel {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  display: none;
+  min-width: 11rem;
+  padding: var(--space-1);
+  background: var(--color-bg-raised);
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  z-index: var(--z-dropdown);
+}
+.dropdown--open .dropdown__panel { display: block; }
 
 .checkbox {
   --cb-size: 1.125rem;

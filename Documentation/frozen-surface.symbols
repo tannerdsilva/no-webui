@@ -3272,10 +3272,13 @@ WebUIDropZone.title
 WebUIDropdown
 WebUIDropdown.children
 WebUIDropdown.id
-WebUIDropdown.init(_:id:onSelect:content:)
+WebUIDropdown.init(_:id:onSelect:isOpen:content:)
+WebUIDropdown.init(id:onSelect:isOpen:trigger:panel:)
+WebUIDropdown.isOpen
 WebUIDropdown.onSelect
 WebUIDropdown.render(into:)
 WebUIDropdown.trigger
+WebUIDropdown.triggerViews
 WebUIEmptyState
 WebUIEmptyState.action
 WebUIEmptyState.icon

@@ -938,28 +938,94 @@ public struct WebUIContextMenu: View {
 
 // MARK: WebUI Dropdown
 /// a trigger with an attached options panel.
+///
+/// the trigger **is** the click boundary. the wrapper is layout only — it
+/// carries no routing attributes — so the element the engine resolves as the
+/// component (the nearest `data-component-id`) is the same element a caller
+/// sees and keys their handler on. putting the boundary on the wrapper while
+/// the button carries `id + "-trigger"` instead makes every click report
+/// `event.data["targetId"] == "<id>-trigger"`, and a caller keyed on the real
+/// id never hears it.
+///
+/// two ways to supply the trigger:
+///
+/// - ``init(_:id:onSelect:isOpen:content:)`` renders a text trigger — the
+///   label and the chevron — inside the button that is the boundary;
+/// - ``init(id:onSelect:isOpen:trigger:panel:)`` takes the trigger as views and
+///   renders them **verbatim**: no wrapper button, no injected chevron, no
+///   injected attributes, so a caller's own typed control keeps its exact
+///   markup, its own `id`, and its own handle. (wrapping a caller's `<button>`
+///   in the component's `<button>` would also be invalid html.)
+///
+/// the panel is open only when ``isOpen`` says so: this framework is
+/// server-driven, nothing in the client runtime toggles a dropdown, so opening
+/// and closing is a render that flips one bool — not client state, not an
+/// animation.
 public struct WebUIDropdown: View {
-    public let trigger: String
+    /// the component-rendered trigger's label; `nil` when the caller supplies
+    /// ``triggerViews`` instead.
+    public let trigger: String?
+    /// the caller-rendered trigger, emitted verbatim in place of the button;
+    /// empty for the label form.
+    public let triggerViews: [any View]
+    /// server state: `true` adds `dropdown--open` to the wrapper and
+    /// `aria-expanded="true"` to a component-rendered trigger — the pair that
+    /// makes `.dropdown--open .dropdown__panel` paint.
+    public let isOpen: Bool
     public let children: [any View]
-    /// stable container id; when set with `onSelect` the root self-wires and
-    /// the trigger button carries `id + "-trigger"`.
+    /// stable component id; when set with `onSelect` the trigger carries both
+    /// `id="<id>"` and `data-component-id="<id>"` — no `-trigger` suffix, so
+    /// the id the engine dispatches to is the id the caller keyed on.
     public let id: String?
     public let onSelect: EventHandler?
+
+    /// a component-rendered text trigger: `trigger` plus the chevron, inside
+    /// the button that is the click boundary.
     public init(_ trigger: String, id: String? = nil, onSelect: EventHandler? = nil,
+                isOpen: Bool = false,
                 @ViewBuilder content: () -> [any View]) {
-        self.trigger = trigger; self.id = id; self.onSelect = onSelect; self.children = content()
+        self.trigger = trigger; self.triggerViews = []
+        self.isOpen = isOpen; self.id = id; self.onSelect = onSelect
+        self.children = content()
+    }
+
+    /// a caller-rendered trigger.
+    ///
+    /// `trigger`'s views are emitted untouched and are their own boundary:
+    /// give them an `id`/`data-component-id`/`aria-*` and the engine dispatches
+    /// exactly that id. pass `id:` + `onSelect:` only when the framework should
+    /// register the handler too — this form emits no attributes of its own, so
+    /// the markup carrying the matching `data-component-id` stays the caller's.
+    public init(id: String? = nil, onSelect: EventHandler? = nil, isOpen: Bool = false,
+                @ViewBuilder trigger: () -> [any View],
+                @ViewBuilder panel: () -> [any View]) {
+        self.trigger = nil; self.triggerViews = trigger()
+        self.isOpen = isOpen; self.id = id; self.onSelect = onSelect
+        self.children = panel()
+        // register-only: the caller owns the attributes, so the canonical
+        // routing string is discarded and only the registration is kept.
+        if let id, let onSelect, var context = RenderContext.current {
+            context.register(handler: onSelect, for: ComponentID(id))
+        }
     }
 
     public func render(into buffer: inout HTMLBuffer) {
-        let attrs: String
-        if let id, let onSelect {
-            attrs = controlAttributes(id: id, event: .click, handler: onSelect)
+        var html = isOpen ? "<div class=\"dropdown dropdown--open\">" : "<div class=\"dropdown\">"
+        if triggerViews.isEmpty {
+            var attrs = ""
+            if let id {
+                attrs += " id=\"\(htmlEscape(id))\""
+                attrs += controlAttributes(id: id, event: .click, handler: onSelect)
+            }
+            // expanded only while open: a closed dropdown keeps the bytes it
+            // shipped before this state existed, and its panel is out of the
+            // accessibility tree either way (display: none).
+            let expanded = isOpen ? Aria.expanded(.yes).render() : ""
+            html += "<button class=\"dropdown__trigger\"\(attrs)\(expanded)>"
+            html += "\(htmlEscape(trigger ?? ""))<span class=\"dropdown__chevron\">▾</span></button>"
         } else {
-            attrs = ""
+            for view in triggerViews { html += view.markup.html }
         }
-        var html = "<div class=\"dropdown\"\(attrs)>"
-        let triggerID = id.map { " id=\"\(htmlEscape("\($0)-trigger"))\"" } ?? ""
-        html += "<button class=\"dropdown__trigger\"\(triggerID)>\(htmlEscape(trigger))<span class=\"dropdown__chevron\">▾</span></button>"
         html += "<div class=\"dropdown__panel\">"
         for c in children { html += c.markup.html }
         html += "</div></div>"

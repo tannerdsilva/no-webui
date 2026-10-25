@@ -163,8 +163,11 @@ func contextMenu() {
 func dropdown() {
     let v = WebUIDropdown("Options") { Text("item") }
     let h = v.markup.html
-    #expect(h.contains("class=\"dropdown\""))
-    #expect(h.contains("dropdown__trigger"))
+    // the wrapper is layout only: no routing attributes live on it.
+    #expect(h.hasPrefix("<div class=\"dropdown\">"))
+    #expect(h.contains("<button class=\"dropdown__trigger\">Options<span class=\"dropdown__chevron\">▾</span></button>"))
+    #expect(h.contains("<div class=\"dropdown__panel\">"))
+    #expect(!h.contains("data-component-id"), "a dropdown with no id/onSelect routes nothing")
 }
 
 @Test("WebUIComboBox renders options panel")
@@ -721,12 +724,15 @@ func bottomSheetSelfWires() {
     #expect(h.contains("id=\"bs-close\""))
 }
 
-@Test("WebUIDropdown self-wires its trigger")
+@Test("WebUIDropdown self-wires its trigger as the boundary")
 func dropdownSelfWires() {
     let v = WebUIDropdown("Options", id: "dd", onSelect: { _ in [] }) { Text("x") }
     let h = v.markup.html
-    #expect(h.contains("data-component-id=\"dd\""))
-    #expect(h.contains("id=\"dd-trigger\""))
+    // the id the engine dispatches to is the id the caller keyed on: the
+    // button carries it, the wrapper does not, and no `-trigger` exists.
+    #expect(h.contains("<button class=\"dropdown__trigger\" id=\"dd\" data-component-id=\"dd\" data-event=\"click\">"))
+    #expect(!h.contains("-trigger"), "the trigger id must be the component id, not a suffixed one")
+    #expect(h.hasPrefix("<div class=\"dropdown\">"), "the wrapper must stay free of routing attributes")
 }
 
 @Test("WebUILightbox self-wires nav buttons")
@@ -880,4 +886,65 @@ func pullRefreshSelfWires() {
     let v = WebUIPullRefresh(state: .active, id: "pr", onRefresh: { _ in [] })
     let h = v.markup.html
     #expect(h.contains("data-component-id=\"pr\""))
+}
+
+// MARK: - Dropdown contract: caller-owned trigger, server-owned open state
+
+/// a stand-in for a caller-rendered control: markup with its own id, routing
+/// attribute, aria, and classes. the component must not touch a byte of it.
+private struct CallerControl: View {
+    let html: String
+    func render(into buffer: inout HTMLBuffer) { buffer.append(html) }
+}
+
+@Test("WebUIDropdown opens from server state alone")
+func dropdownOpenState() {
+    let closed = WebUIDropdown("Options", id: "dd") { Text("x") }.markup.html
+    #expect(closed.hasPrefix("<div class=\"dropdown\">"))
+    #expect(!closed.contains("dropdown--open"))
+    #expect(!closed.contains("aria-expanded"), "a closed dropdown ships no expanded state")
+
+    let open = WebUIDropdown("Options", id: "dd", isOpen: true) { Text("x") }.markup.html
+    #expect(open.hasPrefix("<div class=\"dropdown dropdown--open\">"))
+    #expect(open.contains("aria-expanded=\"true\""))
+}
+
+@Test("WebUIDropdown renders a caller trigger verbatim")
+func dropdownCallerTrigger() {
+    let caller = "<button class=\"button button--ghost\" id=\"acct\" data-component-id=\"acct\" data-event=\"click\" type=\"button\" aria-haspopup=\"menu\" aria-expanded=\"false\"><span class=\"avatar avatar--sm\">TS</span><span class=\"button__label\">tanner</span></button>"
+    let v = WebUIDropdown(isOpen: true,
+                          trigger: { CallerControl(html: caller) },
+                          panel: { Text("Sign out") })
+    let h = v.markup.html
+    #expect(h.contains(caller), "the caller's own id, handle, and aria must survive byte for byte")
+    #expect(h.components(separatedBy: "<button").count - 1 == 1, "the caller's button must not be wrapped in another")
+    #expect(!h.contains("dropdown__chevron"), "no chevron may be injected into a caller trigger")
+    #expect(h.hasPrefix("<div class=\"dropdown dropdown--open\">"), "the wrapper is layout only")
+}
+
+@Test("WebUIDropdown injects nothing into a caller trigger given id + onSelect")
+func dropdownCallerTriggerWithoutInjection() {
+    let caller = "<span id=\"acct\" data-component-id=\"acct\" role=\"button\" aria-expanded=\"true\">tanner</span>"
+    let h = WebUIDropdown(id: "acct", onSelect: { _ in [] },
+                          trigger: { CallerControl(html: caller) },
+                          panel: { Text("x") }).markup.html
+    #expect(h.contains(caller))
+    #expect(!h.contains("data-event"), "this form emits no routing attributes; the caller's own stand")
+    #expect(h.components(separatedBy: "data-component-id=\"acct\"").count - 1 == 1,
+            "the component must not repeat the caller's handle")
+}
+
+@Test("the sheet styles the dropdown panel and keeps it closed until open")
+func dropdownPanelIsStyled() {
+    // the component is inert without these two rules: its panel would render
+    // inline, unstyled and permanently visible — the pre-change behaviour.
+    let css = DesignSystemAssets.minifiedCss
+    let base = css.range(of: ".dropdown__panel {").map { css[$0.upperBound...].prefix { $0 != "}" } }
+    #expect(base != nil, "`.dropdown__panel` has no rule in the served sheet")
+    #expect(base?.contains("display: none") == true, "the panel must not paint while closed")
+    #expect(base?.contains("position: absolute") == true, "the panel floats under the trigger")
+    #expect(base?.contains("min-width: 11rem") == true)
+    #expect(base?.contains("z-index: var(--z-dropdown)") == true)
+    #expect(css.contains(".dropdown--open .dropdown__panel { display: block; }"),
+            "the open state must be the only thing that paints the panel")
 }

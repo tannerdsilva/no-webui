@@ -987,6 +987,47 @@ notes:
   existing `controlAttributes`/self-wiring control, or extend the component.
 - render-contract tests live in `Tests/WebUITests/WebUIExtrasTests.swift`.
 
+### `WebUIDropdown` — the trigger is the click boundary
+
+a dropdown is a trigger with an attached options panel. the wrapper
+(`div.dropdown`) is layout only — it carries **no** routing attributes — and the
+trigger element itself carries the component id, so the id the engine dispatches
+is the id the caller keyed on. (the old shape put `data-component-id` on the
+wrapper and `id="<id>-trigger"` on the button, so every click reported
+`targetId == "<id>-trigger"` and a caller keyed on the real id missed it.)
+
+two initializers, one contract:
+
+```swift
+// a component-rendered text trigger: the label + chevron inside the button.
+WebUIDropdown("Options", id: "sort", onSelect: handle) { WebUIMenu(items: items) }
+
+// a caller-rendered trigger: these views ARE the boundary, emitted verbatim.
+WebUIDropdown(trigger: {
+    WebUIButton("tanner", appearance: .ghost, id: "acct", onTap: toggle)
+}, panel: {
+    WebUIMenu(items: accountItems)
+})
+```
+
+- **component-rendered trigger** — `<button class="dropdown__trigger" id="sort"
+  data-component-id="sort" data-event="click">Options<span
+  class="dropdown__chevron">▾</span></button>`. no `-trigger` suffix anywhere;
+  with no `id`/`onSelect` it is a plain button carrying no routing attributes.
+- **caller-rendered trigger** — rendered byte for byte: no wrapper button (a
+  caller's `<button>` inside the component's would be invalid html), no injected
+  chevron, no injected attributes, so the caller's own `id`,
+  `data-component-id`, and `aria-*` are the dispatch contract. `id:` +
+  `onSelect:` on this initializer register the handler and emit nothing.
+- **`isOpen` is server state** — `true` adds `dropdown--open` to the wrapper and
+  `aria-expanded="true"` to a component-rendered trigger; `false` emits neither.
+  nothing in the client runtime toggles a dropdown, so opening and closing is a
+  re-render, not client state.
+- **the panel is styled** — `.dropdown__panel` is absolutely positioned under the
+  trigger, right-aligned, `min-width: 11rem`, raised surface + `--shadow-lg` +
+  `--z-dropdown`, and `display: none` until `.dropdown--open .dropdown__panel`
+  shows it. before this rule it rendered inline, unstyled, and always visible.
+
 ## CSS Class Naming Convention
 
 All classes follow BEM-like naming:
