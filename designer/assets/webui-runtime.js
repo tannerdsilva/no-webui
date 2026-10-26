@@ -17,7 +17,7 @@ window.WebUIRuntime = (function () {
   };
 
   var LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3, silent: 4 };
-  var EVENT_TYPES = ['click', 'input', 'change', 'submit', 'keydown', 'keyup', 'keypress', 'focus', 'blur', 'focusin', 'focusout', 'mouseover', 'mouseout', 'mousedown', 'mouseup', 'split:commit'];
+  var EVENT_TYPES = ['click', 'input', 'change', 'submit', 'keydown', 'keyup', 'keypress', 'focus', 'blur', 'focusin', 'focusout', 'mouseover', 'mouseout', 'mousedown', 'mouseup'];
 
   function createLogger(level) {
     var min = LOG_LEVELS[level] || LOG_LEVELS.warn;
@@ -273,7 +273,7 @@ window.WebUIRuntime = (function () {
 
       var declaredEvent = componentEl.getAttribute('data-event');
       if (declaredEvent && effectiveTypes(event).indexOf(declaredEvent) === -1) return;
-      if (event.defaultPrevented) return;
+
       if (event.type === 'click') {
         if (event.metaKey || event.ctrlKey || event.shiftKey) return;
         var link = event.target.closest('a');
@@ -409,12 +409,6 @@ window.WebUIRuntime = (function () {
         case 'mouseout':
         case 'mousedown':
         case 'mouseup':
-          return {};
-
-        case 'split:commit':
-          if (event && event.detail && typeof event.detail === 'object') {
-            return event.detail;
-          }
           return {};
 
         default:
