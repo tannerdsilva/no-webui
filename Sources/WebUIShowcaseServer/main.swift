@@ -82,6 +82,22 @@ func renderBench(n: Int) {
         _ = RenderContext.$current.withValue(ctx) { tree.markup.html }
     }
 
+    // the same shape, but every node carries one handler — this is the row that
+    // makes the modifier path a number instead of an argument. one handler per
+    // node costs one router registration per node per render, so keep the
+    // iteration count where `renders * 1000` stays under the router's 10_000
+    // handler cap: past it every registration logs a warning inside the timed
+    // region and the number becomes noise.
+    let handlerNodes = 1000
+    let handlerTree = VStack(spacing: 0) {
+        ForEach(0..<handlerNodes) { i in
+            Div { Text("row \(i)") }.onClick { _ in [] }
+        }
+    }
+    report("synthetic \(handlerNodes) onClick nodes", iterations: max(5, n / 4)) {
+        _ = RenderContext.$current.withValue(ctx) { handlerTree.markup.html }
+    }
+
     print("=== micro paths the render leans on ===")
     report("nextComponentID (mutex + string alloc)", iterations: 200_000) {
         _ = router.nextComponentID()
