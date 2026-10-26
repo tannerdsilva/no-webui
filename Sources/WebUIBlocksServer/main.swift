@@ -1,4 +1,5 @@
 import Logging
+import ServiceLifecycle
 import WebUI
 import WebUIBlocks
 import WebUIServer
@@ -59,6 +60,19 @@ struct WebUIBlocksServer {
 			config: WebUIServerConfig(host: "0.0.0.0", port: port)
 		)
 		logger.info("serving block '\(name)' on http://0.0.0.0:\(port)")
-		try await server.start()
+		// a long-lived process is launched by the group, not awaited in main.
+		// the group traps nothing unless the signals are named (both lists default
+		// to empty), and these are graceful: the group runs the service's
+		// `withGracefulShutdownHandler`, which closes the listener, so `run()` returns.
+		let group = ServiceGroup(
+			services: [WebUIServerService(server: server)],
+			gracefulShutdownSignals: [.sigterm, .sigint],
+			logger: logger
+		)
+		do {
+			try await group.run()
+		} catch is CancellationError {
+			// the signal asked for exactly this: the listener is already down.
+		}
 	}
 }

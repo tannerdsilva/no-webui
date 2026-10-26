@@ -362,6 +362,7 @@ let package = Package(
                 "WebUI",
                 "WebUIDesignSystem",
                 "WebUIServer",
+                .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
             ]
         ),
         .executableTarget(
@@ -370,6 +371,7 @@ let package = Package(
                 "WebUI",
                 "WebUIDesignSystem",
                 "WebUIServer",
+                .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
             ]
         ),
         .executableTarget(
@@ -442,6 +444,7 @@ let package = Package(
                 "WebUIShowcaseContent",
                 "WebUIServer",
                 .product(name: "Logging", package: "swift-log"),
+                .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
             ]
         ),
 
@@ -473,6 +476,7 @@ let package = Package(
                 "WebUIBlocks",
                 "WebUIServer",
                 .product(name: "Logging", package: "swift-log"),
+                .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
             ]
         ),
 

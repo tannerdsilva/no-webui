@@ -38,11 +38,26 @@ public struct WebUIServerService: Service {
 	///
 	/// a bind failure propagates out of `run()`: a service that cannot listen
 	/// fails startup instead of reporting itself ready.
+	///
+	/// two shutdown doors, one action. the group's graceful path (what a signal
+	/// does under the default `gracefulShutdownSignals`) runs
+	/// ``withGracefulShutdownHandler``'s callback; task cancellation runs the
+	/// `onCancel` handler. both close the listener, `start()` unwinds, and
+	/// `run()` returns.
+	///
+	/// the graceful handler is not optional: `GracefulShutdownManager` only runs
+	/// handlers registered through it, so a service with none leaves the group
+	/// waiting for a completion that never arrives — `ServiceGroup(services:
+	/// [service])`, the plainest construction there is, would hang on Ctrl-C.
 	public func run() async throws {
 		logger.info("webui service: starting")
-		try await withTaskCancellationHandler {
-			try await server.start()
-		} onCancel: {
+		try await withGracefulShutdownHandler {
+			try await withTaskCancellationHandler {
+				try await server.start()
+			} onCancel: {
+				Task { await server.stop() }
+			}
+		} onGracefulShutdown: {
 			Task { await server.stop() }
 		}
 		logger.info("webui service: stopped")

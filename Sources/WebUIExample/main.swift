@@ -1,4 +1,5 @@
 import Foundation
+import ServiceLifecycle
 import Synchronization
 import WebUI
 import WebUIDesignSystem
@@ -314,7 +315,19 @@ struct WebUIExample {
 			router: router,
 			config: WebUIServerConfig(port: intFlag(named: "--port", default: 9090))
 		)
-		try await server.start()
+		// a long-lived process is launched by the group, not awaited in main.
+		// the group's default signals are graceful: it invokes the service's
+		// `withGracefulShutdownHandler`, which closes the listener, `start()`
+		// unwinds, and `run()` returns.
+		let group = ServiceGroup(
+			services: [WebUIServerService(server: server)],
+			gracefulShutdownSignals: [.sigterm, .sigint]
+		)
+		do {
+			try await group.run()
+		} catch is CancellationError {
+			// the signal asked for exactly this: the listener is already down.
+		}
 	}
 
 	/// parse a positive-integer flag (`--name N`) with a fallback.
