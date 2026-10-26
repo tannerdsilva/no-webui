@@ -122,16 +122,22 @@ extension Controller {
 // controller.wireGroup_chat(router)
 ```
 
-the generated registrar:
+the generated registrar (this is the emitted shape, byte for byte):
 
 ```swift
 func wireGroup_chat(_ router: EventRouter) {
+    let handleAttachFileEvents: [String] = ([.click] as [HTMLEvent]).map(\.rawValue)
     router.register({ event in
-        guard ["click"].contains(event.event) else { return [] }
+        guard handleAttachFileEvents.contains(event.event) else {
+            return []
+        }
         return await self.handleAttachFile(event)
     }, for: ComponentID("cb-file"))
+    let handleSendEvents: [String] = ([.click, .submit] as [HTMLEvent]).map(\.rawValue)
     router.register({ event in
-        guard ["click", "submit"].contains(event.event) else { return [] }
+        guard handleSendEvents.contains(event.event) else {
+            return []
+        }
         return await self.handleSend(event)
     }, for: ComponentID("cb-send"))
 }
@@ -140,10 +146,11 @@ func wireGroup_chat(_ router: EventRouter) {
 **contract:**
 
 - one registration per annotated handler, in declaration order;
-- the event filter is `guard events.contains(event.event)`; the annotation's
-  `[.click]` resolves to its raw-value spelling at expansion time, so the
-  declaration stays typed and the emitted comparison is byte-identical to the
-  hand-written path;
+- the event filter is `guard <handler>Events.contains(event.event)` over the
+  annotation's own expression: `events:` is emitted as written, cast to
+  `[HTMLEvent]` and mapped through `rawValue`, so the compiler checks the event
+  spellings and `.custom("…")` carries its payload — no case name is recovered
+  from source text;
 - the generated registrar is `internal`, `sync`, non-throwing
   (`func wireGroup_<name>(_ router: EventRouter)`), matching same-module hosts;
 - group name must match `[a-z][a-z0-9_]*` — otherwise a diagnostic;

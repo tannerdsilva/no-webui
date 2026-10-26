@@ -36,6 +36,11 @@ public macro Wired(_ id: String, events: [HTMLEvent] = [.click]) =
 /// ```
 /// - Parameter name: the group name, which becomes the identifier fragment of
 ///   the generated `wireGroup_<name>` method. must match `[a-z][a-z0-9_]*`.
+// the registrar's name is `wireGroup_<group>`, and `<group>` is a macro
+// argument — `names: named(...)` cannot enumerate it, and this compiler rejects
+// `prefixed(wireGroup_)` for a member macro whose name is built at expansion
+// time ("declaration name 'wireGroup_chat' is not covered by macro"). `arbitrary`
+// is therefore required, not a shortcut.
 @attached(member, names: arbitrary)
 public macro WireGroup(_ name: String) =
     #externalMacro(module: "WebUIDesignSystemMacros", type: "WireGroupMacro")

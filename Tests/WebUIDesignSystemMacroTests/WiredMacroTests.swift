@@ -83,16 +83,18 @@ struct WiredMacroExpansionTests {
                 func handleSend(_ event: EventData) async -> [FragmentUpdate] { [] }
 
                 func wireGroup_chat(_ router: EventRouter) {
+                    let handleAttachFileEvents: [String] = ([.click] as [HTMLEvent]).map(\\.rawValue)
                     router.register({ event in
-                        guard ["click"].contains(event.event) else {
-                                    return []
-                                }
+                        guard handleAttachFileEvents.contains(event.event.rawValue) else {
+                            return []
+                        }
                         return await self.handleAttachFile(event)
                     }, for: ComponentID("cb-file"))
+                    let handleSendEvents: [String] = ([.click, .submit] as [HTMLEvent]).map(\\.rawValue)
                     router.register({ event in
-                        guard ["click", "submit"].contains(event.event) else {
-                                    return []
-                                }
+                        guard handleSendEvents.contains(event.event.rawValue) else {
+                            return []
+                        }
                         return await self.handleSend(event)
                     }, for: ComponentID("cb-send"))
                 }
@@ -120,16 +122,18 @@ struct WiredMacroExpansionTests {
                 func first(_ event: EventData) async -> [FragmentUpdate] { [] }
 
                 func wireGroup_g(_ router: EventRouter) {
+                    let secondEvents: [String] = ([.click] as [HTMLEvent]).map(\\.rawValue)
                     router.register({ event in
-                        guard ["click"].contains(event.event) else {
-                                    return []
-                                }
+                        guard secondEvents.contains(event.event.rawValue) else {
+                            return []
+                        }
                         return await self.second(event)
                     }, for: ComponentID("b"))
+                    let firstEvents: [String] = ([.click] as [HTMLEvent]).map(\\.rawValue)
                     router.register({ event in
-                        guard ["click"].contains(event.event) else {
-                                    return []
-                                }
+                        guard firstEvents.contains(event.event.rawValue) else {
+                            return []
+                        }
                         return await self.first(event)
                     }, for: ComponentID("a"))
                 }
@@ -156,10 +160,11 @@ struct WiredMacroExpansionTests {
                 func handler(_ event: EventData) async -> [FragmentUpdate] { [] }
 
                 func wireGroup_g(_ router: EventRouter) {
+                    let handlerEvents: [String] = ([.click] as [HTMLEvent]).map(\\.rawValue)
                     router.register({ event in
-                        guard ["click"].contains(event.event) else {
-                                    return []
-                                }
+                        guard handlerEvents.contains(event.event.rawValue) else {
+                            return []
+                        }
                         return await self.handler(event)
                     }, for: ComponentID("x"))
                 }
@@ -177,6 +182,75 @@ struct WiredMacroExpansionTests {
             """,
             expanded: """
             func handler(_ event: EventData) async -> [FragmentUpdate] { [] }
+            """
+        )
+    }
+
+    @Test("a .custom(_:) event keeps its payload — the case name is not the wire name")
+    func customEventKeepsPayload() {
+        assertExpansion(
+            """
+            @WireGroup("g")
+            extension Host {
+                @Wired("cb-split", events: [.custom("split:commit")])
+                func handleSplit(_ event: EventData) async -> [FragmentUpdate] { [] }
+            }
+            """,
+            expanded: """
+            extension Host {
+                func handleSplit(_ event: EventData) async -> [FragmentUpdate] { [] }
+
+                func wireGroup_g(_ router: EventRouter) {
+                    let handleSplitEvents: [String] = ([.custom("split:commit")] as [HTMLEvent]).map(\\.rawValue)
+                    router.register({ event in
+                        guard handleSplitEvents.contains(event.event.rawValue) else {
+                            return []
+                        }
+                        return await self.handleSplit(event)
+                    }, for: ComponentID("cb-split"))
+                }
+            }
+            """
+        )
+    }
+
+    @Test("a non-literal events expression is carried through, not collapsed to []")
+    func nonLiteralEventsExpression() {
+        assertExpansion(
+            """
+            @WireGroup("g")
+            extension Host {
+                @Wired("x", events: chatEvents)
+                func handler(_ event: EventData) async -> [FragmentUpdate] { [] }
+            }
+            """,
+            expanded: """
+            extension Host {
+                func handler(_ event: EventData) async -> [FragmentUpdate] { [] }
+
+                func wireGroup_g(_ router: EventRouter) {
+                    let handlerEvents: [String] = (chatEvents as [HTMLEvent]).map(\\.rawValue)
+                    router.register({ event in
+                        guard handlerEvents.contains(event.event.rawValue) else {
+                            return []
+                        }
+                        return await self.handler(event)
+                    }, for: ComponentID("x"))
+                }
+            }
+            """
+        )
+    }
+
+    @Test("a qualified return type is the same type, not a different spelling")
+    func qualifiedReturnTypeAccepted() {
+        assertExpansion(
+            """
+            @Wired("x")
+            func handler(_ event: EventData) async -> [WebUI.FragmentUpdate] { [] }
+            """,
+            expanded: """
+            func handler(_ event: EventData) async -> [WebUI.FragmentUpdate] { [] }
             """
         )
     }
@@ -217,6 +291,17 @@ struct WiredMacroNegativeTests {
             func handler(_ event: EventData) async -> Int { 0 }
             """,
             message: "@Wired on 'handler' must return '[FragmentUpdate]', got 'Int'"
+        )
+    }
+
+    @Test("an interpolated id is not a compile-time id")
+    func interpolatedIdThrows() {
+        assertExpansionThrows(
+            """
+            @Wired("cb-\\(suffix)")
+            func handler(_ event: EventData) async -> [FragmentUpdate] { [] }
+            """,
+            message: "@Wired requires an id string literal (interpolation is not a compile-time id)"
         )
     }
 

@@ -207,3 +207,31 @@ struct ArcButton: View {
 		}
 	}
 }
+
+/// a component with a closure-typed shared property: the generated init must take
+/// it `@escaping`, or this declaration does not compile ("assigning non-escaping
+/// parameter 'action' to an '@escaping' closure"). here the compile IS the assertion.
+/// the closure is `@Sendable` because `View` is `Sendable` — the macro has to see
+/// through the attribute to recognise the function type.
+@HTMLComponent(.text("label", unlabeled: true))
+struct LabelPanel: View {
+	var action: @Sendable () -> Void
+	var id: String? = nil
+
+	public func render(into buffer: inout HTMLBuffer) {
+		switch content {
+		case .label(let label):
+			Text(label).render(into: &buffer)
+		}
+	}
+}
+
+@Suite("@HTMLComponent compiled hardening")
+struct HTMLComponentCompiledHardeningTests {
+
+	@Test("a closure-typed shared property is escaping and constructible")
+	func closurePropertyIsEscaping() {
+		let panel = LabelPanel("Attach", action: {}, id: "panel-1")
+		#expect(panel.markup.html.contains("Attach"))
+	}
+}

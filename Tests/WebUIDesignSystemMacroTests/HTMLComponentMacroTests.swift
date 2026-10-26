@@ -296,3 +296,148 @@ struct HTMLComponentMacroNegativeTests {
         )
     }
 }
+
+// MARK: - shapes the macro must widen or reject
+//
+// each case here was a compile error in *generated* code (or a silently wrong
+// emission) before the macro learned to see it. the assertion is the message,
+// because the diagnostic is the whole point: the author should never have to
+// read a macro expansion to find out what went wrong.
+
+@Suite("@HTMLComponent hardening")
+struct HTMLComponentHardeningTests {
+
+    @Test("a closure-typed property is @escaping on the generated parameter")
+    func closurePropertyIsEscaping() {
+        assertExpansion(
+            """
+            @HTMLComponent(.text("label", unlabeled: true))
+            struct Panel {
+                var action: () -> Void
+            }
+            """,
+            expanded: """
+            struct Panel {
+                var action: () -> Void
+
+                private enum Content {
+                    case label(String)
+                }
+
+                private let content: Content
+
+                init(_ label: String, action: @escaping () -> Void) {
+                    self.action = action
+                    self.content = .label(label)
+                }
+            }
+            """
+        )
+    }
+
+    @Test("a package struct gets a package init")
+    func packageAccessPropagates() {
+        assertExpansion(
+            """
+            @HTMLComponent(.text("label", unlabeled: true))
+            package struct Panel {
+                var id: String? = nil
+            }
+            """,
+            expanded: """
+            package struct Panel {
+                var id: String? = nil
+
+                private enum Content {
+                    case label(String)
+                }
+
+                private let content: Content
+
+                package init(_ label: String, id: String? = nil) {
+                    self.id = id
+                    self.content = .label(label)
+                }
+            }
+            """
+        )
+    }
+
+    @Test("a case name that is not an identifier is rejected")
+    func nonIdentifierCaseNameRejected() {
+        assertExpansionThrows(
+            """
+            @HTMLComponent(.text("a b"))
+            struct Panel {
+                var id: String? = nil
+            }
+            """,
+            message: "content case 'a b' is not a valid Swift identifier"
+        )
+    }
+
+    @Test("a case name colliding with a property is rejected")
+    func casePropertyCollisionRejected() {
+        assertExpansionThrows(
+            """
+            @HTMLComponent(.text("label"))
+            struct Panel {
+                var label: String = ""
+            }
+            """,
+            message: "content case 'label' collides with the stored property of the same name — one of them needs a different name"
+        )
+    }
+
+    @Test("a property named content is rejected")
+    func reservedContentPropertyRejected() {
+        assertExpansionThrows(
+            """
+            @HTMLComponent(.text("label"))
+            struct Panel {
+                var content: String = ""
+            }
+            """,
+            message: "'content' is @HTMLComponent's storage — rename the property"
+        )
+    }
+
+    @Test("a nested Content type is rejected")
+    func reservedContentTypeRejected() {
+        assertExpansionThrows(
+            """
+            @HTMLComponent(.text("label"))
+            struct Panel {
+                enum Content { case a }
+            }
+            """,
+            message: "'Content' is @HTMLComponent's enum — rename the nested type"
+        )
+    }
+
+    @Test("a property carrying an attribute is rejected")
+    func attributedPropertyRejected() {
+        assertExpansionThrows(
+            """
+            @HTMLComponent(.text("label"))
+            struct Panel {
+                @MainActor var id: String? = nil
+            }
+            """,
+            message: "stored property 'id' carries an attribute that @HTMLComponent cannot re-emit on a generated parameter"
+        )
+    }
+
+    @Test("a non-literal unlabeled value is rejected")
+    func nonLiteralUnlabeledRejected() {
+        assertExpansionThrows(
+            """
+            @HTMLComponent(.text("label", unlabeled: flag))
+            struct Panel {
+                var id: String? = nil
+            }
+            """,
+            message: "unlabeled: requires a boolean literal (true or false)"
+        )
+    }
+}
