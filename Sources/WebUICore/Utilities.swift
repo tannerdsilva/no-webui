@@ -12,6 +12,12 @@
 /// when there is no tag, comments/doctypes/closing tags left alone, otherwise
 /// the attribute merge. the exact rules live in
 /// `HTMLBuffer.settlePendingAttributes(from:)`.
+///
+/// this is also the string oracle the derived `ViewModifier.apply(to:)` is
+/// tested against: `ModifierDecorateTests` asserts the two agree byte for byte
+/// over element content, bare text, comments and declarations. `apply(to:)`
+/// implements the same rules through `Raw` + the render buffer, so the oracle
+/// and the door cannot drift apart without that test going red first.
 public func injectAttributes(into html: String, _ attributes: String) -> String {
 	var buffer = HTMLBuffer()
 	let mark = buffer.mark
