@@ -74,10 +74,11 @@ struct HeadContentTests {
     }
 
     @Test("the document injects its own nonce into head scripts")
-    func documentInjectsNonce() {
+    func documentInjectsNonce() throws {
         let doc = HTMLDocument(body: .trusted("<p>x</p>"), headContent: .script(src: "/a.js"))
+        let nonce = try #require(doc.nonce)
         let html = doc.markup.html
-        #expect(html.contains("nonce=\"\(doc.nonce)\""))
+        #expect(html.contains("nonce=\"\(nonce)\""))
         #expect(html.contains("src=\"/a.js\""))
     }
 

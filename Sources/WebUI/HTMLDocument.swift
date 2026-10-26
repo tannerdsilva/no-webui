@@ -117,7 +117,15 @@ public struct HTMLDocument: Sendable, BufferRendering {
     /// framework csp already permits `img-src data:`. pass an empty string to
     /// suppress it, or a full `<link ...>` element to override.
     public let icon: String
-    public let nonce: String
+    /// the render nonce — bytes from `SecureRandom`, base64-url encoded — or
+    /// `nil` when the os entropy source failed.
+    ///
+    /// optional because a page that cannot mint a nonce must still render: the
+    /// nonce mints through a `throws` door (``mintNonce()``) rather than
+    /// trapping the process, and a nil nonce suppresses every `nonce="…"`
+    /// attribute and the pre-paint prelude instead of shipping a script no
+    /// policy authorises.
+    public let nonce: String?
     /// when `true`, the combined `styles` + `rawStyles` string is embedded
     /// verbatim instead of passed through `minifyCSS`. used by documents that
     /// pre-minify their (deterministic) stylesheet once at startup — hoisting
@@ -133,12 +141,16 @@ public struct HTMLDocument: Sendable, BufferRendering {
     /// inline mode (`stylesheetURL: nil`) sets this; a core host that inlines
     /// `DesignSystemAssets.minifiedCss` should too.
     public let inlinedComponentStyles: Bool
-    private static func generateNonce() -> String {
+    /// mint a render nonce: 16 bytes from `SecureRandom`, base64-url encoded.
+    ///
+    /// one door, one failure policy: this `throws` on entropy failure the way
+    /// every other minting site in the layer does, instead of trapping the
+    /// process. the caller (``init``) logs and renders without a nonce, which
+    /// is the same suppression path a host policy naming no `'nonce-…'` source
+    /// takes — never a weaker nonce, never a page whose csp and markup disagree.
+    static func mintNonce() throws -> String {
         guard let bytes = SecureRandom.bytes(16) else {
-            // fail loud: silently falling back to a weaker nonce source would
-            // ship a page whose csp nonce is not fully random. entropy failure
-            // is a fatal system condition, not a fallback case.
-            preconditionFailure("SecureRandom.bytes failed — cannot mint a csp nonce")
+            throw CSRFError.entropyUnavailable
         }
         return Base64.encodeURL(bytes)
     }
@@ -165,7 +177,7 @@ public struct HTMLDocument: Sendable, BufferRendering {
         return " dir=\"\(value)\""
     }
 
-    private func effectiveCSP(nonce: String, clientMode: ClientBoot?) -> String? {
+    private func effectiveCSP(nonce: String?, clientMode: ClientBoot?) -> String? {
         if let csp = contentSecurityPolicy {
             guard !csp.isEmpty else { return nil }
             return ClientBoot.merging(policy: csp, extras: contentSecurityPolicyExtras)
@@ -177,6 +189,17 @@ public struct HTMLDocument: Sendable, BufferRendering {
             // page-scoped sheet.
             return ClientBoot.merging(
                 policy: "default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;",
+                extras: contentSecurityPolicyExtras
+            )
+        }
+        guard let nonce else {
+            // no nonce could be minted, so the policy may not name a
+            // `'nonce-…'` source: no markup carries one, and naming it would
+            // buy nothing. this is the layer's existing nonce-less client
+            // policy — the directives a client boot always had — and the same
+            // `inlineScriptsAllowed` check below suppresses the prelude.
+            return ClientBoot.merging(
+                policy: ClientBoot.defaultCSP,
                 extras: contentSecurityPolicyExtras
             )
         }
@@ -237,7 +260,18 @@ public struct HTMLDocument: Sendable, BufferRendering {
         self.themeStylesheetURL = themeStylesheetURL
         self.stylesheetURL = stylesheetURL
         self.inlinedComponentStyles = inlinedComponentStyles
-        self.nonce = Self.generateNonce()
+        // entropy failure must not take the process down: a page that cannot
+        // mint a nonce still renders, with the prelude and every `nonce="…"`
+        // attribute suppressed (the same degrade path a policy naming no
+        // `'nonce-…'` source takes) and one error logged.
+        do {
+            self.nonce = try Self.mintNonce()
+        } catch {
+            self.nonce = nil
+            Self.documentLogger.error(
+                "render nonce unavailable: the os entropy source failed, so this page ships no prelude and no `nonce=\"…\"` attribute; its csp names no nonce source. the page renders — no prng fallback is ever attempted"
+            )
+        }
     }
     private static let documentLogger = Logger(label: "webui.document")
 
@@ -344,10 +378,12 @@ public struct HTMLDocument: Sendable, BufferRendering {
         // browser refuses: the failure is otherwise a console error plus a silent
         // theme flash, which is exactly how this went unnoticed.
         let inlineScriptsAllowed = cspValue.map { $0.contains("'nonce-") } ?? true
-        if themePrelude, boot != nil, inlineScriptsAllowed {
+        if themePrelude, boot != nil, inlineScriptsAllowed, let nonce {
             preludeTag = "<script nonce=\"\(htmlEscape(nonce))\">\(Self.themePreludeScript)</script>"
         } else {
-            if themePrelude, boot != nil {
+            // the entropy-failure case was already reported at .error by `init`;
+            // here only the policy mismatch is news.
+            if themePrelude, boot != nil, nonce != nil, !inlineScriptsAllowed {
                 Self.documentLogger.warning(
                     "theme prelude suppressed: the effective Content-Security-Policy names no nonce source, so inline scripts cannot run — a stored theme choice will flash on first paint. add `'nonce-…'` to script-src (see ClientBoot.csp(nonce:)), extend the default policy with `contentSecurityPolicyExtras:` instead of restating it, or pass themePrelude: false"
                 )

@@ -2258,8 +2258,8 @@ CSRFProtection
 CSRFProtection.defaultMaxAge
 CSRFProtection.expiry(of:)
 CSRFProtection.generateSecret()
-CSRFProtection.token(for:secret:maxAge:)
-CSRFProtection.validate(_:for:secret:)
+CSRFProtection.token(for:secret:maxAge:now:)
+CSRFProtection.validate(_:for:secret:now:)
 ClientBoot
 ClientBoot.config
 ClientBoot.csp(nonce:extras:)

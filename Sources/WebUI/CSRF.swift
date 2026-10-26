@@ -3,9 +3,10 @@ import WebUICore
 
 // MARK: - CSRF Protection
 public enum CSRFError: Error, Equatable, Sendable {
-    /// the os entropy source failed — no fallback was attempted. the signing
-    /// key must fail loudly rather than degrade to a prng (mirrors
-    /// `SessionToken.generate`).
+    /// the os entropy source failed — no fallback was attempted. every minting
+    /// door in this layer fails loudly rather than degrade to a prng (mirrors
+    /// `SessionToken.generate`), and this one case is that failure for both
+    /// `CSRFProtection` and the document's render nonce.
     case entropyUnavailable
     /// hmac failure while signing a token.
     case signingFailed
@@ -19,14 +20,30 @@ public enum CSRFProtection {
         }
         return Base64.encode(bytes)
     }
-    public static func token(for formID: String, secret: String, maxAge: TimeInterval = defaultMaxAge) throws -> String {
-        let expires = Date().timeIntervalSince1970 + maxAge
+    /// `now` is the clock this token is minted against — the injectable seam, not
+    /// a stored one: production callers take the default, tests pass a pinned
+    /// `TimeInterval` and never sleep.
+    public static func token(
+        for formID: String,
+        secret: String,
+        maxAge: TimeInterval = defaultMaxAge,
+        now: TimeInterval = Date().timeIntervalSince1970
+    ) throws -> String {
+        let expires = now + maxAge
         // a per-token random nonce is required: the embedded expiry is
         // second-quantized (`Int` truncation), so without a nonce two tokens
-        // minted in the same wall-clock second would be byte-identical —
-        // harmless for stateless validation, but fatal for the single-use
-        // login-token store, which would reject the second one as consumed.
-        let nonce = UUID().uuidString.replacingOccurrences(of: "-", with: "")
+        // minted at the same `now` would be byte-identical — harmless for
+        // stateless validation, but fatal for the single-use login-token store,
+        // which would reject the second one as consumed. the bytes come from
+        // `SecureRandom` — the same os-entropy door `generateSecret()` uses —
+        // hex-encoded to the 32-character shape this payload always carried.
+        // (`UUID()` used to sit here: a second entropy source with its own
+        // failure semantics, in a layer that otherwise refuses anything but
+        // `SecureRandom`.)
+        guard let nonceBytes = SecureRandom.bytes(16) else {
+            throw CSRFError.entropyUnavailable
+        }
+        let nonce = bytesToHex(nonceBytes)
         let payload = "\(formID):\(Int(expires)):\(nonce)"
         let signature: String
         do {
@@ -41,7 +58,12 @@ public enum CSRFProtection {
         }
         return Base64.encode([UInt8]("\(payload):\(signature)".utf8))
     }
-    public static func validate(_ token: String, for formID: String, secret: String) -> Bool {
+    public static func validate(
+        _ token: String,
+        for formID: String,
+        secret: String,
+        now: TimeInterval = Date().timeIntervalSince1970
+    ) -> Bool {
         guard let tokenBytes = Base64.decode(token) else {
             return false
         }
@@ -55,7 +77,7 @@ public enum CSRFProtection {
 
         guard payloadFormID == formID,
               let expires = TimeInterval(expiresStr),
-              Date().timeIntervalSince1970 < expires else {
+              now < expires else {
             return false
         }
 
