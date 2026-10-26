@@ -59,7 +59,7 @@ struct CSRFRegressionTests {
 	@Test("expiry(of:) reads the embedded timestamp of a valid token")
 	func expiryAccessor() throws {
 		let secret = try CSRFProtection.generateSecret()
-		let before = Date().timeIntervalSince1970
+		let before = Epoch(Date().timeIntervalSince1970)
 		let token = try CSRFProtection.token(for: "login", secret: secret, maxAge: 1800)
 		let expiry = CSRFProtection.expiry(of: token)
 		#expect(expiry != nil)

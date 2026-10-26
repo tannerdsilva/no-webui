@@ -3,17 +3,17 @@ import Foundation
 import WebUI
 import WebUICore
 
-// one clock, one entropy source, one failure policy.
+// one clock, one time representation, one entropy source, one failure policy.
 //
-// the clock is an argument (`now:`), not a stored or global seam: every case
-// below pins it and never sleeps. the nonce comes from `SecureRandom`, so two
-// tokens minted at the *same* pinned instant still differ — the property the
-// single-use login-token store depends on.
+// the clock is an argument (`now:`) in `Epoch` seconds, not a stored or global
+// seam: every case below pins it and never sleeps. the nonce comes from
+// `SecureRandom`, so two tokens minted at the *same* pinned instant still
+// differ — the property the single-use login-token store depends on.
 
 @Suite("CSRFClockInjection")
 struct CSRFClockTests {
 
-	private static let pinnedNow: TimeInterval = 1_700_000_000
+	private static let pinnedNow: Epoch = 1_700_000_000
 	private static let secret = "pinned-test-secret-not-random"
 
 	@Test("a token minted at T validates inside its window and fails after it")
@@ -39,8 +39,8 @@ struct CSRFClockTests {
 	@Test("two tokens minted at the same now differ (the nonce is real)")
 	func sameInstantUniqueness() throws {
 		let t = Self.pinnedNow
-		// the embedded expiry is `Int`-truncated, so without a per-mint nonce
-		// these two payloads would be byte-identical at one pinned instant.
+		// the embedded expiry has one-second resolution, so without a per-mint
+		// nonce these two payloads would be byte-identical at one pinned instant.
 		let first = try CSRFProtection.token(for: "login", secret: Self.secret, now: t)
 		let second = try CSRFProtection.token(for: "login", secret: Self.secret, now: t)
 		#expect(first != second)
@@ -85,7 +85,7 @@ struct CSRFClockTests {
 		let t = Self.pinnedNow
 		let token = try CSRFProtection.token(for: "login", secret: Self.secret, maxAge: 1800, now: t)
 		let expiry = try #require(CSRFProtection.expiry(of: token))
-		#expect(Int(expiry) == Int(t) + 1800)
+		#expect(expiry == t + 1800)
 	}
 }
 

@@ -992,7 +992,10 @@ struct WebUIAuthExample {
 				return try await loginResponse(channel: channel, status: .tooManyRequests, headers: [("Content-Type", "text/plain; charset=utf-8"), ("Retry-After", "60")], body: "too many login pages — try again later")
 			}
 			let token = try CSRFProtection.token(for: "login", secret: csrfSecret)
-			guard await loginTokenStore.reserve(token, expiresAt: CSRFProtection.expiry(of: token) ?? Date().timeIntervalSince1970, key: ipKey) else {
+			// `Epoch` -> `TimeInterval` at the one boundary that still speaks
+			// wall-clock doubles: the token store's models are out of this arc.
+			let expiresAt = CSRFProtection.expiry(of: token).map { TimeInterval($0) } ?? Date().timeIntervalSince1970
+			guard await loginTokenStore.reserve(token, expiresAt: expiresAt, key: ipKey) else {
 				return try await loginResponse(channel: channel, status: .tooManyRequests, headers: [("Content-Type", "text/plain; charset=utf-8"), ("Retry-After", "60")], body: "too many outstanding login forms — submit one first")
 			}
 			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/html; charset=utf-8")], body: renderLoginPage(error: nil, csrfToken: token))
@@ -1044,7 +1047,10 @@ struct WebUIAuthExample {
 		// any KDF work is spent. consume also releases the issuer's outstanding
 		// budget (keyed by the ip the token was reserved under).
 		let ipKey = "ip:\(peerIP)"
-		guard await loginTokenStore.consume(csrf, expiresAt: CSRFProtection.expiry(of: csrf) ?? Date().timeIntervalSince1970, key: ipKey) else {
+		// same boundary widening as the reserve above: the store speaks seconds
+		// as a `TimeInterval`, the token speaks them as an `Epoch`.
+		let expiresAt = CSRFProtection.expiry(of: csrf).map { TimeInterval($0) } ?? Date().timeIntervalSince1970
+		guard await loginTokenStore.consume(csrf, expiresAt: expiresAt, key: ipKey) else {
 			return try await failure("invalid or expired form token — try again")
 		}
 

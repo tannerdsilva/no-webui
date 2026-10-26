@@ -13,38 +13,50 @@ public enum CSRFError: Error, Equatable, Sendable {
 }
 
 public enum CSRFProtection {
-    public static let defaultMaxAge: TimeInterval = 1800
+    /// 30 minutes, in `Epoch` seconds — the framework's one time
+    /// representation (`Epoch` is unix seconds, defined in `WebUISharedCore`).
+    public static let defaultMaxAge: Epoch = 1800
     public static func generateSecret() throws -> String {
         guard let bytes = SecureRandom.bytes(32) else {
             throw CSRFError.entropyUnavailable
         }
         return Base64.encode(bytes)
     }
+    /// the one bridge from wall time to the framework's clock: `Date` speaks
+    /// double seconds, everything else in this file speaks `Epoch`. computed and
+    /// private — it is only the default the injectable `now` parameter falls back
+    /// to, never a settable seam, so nothing can pin or skew time behind a
+    /// caller's back.
+    private static var currentEpoch: Epoch { Epoch(Date().timeIntervalSince1970) }
     /// `now` is the clock this token is minted against — the injectable seam, not
     /// a stored one: production callers take the default, tests pass a pinned
-    /// `TimeInterval` and never sleep.
+    /// `Epoch` and never sleep.
     public static func token(
         for formID: String,
         secret: String,
-        maxAge: TimeInterval = defaultMaxAge,
-        now: TimeInterval = Date().timeIntervalSince1970
+        maxAge: Epoch = defaultMaxAge,
+        now instant: Epoch? = nil
     ) throws -> String {
+        let now = instant ?? currentEpoch
         let expires = now + maxAge
-        // a per-token random nonce is required: the embedded expiry is
-        // second-quantized (`Int` truncation), so without a nonce two tokens
-        // minted at the same `now` would be byte-identical — harmless for
-        // stateless validation, but fatal for the single-use login-token store,
-        // which would reject the second one as consumed. the bytes come from
+        // a per-token random nonce is required: the embedded expiry has
+        // one-second resolution, so without a nonce two tokens minted at the
+        // same `now` would be byte-identical — harmless for stateless
+        // validation, but fatal for the single-use login-token store, which
+        // would reject the second one as consumed. the bytes come from
         // `SecureRandom` — the same os-entropy door `generateSecret()` uses —
         // hex-encoded to the 32-character shape this payload always carried.
-        // (`UUID()` used to sit here: a second entropy source with its own
-        // failure semantics, in a layer that otherwise refuses anything but
-        // `SecureRandom`.)
+        // (a Foundation uuid string used to sit here: a second entropy source
+        // with its own failure semantics, in a layer that otherwise refuses
+        // anything but `SecureRandom`.)
         guard let nonceBytes = SecureRandom.bytes(16) else {
             throw CSRFError.entropyUnavailable
         }
         let nonce = bytesToHex(nonceBytes)
-        let payload = "\(formID):\(Int(expires)):\(nonce)"
+        // `expires` is an `Epoch` and interpolates as whole seconds — the same
+        // digits the old `Int(expires)` truncation produced, so the wire format
+        // (`base64(formID:expiry:nonce:signature)`) did not move.
+        let payload = "\(formID):\(expires):\(nonce)"
         let signature: String
         do {
             signature = try hmacSHA256(key: secret, message: payload)
@@ -62,8 +74,9 @@ public enum CSRFProtection {
         _ token: String,
         for formID: String,
         secret: String,
-        now: TimeInterval = Date().timeIntervalSince1970
+        now instant: Epoch? = nil
     ) -> Bool {
+        let now = instant ?? currentEpoch
         guard let tokenBytes = Base64.decode(token) else {
             return false
         }
@@ -76,7 +89,7 @@ public enum CSRFProtection {
         let signature = String(parts[3])
 
         guard payloadFormID == formID,
-              let expires = TimeInterval(expiresStr),
+              let expires = Epoch(expiresStr),
               now < expires else {
             return false
         }
@@ -94,17 +107,17 @@ public enum CSRFProtection {
         // and a short-circuiting == would leak prefix bytes of the MAC.
         return constantTimeEquals(Array(signature.utf8), Array(expectedSignature.utf8))
     }
-    /// the embedded expiry (seconds since 1970) of a well-formed token, or
+    /// the embedded expiry (unix seconds, `Epoch`) of a well-formed token, or
     /// `nil` when the token does not decode to `formID:expiry:nonce:signature`.
     /// callers should only pass tokens that have already passed `validate`.
-    public static func expiry(of token: String) -> TimeInterval? {
+    public static func expiry(of token: String) -> Epoch? {
         guard let tokenBytes = Base64.decode(token) else {
             return nil
         }
         let tokenStr = String(decoding: tokenBytes, as: UTF8.self)
         let parts = tokenStr.split(separator: ":", maxSplits: 2, omittingEmptySubsequences: false)
         guard parts.count == 3 else { return nil }
-        return TimeInterval(parts[1])
+        return Epoch(parts[1])
     }
     private static func hmacSHA256(key: String, message: String) throws -> String {
         try HMACSHA256.hex(message: [UInt8](message.utf8), key: [UInt8](key.utf8))
