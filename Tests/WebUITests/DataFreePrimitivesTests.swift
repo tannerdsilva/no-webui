@@ -168,7 +168,7 @@ struct WSJSONCodecTests {
 			Issue.record("expected .event"); return
 		}
 		#expect(component == "c0")
-		#expect(event2 == "click")
+		#expect(event2 == .click)
 		#expect(data == ["targetId": "x"])
 		#expect(token == nil)
 		// a render token rides along when the page configured one.

@@ -145,7 +145,7 @@ struct HTMLEventVocabularyTests {
 			return
 		}
 		#expect(component == "c0")
-		#expect(HTMLEvent(rawValue: event) == .custom("futuristicgesture"))
+		#expect(event == .custom("futuristicgesture"))
 		#expect(token == "t")
 
 		// a registered handler still receives it — the enum does not filter.
@@ -159,13 +159,13 @@ struct HTMLEventVocabularyTests {
 		}, for: ComponentID("c0"), in: session)
 
 		_ = await router.handle(
-			EventData(component: "c0", event: HTMLEvent(rawValue: event)), in: session
+			EventData(component: "c0", event: event), in: session
 		)
 		#expect(seen.withLock { $0 } == .custom("futuristicgesture"))
 
 		// and an unregistered component misses quietly (empty outcome, debug log).
 		let missed = await router.handle(
-			EventData(component: "nobody", event: HTMLEvent(rawValue: event)), in: session
+			EventData(component: "nobody", event: event), in: session
 		)
 		#expect(missed.isEmpty)
 	}
@@ -190,5 +190,28 @@ struct HTMLEventVocabularyTests {
 		let literal: EventData = EventData(component: "c0", event: "click")
 		#expect(literal.event == .click)
 		#expect(literal.event.rawValue == "click")
+	}
+
+	@Test("both decode doors produce one typed event")
+	func bothDecodeDoorsAgree() throws {
+		// the frame has two doors — the data-free `jsonText` fast path and the
+		// `Decodable` conformance — and they must land on the same value, or
+		// the server and a Foundation decoder disagree about what arrived.
+		let known = #"{"type":"event","component":"c0","event":"click","data":{"targetId":"x"},"token":"t"}"#
+		let fast = try WSIncoming(jsonText: known)
+		let codable = try JSONDecoder().decode(WSIncoming.self, from: Data(known.utf8))
+		#expect(fast == codable)
+		#expect(fast == .event(component: "c0", event: .click, data: ["targetId": .string("x")], token: "t"))
+
+		// an unknown name is data at either door, never a decode failure.
+		let unknown = #"{"type":"event","component":"c0","event":"futuristicgesture"}"#
+		let fastUnknown = try WSIncoming(jsonText: unknown)
+		let codableUnknown = try JSONDecoder().decode(WSIncoming.self, from: Data(unknown.utf8))
+		#expect(fastUnknown == codableUnknown)
+		guard case .event(_, let name, _, _) = fastUnknown else {
+			Issue.record("expected an event message")
+			return
+		}
+		#expect(name == .custom("futuristicgesture"))
 	}
 }

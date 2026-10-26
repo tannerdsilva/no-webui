@@ -173,7 +173,7 @@ func loggerEmitForwardsToObservers() {
     let collector = EventCollector()
     observers.add(TestObserver { collector.add($0) })
     let logger = Logger(label: "test.emit")
-    logger.emit(.eventReceived(component: "c0", event: "click"), observers: observers)
+    logger.emit(.eventReceived(component: "c0", event: .click), observers: observers)
     #expect(collector.count == 1)
     if case .eventReceived = collector.events[0] {} else {
         Issue.record("expected .eventReceived through the logger funnel")
@@ -197,8 +197,8 @@ func observableEventCodableRoundTrip() throws {
     let decoder = JSONDecoder()
     let samples: [ObservableEvent] = [
         .viewRendered(viewType: "Card", durationNanoseconds: 123),
-        .eventReceived(component: "c0", event: "click"),
-        .eventHandled(component: "c0", event: "click", fragmentCount: 2),
+        .eventReceived(component: "c0", event: .click),
+        .eventHandled(component: "c0", event: .click, fragmentCount: 2),
         .fragmentSent(fragmentCount: 2, seq: 7),
         .fragmentSent(fragmentCount: 1, seq: nil),
         .websocketConnected,

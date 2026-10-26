@@ -1135,7 +1135,7 @@ func wsIncomingEvent() throws {
         return
     }
     #expect(component == "btn-1")
-    #expect(event == "click")
+    #expect(event == .click)
     #expect(data["key"] == "val")
     #expect(token == nil)
 }

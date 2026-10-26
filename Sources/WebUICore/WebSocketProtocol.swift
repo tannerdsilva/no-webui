@@ -56,7 +56,11 @@ public struct FragmentUpdate: Sendable, Codable, Equatable, Hashable {
 
 // MARK: - Incoming Messages (Client → Server)
 public enum WSIncoming: Sendable, Equatable {
-    case event(component: String, event: String, data: [String: JSONValue], token: String?)
+    // the inbound frame's `event` is the same type the router hands a handler —
+    // decoded once at the door, never re-parsed downstream. `HTMLEvent`'s
+    // `Codable` is a bare string, so the wire bytes are unchanged
+    // (`{"event":"click"}`) and an unknown name still arrives as `.custom`.
+    case event(component: String, event: HTMLEvent, data: [String: JSONValue], token: String?)
     case ping(token: String?)
     case navigate(url: String)
 }
@@ -72,7 +76,7 @@ extension WSIncoming: Decodable {
         switch type {
         case "event":
             let component = try container.decode(String.self, forKey: .component)
-            let event = try container.decode(String.self, forKey: .event)
+            let event = try container.decode(HTMLEvent.self, forKey: .event)
             let data = try container.decodeIfPresent([String: JSONValue].self, forKey: .data) ?? [:]
             let token = try container.decodeIfPresent(String.self, forKey: .token)
             self = .event(component: component, event: event, data: data, token: token)
@@ -163,7 +167,7 @@ extension WSIncoming {
         switch type {
         case "event":
             guard case .string(let component) = object["component"],
-                  case .string(let event) = object["event"] else {
+                  case .string(let eventName) = object["event"] else {
                 throw WSMessageError.malformed("event requires 'component' and 'event' strings")
             }
             var data: [String: JSONValue] = [:]
@@ -184,7 +188,15 @@ extension WSIncoming {
             } else {
                 token = nil
             }
-            self = .event(component: component, event: event, data: data, token: token)
+            // this fast path and the `Decodable` door above are both decode
+            // doors: each converts the wire word once, through the same total
+            // inverse, so nothing downstream carries a bare string.
+            self = .event(
+                component: component,
+                event: HTMLEvent(rawValue: eventName),
+                data: data,
+                token: token
+            )
         case "ping":
             let token: String?
             if let rawToken = object["token"] {

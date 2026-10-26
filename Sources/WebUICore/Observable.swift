@@ -4,8 +4,12 @@ import Synchronization
 // MARK: - ObservableEvent
 public enum ObservableEvent: Sendable, Codable {
     case viewRendered(viewType: String, durationNanoseconds: UInt64)
-    case eventReceived(component: String, event: String)
-    case eventHandled(component: String, event: String, fragmentCount: Int)
+    // the event payload is the same `HTMLEvent` the router dispatched — an
+    // observer sees the typed value, not the wire word. the synthesized
+    // `Codable` delegates to `HTMLEvent`'s single-value conformance, so the
+    // encoded json keeps a bare string per case.
+    case eventReceived(component: String, event: HTMLEvent)
+    case eventHandled(component: String, event: HTMLEvent, fragmentCount: Int)
     case fragmentSent(fragmentCount: Int, seq: Int?)
     case websocketConnected
     case websocketDisconnected

@@ -809,7 +809,7 @@ final class Runner: Sendable {
 					)
 					return false
 				}
-				let eventData = EventData(component: ComponentID(component), event: HTMLEvent(rawValue: event), data: data)
+				let eventData = EventData(component: ComponentID(component), event: event, data: data)
 				let outcome = await router.dispatch(eventData, in: session)
 				for frame in frames(of: outcome) {
 					try await writeJSON(frame, outbound: outbound)
