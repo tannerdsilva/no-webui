@@ -10,7 +10,7 @@
 # forced it. `Tests/WebUITests/FrozenSurfaceTests.swift` fails when this
 # file and a fresh extraction diverge, naming every added and removed symbol.
 #
-# re-measured 2026-10-26: 4784 symbols across 9 modules.
+# re-measured 2026-10-26: 4789 symbols across 9 modules.
 
 ## WebUISharedCore
 
@@ -689,11 +689,15 @@ HTMLEvent.dragleave
 HTMLEvent.dragover
 HTMLEvent.dragstart
 HTMLEvent.drop
+HTMLEvent.encode(to:)
 HTMLEvent.ended
 HTMLEvent.error
 HTMLEvent.focus
 HTMLEvent.focusin
 HTMLEvent.focusout
+HTMLEvent.init(from:)
+HTMLEvent.init(rawValue:)
+HTMLEvent.init(stringLiteral:)
 HTMLEvent.input
 HTMLEvent.keydown
 HTMLEvent.keypress
@@ -703,6 +707,7 @@ HTMLEvent.mousedown
 HTMLEvent.mouseout
 HTMLEvent.mouseover
 HTMLEvent.mouseup
+HTMLEvent.named
 HTMLEvent.paste
 HTMLEvent.pause
 HTMLEvent.play

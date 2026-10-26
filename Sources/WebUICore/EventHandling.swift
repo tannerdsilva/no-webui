@@ -12,12 +12,12 @@ public struct ComponentID: Sendable, Hashable, Codable, ExpressibleByStringLiter
 
 public struct EventData: Sendable, Codable {
     public let component: ComponentID
-    public let event: String
+    public let event: HTMLEvent
     /// widened (p3): typed payload values — flat string fields are read with
     /// `string(_:)`; structured values (search terms, row ids, numeric
     /// filters) flow through the hand-rolled `JSONValue` object unchanged.
     public let data: [String: JSONValue]
-    public init(component: ComponentID, event: String, data: [String: JSONValue] = [:]) {
+    public init(component: ComponentID, event: HTMLEvent, data: [String: JSONValue] = [:]) {
         self.component = component
         self.event = event
         self.data = data
@@ -624,7 +624,7 @@ public final class EventRouter: Sendable {
 
     /// route `event` within `session`, returning the full outcome.
     public func dispatch(_ event: EventData, in session: RenderSessionID) async -> HandlerOutcome {
-        logger.emit(ObservableEvent.eventReceived(component: event.component.value, event: event.event), observers: observers)
+        logger.emit(ObservableEvent.eventReceived(component: event.component.value, event: event.event.rawValue), observers: observers)
 
         guard let handler = state.handler(for: event.component, in: session) else {
             // route through `logger.emit` so the observer fan-out stays on the
@@ -652,7 +652,7 @@ public final class EventRouter: Sendable {
             return .fail(code: "handler", message: message, fallback: fragments)
         }
 
-        logger.emit(ObservableEvent.eventHandled(component: event.component.value, event: event.event, fragmentCount: outcome.fragments.count), observers: observers)
+        logger.emit(ObservableEvent.eventHandled(component: event.component.value, event: event.event.rawValue, fragmentCount: outcome.fragments.count), observers: observers)
         return outcome
     }
 

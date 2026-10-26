@@ -255,6 +255,56 @@ public enum HTMLEvent: Sendable, Hashable {
         case .custom(let v): return v
         }
     }
+
+    /// every named case, in declaration order.
+    ///
+    /// the one list `init(rawValue:)` needs — a named case missing here would
+    /// decode as `.custom`, so `named` and `rawValue` move together by hand and
+    /// ``HTMLEventVocabularyTests`` pins the round-trip.
+    public static let named: [HTMLEvent] = [
+        .click, .submit, .input, .change, .mouseover, .mouseout, .mousedown, .mouseup,
+        .keydown, .keyup, .keypress, .focus, .blur, .focusin, .focusout,
+        .pointerdown, .pointermove, .pointerup, .pointercancel, .pointerenter, .pointerleave,
+        .touchstart, .touchmove, .touchend,
+        .dragstart, .drag, .dragend, .dragenter, .dragover, .dragleave, .drop,
+        .copy, .cut, .paste, .wheel, .scroll, .dblclick, .contextmenu,
+        .animationend, .transitionend, .play, .pause, .ended, .timeupdate,
+        .loadedmetadata, .error,
+    ]
+
+    /// the inverse of `rawValue`, and deliberately total.
+    ///
+    /// an inbound frame carries a bare string, and a newer engine may name an
+    /// event this build has never heard of — that is data to route, not a decode
+    /// failure, so an unknown name becomes `.custom` rather than `nil`.
+    public init(rawValue: String) {
+        if let known = HTMLEvent.named.first(where: { $0.rawValue == rawValue }) {
+            self = known
+        } else {
+            self = .custom(rawValue)
+        }
+    }
+}
+
+extension HTMLEvent: ExpressibleByStringLiteral {
+    /// `event: "click"` — the wire word, parsed through ``init(rawValue:)`` so a
+    /// literal and a decoded frame agree on what `.click` means.
+    public init(stringLiteral value: String) {
+        self.init(rawValue: value)
+    }
+}
+
+extension HTMLEvent: Codable {
+    /// the wire carries `"click"`, never `{"custom":"…"}` — the synthesized
+    /// enum encoding would have produced an object and broken every client.
+    public init(from decoder: any Decoder) throws {
+        self.init(rawValue: try decoder.singleValueContainer().decode(String.self))
+    }
+
+    public func encode(to encoder: any Encoder) throws {
+        var container = encoder.singleValueContainer()
+        try container.encode(rawValue)
+    }
 }
 
 // MARK: - Event Handler Modifier

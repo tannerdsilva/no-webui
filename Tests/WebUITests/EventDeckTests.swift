@@ -34,7 +34,7 @@ struct EventDeckTests {
     /// an `EventData` whose `data` is the wire keys the engine emits
     /// (`extractEventData` in `designer/assets/webui-engine.js`).
     private func frame(_ name: String, _ data: [String: JSONValue]) -> EventData {
-        EventData(component: ComponentID("c0"), event: name, data: data)
+        EventData(component: ComponentID("c0"), event: HTMLEvent(rawValue: name), data: data)
     }
 
     /// the wire-frame assertion for one control: the emitted attributes carry

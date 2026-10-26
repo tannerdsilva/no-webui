@@ -854,7 +854,7 @@ struct WebUIAuthExample {
 			case .event(let component, let event, let data, let token):
 				guard await sessionIsAlive(tokenHash: tokenHash, outbound: outbound) else { return }
 				guard let router = await boundRouter(token: token, tokenHash: tokenHash, outbound: outbound) else { return }
-				let eventData = EventData(component: ComponentID(component), event: event, data: data)
+				let eventData = EventData(component: ComponentID(component), event: HTMLEvent(rawValue: event), data: data)
 				let updates = await router.handle(eventData)
 				guard !updates.isEmpty else { return }
 				let out = WSOutgoing.update(fragments: updates)
