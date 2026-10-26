@@ -630,7 +630,7 @@ let package = Package(
                 .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
                 .product(name: "Logging", package: "swift-log"),
             ],
-            resources: [.copy("orphan-class-baseline.txt")]
+            resources: [.copy("orphan-class-baseline.txt"), .copy("Fixtures")]
         ),
         .testTarget(
             name: "WebUIWasmToolTests",
