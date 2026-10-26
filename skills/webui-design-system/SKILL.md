@@ -423,9 +423,8 @@ migrating a 1.x host. the short version a 2.0 host writes against:
   top-level vocabulary). every 1.x spelling keeps a deprecated shim through
   the one minor; removal lands in 2.0.0.
 - **capability protocols** — conformance is a one-word change and no capability
-  adds a `View` requirement: `Interactive`, `Identified` (`stableID`),
-  `StreamingContent`, `AsyncContent`, `Recoverable`. `ErrorBoundary` is the
-  shipped `Recoverable` conformer.
+  adds a `View` requirement: `Identified` (`stableID`), `Recoverable`.
+  `ErrorBoundary` is the shipped `Recoverable` conformer.
 - **typed aria.** `Aria` (one case per attribute: `.label`, `.expanded(.yes)`,
   `.checked(.mixed)`, `.live(.polite)`, `.sort(.ascending)`, …) and `AriaRole`
   replace hand-written `aria-*`/`role=` strings; `.role(_:)`/`.aria(_:)`/

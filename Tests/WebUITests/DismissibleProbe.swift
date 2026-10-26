@@ -1,7 +1,7 @@
 import WebUICore
 
-/// the smallest `Dismissible`: conformance is a capability, so it must stay a
-/// one-word opt-in plus the protocol's own four members — no extra requirements.
+/// the smallest `Dismissible`: `View` plus the protocol's own four members — no
+/// extra requirements.
 struct DismissibleProbe: Dismissible {
     var dismissButtonClass: String { "probe__close" }
     var dismissMarker: String { "" }

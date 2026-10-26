@@ -19,19 +19,6 @@ private struct BareView: View {
     func render(into buffer: inout HTMLBuffer) { buffer.append("bare") }
 }
 
-/// each capability, conformed in one word — no members, no ceremony.
-private struct BareInteractive: View, Interactive {
-    func render(into buffer: inout HTMLBuffer) { buffer.append("i") }
-}
-
-private struct BareStreaming: View, StreamingContent {
-    func render(into buffer: inout HTMLBuffer) { buffer.append("s") }
-}
-
-private struct BareAsync: View, AsyncContent {
-    func render(into buffer: inout HTMLBuffer) { buffer.append("a") }
-}
-
 /// `Identified` and `Recoverable` do have requirements; the defaults answer them.
 private struct BareIdentified: View, Identified {
     func render(into buffer: inout HTMLBuffer) { buffer.append("id") }
@@ -51,9 +38,6 @@ struct CapabilityProtocolTests {
 
     @Test("every capability conforms in one word")
     func capabilitiesAreOneWord() {
-        #expect(BareInteractive().markup.html == "i")
-        #expect(BareStreaming().markup.html == "s")
-        #expect(BareAsync().markup.html == "a")
         #expect(BareIdentified().markup.html == "id")
         #expect(BareRecoverable().markup.html == "r")
     }
@@ -68,12 +52,12 @@ struct CapabilityProtocolTests {
     func capabilitiesAreDistinct() {
         // asked through `any View`, so this is a real dynamic check rather than
         // a cast the compiler already knows the answer to.
-        let views: [any View] = [BareInteractive(), BareView(), BareIdentified()]
-        #expect(views[0] is any Interactive)
-        #expect(!(views[1] is any Interactive))
-        #expect(views[2] is any Identified)
-        // and a plain view is not accidentally interactive.
-        #expect(!(views[1] is any Identified))
+        let views: [any View] = [BareView(), BareIdentified(), BareRecoverable()]
+        #expect(views[1] is any Identified)
+        #expect(views[2] is any Recoverable)
+        // and a plain view is not accidentally either.
+        #expect(!(views[0] is any Identified))
+        #expect(!(views[0] is any Recoverable))
     }
 
     @Test("a bare view round-trips through the render buffer")

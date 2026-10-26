@@ -181,12 +181,13 @@ struct AttributeVocabularyTests {
 		        "got: \(wire.attributeText)")
 	}
 
-	@Test("Dismissible is Interactive, so its event is a capability")
-	func dismissibleIsInteractive() {
-		// a view that declares a DOM event IS interactive; the capability exists
-		// to say so, and the compiler can now check it.
-		func requiresInteractive<T: Interactive>(_: T.Type) {}
-		requiresInteractive(DismissibleProbe.self)
+	@Test("a dismissible view is wired through the plain View event deck")
+	func dismissibleUsesPlainViewEventDeck() {
+		// the event surface is `extension View`, so a `Dismissible` needs no
+		// extra capability to be wired — its conformance is `View` alone.
+		let html = markup(DismissibleProbe().wire(ComponentID("probe-1")))
+		#expect(html.contains("data-component-id=\"probe-1\""), "got: \(html)")
+		#expect(html.contains("data-event=\"click\""), "got: \(html)")
 	}
 
 	// MARK: element authoring

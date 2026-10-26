@@ -61,7 +61,7 @@ public typealias DismissHandler = @Sendable (ElementRef, EventData) async -> [Fr
 /// when no handler is set, `makeDismissal()` produces the legacy static marker
 /// (`data-dismiss`/`data-remove`, no component id) — byte-identical to the
 /// un-wired output the container-handler pattern already consumes.
-public protocol Dismissible: View, Interactive {
+public protocol Dismissible: View {
     /// the css class the close/remove button carries (e.g. `toast__close`).
     var dismissButtonClass: String { get }
 

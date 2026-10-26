@@ -10,7 +10,7 @@
 # forced it. `Tests/WebUITests/FrozenSurfaceTests.swift` fails when this
 # file and a fresh extraction diverge, naming every added and removed symbol.
 #
-# re-measured 2026-10-26: 4787 symbols across 9 modules.
+# re-measured 2026-10-26: 4784 symbols across 9 modules.
 
 ## WebUISharedCore
 
@@ -279,7 +279,6 @@ Aside.class
 Aside.content
 Aside.init(class:content:)
 Aside.render(into:)
-AsyncContent
 AttributeContribution
 AttributeContribution.decorate(_:into:)
 AttributeContribution.init(_:)
@@ -1520,7 +1519,6 @@ InputType.text
 InputType.time
 InputType.url
 InputType.week
-Interactive
 Island
 Island.name
 Island.render(_:)
@@ -1820,7 +1818,6 @@ StableIDEventHandlerModifier.decorate(_:into:)
 StableIDEventHandlerModifier.event
 StableIDEventHandlerModifier.handler
 StableIDEventHandlerModifier.init(componentID:event:handler:)
-StreamingContent
 Strong
 Strong.content
 Strong.init(_:)
