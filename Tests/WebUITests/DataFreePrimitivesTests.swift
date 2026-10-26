@@ -53,13 +53,25 @@ struct Base64Tests {
 
 @Suite("JSONValue")
 struct JSONValueTests {
-	@Test("parse + serialize round-trips nested documents")
+	@Test("parse + serialize round-trips nested documents byte-stably")
 	func roundTrip() throws {
 		let text = #"{"type":"update","fragments":[{"id":"a","html":"<b>hi</b>"}],"seq":1,"ok":true,"nothing":null}"#
 		let value = try JSONValue.parse(text)
-		let reserialized = value.serialize()
-		// object key order is not guaranteed — compare via re-parse
-		#expect(try JSONValue.parse(reserialized) == value)
+		// keys serialize sorted, so this is a byte comparison now, not a re-parse
+		#expect(
+			value.serialize()
+				== #"{"fragments":[{"html":"<b>hi</b>","id":"a"}],"nothing":null,"ok":true,"seq":1,"type":"update"}"#
+		)
+		#expect(try JSONValue.parse(value.serialize()) == value)
+	}
+
+	@Test("object keys serialize in sorted order — byte-stable across processes")
+	func objectKeysAreSorted() {
+		let value = JSONValue.object(["z": .number(1), "a": .number(2), "m": .number(3)])
+		#expect(value.serialize() == #"{"a":2,"m":3,"z":1}"#)
+		// a different insertion order is the same bytes: the sort is the contract.
+		let other = JSONValue.object(["m": .number(3), "z": .number(1), "a": .number(2)])
+		#expect(value.serialize() == other.serialize())
 	}
 
 	@Test("escapes are honored in both directions")

@@ -39,7 +39,16 @@ public enum JSONValue: Equatable, Sendable {
         case .array(let elements):
             return "[" + elements.map { $0.serialize() }.joined(separator: ",") + "]"
         case .object(let object):
-            return "{" + object.map { "\"\(Self.escapeString($0.key))\":" + $0.value.serialize() }.joined(separator: ",") + "}"
+            // sorted keys, on purpose: swift seeds `Dictionary` hashing per
+            // process, so iterating the dictionary emitted a different byte
+            // order in every run — semantically identical json that is not
+            // byte-identical, which breaks content-addressed caching and makes
+            // a render diff unexplainable. key order carries no meaning in an
+            // object, so the sort costs nothing and buys determinism.
+            let members = object.keys.sorted().map { key in
+                "\"\(Self.escapeString(key))\":" + (object[key]?.serialize() ?? "null")
+            }
+            return "{" + members.joined(separator: ",") + "}"
         }
     }
 

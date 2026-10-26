@@ -267,7 +267,7 @@ enum FrozenSurface {
 		lines.append("# forced it. `Tests/WebUITests/FrozenSurfaceTests.swift` fails when this")
 		lines.append("# file and a fresh extraction diverge, naming every added and removed symbol.")
 		lines.append("#")
-		lines.append("# re-measured 2026-10-09: \(surface.total) symbols across \(FrozenSurface.modules.count) modules.")
+		lines.append("# re-measured \(remeasuredOn()): \(surface.total) symbols across \(FrozenSurface.modules.count) modules.")
 		lines.append("")
 		for module in FrozenSurface.modules {
 			lines.append("## \(module)")
@@ -277,6 +277,18 @@ enum FrozenSurface {
 			lines.append("")
 		}
 		return lines.joined(separator: "\n")
+	}
+
+	/// today, in UTC, as `yyyy-MM-dd` — the date this file was actually regenerated.
+	///
+	/// it used to be a hardcoded literal, so the line kept claiming an old measurement
+	/// while the symbol count beneath it moved with every api change.
+	private static func remeasuredOn() -> String {
+		let formatter = DateFormatter()
+		formatter.locale = Locale(identifier: "en_US_POSIX")
+		formatter.timeZone = TimeZone(secondsFromGMT: 0)
+		formatter.dateFormat = "yyyy-MM-dd"
+		return formatter.string(from: Date())
 	}
 
 	static func parse(_ text: String) -> Surface {
