@@ -8,7 +8,9 @@ written down. An undocumented trade is the thing these notes exist to remove.
 ## Typed view trees: `TupleView` vs `[any View]` erasure
 
 **Status:** adopted (W2.5, measured 2026-10-09). Migrate containers one per task,
-each behind the byte gate.
+each behind the byte gate. **Completed 2026-10-25** — all 26 container primitives
+and `ForEach` migrated in two slices; see the follow-up at the end of this note
+for the measurement W2.5 was missing.
 
 ### The question
 
@@ -80,3 +82,88 @@ migration needs a render-cost gate of its own.
 `ARCHITECTURE.md` may keep the "typed view tree" claim. Containers migrate one per
 task — each carrying the byte gate and the four criteria above — rather than in one
 all-or-nothing pass.
+
+---
+
+## Follow-up (2026-10-25): the erasure that actually cost
+
+**Status:** shipped. 26 container primitives plus `ForEach`.
+
+### What W2.5 missed
+
+The prototype typed **one container** and measured **the showcase page**. On that
+corpus the erasure is free, so the note concluded "the typed tree is not faster"
+and proposed migrating containers one per task. That framing is what stalled the
+arc: the cost was never at literal arity.
+
+The cost is **per element**. Measured on a 2000-row render (release, the same
+trees, byte-identical output):
+
+| shape | before | after | gain |
+|---|---:|---:|---:|
+| 2000-row list, per row | 366 ns | **165 ns** | **2.21×** |
+| 10000-row list | 3.674 ms | **1.639 ms** | **2.24×** |
+| 12 heterogeneous literal children | 3.9 µs | 2.1 µs | 1.86× |
+| showcase page (168 671 B) | — | — | unchanged |
+
+Two things follow. `ForEach`'s per-element `[any View]` was the expensive site and
+it is invisible on a literal-heavy page — the page measurement could not have
+found it. And typing *containers* alone buys ~1.9× on a tree too small for the
+page to notice, which is why W2.5 saw noise.
+
+### The rule the split settles on
+
+`[any View]` has exactly one capability the typed tuple lacks: it can answer
+`count`, `isEmpty`, `enumerated`. So the array is granted only to the types that
+inspect arity — the design-system components (20+ sites) — and withdrawn from
+everything that only forwards children. Two builders, chosen by the parameter's
+attribute; a call site never names one:
+
+- `@ViewBuilder` → `[any View]` (components).
+- `@ElementBuilder` → `TupleView` / `OptionalView` / `EitherView` /
+  `RepeatedView` / `ErasedViews` (primitives, `ForEach`).
+
+`Group` keeps its name and loses its array: it is now the typed no-wrapper
+grouper, and `ElementGroup` is how a setup-time walk (the chart resolving marks)
+sees through the combinators.
+
+### The four criteria, re-run
+
+| metric | before | after | delta | criterion | met |
+|---|---|---|---|---|---|
+| clean `swift build -c release` | 181.11 s | 183.42 s | +1.28 % | ≤ +25 % | yes |
+| `WebUIShowcase` binary | 13 406 512 B | 13 728 448 B | +2.40 % | ≤ +5 % | yes |
+| row render (2000) | 0.731 ms | 0.331 ms | −54.8 % | — | yes |
+| emitted page bytes | 168 671 | 168 671 | identical | identical | yes |
+
+Both builds were cold, in fresh copies (`.build` absent), same toolchain.
+
+### What the migration actually cost
+
+Not call-site churn: all 54 `ForEach` sites and all 442 container closures
+compiled unchanged. Packs absorb any arity, so `Div { a; b }` never had to wrap.
+The real work was four things the note did not anticipate:
+
+1. **The builder must be a superset.** A block whose expression is an array
+   (`Div { someArray }`) needs `buildExpression` overloads for `[C]` and
+   `[any View]`, or every such site fails. `[any View]` becomes `ErasedViews`.
+2. **`TupleView` is not free.** Wrapping a single child in a tuple cost ~30 ns/row
+   (12 %) until a single-element `buildBlock<C: View>(_ c: C) -> C` overload
+   skipped the wrapper for the dominant one-view body.
+3. **A runtime type walk breaks.** `Chart.resolve` found marks with `as? Group`;
+   once elements became tuples, every mark vanished. `ElementGroup` is the fix,
+   and it is now the protocol a walk should use.
+4. **`<li>` is per child.** `UnorderedList`/`OrderedList` genuinely need the
+   child set, so they walk `ElementGroup` at render time — the one place the old
+   array semantics had to be reproduced deliberately rather than inherited.
+
+Naming: the prototype's `TypedViewBuilder` was never committed. The shipped name
+is `ElementBuilder` — HTML's own word, and it keeps "views" for the erased
+collection and "elements" for the typed tree.
+
+### Reproducing it
+
+`~/.hermes/profiles/swift-dev/cache/scratch/pack-probe` (a path-dependency probe,
+not in this repo): `swift run -c release probe` renders the same six trees through
+the framework, a hand-written generic `ForEach`, a hand-written generic `Div`, and
+a pack-based `VStack`, asserting byte identity before timing.

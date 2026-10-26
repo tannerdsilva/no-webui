@@ -41,18 +41,18 @@ public struct Text: View {
 }
 
 // MARK: - Div
-public struct Div: View {
+public struct Div<Content: View>: View {
     public let id: String?
     public let `class`: String?
-    public let children: [any View]
+    public let content: Content
     public init(
         id: String? = nil,
         class: String? = nil,
-        @ViewBuilder content: () -> [any View]
+        @ElementBuilder content: () -> Content
     ) {
         self.id = id
         self.class = `class`
-        self.children = content()
+        self.content = content()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -61,26 +61,24 @@ public struct Div: View {
         if let `class` { attributes += " class=\"\(htmlEscape(`class`))\"" }
         buffer.beginElement("div", attributes)
         buffer.endOpenTag()
-        for child in children {
-            child.render(into: &buffer)
-        }
+        content.render(into: &buffer)
         buffer.endElement()
     }
 }
 
 // MARK: - Span
-public struct Span: View {
+public struct Span<Content: View>: View {
     public let id: String?
     public let `class`: String?
-    public let children: [any View]
+    public let content: Content
     public init(
         id: String? = nil,
         class: String? = nil,
-        @ViewBuilder content: () -> [any View]
+        @ElementBuilder content: () -> Content
     ) {
         self.id = id
         self.class = `class`
-        self.children = content()
+        self.content = content()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -89,9 +87,7 @@ public struct Span: View {
         if let `class` { attributes += " class=\"\(htmlEscape(`class`))\"" }
         buffer.beginElement("span", attributes)
         buffer.endOpenTag()
-        for child in children {
-            child.render(into: &buffer)
-        }
+        content.render(into: &buffer)
         buffer.endElement()
     }
 }
@@ -390,13 +386,40 @@ public struct Paragraph: View {
 }
 
 // MARK: - List Elements
-public struct UnorderedList: View {
-    public let items: [any View]
+
+/// renders one child as a list item.
+@inline(__always)
+private func renderListItem(_ item: any View, into buffer: inout HTMLBuffer) {
+    buffer.beginElement("li")
+    buffer.endOpenTag()
+    item.render(into: &buffer)
+    buffer.endElement()
+}
+
+/// renders `content` as list items — one `<li>` per child.
+///
+/// `<li>` is per child, so a typed block's combinator content (a tuple, a
+/// repetition, an `if`) is walked through ``ElementGroup``, which is exactly
+/// the child set the erased array used to hold. a leaf view is one item, and an
+/// already-erased block keeps its own erasure — one item per element.
+@inline(__always)
+private func renderListItems<Content: View>(_ content: Content, into buffer: inout HTMLBuffer) {
+    if let group = content as? any ElementGroup {
+        for item in group.elements { renderListItem(item, into: &buffer) }
+    } else if let erased = content as? ErasedViews {
+        for item in erased.content { renderListItem(item, into: &buffer) }
+    } else {
+        renderListItem(content, into: &buffer)
+    }
+}
+
+public struct UnorderedList<Content: View>: View {
+    public let content: Content
     public let `class`: String?
 
-    public init(class: String? = nil, @ViewBuilder items: () -> [any View]) {
+    public init(class: String? = nil, @ElementBuilder items: () -> Content) {
         self.class = `class`
-        self.items = items()
+        self.content = items()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -404,22 +427,17 @@ public struct UnorderedList: View {
         if let `class` { attributes += " class=\"\(htmlEscape(`class`))\"" }
         buffer.beginElement("ul", attributes)
         buffer.endOpenTag()
-        for item in items {
-            buffer.beginElement("li")
-            buffer.endOpenTag()
-            item.render(into: &buffer)
-            buffer.endElement()
-        }
+        renderListItems(content, into: &buffer)
         buffer.endElement()
     }
 }
-public struct OrderedList: View {
-    public let items: [any View]
+public struct OrderedList<Content: View>: View {
+    public let content: Content
     public let `class`: String?
 
-    public init(class: String? = nil, @ViewBuilder items: () -> [any View]) {
+    public init(class: String? = nil, @ElementBuilder items: () -> Content) {
         self.class = `class`
-        self.items = items()
+        self.content = items()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -427,12 +445,7 @@ public struct OrderedList: View {
         if let `class` { attributes += " class=\"\(htmlEscape(`class`))\"" }
         buffer.beginElement("ol", attributes)
         buffer.endOpenTag()
-        for item in items {
-            buffer.beginElement("li")
-            buffer.endOpenTag()
-            item.render(into: &buffer)
-            buffer.endElement()
-        }
+        renderListItems(content, into: &buffer)
         buffer.endElement()
     }
 }
@@ -612,40 +625,42 @@ public struct Select: View {
 //
 // `ForEach` remains the right tool for data that is already `Sendable` and
 // non-isolated (a literal, a value passed in).
-public struct ForEach<Data: RandomAccessCollection & Sendable>: View {
+/// repeats one view per element of `data`.
+///
+/// `content` returns a single view, so an element costs no array and no
+/// existential box — the element's own type flows into the render loop. a body
+/// that wants several views per element wraps them in ``Group`` (which frames
+/// nothing), and the markup is byte-identical to the array form it replaced.
+public struct ForEach<Data: RandomAccessCollection & Sendable, Content: View>: View {
     public let data: Data
-    public let content: @Sendable (Data.Element) -> [any View]
-    public init(_ data: Data, @ViewBuilder content: @escaping @Sendable (Data.Element) -> [any View]) {
+    public let content: @Sendable (Data.Element) -> Content
+    public init(_ data: Data, @ElementBuilder content: @escaping @Sendable (Data.Element) -> Content) {
         self.data = data
         self.content = content
     }
 
     public func render(into buffer: inout HTMLBuffer) {
         for element in data {
-            for child in content(element) {
-                child.render(into: &buffer)
-            }
+            content(element).render(into: &buffer)
         }
     }
 }
 extension ForEach where Data == Range<Int> {
-    public init(_ range: Range<Int>, @ViewBuilder content: @escaping @Sendable (Int) -> [any View]) {
+    public init(_ range: Range<Int>, @ElementBuilder content: @escaping @Sendable (Int) -> Content) {
         self.data = range
         self.content = content
     }
 }
 
 // MARK: - Group
-public struct Group: View {
-    public let children: [any View]
-    public init(@ViewBuilder content: () -> [any View]) {
-        self.children = content()
+public struct Group<Content: View>: View {
+    public let content: Content
+    public init(@ElementBuilder content: () -> Content) {
+        self.content = content()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
-        for child in children {
-            child.render(into: &buffer)
-        }
+        content.render(into: &buffer)
     }
 }
 
@@ -662,7 +677,7 @@ public enum FormMethod: String, Sendable, CaseIterable {
 }
 
 // MARK: - Form
-public struct Form: View {
+public struct Form<Content: View>: View {
     public let action: String
     /// the emitted `method`, when non-nil. the default is `.post`, which is
     /// what the framework's own `WebUIServer` does *not* answer — see the
@@ -676,7 +691,7 @@ public struct Form: View {
     public let id: String?
     public let `class`: String?
     public let csrfToken: String?
-    public let children: [any View]
+    public let content: Content
     /// the verbatim attribute text when the caller passed a raw string.
     ///
     /// the typed initializer leaves this nil. the raw initializer needs
@@ -692,7 +707,7 @@ public struct Form: View {
         id: String? = nil,
         class: String? = nil,
         csrfToken: String? = nil,
-        @ViewBuilder content: () -> [any View]
+        @ElementBuilder content: () -> Content
     ) {
         self.action = action
         self.method = method
@@ -701,7 +716,7 @@ public struct Form: View {
         self.id = id
         self.class = `class`
         self.csrfToken = csrfToken
-        self.children = content()
+        self.content = content()
     }
 
     /// the raw-string spelling, kept so a 1.x call site emits exactly what it
@@ -713,7 +728,7 @@ public struct Form: View {
         id: String? = nil,
         class: String? = nil,
         csrfToken: String? = nil,
-        @ViewBuilder content: () -> [any View]
+        @ElementBuilder content: () -> Content
     ) {
         self.action = action
         self.method = FormMethod(rawValue: method) ?? .post
@@ -722,7 +737,7 @@ public struct Form: View {
         self.id = id
         self.class = `class`
         self.csrfToken = csrfToken
-        self.children = content()
+        self.content = content()
     }
 
     /// the exact `method` attribute value this form emits, or nil when the
@@ -762,88 +777,86 @@ public struct Form: View {
         if let token = csrfToken {
             buffer.voidElement("input", " type=\"hidden\" name=\"_csrf\" value=\"\(htmlEscape(token))\"")
         }
-        for child in children {
-            child.render(into: &buffer)
-        }
+        content.render(into: &buffer)
         buffer.endElement()
     }
 }
 
 // MARK: - Inline elements
 
-public struct Small: View {
-    public let children: [any View]
-    public init(_ text: String) { self.children = [Text(text)] }
-    public init(@ViewBuilder content: () -> [any View]) { self.children = content() }
+public struct Small<Content: View>: View {
+    public let content: Content
+    public init(_ text: String) where Content == Text { self.content = Text(text) }
+    public init(@ElementBuilder content: () -> Content) { self.content = content() }
     public func render(into buffer: inout HTMLBuffer) {
         buffer.beginElement("small"); buffer.endOpenTag()
-        for child in children { child.render(into: &buffer) }
+        content.render(into: &buffer)
         buffer.endElement()
     }
 }
 
-public struct InlineCode: View {
-    public let children: [any View]
-    public init(_ text: String) { self.children = [Text(text)] }
-    public init(@ViewBuilder content: () -> [any View]) { self.children = content() }
+public struct InlineCode<Content: View>: View {
+    public let content: Content
+    public init(_ text: String) where Content == Text { self.content = Text(text) }
+    public init(@ElementBuilder content: () -> Content) { self.content = content() }
     public func render(into buffer: inout HTMLBuffer) {
         buffer.beginElement("code"); buffer.endOpenTag()
-        for child in children { child.render(into: &buffer) }
+        content.render(into: &buffer)
         buffer.endElement()
     }
 }
 
-public struct Preformatted: View {
-    public let children: [any View]
-    public init(_ text: String) { self.children = [Text(text)] }
-    public init(@ViewBuilder content: () -> [any View]) { self.children = content() }
+public struct Preformatted<Content: View>: View {
+    public let content: Content
+    public init(_ text: String) where Content == Text { self.content = Text(text) }
+    public init(@ElementBuilder content: () -> Content) { self.content = content() }
     public func render(into buffer: inout HTMLBuffer) {
         buffer.beginElement("pre"); buffer.endOpenTag()
-        for child in children { child.render(into: &buffer) }
+        content.render(into: &buffer)
         buffer.endElement()
     }
 }
 
-public struct Strong: View {
-    public let children: [any View]
-    public init(_ text: String) { self.children = [Text(text)] }
-    public init(@ViewBuilder content: () -> [any View]) { self.children = content() }
+public struct Strong<Content: View>: View {
+    public let content: Content
+    public init(_ text: String) where Content == Text { self.content = Text(text) }
+    public init(@ElementBuilder content: () -> Content) { self.content = content() }
     public func render(into buffer: inout HTMLBuffer) {
         buffer.beginElement("strong"); buffer.endOpenTag()
-        for child in children { child.render(into: &buffer) }
+        content.render(into: &buffer)
         buffer.endElement()
     }
 }
 
-public struct Emphasis: View {
-    public let children: [any View]
-    public init(_ text: String) { self.children = [Text(text)] }
-    public init(@ViewBuilder content: () -> [any View]) { self.children = content() }
+public struct Emphasis<Content: View>: View {
+    public let content: Content
+    public init(_ text: String) where Content == Text { self.content = Text(text) }
+    public init(@ElementBuilder content: () -> Content) { self.content = content() }
     public func render(into buffer: inout HTMLBuffer) {
         buffer.beginElement("em"); buffer.endOpenTag()
-        for child in children { child.render(into: &buffer) }
+        content.render(into: &buffer)
         buffer.endElement()
     }
 }
 
-public struct Blockquote: View {
-    public let children: [any View]
-    public init(_ text: String) { self.children = [Text(text)] }
-    public init(@ViewBuilder content: () -> [any View]) { self.children = content() }
+public struct Blockquote<Content: View>: View {
+    public let content: Content
+    public init(_ text: String) where Content == Text { self.content = Text(text) }
+    public init(@ElementBuilder content: () -> Content) { self.content = content() }
     public func render(into buffer: inout HTMLBuffer) {
         buffer.beginElement("blockquote"); buffer.endOpenTag()
-        for child in children { child.render(into: &buffer) }
+        content.render(into: &buffer)
         buffer.endElement()
     }
 }
 
-public struct Article: View {
-    public let children: [any View]
-    public init(_ text: String) { self.children = [Text(text)] }
-    public init(@ViewBuilder content: () -> [any View]) { self.children = content() }
+public struct Article<Content: View>: View {
+    public let content: Content
+    public init(_ text: String) where Content == Text { self.content = Text(text) }
+    public init(@ElementBuilder content: () -> Content) { self.content = content() }
     public func render(into buffer: inout HTMLBuffer) {
         buffer.beginElement("article"); buffer.endOpenTag()
-        for child in children { child.render(into: &buffer) }
+        content.render(into: &buffer)
         buffer.endElement()
     }
 }
@@ -853,22 +866,22 @@ public struct LineBreak: View {
     public func render(into buffer: inout HTMLBuffer) { buffer.voidElement("br") }
 }
 
-public struct Details: View {
+public struct Details<Summary: View, Content: View>: View {
     public let isOpen: Bool
-    public let summary: [any View]
-    public let content: [any View]
+    public let summary: Summary
+    public let content: Content
     public init(open: Bool = false,
-                @ViewBuilder summary: () -> [any View],
-                @ViewBuilder content: () -> [any View]) {
+                @ElementBuilder summary: () -> Summary,
+                @ElementBuilder content: () -> Content) {
         self.isOpen = open; self.summary = summary(); self.content = content()
     }
     public func render(into buffer: inout HTMLBuffer) {
         buffer.beginElement("details", isOpen ? " open" : "")
         buffer.endOpenTag()
         buffer.beginElement("summary"); buffer.endOpenTag()
-        for v in summary { v.render(into: &buffer) }
+        summary.render(into: &buffer)
         buffer.endElement()
-        for v in content { v.render(into: &buffer) }
+        content.render(into: &buffer)
         buffer.endElement()
     }
 }

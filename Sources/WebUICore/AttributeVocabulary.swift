@@ -29,10 +29,6 @@ public struct AttributeContribution: ViewModifier {
 		self.text = text
 	}
 
-	public func apply(to html: String) -> String {
-		text.isEmpty ? html : injectAttributes(into: html, text)
-	}
-
 	public func decorate<C: View>(_ content: C, into buffer: inout HTMLBuffer) {
 		guard !text.isEmpty else {
 			content.render(into: &buffer)
@@ -337,20 +333,20 @@ public enum Tag: String, Sendable {
 /// hand-built attribute text — enough boilerplate that repeating a string is
 /// cheaper than factoring it, which is why a page accumulates one-off markup.
 /// this is the cheap path.
-public struct Element: View {
+public struct Element<Content: View>: View {
 	public let tag: Tag
 	public let className: String?
 	public let id: String?
-	/// children as `[any View]`, the shape `Group` uses: a `@ViewBuilder`
-	/// closure holding more than one expression builds an array, and a generic
-	/// `Content: View` parameter cannot accept it.
-	public let content: [any View]
+	/// children as one typed `Content`, the shape ``Group`` uses: an
+	/// `@ElementBuilder` block builds a tuple of concrete views, so no array
+	/// and no per-child box stands between the element and its children.
+	public let content: Content
 
 	public init(
 		_ tag: Tag,
 		class className: String? = nil,
 		id: String? = nil,
-		@ViewBuilder content: () -> [any View]
+		@ElementBuilder content: () -> Content
 	) {
 		self.tag = tag
 		self.className = className
@@ -364,7 +360,7 @@ public struct Element: View {
 		if let className { attributes += " class=\"\(htmlEscape(className))\"" }
 		buffer.beginElement(tag.rawValue, attributes)
 		buffer.endOpenTag()
-		for child in content { child.render(into: &buffer) }
+		content.render(into: &buffer)
 		buffer.endElement()
 	}
 }

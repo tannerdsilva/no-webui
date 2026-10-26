@@ -758,8 +758,15 @@ func renderBufferAdditionsPin() {
 	BufferOnly().render(into: &fallback)
 	#expect(fallback.finish() == "s")
 
+	// the requirement is what dispatches: a conformer's decorate(_:into:) runs,
+	// and since the modifier flip it is the only way to conform at all — the
+	// string door is derived from it
 	struct ModifierOnly: ViewModifier {
-		func apply(to html: String) -> String { "<b>\(html)</b>" }
+		func decorate<C: View>(_ content: C, into buffer: inout HTMLBuffer) {
+			buffer.append("<b>")
+			content.render(into: &buffer)
+			buffer.append("</b>")
+		}
 	}
 	var wrapped = HTMLBuffer()
 	ModifiedView(content: Text("z"), modifier: ModifierOnly()).render(into: &wrapped)

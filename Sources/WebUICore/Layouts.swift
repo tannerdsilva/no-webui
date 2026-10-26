@@ -1,16 +1,16 @@
 // MARK: - VStack
-public struct VStack: View {
+public struct VStack<Content: View>: View {
     public let alignment: HorizontalAlignment
     public let spacing: Int
-    public let children: [any View]
+    public let content: Content
     public init(
         alignment: HorizontalAlignment = .leading,
         spacing: Int = 8,
-        @ViewBuilder content: () -> [any View]
+        @ElementBuilder content: () -> Content
     ) {
         self.alignment = alignment
         self.spacing = spacing
-        self.children = content()
+        self.content = content()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -18,27 +18,25 @@ public struct VStack: View {
         buffer.beginElement("div", " class=\"vstack spacing-\(spacing) \(alignClass)\"")
         buffer.endOpenTag()
         buffer.append("\n")
-        for child in children {
-            child.render(into: &buffer)
-        }
+        content.render(into: &buffer)
         buffer.append("\n")
         buffer.endElement()
     }
 }
 
 // MARK: - HStack
-public struct HStack: View {
+public struct HStack<Content: View>: View {
     public let alignment: VerticalAlignment
     public let spacing: Int
-    public let children: [any View]
+    public let content: Content
     public init(
         alignment: VerticalAlignment = .center,
         spacing: Int = 8,
-        @ViewBuilder content: () -> [any View]
+        @ElementBuilder content: () -> Content
     ) {
         self.alignment = alignment
         self.spacing = spacing
-        self.children = content()
+        self.content = content()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -46,27 +44,25 @@ public struct HStack: View {
         buffer.beginElement("div", " class=\"hstack spacing-\(spacing) \(alignClass)\"")
         buffer.endOpenTag()
         buffer.append("\n")
-        for child in children {
-            child.render(into: &buffer)
-        }
+        content.render(into: &buffer)
         buffer.append("\n")
         buffer.endElement()
     }
 }
 
 // MARK: - ZStack
-public struct ZStack: View {
+public struct ZStack<Content: View>: View {
     public let alignment: HorizontalAlignment
     public let verticalAlignment: VerticalAlignment
-    public let children: [any View]
+    public let content: Content
     public init(
         alignment: HorizontalAlignment = .center,
         verticalAlignment: VerticalAlignment = .center,
-        @ViewBuilder content: () -> [any View]
+        @ElementBuilder content: () -> Content
     ) {
         self.alignment = alignment
         self.verticalAlignment = verticalAlignment
-        self.children = content()
+        self.content = content()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -75,9 +71,7 @@ public struct ZStack: View {
         buffer.beginElement("div", " class=\"zstack\" style=\"display:grid;place-items:\(hAlign) \(vAlign);\"")
         buffer.endOpenTag()
         buffer.append("\n")
-        for child in children {
-            child.render(into: &buffer)
-        }
+        content.render(into: &buffer)
         buffer.append("\n")
         buffer.endElement()
     }
@@ -98,19 +92,17 @@ public struct Spacer: View {
 }
 
 // MARK: - ScrollView
-public struct ScrollView: View {
-    public let children: [any View]
-    public init(@ViewBuilder content: () -> [any View]) {
-        self.children = content()
+public struct ScrollView<Content: View>: View {
+    public let content: Content
+    public init(@ElementBuilder content: () -> Content) {
+        self.content = content()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
         buffer.beginElement("div", " class=\"scrollview\"")
         buffer.endOpenTag()
         buffer.append("\n")
-        for child in children {
-            child.render(into: &buffer)
-        }
+        content.render(into: &buffer)
         buffer.append("\n")
         buffer.endElement()
     }
@@ -144,46 +136,44 @@ public enum GridColumns: Sendable {
 }
 
 // MARK: - Grid
-public struct Grid: View {
+public struct Grid<Content: View>: View {
     public let columns: GridColumns
     public let spacing: Int
-    public let children: [any View]
+    public let content: Content
     public init(
         columns: GridColumns = .fraction(2),
         spacing: Int = 16,
-        @ViewBuilder content: () -> [any View]
+        @ElementBuilder content: () -> Content
     ) {
         self.columns = columns
         self.spacing = spacing
-        self.children = content()
+        self.content = content()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
         buffer.beginElement("div", " class=\"grid\" style=\"display:grid;grid-template-columns:\(columns.cssValue);gap:\(spacing)px;\"")
         buffer.endOpenTag()
         buffer.append("\n")
-        for child in children {
-            child.render(into: &buffer)
-        }
+        content.render(into: &buffer)
         buffer.append("\n")
         buffer.endElement()
     }
 }
 
 // MARK: - Section
-public struct Section: View {
+public struct Section<Content: View>: View {
     public let id: String?
     public let `class`: String?
-    public let children: [any View]
+    public let content: Content
 
     public init(
         id: String? = nil,
         class: String? = nil,
-        @ViewBuilder content: () -> [any View]
+        @ElementBuilder content: () -> Content
     ) {
         self.id = id
         self.class = `class`
-        self.children = content()
+        self.content = content()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -192,24 +182,22 @@ public struct Section: View {
         if let `class` { attributes += " class=\"\(htmlEscape(`class`))\"" }
         buffer.beginElement("section", attributes)
         buffer.endOpenTag()
-        for child in children {
-            child.render(into: &buffer)
-        }
+        content.render(into: &buffer)
         buffer.endElement()
     }
 }
 
 // MARK: - Navigation
-public struct Navigation: View {
+public struct Navigation<Content: View>: View {
     public let `class`: String?
-    public let children: [any View]
+    public let content: Content
 
     public init(
         class: String? = nil,
-        @ViewBuilder content: () -> [any View]
+        @ElementBuilder content: () -> Content
     ) {
         self.class = `class`
-        self.children = content()
+        self.content = content()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -217,24 +205,22 @@ public struct Navigation: View {
         if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
         buffer.beginElement("nav", attributeText)
         buffer.endOpenTag()
-        for child in children {
-            child.render(into: &buffer)
-        }
+        content.render(into: &buffer)
         buffer.endElement()
     }
 }
 
 // MARK: - Header
-public struct Header: View {
+public struct Header<Content: View>: View {
     public let `class`: String?
-    public let children: [any View]
+    public let content: Content
 
     public init(
         class: String? = nil,
-        @ViewBuilder content: () -> [any View]
+        @ElementBuilder content: () -> Content
     ) {
         self.class = `class`
-        self.children = content()
+        self.content = content()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -242,24 +228,22 @@ public struct Header: View {
         if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
         buffer.beginElement("header", attributeText)
         buffer.endOpenTag()
-        for child in children {
-            child.render(into: &buffer)
-        }
+        content.render(into: &buffer)
         buffer.endElement()
     }
 }
 
 // MARK: - Footer
-public struct Footer: View {
+public struct Footer<Content: View>: View {
     public let `class`: String?
-    public let children: [any View]
+    public let content: Content
 
     public init(
         class: String? = nil,
-        @ViewBuilder content: () -> [any View]
+        @ElementBuilder content: () -> Content
     ) {
         self.class = `class`
-        self.children = content()
+        self.content = content()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -267,24 +251,22 @@ public struct Footer: View {
         if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
         buffer.beginElement("footer", attributeText)
         buffer.endOpenTag()
-        for child in children {
-            child.render(into: &buffer)
-        }
+        content.render(into: &buffer)
         buffer.endElement()
     }
 }
 
 // MARK: - Main
-public struct Main: View {
+public struct Main<Content: View>: View {
     public let `class`: String?
-    public let children: [any View]
+    public let content: Content
 
     public init(
         class: String? = nil,
-        @ViewBuilder content: () -> [any View]
+        @ElementBuilder content: () -> Content
     ) {
         self.class = `class`
-        self.children = content()
+        self.content = content()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -292,24 +274,22 @@ public struct Main: View {
         if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
         buffer.beginElement("main", attributeText)
         buffer.endOpenTag()
-        for child in children {
-            child.render(into: &buffer)
-        }
+        content.render(into: &buffer)
         buffer.endElement()
     }
 }
 
 // MARK: - Aside
-public struct Aside: View {
+public struct Aside<Content: View>: View {
     public let `class`: String?
-    public let children: [any View]
+    public let content: Content
 
     public init(
         class: String? = nil,
-        @ViewBuilder content: () -> [any View]
+        @ElementBuilder content: () -> Content
     ) {
         self.class = `class`
-        self.children = content()
+        self.content = content()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -317,9 +297,7 @@ public struct Aside: View {
         if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
         buffer.beginElement("aside", attributeText)
         buffer.endOpenTag()
-        for child in children {
-            child.render(into: &buffer)
-        }
+        content.render(into: &buffer)
         buffer.endElement()
     }
 }

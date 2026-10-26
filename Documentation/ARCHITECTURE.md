@@ -117,9 +117,17 @@ VStack {
 ```
 
 a single-expression block preserves the concrete view
-type (`buildBlock<V: View>(_ view: V) -> V`); a multi-view block produces
-`[any View]` — an array of type-erased views. This is intentional:
-it keeps the compiler happy without deep generic nesting.
+type (`buildBlock<V: View>(_ view: V) -> V`); a multi-view block produces a tuple
+of concrete views (`TupleView`) when the parameter takes `@ElementBuilder`, and
+`[any View]` when it takes `@ViewBuilder`.
+
+the split is not taste, it is the array's one capability: `[any View]` can answer
+`count`, `isEmpty` and `enumerated`, and the design-system components use exactly
+that to decide markup. the primitives only forward their children, so they take
+the typed builder — no array, no per-child box. measured on a 2000-row render,
+the typed path costs 165 ns/row against the erased 366 ns/row; on the showcase
+page the two are within noise. see `Documentation/DESIGN_NOTES.md` for both
+measurements and the reason the earlier arc stalled.
 
 ### Primitives
 

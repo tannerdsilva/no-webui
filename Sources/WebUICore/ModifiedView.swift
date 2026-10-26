@@ -1,11 +1,15 @@
 import Logging
 
 extension ViewModifier {
-    /// the fallback for a modifier that has not migrated: apply to the
-    /// content's string render, which re-parses that html — the cost S2
-    /// removes for the migrated modifier set.
-    public func decorate<C: View>(_ content: C, into buffer: inout HTMLBuffer) {
-        buffer.append(apply(to: content.markup.html))
+    /// the 1.x spelling: decorate an already-rendered string.
+    ///
+    /// derived, so a modifier has ONE implementation. `Raw` is the view that
+    /// carries the markup back through the buffered door, which settles the
+    /// attribute at the first element exactly as the old string splice did.
+    public func apply(to html: String) -> String {
+        var buffer = HTMLBuffer()
+        decorate(Raw(UnsafeMarkup.trusted(html)), into: &buffer)
+        return buffer.finish()
     }
 }
 
@@ -19,7 +23,7 @@ public struct ModifiedView<Content: View, M: ViewModifier>: View {
     }
 
     /// route the wrapped content through the modifier's buffered decoration.
-    /// the call below is a requirement, so a migrated modifier's own
+    /// the call below is a requirement, so a modifier's own
     /// `decorate(_:into:)` runs even though `M` is generic.
     public func render(into buffer: inout HTMLBuffer) {
         modifier.decorate(content, into: &buffer)
@@ -29,19 +33,20 @@ public struct ModifiedView<Content: View, M: ViewModifier>: View {
 
 // MARK: - AnyViewModifier (type eraser for conditional modifier use)
 //
-// it stays on the string path by construction: the eraser carries only
-// `(String) -> String`, which is exactly the capability the buffer path
-// replaces, so there is nothing here to migrate — the default `decorate`
-// applies the erased function to the content's rendered string, byte-identical
-// to the old `ModifiedView.render()`. A migrated modifier handed to the eraser
-// keeps its own `apply` and rides the string path with it.
+// the eraser carries only a string transform, which is the one capability that
+// cannot reach the buffer: `decorate` hands it the content's string render, and
+// `apply` is the derived door, so the erased modifier still has exactly one
+// behaviour and both doors run it.
 public struct AnyViewModifier: ViewModifier {
     private let _apply: @Sendable (String) -> String
     public init<M: ViewModifier>(_ modifier: M) {
         self._apply = modifier.apply
     }
-    public func apply(to html: String) -> String {
-        _apply(html)
+
+    /// the erased transform applied to the content's string render — the
+    /// eraser's whole job, byte-identical to the 1.x `ModifiedView.render()`.
+    public func decorate<C: View>(_ content: C, into buffer: inout HTMLBuffer) {
+        buffer.append(_apply(content.markup.html))
     }
 }
 
@@ -107,10 +112,6 @@ public struct InlineStyle: ViewModifier {
         self.value = value
     }
 
-    public func apply(to html: String) -> String {
-        injectAttributes(into: html, attributeText)
-    }
-
     /// contribute the declaration to the element that opens next, then render
     /// the content through the buffer. content that renders as a string — and
     /// so opens no element — is settled through the string-path rules instead.
@@ -131,10 +132,6 @@ public struct HTMLAttribute: ViewModifier {
     public init(_ key: String, _ value: String) {
         self.key = key
         self.value = value
-    }
-
-    public func apply(to html: String) -> String {
-        injectAttributes(into: html, attributeText)
     }
 
     /// contribute the attribute to the element that opens next, then render the
@@ -160,14 +157,11 @@ public struct ComposedModifier<First: ViewModifier, Second: ViewModifier>: ViewM
         self.second = second
     }
 
-    public func apply(to html: String) -> String {
-        second.apply(to: first.apply(to: html))
-    }
-
     /// render through the nesting the string path composes — `second` wrapping
     /// `first` wrapping the content — so the layers contribute in the order
-    /// `second.apply(to: first.apply(to: html))` would have contributed, and
-    /// each layer's own fallback still applies.
+    /// `second.apply(to: first.apply(to: html))` would have contributed. both
+    /// doors of each layer are the layer's own `decorate`, so the derived
+    /// `apply` of the composition lands on the same bytes.
     public func decorate<C: View>(_ content: C, into buffer: inout HTMLBuffer) {
         ModifiedView(content: ModifiedView(content: content, modifier: first), modifier: second)
             .render(into: &buffer)
@@ -181,7 +175,6 @@ extension ViewModifier {
 }
 public struct NoopModifier: ViewModifier {
     public init() {}
-    public func apply(to html: String) -> String { html }
 
     /// nothing to contribute and nothing to transform — the content renders
     /// straight into the buffer.
@@ -274,17 +267,26 @@ public struct EventHandlerModifier: ViewModifier {
         self.handler = handler
     }
 
-    public func apply(to html: String) -> String {
+    /// mint the id AFTER the content renders (the string path's post-order: the
+    /// innermost modifier mints first, and pages pin `c0`/`c1`), then settle the
+    /// contribution over the bytes the content wrote — `settlePendingAttributes`
+    /// from `mark` applies it to the first element the content opened, exactly
+    /// where `injectAttributes` spliced it. minting before the content rendered
+    /// would renumber every page with nested minting.
+    public func decorate<C: View>(_ content: C, into buffer: inout HTMLBuffer) {
         guard var context = RenderContext.current else {
             Self.log.warning("EventHandlerModifier used without RenderContext. Wrap your render call in RenderContext.$current.withValue(...). The event handler for '\(event.rawValue)' will not fire.")
-            return html
+            content.render(into: &buffer)
+            return
         }
+        let mark = buffer.mark
+        content.render(into: &buffer)
         let componentID = context.nextComponentID()
         context.register(handler: handler, for: componentID)
-        return injectAttributes(
-            into: html,
+        buffer.addAttribute(
             "data-component-id=\"\(componentID.value)\" data-event=\"\(htmlEscape(event.rawValue))\""
         )
+        buffer.settlePendingAttributes(from: mark)
     }
 }
 
@@ -311,15 +313,6 @@ public struct StableIDEventHandlerModifier: ViewModifier {
         self.componentID = componentID
         self.event = event
         self.handler = handler
-    }
-
-    public func apply(to html: String) -> String {
-        guard var context = RenderContext.current else {
-            Self.log.warning("StableIDEventHandlerModifier used without RenderContext. Wrap your render call in RenderContext.$current.withValue(...). The event handler for '\(event.rawValue)' will not fire.")
-            return html
-        }
-        context.register(handler: handler, for: ComponentID(componentID))
-        return injectAttributes(into: html, attributeText)
     }
 
     /// contribute the routing attributes to the element that opens next, then
@@ -370,11 +363,17 @@ public struct OptimisticClickModifier: ViewModifier {
         self.handler = handler
     }
 
-    public func apply(to html: String) -> String {
+    /// mint and register AFTER the content renders (the string path's
+    /// post-order), then settle both attributes — the routing pair and the
+    /// predicted fragments — onto the first element the content opened.
+    public func decorate<C: View>(_ content: C, into buffer: inout HTMLBuffer) {
         guard var context = RenderContext.current else {
             Self.log.warning("OptimisticClickModifier used without RenderContext. Wrap your render call in RenderContext.$current.withValue(...). The event handler will not fire.")
-            return html
+            content.render(into: &buffer)
+            return
         }
+        let mark = buffer.mark
+        content.render(into: &buffer)
         let componentID = context.nextComponentID()
         context.register(handler: handler, for: componentID)
         // data-free json emission of the predicted fragments — the runtime
@@ -387,9 +386,9 @@ public struct OptimisticClickModifier: ViewModifier {
             ])
         })
         let encoded = predictions.serialize()
-        return injectAttributes(
-            into: html,
+        buffer.addAttribute(
             "data-component-id=\"\(componentID.value)\" data-event=\"click\" data-optimistic=\"\(htmlEscape(encoded))\""
         )
+        buffer.settlePendingAttributes(from: mark)
     }
 }

@@ -404,8 +404,9 @@ migrating a 1.x host. the short version a 2.0 host writes against:
 
 - **`render(into:)` is the sole `View` requirement.** `render() -> String` is
   a deprecated default materialized from the buffer; a type implementing only
-  `render()` does not satisfy `View`. `ViewModifier` likewise requires
-  `decorate(_:into:)` in addition to `apply(to:)` (defaulted through the buffer).
+  `render()` does not satisfy `View`. `ViewModifier` likewise requires only
+  `decorate(_:into:)`; `apply(to:)` is derived from it, so a modifier that
+  implements only `apply(to:)` does not satisfy `ViewModifier`.
 - **`class:` merges now.** `.class("x")`/`.classes(...)`/`.addClass(...)` and
   the `class:` parameters keep the content's own classes — call order,
   duplicates folded. the 1.x replace semantics are gone, and there is **no

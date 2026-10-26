@@ -53,8 +53,8 @@ public struct Chart: View {
 		if let iterable = view as? ChartIterableMark {
 			return iterable.resolvedMarks
 		}
-		if let group = view as? Group {
-			return group.children.flatMap { resolve($0) }
+		if let group = view as? ElementGroup {
+			return group.elements.flatMap { resolve($0) }
 		}
 		if let mark = view as? ChartContent {
 			return [mark.makeMark()]
@@ -167,7 +167,7 @@ public protocol ChartIterableMark: View {
 extension ForEach: ChartIterableMark {
 	public var resolvedMarks: [ChartMark] {
 		data.flatMap { el -> [ChartMark] in
-			content(el).flatMap { Chart.resolve($0) }
+			Chart.resolve(content(el))
 		}
 	}
 }

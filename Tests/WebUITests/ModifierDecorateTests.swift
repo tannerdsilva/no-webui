@@ -2,22 +2,16 @@ import Testing
 import WebUI
 import WebUISharedCore
 
-// the S2 contract (`.hermes/plans/2026-09-28_123131-render-buffer-v2.md` §2.3, §3 S2):
-// migrated modifiers contribute through the buffer's pending slot, and content
-// that opens no element is settled through the string-path rules instead.
+// the modifier contract (`.hermes/plans/2026-09-28_123131-render-buffer-v2.md` §2.3, §3 S2):
+// `decorate(_:into:)` is the ONE requirement — a modifier contributes through
+// the buffer's pending slot and settles it at the element the content opened —
+// and `apply(to:)` is derived from it, so a modifier has one implementation and
+// both doors run that implementation. the census tests at the bottom assert the
+// two doors agree byte-for-byte for every conformer the framework ships.
 //
-// two of the plan's S2 items are pinned here as DEFERRED decisions rather than
-// migrations, because moving them would change bytes:
-//
-//   - the auto-minting event modifiers (`EventHandlerModifier`,
-//     `OptimisticClickModifier`): their attribute needs an id minted AFTER the
-//     content renders — the string path mints in post-order, and tests across
-//     the suite pin `c0`/`c1` — while contributing after the content would
-//     invert the attribute order of a mixed chain like `.padding(4).onClick(…)`.
-//   - `AnyViewModifier` (a `(String) -> String` eraser: the buffer route is
-//     structurally unavailable) and `IconSizeModifier` (it rewrites a class
-//     token inside an existing attribute; the merge model replaces whole keys,
-//     not tokens).
+// content that opens no element (a bare string) is settled through the
+// string-path rules instead: the `<span>` wrap, or the drop when the content
+// opens with a comment/doctype/closing tag.
 
 @Suite("modifier decorate")
 struct ModifierDecorateTests {
@@ -87,22 +81,143 @@ struct ModifierDecorateTests {
 		#expect(Raw("a<div></div>").class("x").markup.html == "a<div class=\"x\"></div>")
 	}
 
-	// MARK: apply and decorate agree
+	// MARK: the doors — every conformer, both content shapes
 
-	private func bufferOutput<M: ViewModifier>(_ modifier: M, over content: some View) -> String {
-		var buffer = HTMLBuffer()
-		modifier.decorate(content, into: &buffer)
-		return buffer.finish()
+	/// both doors of one modifier, each rendered in its own fresh render context
+	/// so the minting modifiers start from `c0` on both sides and the ids are
+	/// comparable.
+	private func bothDoors(
+		_ modifier: any ViewModifier,
+		over content: some View
+	) -> (buffered: String, string: String) {
+		let buffered = inFreshContext {
+			var buffer = HTMLBuffer()
+			modifier.decorate(content, into: &buffer)
+			return buffer.finish()
+		}
+		let string = inFreshContext {
+			modifier.apply(to: content.markup.html)
+		}
+		return (buffered, string)
 	}
 
-	@Test("a migrated modifier's string path and buffer path agree")
-	func applyDecorateParity() {
+	private func inFreshContext<R>(_ body: () -> R) -> R {
+		RenderContext.$current.withValue(RenderContext(router: EventRouter()), operation: body)
+	}
+
+	/// the census: one entry per `ViewModifier` conformer in the framework.
+	/// adding a conformer without adding it here is what the "every" in the two
+	/// test names below means to prevent.
+	private func conformers() -> [(name: String, modifier: any ViewModifier)] {
+		let handler: EventHandler = { _ in [] }
+		return [
+			("InlineStyle", InlineStyle(.padding, "4px")),
+			("HTMLAttribute", HTMLAttribute("data-x", "1")),
+			("AttributeContribution", AttributeContribution("data-y=\"2\"")),
+			("AttributeContribution.empty", AttributeContribution("")),
+			("NoopModifier", NoopModifier()),
+			("ComposedModifier", ComposedModifier(
+				first: InlineStyle(.padding, "4px"),
+				second: HTMLAttribute("id", "i")
+			)),
+			("AnyViewModifier", AnyViewModifier(InlineStyle(.padding, "4px"))),
+			("AnyViewModifier.noop", AnyViewModifier(NoopModifier())),
+			("StableIDEventHandlerModifier", StableIDEventHandlerModifier(
+				componentID: "s1",
+				event: .click,
+				handler: handler
+			)),
+			("EventHandlerModifier", EventHandlerModifier(event: .click, handler: handler)),
+			("OptimisticClickModifier", OptimisticClickModifier(
+				prediction: [FragmentUpdate(id: "a", html: "<b>1</b>")],
+				handler: handler
+			)),
+			("IconSizeModifier.large", IconSizeModifier(size: .large)),
+			("IconSizeModifier.slot", IconSizeModifier(size: .slot)),
+		]
+	}
+
+	@Test("every modifier's string door and buffered door agree over element content")
+	func everyConformerAgreesOverElement() {
+		for conformer in conformers() {
+			let doors = bothDoors(conformer.modifier, over: Div { Text("x") })
+			#expect(
+				doors.buffered == doors.string,
+				"\(conformer.name): buffered \(doors.buffered) != string \(doors.string)"
+			)
+		}
+	}
+
+	@Test("every modifier's string door and buffered door agree over bare text")
+	func everyConformerAgreesOverText() {
+		for conformer in conformers() {
+			let doors = bothDoors(conformer.modifier, over: Text("t"))
+			#expect(
+				doors.buffered == doors.string,
+				"\(conformer.name): buffered \(doors.buffered) != string \(doors.string)"
+			)
+		}
+	}
+
+	@Test("an element modifier still writes the string path's bytes on both doors")
+	func elementModifierBytes() {
 		let style = InlineStyle(.padding, "4px")
-		#expect(bufferOutput(style, over: Div { Text("x") }) == style.apply(to: Div { Text("x") }.markup.html))
-		#expect(bufferOutput(style, over: Text("t")) == style.apply(to: Text("t").markup.html))
+		#expect(bothDoors(style, over: Div { Text("x") }).buffered == "<div style=\"padding: 4px;\">x</div>")
+		#expect(bothDoors(style, over: Text("t")).buffered == "<span style=\"padding: 4px;\">t</span>")
 		let attribute = HTMLAttribute("data-x", "1")
-		#expect(bufferOutput(attribute, over: Div { Text("x") }) == attribute.apply(to: Div { Text("x") }.markup.html))
-		#expect(bufferOutput(attribute, over: Text("t")) == attribute.apply(to: Text("t").markup.html))
+		#expect(bothDoors(attribute, over: Div { Text("x") }).buffered == "<div data-x=\"1\">x</div>")
+		#expect(bothDoors(attribute, over: Text("t")).buffered == "<span data-x=\"1\">t</span>")
+	}
+
+	@Test("the auto-minting click modifier emits its routing pair on both doors")
+	func eventHandlerBytes() {
+		let handler: EventHandler = { _ in [] }
+		let element = bothDoors(EventHandlerModifier(event: .click, handler: handler), over: Div { Text("x") })
+		#expect(element.buffered == "<div data-component-id=\"c0\" data-event=\"click\">x</div>")
+		#expect(element.string == element.buffered)
+		let text = bothDoors(EventHandlerModifier(event: .submit, handler: handler), over: Text("t"))
+		#expect(text.buffered == "<span data-component-id=\"c0\" data-event=\"submit\">t</span>")
+		#expect(text.string == text.buffered)
+	}
+
+	@Test("the optimistic modifier emits data-event and the escaped prediction on both doors")
+	func optimisticBytes() {
+		let handler: EventHandler = { _ in [] }
+		let modifier = OptimisticClickModifier(
+			prediction: [FragmentUpdate(id: "a", html: "<b>1</b>")],
+			handler: handler
+		)
+		let element = bothDoors(modifier, over: Div { Text("x") })
+		#expect(element.buffered == element.string)
+		#expect(element.buffered.hasPrefix("<div data-component-id=\"c0\" data-event=\"click\" data-optimistic=\"["))
+		#expect(element.buffered.contains("&quot;html&quot;:&quot;&lt;b&gt;1&lt;/b&gt;&quot;"))
+		#expect(element.buffered.contains("&quot;id&quot;:&quot;a&quot;"))
+		#expect(element.buffered.hasSuffix("\">x</div>"))
+	}
+
+	// MARK: the minted id is the registered id AND the emitted id
+
+	private final class ClickCounter: @unchecked Sendable {
+		var clicks = 0
+	}
+
+	@Test("the id an auto-minting modifier emits is the id it registered")
+	func mintedIDIsRegisteredAndEmitted() async {
+		let counter = ClickCounter()
+		let router = EventRouter()
+		let html = RenderContext.$current.withValue(RenderContext(router: router)) {
+			Div { Text("x") }.onClick { _ in counter.clicks += 1; return [] }.markup.html
+		}
+		// the one id on the element is the one the router answers to
+		guard let start = html.range(of: "data-component-id=\"")?.upperBound,
+		      let end = html[start...].firstIndex(of: "\"") else {
+			Issue.record("no component id emitted: \(html)")
+			return
+		}
+		let emitted = String(html[start..<end])
+		#expect(router.handlerCount == 1)
+		_ = await router.handle(EventData(component: ComponentID(emitted), event: "click", data: [:]))
+		#expect(counter.clicks == 1, "handler registered under \(emitted) did not answer that id")
 	}
 
 	// MARK: composition and no-ops
@@ -120,13 +235,17 @@ struct ModifierDecorateTests {
 		#expect(ModifiedView(content: Text("t"), modifier: composed).markup.html == expected)
 	}
 
-	// MARK: the deferred families, pinned
+	// MARK: the token-rewriting and erasing conformers
 
-	@Test("the string-rewriting icon size modifier keeps its bytes")
-	func iconSizeStaysStringPath() {
-		let content = Raw("<svg class=\"icon icon--md\"></svg>")
-		let html = ModifiedView(content: content, modifier: IconSizeModifier(size: .large)).markup.html
-		#expect(html == "<svg class=\"icon icon--lg\"></svg>")
+	@Test("the class-rewriting icon size modifier is byte-identical on both doors")
+	func iconSizeRetargetsBytes() {
+		let content = Raw("<svg class=\"icon icon--md\" viewBox=\"0 0 24 24\" width=\"20\" height=\"20\" fill=\"none\"></svg>")
+		let modifier = IconSizeModifier(size: .large)
+		let expected = "<svg class=\"icon icon--lg\" viewBox=\"0 0 24 24\" width=\"1.25em\" height=\"1.25em\" fill=\"none\"></svg>"
+		#expect(bothDoors(modifier, over: content).buffered == expected)
+		#expect(bothDoors(modifier, over: content).string == expected)
+		#expect(ModifiedView(content: content, modifier: IconSizeModifier(size: .slot)).markup.html
+			== "<svg class=\"icon\" viewBox=\"0 0 24 24\" fill=\"none\"></svg>")
 	}
 
 	@Test("the eraser keeps the string path and agrees with the direct modifier")

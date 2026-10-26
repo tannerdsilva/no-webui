@@ -10,7 +10,7 @@
 # forced it. `Tests/WebUITests/FrozenSurfaceTests.swift` fails when this
 # file and a fresh extraction diverge, naming every added and removed symbol.
 #
-# re-measured 2026-10-09: 4755 symbols across 9 modules.
+# re-measured 2026-10-26: 4787 symbols across 9 modules.
 
 ## WebUISharedCore
 
@@ -145,7 +145,7 @@ AnimationPayload
 AnimationPayload.animationName
 AnimationPayload.init(animationName:)
 AnyViewModifier
-AnyViewModifier.apply(to:)
+AnyViewModifier.decorate(_:into:)
 AnyViewModifier.init(_:)
 Aria
 Aria.attributes(_:role:)
@@ -270,18 +270,17 @@ AriaSort.init(rawValue:)
 AriaSort.none
 AriaSort.other
 Article
-Article.children
+Article.content
 Article.init(_:)
 Article.init(content:)
 Article.render(into:)
 Aside
-Aside.children
 Aside.class
+Aside.content
 Aside.init(class:content:)
 Aside.render(into:)
 AsyncContent
 AttributeContribution
-AttributeContribution.apply(to:)
 AttributeContribution.decorate(_:into:)
 AttributeContribution.init(_:)
 AttributeContribution.text
@@ -300,7 +299,7 @@ Base64.decodeURL(_:)
 Base64.encode(_:)
 Base64.encodeURL(_:)
 Blockquote
-Blockquote.children
+Blockquote.content
 Blockquote.init(_:)
 Blockquote.init(content:)
 Blockquote.render(into:)
@@ -436,7 +435,6 @@ ComponentID.init(from:)
 ComponentID.init(stringLiteral:)
 ComponentID.value
 ComposedModifier
-ComposedModifier.apply(to:)
 ComposedModifier.decorate(_:into:)
 ComposedModifier.first
 ComposedModifier.init(first:second:)
@@ -463,8 +461,8 @@ Dismissible.makeDismissal(ariaLabel:)
 Dismissible.onDismiss
 Dismissible.onDismiss(_:)
 Div
-Div.children
 Div.class
+Div.content
 Div.id
 Div.init(id:class:content:)
 Div.render(into:)
@@ -477,6 +475,11 @@ DroppedFile.init(name:size:type:)
 DroppedFile.name
 DroppedFile.size
 DroppedFile.type
+EitherView
+EitherView.elements
+EitherView.first(_:)
+EitherView.render(into:)
+EitherView.second(_:)
 Element
 Element.className
 Element.content
@@ -484,19 +487,33 @@ Element.id
 Element.init(_:class:id:content:)
 Element.render(into:)
 Element.tag
+ElementBuilder
+ElementBuilder.buildArray(_:)
+ElementBuilder.buildBlock(_:)
+ElementBuilder.buildEither(first:)
+ElementBuilder.buildEither(second:)
+ElementBuilder.buildExpression(_:)
+ElementBuilder.buildLimitedAvailability(_:)
+ElementBuilder.buildOptional(_:)
+ElementGroup
+ElementGroup.elements
 ElementRef
 ElementRef.remove()
 ElementRef.replace(with:)
 ElementRef.stable(_:)
 ElementRef.update(_:)
 Emphasis
-Emphasis.children
+Emphasis.content
 Emphasis.init(_:)
 Emphasis.init(content:)
 Emphasis.render(into:)
 EmptyView
 EmptyView.init()
 EmptyView.render(into:)
+ErasedViews
+ErasedViews.content
+ErasedViews.init(_:)
+ErasedViews.render(into:)
 ErrorBoundary
 ErrorBoundary.content
 ErrorBoundary.fallback
@@ -528,7 +545,7 @@ EventData.value
 EventData.wheel()
 EventHandler
 EventHandlerModifier
-EventHandlerModifier.apply(to:)
+EventHandlerModifier.decorate(_:into:)
 EventHandlerModifier.event
 EventHandlerModifier.handler
 EventHandlerModifier.init(event:handler:)
@@ -586,8 +603,8 @@ FontWeight.rawValue
 FontWeight.semibold
 FontWeight.thin
 Footer
-Footer.children
 Footer.class
+Footer.content
 Footer.init(class:content:)
 Footer.render(into:)
 ForEach
@@ -597,8 +614,8 @@ ForEach.init(_:content:)
 ForEach.render(into:)
 Form
 Form.action
-Form.children
 Form.class
+Form.content
 Form.csrfToken
 Form.enctype
 Form.id
@@ -627,8 +644,8 @@ FragmentUpdate.text
 FragmentUpdate.text(id:value:transition:)
 FragmentUpdate.transition
 Grid
-Grid.children
 Grid.columns
+Grid.content
 Grid.init(columns:spacing:content:)
 Grid.render(into:)
 Grid.spacing
@@ -641,17 +658,17 @@ GridColumns.fixed(_:)
 GridColumns.fraction(_:)
 GridColumns.minmax(_:_:)
 Group
-Group.children
+Group.content
+Group.elements
 Group.init(content:)
 Group.render(into:)
 HStack
 HStack.alignment
-HStack.children
+HStack.content
 HStack.init(alignment:spacing:content:)
 HStack.render(into:)
 HStack.spacing
 HTMLAttribute
-HTMLAttribute.apply(to:)
 HTMLAttribute.decorate(_:into:)
 HTMLAttribute.init(_:_:)
 HTMLAttribute.key
@@ -746,8 +763,8 @@ HeadContentBuilder.buildEither(second:)
 HeadContentBuilder.buildExpression(_:)
 HeadContentBuilder.buildOptional(_:)
 Header
-Header.children
 Header.class
+Header.content
 Header.init(class:content:)
 Header.render(into:)
 Heading
@@ -1410,7 +1427,7 @@ IconSize.slot
 IconSize.small
 IconSize.suffixClass
 IconSizeModifier
-IconSizeModifier.apply(to:)
+IconSizeModifier.decorate(_:into:)
 IconSizeModifier.init(size:)
 IconSizeModifier.size
 Identified
@@ -1456,12 +1473,11 @@ Image.loading
 Image.render(into:)
 Image.src
 InlineCode
-InlineCode.children
+InlineCode.content
 InlineCode.init(_:)
 InlineCode.init(content:)
 InlineCode.render(into:)
 InlineStyle
-InlineStyle.apply(to:)
 InlineStyle.decorate(_:into:)
 InlineStyle.init(_:_:)
 InlineStyle.property
@@ -1579,8 +1595,8 @@ LocalizedEnvironment.locale
 LocalizedEnvironment.strings
 Logger.emit(_:observers:)
 Main
-Main.children
 Main.class
+Main.content
 Main.init(class:content:)
 Main.render(into:)
 MediaPayload
@@ -1595,12 +1611,11 @@ ModifiedView.init(content:modifier:)
 ModifiedView.modifier
 ModifiedView.render(into:)
 Navigation
-Navigation.children
 Navigation.class
+Navigation.content
 Navigation.init(class:content:)
 Navigation.render(into:)
 NoopModifier
-NoopModifier.apply(to:)
 NoopModifier.decorate(_:into:)
 NoopModifier.init()
 Observable
@@ -1625,14 +1640,19 @@ ObserverList.maxObservers
 ObserverList.remove(_:)
 ObserverList.removeAll()
 OptimisticClickModifier
-OptimisticClickModifier.apply(to:)
+OptimisticClickModifier.decorate(_:into:)
 OptimisticClickModifier.handler
 OptimisticClickModifier.init(prediction:handler:)
 OptimisticClickModifier.prediction
+OptionalView
+OptionalView.content
+OptionalView.elements
+OptionalView.init(_:)
+OptionalView.render(into:)
 OrderedList
 OrderedList.class
+OrderedList.content
 OrderedList.init(class:items:)
-OrderedList.items
 OrderedList.render(into:)
 OutcomeHandler
 Paragraph
@@ -1655,7 +1675,7 @@ PointerPayload.init(x:y:button:buttons:)
 PointerPayload.x
 PointerPayload.y
 Preformatted
-Preformatted.children
+Preformatted.content
 Preformatted.init(_:)
 Preformatted.init(content:)
 Preformatted.render(into:)
@@ -1702,6 +1722,11 @@ RenderSessionID.default
 RenderSessionID.description
 RenderSessionID.init(_:)
 RenderSessionID.rawValue
+RepeatedView
+RepeatedView.content
+RepeatedView.elements
+RepeatedView.init(_:)
+RepeatedView.render(into:)
 ResizableIsland
 ResizableIsland.render(_:width:)
 ResizableIslandRegion
@@ -1730,12 +1755,12 @@ ScrollPayload.init(scrollTop:scrollLeft:)
 ScrollPayload.scrollLeft
 ScrollPayload.scrollTop
 ScrollView
-ScrollView.children
+ScrollView.content
 ScrollView.init(content:)
 ScrollView.render(into:)
 Section
-Section.children
 Section.class
+Section.content
 Section.id
 Section.init(id:class:content:)
 Section.render(into:)
@@ -1754,7 +1779,7 @@ SelectOption.label
 SelectOption.value
 Set.strict
 Small
-Small.children
+Small.content
 Small.init(_:)
 Small.init(content:)
 Small.render(into:)
@@ -1784,13 +1809,12 @@ Spacer.init(minSize:)
 Spacer.minSize
 Spacer.render(into:)
 Span
-Span.children
 Span.class
+Span.content
 Span.id
 Span.init(id:class:content:)
 Span.render(into:)
 StableIDEventHandlerModifier
-StableIDEventHandlerModifier.apply(to:)
 StableIDEventHandlerModifier.componentID
 StableIDEventHandlerModifier.decorate(_:into:)
 StableIDEventHandlerModifier.event
@@ -1798,7 +1822,7 @@ StableIDEventHandlerModifier.handler
 StableIDEventHandlerModifier.init(componentID:event:handler:)
 StreamingContent
 Strong
-Strong.children
+Strong.content
 Strong.init(_:)
 Strong.init(content:)
 Strong.render(into:)
@@ -1903,6 +1927,11 @@ TrustedSource.label
 TrustedSource.markdown
 TrustedSource.other(_:)
 TrustedSource.plugin(_:)
+TupleView
+TupleView.content
+TupleView.elements
+TupleView.init(content:)
+TupleView.render(into:)
 TypedIsland
 TypedIsland.Input
 TypedIsland.name
@@ -1919,12 +1948,12 @@ TypedResizableIslandRegion.init(_:)
 TypedResizableIslandRegion.render(into:)
 UnorderedList
 UnorderedList.class
+UnorderedList.content
 UnorderedList.init(class:items:)
-UnorderedList.items
 UnorderedList.render(into:)
 VStack
 VStack.alignment
-VStack.children
+VStack.content
 VStack.init(alignment:spacing:content:)
 VStack.render(into:)
 VStack.spacing
@@ -2200,7 +2229,7 @@ Wire.event
 Wire.init(_:on:)
 ZStack
 ZStack.alignment
-ZStack.children
+ZStack.content
 ZStack.init(alignment:verticalAlignment:content:)
 ZStack.render(into:)
 ZStack.verticalAlignment

@@ -26,10 +26,19 @@ no default for the requirement (a kept `render()` would be silently bypassed
 through `any View`). see `Documentation/MIGRATION_2_0.md` (wave 2) for the
 flip and the shim.
 
-### ViewBuilder
+### ViewBuilder / ElementBuilder
 
-`@resultBuilder` used by every container closure. single-expression blocks preserve
-the concrete view type; multi-view blocks produce `[any View]`.
+two result builders, chosen by the parameter's attribute — a call site never
+names one.
+
+- `@ViewBuilder` — the block becomes `[any View]`. used by the design-system
+  components, which count and enumerate their children to decide markup.
+- `@ElementBuilder` — the block becomes concrete views (`TupleView`,
+  `OptionalView`, `EitherView`, `RepeatedView`, `ErasedViews`). used by
+  `ForEach` and every container primitive, which only forward their children.
+
+same call-site syntax either way; the difference is one array versus a typed
+tuple. `Documentation/DESIGN_NOTES.md` records the measurement behind the split.
 
 ### Primitives
 
@@ -44,7 +53,7 @@ the concrete view type; multi-view blocks produce `[any View]`.
 | `Link(_ text:, href:class:target:rel:)` | sanitized href | `LinkTarget` enum, `LinkRel` option set |
 | `Heading(_ text:, level:class:)` | escaped | `HeadingLevel` = `.h1`…`.h6` |
 | `Paragraph`, `Label`, `TextArea`, `Select`, `Table`, `Form` | escaped | `SelectOption.value/label` |
-| `ForEach<Data: RandomAccessCollection>` | — | renders each element; no wrapper |
+| `ForEach<Data: RandomAccessCollection, Content: View>` | — | renders each element; one concrete view per element (typed `@ElementBuilder`), no wrapper |
 | `Group` | — | renders children without a wrapper |
 | `WebUIIcon(_ name:, size:, title:)` | escaped title | inline svg from the generated `IconName` catalog; `currentColor` |
 | `WebUIIconCustom(name:body:size:title:)` | sanitized body | caller-supplied svg geometry (see the WebUIIcon section) |

@@ -49,10 +49,18 @@ left the tree. the list is generated, not hand-maintained: intentionally
 moving the surface means regenerating it (`FROZEN_SURFACE_EMIT=1 swift test
 --filter FrozenSurfaceTests` rewrites the file in place) and committing the
 regeneration in the same commit as the api change that forced it, justified
-there. re-measured 2026-10-10: 4562 symbols across 8 modules.
+there. re-measured 2026-10-25: 4789 symbols across 9 modules.
 compiler-synthesized members are excluded — a synthesized `==` is generated,
 not a declared contract, and including it would make the list churn on every
 equatable addition.
+
+the typed-builder arc is the limit's clearest worked case, measured: `ForEach`
+gained a `Content: View` parameter and swapped its result builder, and the
+regeneration moved **31 added, 0 removed** lines — every one of them a *new*
+public type (`ElementBuilder`, `TupleView`, `OptionalView`, `EitherView`,
+`RepeatedView`, `ElementGroup`). the signature change itself moved nothing;
+only `Tests/WebUITests/ForEachElementShapeTests.swift` (the compile-time pin on
+the element's concrete type) sees it.
 
 a stated limit of this pin: it is **name/label-keyed, not type-keyed**. a
 parameter's type is part of the emitted signature label, but the canonicalization

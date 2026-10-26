@@ -296,7 +296,22 @@ public struct IconSizeModifier: ViewModifier {
 	public init(size: IconSize) {
 		self.size = size
 	}
-	public func apply(to html: String) -> String {
+
+	/// the transform is a token retarget inside the root `<svg>` tag — a class
+	/// suffix and the fallback `width`/`height` pair — so it is not an attribute
+	/// contribution: the merge model replaces whole keys, and `class` here must
+	/// rewrite one token, not append another. the content therefore renders
+	/// through a scratch buffer and the rewritten bytes go to the real one; the
+	/// string door derives from this method, so both doors run one transform.
+	public func decorate<C: View>(_ content: C, into buffer: inout HTMLBuffer) {
+		var rendered = HTMLBuffer()
+		content.render(into: &rendered)
+		buffer.append(retargeting(rendered.finish()))
+	}
+
+	/// the class suffix and the fallback dimensions, in the order the 1.x
+	/// string path applied them.
+	private func retargeting(_ html: String) -> String {
 		let retargeted = replaceIconSuffix(in: html, with: size == .slot ? "icon" : "icon--\(size.rawValue)")
 		return replaceIconDimensions(in: retargeted, with: size)
 	}
