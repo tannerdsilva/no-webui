@@ -87,6 +87,43 @@ struct CSRFClockTests {
 		let expiry = try #require(CSRFProtection.expiry(of: token))
 		#expect(expiry == t + 1800)
 	}
+
+	@Test("an overflowing maxAge clamps instead of trapping")
+	func overflowClampsInsteadOfTrapping() throws {
+		// `maxAge` is caller-supplied and `now + maxAge` on `UInt64` traps on
+		// overflow. the pre-`Epoch` code saturated `TimeInterval` to `inf` — a
+		// token that never expired — so the clamp keeps that meaning without a
+		// trap in a public security API.
+		let token = try CSRFProtection.token(
+			for: "login",
+			secret: Self.secret,
+			maxAge: .max,
+			now: 1_000
+		)
+		#expect(CSRFProtection.validate(token, for: "login", secret: Self.secret, now: 1_000))
+		#expect(CSRFProtection.validate(token, for: "login", secret: Self.secret, now: Epoch.max - 1))
+	}
+
+	@Test("a hand-built token in the pre-Epoch shape still validates")
+	func legacyWireShapeValidates() throws {
+		// built by hand rather than by `token(...)`: the payload string, its hmac
+		// and the base64 envelope are written out literally, so a later change to
+		// the field order, the separator, the nonce encoding or a reintroduced
+		// fractional expiry fails here — instead of silently invalidating every
+		// token already sitting in a user's browser.
+		let expiry: Epoch = 1_700_000_180
+		let nonce = String(repeating: "a", count: 32)
+		let payload = "login:\(expiry):\(nonce)"
+		let signature = try HMACSHA256.hex(
+			message: [UInt8](payload.utf8),
+			key: [UInt8](Self.secret.utf8)
+		)
+		let token = Base64.encode([UInt8]("\(payload):\(signature)".utf8))
+
+		#expect(CSRFProtection.validate(token, for: "login", secret: Self.secret, now: Self.pinnedNow))
+		#expect(!CSRFProtection.validate(token, for: "login", secret: Self.secret, now: expiry))
+		#expect(CSRFProtection.expiry(of: token) == expiry)
+	}
 }
 
 @Suite("DocumentNonce")

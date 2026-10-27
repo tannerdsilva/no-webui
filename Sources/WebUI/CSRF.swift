@@ -38,7 +38,12 @@ public enum CSRFProtection {
         now instant: Epoch? = nil
     ) throws -> String {
         let now = instant ?? currentEpoch
-        let expires = now + maxAge
+        // `now + maxAge` on `UInt64` traps on overflow, and `maxAge` is
+        // caller-supplied. the pre-Epoch code saturated `TimeInterval` to `inf`
+        // here — "a token that never expires" — so clamping to `.max` keeps that
+        // meaning without a trap in a security primitive.
+        let (sum, overflowed) = now.addingReportingOverflow(maxAge)
+        let expires = overflowed ? Epoch.max : sum
         // a per-token random nonce is required: the embedded expiry has
         // one-second resolution, so without a nonce two tokens minted at the
         // same `now` would be byte-identical — harmless for stateless
