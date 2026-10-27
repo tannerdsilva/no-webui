@@ -95,7 +95,12 @@ extension View {
 extension View {
 	/// a `title` attribute — the hover tooltip — optionally only when a
 	/// condition holds.
-	public func title(_ text: String, when condition: Bool = true) -> some View {
+	///
+	/// concrete return type, not `some View`: an opaque result cannot be
+	/// inferred as the element type of a `ViewBuilder` loop body, so `some View`
+	/// here blocks `for` loops that apply a tooltip. the sibling `.id`/`.class`
+	/// already return their concrete `ModifiedView`.
+	public func title(_ text: String, when condition: Bool = true) -> ModifiedView<Self, AttributeContribution> {
 		ModifiedView(
 			content: self,
 			modifier: AttributeContribution(condition ? renderedAttributes([("title", text)]) : "")
@@ -106,7 +111,7 @@ extension View {
 	///
 	/// the form-control payload a change wire reads back. `WebUIToggle` carries
 	/// its own; this is for the raw `<input>`/`<button>`/`<option>` spellings.
-	public func value(_ text: String, when condition: Bool = true) -> some View {
+	public func value(_ text: String, when condition: Bool = true) -> ModifiedView<Self, AttributeContribution> {
 		ModifiedView(
 			content: self,
 			modifier: AttributeContribution(condition ? renderedAttributes([("value", text)]) : "")
