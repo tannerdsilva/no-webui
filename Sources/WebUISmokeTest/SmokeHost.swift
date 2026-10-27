@@ -61,12 +61,22 @@ struct SmokePageResponder: Responder {
 	let router: EventRouter
 
 	func respond(to request: HTTPRequest) async throws -> HTTPResponse {
-		router.begin(.default)
+		// the render's session is named by its token, which is what
+		// `boundSession` resolves an inbound frame back to. beginning `.default`
+		// here would register the page's handlers somewhere no token points at,
+		// and a token-bound server would refuse every frame.
+		let session = RenderSessionID(request.renderToken.value)
+		router.begin(session)
 		router.register(
 			outcome: { _ in .redirect(to: "/", replace: true) },
-			for: ComponentID("redirect-test")
+			for: ComponentID("redirect-test"),
+			in: session
 		)
-		let html = renderSmokePage(state: state, router: router)
+		let html = renderSmokePage(
+			state: state,
+			router: router,
+			renderToken: request.renderToken.value
+		)
 		return HTTPResponse(headers: smokeHeaders(), body: .html(UnsafeMarkup.trusted(html)))
 	}
 }

@@ -49,7 +49,11 @@ struct WebUISmokeHost {
 				port: port,
 				maxConnections: intFlag(named: "--max-connections", default: 256),
 				assets: smokeAssets(),
-				requireRenderToken: false
+				// the page carries its render token (SmokePageResponder threads
+				// `request.renderToken` into RuntimeConfig), so the server can
+				// bind every frame to the render that minted it — a stale page
+				// from a former session cannot drive this router.
+				requireRenderToken: true
 			),
 			logger: logger
 		)

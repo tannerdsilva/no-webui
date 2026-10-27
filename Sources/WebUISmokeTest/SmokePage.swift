@@ -301,8 +301,11 @@ enum SmokeChartProbeIsland: TypedResizableIsland {
 
 // MARK: - Page assembly (renders interactive views, registers handlers)
 
-func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
-	let ctx = RenderContext(router: router)
+func renderSmokePage(state: SmokeState, router: EventRouter, renderToken: String) -> String {
+	// the session is named by the token: the server resolves an inbound frame's
+	// token to `RenderSessionID(token)`, so the ids and handlers this pass mints
+	// must land in exactly that session.
+	let ctx = RenderContext(router: router, session: RenderSessionID(renderToken))
 	let body = ctx.withValueBody {
 		Div(class: "smoke") {
 			Header(class: "smoke__header") {
@@ -544,7 +547,13 @@ func renderSmokePage(state: SmokeState, router: EventRouter) -> String {
 			title: "Design System Full-Stack Smoke Test",
 			body: .trusted(body),
 			head: smokePageStyle,
-			clientMode: ClientBoot(config: RuntimeConfig(capabilities: ["validate", "never-built", "offline"])),
+			clientMode: ClientBoot(config: RuntimeConfig(
+				// the socket is token-bound: the engine echoes this on every
+				// frame, and the server routes it only into the render that
+				// minted it.
+				renderToken: renderToken,
+				capabilities: ["validate", "never-built", "offline"]
+			)),
 			dir: smokeDir,
 		).markup.html
 	}

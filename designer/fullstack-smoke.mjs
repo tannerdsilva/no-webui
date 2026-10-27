@@ -37,6 +37,25 @@ else bad("no data-optimistic on served page");
 if (html.includes('data-component-id="interactive-table-sort-0"') && html.includes('data-component-id="interactive-table-select-all"') && html.includes('data-component-id="interactive-table-expand-') && html.includes('data-component-id="smoke-chart-mark-')) ok("interactive table + chart served (typed per-control routing)");
 else bad("interactive table wiring missing from served page");
 
+// the page's render token, read out of the webui-config meta exactly as the
+// engine reads it. the smoke host is token-bound (`requireRenderToken`), so a
+// frame without the token is refused and the socket closed — which is the point:
+// a stale page from a former session cannot drive this router.
+let RENDER_TOKEN = null;
+{
+  const meta = html.match(/<meta name="webui-config" content="([^"]*)"/);
+  if (meta) {
+    try {
+      const cfg = JSON.parse(
+        meta[1].replace(/&quot;/g, '"').replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">").replace(/&amp;/g, "&")
+      );
+      RENDER_TOKEN = cfg.renderToken || null;
+    } catch (e) { /* unparseable config: treated as tokenless below */ }
+  }
+}
+if (!RENDER_TOKEN) bad("served page carries no render token — a token-bound host would refuse every frame");
+
 // 2. Real WebSocket — proves the upgrade + WS stack.
 const messages = [];
 const ws = new WebSocket(WS);
@@ -51,7 +70,7 @@ else { bad("WebSocket did not open"); process.exit(1); }
 await sleep(150);
 
 // 3. ping → pong
-ws.send(JSON.stringify({ type: "ping" }));
+ws.send(JSON.stringify({ token: RENDER_TOKEN, type: "ping" }));
 await sleep(250);
 if (messages.some((m) => m.type === "pong")) ok("ping → pong round-trip");
 else bad(`ping got no pong; got ${JSON.stringify(messages)}`);
@@ -82,36 +101,36 @@ const expectUpdate = (targetId) =>
   });
 
 // 5. Click + → counter 0 → 1
-ws.send(JSON.stringify({ type: "event", component: INC, event: "click", data: {} }));
+ws.send(JSON.stringify({ token: RENDER_TOKEN, type: "event", component: INC, event: "click", data: {} }));
 let upd = await expectUpdate("counter-value");
 if (upd && upd.fragments[0].html.includes(">1<")) ok("click + → #counter-value patched to 1");
 else bad(`+ did not patch counter: ${JSON.stringify(upd)}`);
 
 // 6. Click + again → 2, then reset → 0
-ws.send(JSON.stringify({ type: "event", component: INC, event: "click", data: {} }));
+ws.send(JSON.stringify({ token: RENDER_TOKEN, type: "event", component: INC, event: "click", data: {} }));
 upd = await expectUpdate("counter-value");
 if (upd && upd.fragments[0].html.includes(">2<")) ok("click + again → counter 2");
 else bad(`+2 did not patch to 2: ${JSON.stringify(upd)}`);
 
-ws.send(JSON.stringify({ type: "event", component: RESET, event: "click", data: {} }));
+ws.send(JSON.stringify({ token: RENDER_TOKEN, type: "event", component: RESET, event: "click", data: {} }));
 upd = await expectUpdate("counter-value");
 if (upd && upd.fragments[0].html.includes(">0<")) ok("click Reset → counter back to 0");
 else bad(`reset did not zero counter: ${JSON.stringify(upd)}`);
 
 // 7. Progress +10% → re-renders #progress-value with a new progress bar
-ws.send(JSON.stringify({ type: "event", component: PINC, event: "click", data: {} }));
+ws.send(JSON.stringify({ token: RENDER_TOKEN, type: "event", component: PINC, event: "click", data: {} }));
 upd = await expectUpdate("progress-value");
 if (upd && upd.fragments[0].html.includes('role="progressbar"')) ok("click +10% → #progress-value re-rendered");
 else bad(`+10% did not patch progress: ${JSON.stringify(upd)}`);
 
 // 8. Echo: input event → server echoes value to #echo-out
-ws.send(JSON.stringify({ type: "event", component: ECHO, event: "input", data: { value: "hello webui" } }));
+ws.send(JSON.stringify({ token: RENDER_TOKEN, type: "event", component: ECHO, event: "input", data: { value: "hello webui" } }));
 upd = await expectUpdate("echo-out");
 if (upd && upd.fragments[0].html.includes("hello webui")) ok("type 'hello webui' → echoed to #echo-out over WS");
 else bad(`echo did not round-trip: ${JSON.stringify(upd)}`);
 
 // 9. Redirect: the reserved server path emits {type:"redirect"} over the wire
-ws.send(JSON.stringify({ type: "event", component: "redirect-test", event: "click", data: {} }));
+ws.send(JSON.stringify({ token: RENDER_TOKEN, type: "event", component: "redirect-test", event: "click", data: {} }));
 const redirectHit = await new Promise((resolve) => {
   const t0 = Date.now();
   const check = () => {
@@ -130,7 +149,7 @@ else bad(`redirect-test did not emit a redirect frame: ${JSON.stringify(redirect
 // to a control's component id (no container + targetId pattern anymore).
 const TBL = "interactive-table";
 const tblClick = (controlId) =>
-  ws.send(JSON.stringify({ type: "event", component: controlId, event: "click", data: {} }));
+  ws.send(JSON.stringify({ token: RENDER_TOKEN, type: "event", component: controlId, event: "click", data: {} }));
 const tblUpdate = () => expectUpdate(TBL);
 // ordered data-row names: per row the tds are [select, expand, name, region, p95];
 // select/expand render empty text, so the 3rd cell is the primary name.
