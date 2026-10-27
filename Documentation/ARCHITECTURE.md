@@ -95,12 +95,18 @@ kept `render()` would be silently bypassed through `any View`). see
 
 ```swift
 public protocol ViewModifier: Sendable {
-    func apply(to html: String) -> String
-    /// defaulted: apply through the buffer; the default applies `apply(to:)`
-    /// to the content's string render.
+    /// the only requirement: write into the buffer the content renders through.
     func decorate<C: View>(_ content: C, into buffer: inout HTMLBuffer)
 }
 ```
+
+`apply(to html: String)` still exists as a **derived** extension, not a
+requirement: it wraps finished html in `Raw` and decorates it, which settles the
+attribute at the first element exactly as the old splice did. So a modifier has
+one implementation and both doors are that behaviour — the property
+`ModifierDecorateTests` asserts for every modifier, and `ModifierContractPinTests`
+pins structurally. The inversion removed the old default `decorate`, which had
+rendered every unmigrated modifier to a `String` and parsed it back.
 
 Modifiers wrap rendered HTML with additional attributes or styles. They compose
 via `ModifiedView<Content>` which preserves the concrete type through the chain.

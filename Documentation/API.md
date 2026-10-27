@@ -9,8 +9,8 @@
 | `View` | `func render(into buffer: inout HTMLBuffer)` | the **sole requirement** since the 2.0 flip: writes this view's bytes into a shared render buffer. a requirement deliberately — an extension method would resolve statically, so a view's own implementation would never run through `any View`; the dispatch is pinned by `RenderIntoBufferTests` |
 | `View` | `func render() -> String` | **deprecated extension default**: `markup.html`. existing call sites keep compiling and rendering identically — the deprecation is the migration signal. it is not a way to *conform*: a type that implements only `render() -> String` does not satisfy the protocol |
 | `BufferRendering` | `var markup: UnsafeMarkup` | the materializer: renders this value's bytes into an `UnsafeMarkup` the framework vouches for. `View` refines `BufferRendering`, and so do `HTMLDocument`, `WebUIDocument` and `CSSStylesheet` — a document is not a `View`, but it sings the same door |
-| `ViewModifier` | `func apply(to html: String) -> String` | wraps rendered html with attributes or styles |
-| `ViewModifier` | `func decorate<C: View>(_ content: C, into buffer: inout HTMLBuffer)` | *defaulted* requirement: applies the modifier through the buffer; the default applies `apply(to:)` to the content's string render |
+| `ViewModifier` | `func decorate<C: View>(_ content: C, into buffer: inout HTMLBuffer)` | the **sole requirement**: apply the modifier by writing into the render buffer — `buffer.mark`, contribute an attribute or register a handler, render the content, `settlePendingAttributes(from:)`. one implementation per modifier, and both doors are that behaviour |
+| `ViewModifier` | `func apply(to html: String) -> String` | **derived extension, not a requirement**: decorates already-finished html through the buffered door, so it agrees byte for byte with `injectAttributes(into:_:)` — the oracle `ModifierDecorateTests` checks it against. `ModifierContractPinTests` pins that only `AnyViewModifier` and `IconSizeModifier` pay a round-trip, and that `apply` is declared in exactly one place |
 | `ModifiedView<Content: View, M: ViewModifier>` | `View` | type-preserving wrapper returned by every modifier |
 | `EmptyView` | `View` | renders nothing |
 
@@ -301,8 +301,9 @@ servers use the capped path) |
 | Method | Description |
 |---|---|
 | `CSRFProtection.generateSecret() throws -> String` | 32-byte random server secret; throws on entropy failure (no prng fallback) |
-| `CSRFProtection.token(for:secret:maxAge:) throws -> String` | HMAC-SHA256 stateless token; throws on signing failure |
-| `CSRFProtection.validate(_:for:secret:) -> Bool` | validate token (signature + expiration); false on any failure, including signing errors |
+| `CSRFProtection.token(for:secret:maxAge:now:) throws -> String` | HMAC-SHA256 stateless token. `maxAge` and `now` are `Epoch` (unix seconds — the framework's one time representation); `now` is an injectable argument, not a stored clock, so a test pins expiry without sleeping. throws on entropy or signing failure |
+| `CSRFProtection.validate(_:for:secret:now:) -> Bool` | validate token (signature + expiration); false on any failure, including signing errors — never co-signs an empty signature |
+| `CSRFProtection.expiry(of:) -> Epoch?` | the embedded expiry of a well-formed token, or `nil` when it does not decode to `formID:expiry:nonce:signature` |
 
 ### Capability Islands
 

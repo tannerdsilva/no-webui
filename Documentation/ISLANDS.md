@@ -151,9 +151,12 @@ on a fresh clone this is the step the browser gates tell you to run.
 **the route is a wire contract**: the engine fetches `/__assets/webui-<name>.wasm`
 where `<name>` is the value of `Island.name`. serve the artifact bytes as
 `application/wasm` and let an absent artifact 404 — that 404 *is* the degrade path.
-`Sources/WebUISmokeTest/main.swift` is the worked example (the
-`/__assets/webui-width-probe.wasm` route, backed by `readWasmArtifact`); a
-`WebUIServer` host registers it as a `WebUIServerAsset` binary entry.
+`Sources/WebUISmokeTest/SmokeHost.swift` is the worked example: the bytes come
+from `readWasmArtifact`, and the route is registered through
+`WebUIServerConfig.assets` as a binary `WebUIServerAsset`
+(`.bytes("/__assets/webui-validate.wasm", wasm, contentType: "application/wasm")`).
+the host itself is a `WebUIServer`, so there is no second server implementation
+to keep in agreement with the framework's.
 
 ## 3b. typed islands — payloads that are not strings
 
