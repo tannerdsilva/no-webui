@@ -421,10 +421,6 @@ let package = Package(
                 "WebUISharedCore",
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
-                .product(name: "NIOPosix", package: "swift-nio"),
-                .product(name: "NIOHTTP1", package: "swift-nio"),
-                .product(name: "NIOCore", package: "swift-nio"),
-                .product(name: "NIOWebSocket", package: "swift-nio"),
             ],
             // `Assets/` is consumed by `WebUIEmbedPlugin`, not compiled: excluding it keeps
             // swiftpm from warning about files it does not know how to handle (the plugin
