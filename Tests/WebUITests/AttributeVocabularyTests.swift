@@ -52,6 +52,33 @@ struct AttributeVocabularyTests {
 		#expect(!html.contains("data-data-follow"))
 	}
 
+	// MARK: title / value
+
+	@Test("title emits the hover tooltip as an attribute")
+	func titleEmits() {
+		let html = markup(Div { Text("x") }.title("Delete task and its chat"))
+		#expect(html.contains("title=\"Delete task and its chat\""), "got: \(html)")
+	}
+
+	@Test("title is conditional without a Group")
+	func titleConditional() {
+		let off = markup(Div { Text("x") }.title("tip", when: false))
+		#expect(!off.contains("title="), "absent, not empty: \(off)")
+		#expect(off.contains("<div>"), "the element still renders: \(off)")
+	}
+
+	@Test("value emits the form payload as an attribute")
+	func valueEmits() {
+		let html = markup(Div { Text("x") }.value("off"))
+		#expect(html.contains("value=\"off\""), "got: \(html)")
+	}
+
+	@Test("value is escaped like every other attribute")
+	func valueEscapes() {
+		let html = markup(Div { Text("x") }.value(#"a"b&c"#))
+		#expect(html.contains("value=\"a&quot;b&amp;c\""), "got: \(html)")
+	}
+
 	// MARK: presence attributes
 
 	@Test("a presence attribute is bare, not empty-valued")

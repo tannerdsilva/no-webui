@@ -83,6 +83,37 @@ extension View {
 	}
 }
 
+// MARK: - value-bearing html attributes
+
+/// html attributes that carry a value and had no typed spelling.
+///
+/// `id`, `class` and `style` have their own emitters. `title` and `value` did
+/// not, so every consumer wrote them as raw `.attribute("title", …)` strings —
+/// 100 sites in one app — where the key is unchecked and a typo compiles
+/// silently. one attribute, one emitter: a generic attribute bag would accept
+/// any key, which is the defect the typed vocabulary exists to remove.
+extension View {
+	/// a `title` attribute — the hover tooltip — optionally only when a
+	/// condition holds.
+	public func title(_ text: String, when condition: Bool = true) -> some View {
+		ModifiedView(
+			content: self,
+			modifier: AttributeContribution(condition ? renderedAttributes([("title", text)]) : "")
+		)
+	}
+
+	/// a `value` attribute, optionally only when a condition holds.
+	///
+	/// the form-control payload a change wire reads back. `WebUIToggle` carries
+	/// its own; this is for the raw `<input>`/`<button>`/`<option>` spellings.
+	public func value(_ text: String, when condition: Bool = true) -> some View {
+		ModifiedView(
+			content: self,
+			modifier: AttributeContribution(condition ? renderedAttributes([("value", text)]) : "")
+		)
+	}
+}
+
 // MARK: - presence-only attributes
 
 /// an attribute whose meaning is its PRESENCE, not its value.
