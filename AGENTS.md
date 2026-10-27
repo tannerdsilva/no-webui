@@ -53,7 +53,7 @@ inline comments explain code, markdown files explain architecture and APIs.
 
 ```bash
 swift build             # includes the WebUIAssetPlugin + WebUIIconPlugin (auto-generates Assets+Generated.swift + DesignTokens+Generated.swift + IconLibrary.swift; WebUIEmbedPlugin for a target shipping its own Assets/webui-assets.json)
-swift test              # 1406 tests — re-count rather than trust: grep -rc '@Test' Tests/ | awk -F: '{s+=$2} END {print s}'
+swift test              # 1571 tests — re-count rather than trust: grep -rc '@Test' Tests/ | awk -F: '{s+=$2} END {print s}'
 swift run WebUIExample  # example server on :9090
 ```
 
@@ -195,10 +195,12 @@ invocation. gates host their own server, check, and tear down in one call.
   `BufferRendering`, as do `HTMLDocument`/`WebUIDocument`/`CSSStylesheet` (a
   document is not a view). the 1.x spelling `render() -> String` is deprecated
   (`markup.html`); `renderThroughBuffer()`/`renderedString()` are deleted.
-- **ViewModifier protocol** — `apply(to html: String) -> String` AND
-  `decorate<C: View>(_ content: C, into buffer: inout HTMLBuffer)` (the buffered
-  path; defaulted through the buffer so an unmigrated modifier keeps its `apply`).
-  wraps rendered HTML with attributes or styles.
+- **ViewModifier protocol** — ONE requirement,
+  `decorate<C: View>(_ content: C, into buffer: inout HTMLBuffer)`: a modifier
+  writes into the buffer. `apply(to html: String) -> String` still exists, but it
+  is derived through `Raw` in a protocol extension — the compatibility door for a
+  caller that already holds a String, never the path a render takes. wraps
+  rendered HTML with attributes or styles.
 - **EventRouter** — routes WebSocket events to registered handlers. thread-safe
   via `Synchronization.Mutex`. max 10,000 handlers by default. missing-handler
   events log at `.debug` (via the unified `logger.emit` funnel) and `handlerCount` is public.
@@ -389,7 +391,7 @@ see `Documentation/ICONS.md` for the full guide.
 
 ```bash
 swift build
-swift test                                  # 1459 tests, 0 issues
+swift test                                  # 1571 tests, 0 issues
 swift package plugin budget                 # shipped-surface ceilings: engine/sheet/shell/island
 swift package --disable-sandbox plugin smoke
 swift package --disable-sandbox plugin fullstack-smoke
@@ -488,10 +490,14 @@ are measuring, and make every probe assert its own preconditions.
   exceptions. a consumer package invokes the verb through the dependency graph;
   attaching a command plugin to a target via `plugins:` is planned as a build tool and
   fails.
-- **smoke pins the interactive count** — the smoke gate asserts exactly 26
-  `data-component-id` attributes on the smoke page (3 counter + 2 progress +
-  1 echo + 12 routed table controls [3 sort + select-all + 4 select + 4 expand] +
-  6 routed chart bars + 1 upload form). adding or removing
+- **smoke pins the interactive count** — the smoke gate asserts exactly 27
+  `data-component-id` attributes on the smoke page: 6 auto-minted (3 counter +
+  2 progress + 1 echo), the column menu, 12 routed table controls (select-all +
+  3 sort + 4 select + 4 expand), 6 routed chart bars, the island re-render
+  button, and the upload form. that breakdown is a sentence and sentences rot —
+  count them off the served page before changing anything:
+  `curl -s http://127.0.0.1:9123/ | grep -o 'data-component-id=' | wc -l`.
+  adding or removing
   an interactive component there means updating the expected count in
   `WebUISmokePlugin.swift` (the fullstack driver's `>=6` check is tolerant).
   the same page is what `browser-smoke` drives for optimistic + scroll
