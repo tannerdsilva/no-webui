@@ -6,7 +6,7 @@
           <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:;">  <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAACAAAAAgCAYAAABzenr0AAAApklEQVR4nO2XwQ2AIAxF2ahDeWQZb07idkINCQejECgpfDSS/BvQ118C1JhZB1lmsuyVxNLAjiwfynJFkBhcO/BdaYhBwfMQnWzPlgOZ/dOFeFJHA/h3AWy7TKoAzG1SAQjZhM2Wtd7eMDesKTghA5DW+HsA0kOoDtCib5XgB4ADwC4iQl/FVydgj1EnzQWA/ZIZ9KcU4AK0N6jqjjCtWQJkfHM6epyUsxUEgyvS4gAAAABJRU5ErkJggg==">
   <title>WebUI Showcase</title>
   
-    <link rel="stylesheet" href="/__assets/css.b11dd9fa0e36cdfeaff127150756c2ba8c0e72dbd162ee6266226d8bd2abd613">
+    <link rel="stylesheet" href="/__assets/css.ea7b485ae050d04b377c78113461b823cec88311fc3af5f337dc4b259a1f07cf">
 
 </head>
 <body>
@@ -85,7 +85,7 @@ Plain text content<span class="text-escaped">&lt;script&gt;alert(&#39;xss&#39;)&
 <label for="demo-country" class="demo-label">Country:</label><select id="demo-country"><option value="us" selected>United States</option><option value="ca">Canada</option><option value="uk">United Kingdom</option><option value="de">Germany</option><option value="jp">Japan</option></select>
 </div></div>
 </div></div></div><div class="card card--outlined"><div class="card__body"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
-<h3 class="demo-card-title">Form with CSRF</h3><div class="demo-card-body"><form id="demo-form" action="/submit" method="post"><input type="hidden" name="_csrf" value="ZGVtby1mb3JtOjE3OTE2MDc5MDU6RkZBQ0E3RUY4MUI4NEUxQUE1RTdDRkIxNzhBQjJEQUE6M2Q0ZWYwN2MxYzVlNDA4NDVkOTJmZGIzOTIyYzRlZWMwMzE0YTM0MDI4ZTllNzY2NzU4MDQ1MTRiYmFiYzgwMg=="><div class="vstack spacing-12 align-flex-start">
+<h3 class="demo-card-title">Form with CSRF</h3><div class="demo-card-body"><form id="demo-form" action="/submit" method="post"><input type="hidden" name="_csrf" value="ZGVtby1mb3JtOjE3OTMwNjg5MzI6MjkwZWYwODVhOTNiNmIyYjliMjI0YWZjYTEyODZhNzg6MTUyN2M4MTlmMjExMTEyZmY0OTgyMTBjNTE0YmRmMzZkZmViOGJmYzE5Mjg4NGYxZGYyMzA1N2M0ZjNjNDY5OQ=="><div class="vstack spacing-12 align-flex-start">
 <label for="form-name" class="demo-label">Name:</label><input id="form-name" type="text" placeholder="Your name"><label for="form-message" class="demo-label">Message:</label><textarea id="form-message" rows="3" placeholder="Your message"></textarea><button id="form-submit" type="submit">Submit</button>
 </div></form></div>
 </div></div></div><div class="card card--outlined"><div class="card__body"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
@@ -369,7 +369,7 @@ left<div class="divider divider--vertical" role="separator" aria-orientation="ve
 <h3 class="demo-card-title">Click Counter</h3><div class="demo-card-body"><div class="vstack spacing-16 align-flex-start">
 <p>Click the buttons below. The counter updates via WebSocket.</p><div class="counter-display"><span id="counter-value" class="counter-number">0</span></div><div class="hstack spacing-12 align-center">
 <button id="btn-decrement" data-component-id="btn-decrement" data-event="click" class="button button--primary button--lg" aria-label="Decrement"><span class="button__label">−</span></button><button id="btn-increment" data-component-id="btn-increment" data-event="click" class="button button--primary button--lg"><span class="button__label">+</span></button>
-</div><button id="btn-reset" class="button button--ghost button--sm" data-component-id="c5" data-event="click" data-optimistic="[{&quot;id&quot;:&quot;counter-value&quot;,&quot;html&quot;:&quot;&lt;span id=\&quot;counter-value\&quot; class=\&quot;counter-number\&quot;&gt;0&lt;/span&gt;&quot;}]"><span class="button__label">Reset</span></button>
+</div><button id="btn-reset" class="button button--ghost button--sm" data-component-id="c5" data-event="click" data-optimistic="[{&quot;html&quot;:&quot;&lt;span id=\&quot;counter-value\&quot; class=\&quot;counter-number\&quot;&gt;0&lt;/span&gt;&quot;,&quot;id&quot;:&quot;counter-value&quot;}]"><span class="button__label">Reset</span></button>
 </div></div>
 </div></div></div><div class="card card--outlined"><div class="card__body"><div class="vstack spacing-12 align-flex-start" style="padding: 16px;">
 <h3 class="demo-card-title">Form Echo</h3><div class="demo-card-body"><div class="vstack spacing-12 align-flex-start">
