@@ -876,13 +876,13 @@ public struct ShowcasePage: Sendable, BufferRendering {
                         }
                         demoCard("WebUIItem - rows with hover-revealed actions") {
                             Div {
-                                WebUIItem(title: "web-01", subtitle: "us-east-1", meta: "42 ms", icon: .server, selected: true) {
-                                    WebUIButton("Open", variant: .ghost, size: .sm)
+                                WebUIItem(title: "web-01", subtitle: "us-east-1", meta: "42 ms", icon: .server, selected: true, actions: [
+                                    WebUIButton("Open", variant: .ghost, size: .sm),
                                     WebUIButton("Restart", variant: .danger, size: .sm)
-                                }
-                                WebUIItem(title: "api-01", subtitle: "eu-west-2", meta: "18 ms", icon: .server) {
+                                ])
+                                WebUIItem(title: "api-01", subtitle: "eu-west-2", meta: "18 ms", icon: .server, actions: [
                                     WebUIButton("Open", variant: .ghost, size: .sm)
-                                }
+                                ])
                                 WebUIItem(title: "search-01", subtitle: "us-west-2", meta: "61 ms", icon: .server)
                             }
                         }
@@ -1454,13 +1454,22 @@ public struct ShowcasePage: Sendable, BufferRendering {
         return marks
     }
 
-    func section(_ title: String, _ id: String, @ViewBuilder content: () -> [any View]) -> some View {
-        Section(class: "showcase-section") {
+    /// a page section, erased at its boundary.
+    ///
+    /// the typed migration makes a view tree's *value* the whole tree: nested
+    /// generics nest their content's layout inside their own. this page is 1,300
+    /// lines and 15 sections deep, so the composed value outgrew a 512 KB render
+    /// stack (the size a NIO event loop and a Swift Testing task both run on).
+    /// erasing here — the one documented door, `ErasedViews` — keeps each
+    /// section's tree in its own frame and hands the composition an array. the
+    /// markup is identical: `ErasedViews` renders its children in order.
+    func section<C: View>(_ title: String, _ id: String, @ElementBuilder content: () -> C) -> ErasedViews {
+        ErasedViews([Section(class: "showcase-section") {
             content()
-        }.id(id)
+        }.id(id)])
     }
 
-    func demoCard(_ title: String, @ViewBuilder content: () -> [any View]) -> some View {
+    func demoCard<C: View>(_ title: String, @ElementBuilder content: () -> C) -> some View {
         WebUICard(variant: .outlined) {
             VStack(spacing: 12) {
                 Heading(title, level: .h3).class("demo-card-title")

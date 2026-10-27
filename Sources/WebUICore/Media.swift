@@ -112,7 +112,7 @@ public struct Track: View {
 /// `HTMLDocument`'s `contentSecurityPolicyExtras: "media-src 'self' data: blob:"`
 /// (the wave-4.1 event-deck fixture does exactly this). the framework's
 /// default csp is intentionally left untouched.
-public struct Video: View {
+public struct Video<Tracks: View>: View {
 	public let src: String
 	public let poster: String?
 	public let controls: Bool
@@ -120,7 +120,7 @@ public struct Video: View {
 	public let muted: Bool
 	public let loop: Bool
 	public let playsInline: Bool
-	public let tracks: [any View]
+	public let tracks: Tracks
 
 	public init(
 		src: String,
@@ -130,7 +130,7 @@ public struct Video: View {
 		muted: Bool = false,
 		loop: Bool = false,
 		playsInline: Bool = false,
-		@ViewBuilder tracks: () -> [any View]
+		@ElementBuilder tracks: () -> Tracks
 	) {
 		self.src = src
 		self.poster = poster
@@ -155,9 +155,7 @@ public struct Video: View {
 		if playsInline { attributes += " playsinline" }
 		buffer.beginElement("video", attributes)
 		buffer.endOpenTag()
-		for track in tracks {
-			track.render(into: &buffer)
-		}
+		tracks.render(into: &buffer)
 		buffer.endElement()
 	}
 }
@@ -172,13 +170,13 @@ public struct Video: View {
 /// (`MEDIA_ERR_SRC_NOT_SUPPORTED`, error code 4). a host adds `media-src`
 /// itself through `HTMLDocument`'s `contentSecurityPolicyExtras`; the
 /// framework default csp is not changed here.
-public struct Audio: View {
+public struct Audio<Tracks: View>: View {
 	public let src: String
 	public let controls: Bool
 	public let autoplay: Bool
 	public let muted: Bool
 	public let loop: Bool
-	public let tracks: [any View]
+	public let tracks: Tracks
 
 	public init(
 		src: String,
@@ -186,7 +184,7 @@ public struct Audio: View {
 		autoplay: Bool = false,
 		muted: Bool = false,
 		loop: Bool = false,
-		@ViewBuilder tracks: () -> [any View]
+		@ElementBuilder tracks: () -> Tracks
 	) {
 		self.src = src
 		self.controls = controls
@@ -205,9 +203,7 @@ public struct Audio: View {
 		if loop { attributes += " loop" }
 		buffer.beginElement("audio", attributes)
 		buffer.endOpenTag()
-		for track in tracks {
-			track.render(into: &buffer)
-		}
+		tracks.render(into: &buffer)
 		buffer.endElement()
 	}
 }
@@ -217,19 +213,17 @@ public struct Audio: View {
 /// constraints, in preference order) followed by the `Image` fallback the
 /// browser shows when none match. every child carries `sanitizeURL` itself,
 /// so a `javascript:`/`data:` candidate never reaches the document.
-public struct Picture: View {
-	public let tracks: [any View]
+public struct Picture<Tracks: View>: View {
+	public let tracks: Tracks
 
-	public init(@ViewBuilder tracks: () -> [any View]) {
+	public init(@ElementBuilder tracks: () -> Tracks) {
 		self.tracks = tracks()
 	}
 
 	public func render(into buffer: inout HTMLBuffer) {
 		buffer.beginElement("picture", "")
 		buffer.endOpenTag()
-		for track in tracks {
-			track.render(into: &buffer)
-		}
+		tracks.render(into: &buffer)
 		buffer.endElement()
 	}
 }

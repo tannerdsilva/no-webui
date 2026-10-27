@@ -1,3 +1,5 @@
+import Logging
+
 // MARK: - Typography Tokens
 
 public enum FontWeight: Sendable {
@@ -386,5 +388,119 @@ extension View {
     /// add one class name — the singular reading of `classes(_:)`.
     public func addClass(_ name: ClassName) -> ModifiedView<Self, HTMLAttribute> {
         ModifiedView(content: self, modifier: HTMLAttribute("class", name.value))
+    }
+}
+
+// MARK: - State-Mutating Event Handlers
+//
+// design B's door on a control: the handler receives the render's typed state
+// binding and mutates it — the page re-renders from the store, so the handler
+// never names a fragment or a byte of html.
+//
+// the markup is not this family's business. each sugar builds the *same*
+// `EventHandlerModifier` `.onClick(perform:)` builds — same minted component id,
+// same `data-component-id`/`data-event` attributes, same element — so converting
+// a handler to a mutation cannot move a byte of output (§14 N21: fix the
+// modifier, never the pin).
+//
+// a nil binding is a page rendered outside a state-bound loop. the handler is
+// still registered (so the markup is identical) and logs what is missing when it
+// fires; the house style bans a `#if DEBUG`-only warning for a path that is
+// silent in production.
+
+private let stateModifierLog = Logger(label: "webui.state")
+
+private func stateHandler<State: Sendable>(
+    _ event: HTMLEvent,
+    binding: StateBinding<State>?,
+    mutation: @escaping @Sendable (StateBinding<State>) -> Void
+) -> EventHandler {
+    { _ in
+        guard let binding else {
+            stateModifierLog.warning(
+                "state-mutating \(event.rawValue) fired with no state binding; render the page through StatefulPageSession so the control's store is in scope."
+            )
+            return []
+        }
+        mutation(binding)
+        return []
+    }
+}
+
+extension View {
+    /// a click that mutates the page's state instead of authoring html.
+    ///
+    /// `binding` is the door the render pass hands the control — in a
+    /// `StatefulPage` body it is ``StatefulPage/binding``. the closure returns
+    /// nothing: it mutates, the store bumps its revision, and the host re-renders.
+    public func onClick<State: Sendable>(
+        _ binding: StateBinding<State>?,
+        perform mutation: @escaping @Sendable (StateBinding<State>) -> Void
+    ) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(
+            content: self,
+            modifier: EventHandlerModifier(
+                event: .click,
+                handler: stateHandler(.click, binding: binding, mutation: mutation)
+            )
+        )
+    }
+
+    /// a submit that mutates the page's state instead of authoring html.
+    public func onSubmit<State: Sendable>(
+        _ binding: StateBinding<State>?,
+        perform mutation: @escaping @Sendable (StateBinding<State>) -> Void
+    ) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(
+            content: self,
+            modifier: EventHandlerModifier(
+                event: .submit,
+                handler: stateHandler(.submit, binding: binding, mutation: mutation)
+            )
+        )
+    }
+
+    /// an input that mutates the page's state instead of authoring html.
+    public func onInput<State: Sendable>(
+        _ binding: StateBinding<State>?,
+        perform mutation: @escaping @Sendable (StateBinding<State>) -> Void
+    ) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(
+            content: self,
+            modifier: EventHandlerModifier(
+                event: .input,
+                handler: stateHandler(.input, binding: binding, mutation: mutation)
+            )
+        )
+    }
+
+    /// a change that mutates the page's state instead of authoring html.
+    public func onChange<State: Sendable>(
+        _ binding: StateBinding<State>?,
+        perform mutation: @escaping @Sendable (StateBinding<State>) -> Void
+    ) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(
+            content: self,
+            modifier: EventHandlerModifier(
+                event: .change,
+                handler: stateHandler(.change, binding: binding, mutation: mutation)
+            )
+        )
+    }
+
+    /// declare any event whose handler mutates the page's state — the general
+    /// door the sugars above are spelled from.
+    public func on<State: Sendable>(
+        _ event: HTMLEvent,
+        _ binding: StateBinding<State>?,
+        perform mutation: @escaping @Sendable (StateBinding<State>) -> Void
+    ) -> ModifiedView<Self, EventHandlerModifier> {
+        ModifiedView(
+            content: self,
+            modifier: EventHandlerModifier(
+                event: event,
+                handler: stateHandler(event, binding: binding, mutation: mutation)
+            )
+        )
     }
 }

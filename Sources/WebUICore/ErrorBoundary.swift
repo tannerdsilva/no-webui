@@ -29,12 +29,10 @@ public struct ErrorBoundary<Content: View, Fallback: View>: View {
 	public let content: Content
 	public let fallback: Fallback
 
-	// single-view closures, not `@ViewBuilder`: this package's `ViewBuilder`
-	// is array-shaped (its `buildExpression` wraps every view into
-	// `[any View]`), so a builder-returned `Content: View` can never be
-	// inferred from a single view expression — the same constraint `Route.page`
-	// documents. a multi-view subtree is composed as one view (`VStack { ... }`).
-	public init(content: () -> Content, fallback: () -> Fallback) {
+	// a typed block: `Content` is whatever the block yields, so a single view
+	// stays that view and several stay a tuple. no erasure, and the same
+	// `@ElementBuilder` every other block in the package takes.
+	public init(@ElementBuilder content: () -> Content, fallback: () -> Fallback) {
 		self.content = content()
 		self.fallback = fallback()
 	}

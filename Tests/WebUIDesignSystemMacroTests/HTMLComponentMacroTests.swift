@@ -37,6 +37,11 @@ private func assertExpansionThrows(_ source: String, message: String) {
 }
 
 // MARK: - expansion fixtures
+//
+// the emitted shape is a discriminator (`ContentKind` + `kind`) plus one storage
+// per content case: a `String` for a text case, the host's own generic parameter
+// for a builder case. no payload is erased — that is the whole point of the
+// generic content migration.
 
 @Suite("@HTMLComponent macro expansion")
 struct HTMLComponentMacroExpansionTests {
@@ -56,51 +61,62 @@ struct HTMLComponentMacroExpansionTests {
                 var id: String? = nil
                 var body: some View { EmptyView() }
 
-                private enum Content {
-                    case label(String)
+                private enum ContentKind {
+                    case label
                 }
 
-                private let content: Content
+                private let kind: ContentKind
+
+                private let label: String
 
                 init(_ label: String, id: String? = nil) {
                     self.id = id
-                    self.content = .label(label)
+                    self.kind = .label
+                    self.label = label
                 }
             }
             """
         )
     }
 
-    @Test("text case plus builder case")
+    @Test("text case plus builder case: the builder rides the host's generic")
     func textAndBuilder() {
         assertExpansion(
             """
             @HTMLComponent(.text("label", unlabeled: true), .builder("views"))
-            struct ArcButton {
+            struct ArcButton<Views: View> {
                 var id: String? = nil
                 var body: some View { EmptyView() }
             }
             """,
             expanded: """
-            struct ArcButton {
+            struct ArcButton<Views: View> {
                 var id: String? = nil
                 var body: some View { EmptyView() }
 
-                private enum Content {
-                    case label(String)
-                    case views([any WebUI.View])
+                private enum ContentKind {
+                    case label
+                    case views
                 }
 
-                private let content: Content
+                private let kind: ContentKind
 
-                init(_ label: String, id: String? = nil) {
+                private let label: String
+
+                private let views: Views
+
+                init(_ label: String, id: String? = nil) where Views == EmptyView {
                     self.id = id
-                    self.content = .label(label)
+                    self.kind = .label
+                    self.label = label
+                    self.views = EmptyView()
                 }
 
-                init(id: String? = nil, @ViewBuilder views: () -> [any WebUI.View]) {
+                init(id: String? = nil, @ElementBuilder views: () -> Views) {
                     self.id = id
-                    self.content = .views(views())
+                    self.kind = .views
+                    self.label = ""
+                    self.views = views()
                 }
             }
             """
@@ -124,16 +140,19 @@ struct HTMLComponentMacroExpansionTests {
                 var disabled: Bool = false
                 var body: some View { EmptyView() }
 
-                private enum Content {
-                    case label(String)
+                private enum ContentKind {
+                    case label
                 }
 
-                private let content: Content
+                private let kind: ContentKind
+
+                private let label: String
 
                 init(_ label: String, id: String? = nil, disabled: Bool = false) {
                     self.id = id
                     self.disabled = disabled
-                    self.content = .label(label)
+                    self.kind = .label
+                    self.label = label
                 }
             }
             """
@@ -148,22 +167,27 @@ struct HTMLComponentMacroExpansionTests {
             struct ArcButton {
                 var id: String? = nil
                 var body: some View { EmptyView() }
+                var derived: String { "x" }
             }
             """,
             expanded: """
             struct ArcButton {
                 var id: String? = nil
                 var body: some View { EmptyView() }
+                var derived: String { "x" }
 
-                private enum Content {
-                    case label(String)
+                private enum ContentKind {
+                    case label
                 }
 
-                private let content: Content
+                private let kind: ContentKind
+
+                private let label: String
 
                 init(_ label: String, id: String? = nil) {
                     self.id = id
-                    self.content = .label(label)
+                    self.kind = .label
+                    self.label = label
                 }
             }
             """
@@ -175,37 +199,149 @@ struct HTMLComponentMacroExpansionTests {
         assertExpansion(
             """
             @HTMLComponent(.text("title"), .text("label", unlabeled: true), .builder("views"))
-            struct ArcButton {
+            struct ArcButton<Views: View> {
                 var id: String? = nil
                 var body: some View { EmptyView() }
             }
             """,
             expanded: """
-            struct ArcButton {
+            struct ArcButton<Views: View> {
                 var id: String? = nil
                 var body: some View { EmptyView() }
 
-                private enum Content {
-                    case title(String)
-                    case label(String)
-                    case views([any WebUI.View])
+                private enum ContentKind {
+                    case title
+                    case label
+                    case views
                 }
+
+                private let kind: ContentKind
+
+                private let title: String
+
+                private let label: String
+
+                private let views: Views
+
+                init(_ label: String, id: String? = nil) where Views == EmptyView {
+                    self.id = id
+                    self.kind = .label
+                    self.title = ""
+                    self.label = label
+                    self.views = EmptyView()
+                }
+
+                init(title: String, id: String? = nil) where Views == EmptyView {
+                    self.id = id
+                    self.kind = .title
+                    self.title = title
+                    self.label = ""
+                    self.views = EmptyView()
+                }
+
+                init(id: String? = nil, @ElementBuilder views: () -> Views) {
+                    self.id = id
+                    self.kind = .views
+                    self.title = ""
+                    self.label = ""
+                    self.views = views()
+                }
+            }
+            """
+        )
+    }
+
+    @Test("two builder cases: one generic parameter each, unused ones pinned")
+    func twoBuilderCases() {
+        assertExpansion(
+            """
+            @HTMLComponent(.builder("header"), .builder("body"))
+            struct Shell<Header: View, Body: View> {
+                var id: String? = nil
+            }
+            """,
+            expanded: """
+            struct Shell<Header: View, Body: View> {
+                var id: String? = nil
+
+                private enum ContentKind {
+                    case header
+                    case body
+                }
+
+                private let kind: ContentKind
+
+                private let header: Header
+
+                private let body: Body
+
+                init(id: String? = nil, @ElementBuilder header: () -> Header) where Body == EmptyView {
+                    self.id = id
+                    self.kind = .header
+                    self.header = header()
+                    self.body = EmptyView()
+                }
+
+                init(id: String? = nil, @ElementBuilder body: () -> Body) where Header == EmptyView {
+                    self.id = id
+                    self.kind = .body
+                    self.header = EmptyView()
+                    self.body = body()
+                }
+            }
+            """
+        )
+    }
+
+    @Test("three builder cases keep declaration order in both storage and inits")
+    func threeBuilderCases() {
+        assertExpansion(
+            """
+            @HTMLComponent(.builder("leading"), .builder("content"), .builder("trailing"))
+            struct Row<Leading: View, Content: View, Trailing: View> {
+                var gap: Int = 0
+            }
+            """,
+            expanded: """
+            struct Row<Leading: View, Content: View, Trailing: View> {
+                var gap: Int = 0
+
+                private enum ContentKind {
+                    case leading
+                    case content
+                    case trailing
+                }
+
+                private let kind: ContentKind
+
+                private let leading: Leading
 
                 private let content: Content
 
-                init(_ label: String, id: String? = nil) {
-                    self.id = id
-                    self.content = .label(label)
+                private let trailing: Trailing
+
+                init(gap: Int = 0, @ElementBuilder leading: () -> Leading) where Content == EmptyView, Trailing == EmptyView {
+                    self.gap = gap
+                    self.kind = .leading
+                    self.leading = leading()
+                    self.content = EmptyView()
+                    self.trailing = EmptyView()
                 }
 
-                init(title: String, id: String? = nil) {
-                    self.id = id
-                    self.content = .title(title)
+                init(gap: Int = 0, @ElementBuilder content: () -> Content) where Leading == EmptyView, Trailing == EmptyView {
+                    self.gap = gap
+                    self.kind = .content
+                    self.leading = EmptyView()
+                    self.content = content()
+                    self.trailing = EmptyView()
                 }
 
-                init(id: String? = nil, @ViewBuilder views: () -> [any WebUI.View]) {
-                    self.id = id
-                    self.content = .views(views())
+                init(gap: Int = 0, @ElementBuilder trailing: () -> Trailing) where Leading == EmptyView, Content == EmptyView {
+                    self.gap = gap
+                    self.kind = .trailing
+                    self.leading = EmptyView()
+                    self.content = EmptyView()
+                    self.trailing = trailing()
                 }
             }
             """
@@ -231,16 +367,29 @@ struct HTMLComponentMacroNegativeTests {
         )
     }
 
-    @Test("two builders throw")
-    func twoBuildersThrow() {
+    @Test("a builder case with no generic parameter on the host is rejected")
+    func builderWithoutGenericThrows() {
         assertExpansionThrows(
             """
-            @HTMLComponent(.builder("a"), .builder("b"))
+            @HTMLComponent(.builder("views"))
             struct ArcButton {
                 var id: String? = nil
             }
             """,
-            message: "@HTMLComponent declares 2 builder cases; at most one is allowed"
+            message: "@HTMLComponent declares 1 builder case(s) but the host declares 0 generic parameter(s) — one `: View` parameter per builder case, in declaration order"
+        )
+    }
+
+    @Test("more builder cases than generic parameters is rejected")
+    func tooFewGenericsThrows() {
+        assertExpansionThrows(
+            """
+            @HTMLComponent(.builder("header"), .builder("body"))
+            struct Shell<Header: View> {
+                var id: String? = nil
+            }
+            """,
+            message: "@HTMLComponent declares 2 builder case(s) but the host declares 1 generic parameter(s) — one `: View` parameter per builder case, in declaration order"
         )
     }
 
@@ -262,7 +411,7 @@ struct HTMLComponentMacroNegativeTests {
         assertExpansionThrows(
             """
             @HTMLComponent(.builder("views", unlabeled: true))
-            struct ArcButton {
+            struct ArcButton<Views: View> {
                 var id: String? = nil
             }
             """,
@@ -320,15 +469,18 @@ struct HTMLComponentHardeningTests {
             struct Panel {
                 var action: () -> Void
 
-                private enum Content {
-                    case label(String)
+                private enum ContentKind {
+                    case label
                 }
 
-                private let content: Content
+                private let kind: ContentKind
+
+                private let label: String
 
                 init(_ label: String, action: @escaping () -> Void) {
                     self.action = action
-                    self.content = .label(label)
+                    self.kind = .label
+                    self.label = label
                 }
             }
             """
@@ -348,15 +500,18 @@ struct HTMLComponentHardeningTests {
             package struct Panel {
                 var id: String? = nil
 
-                private enum Content {
-                    case label(String)
+                private enum ContentKind {
+                    case label
                 }
 
-                private let content: Content
+                private let kind: ContentKind
+
+                private let label: String
 
                 package init(_ label: String, id: String? = nil) {
                     self.id = id
-                    self.content = .label(label)
+                    self.kind = .label
+                    self.label = label
                 }
             }
             """
@@ -389,29 +544,29 @@ struct HTMLComponentHardeningTests {
         )
     }
 
-    @Test("a property named content is rejected")
-    func reservedContentPropertyRejected() {
+    @Test("a property named kind is rejected")
+    func reservedKindPropertyRejected() {
         assertExpansionThrows(
             """
             @HTMLComponent(.text("label"))
             struct Panel {
-                var content: String = ""
+                var kind: String = ""
             }
             """,
-            message: "'content' is @HTMLComponent's storage — rename the property"
+            message: "'kind' is @HTMLComponent's discriminator — rename the property"
         )
     }
 
-    @Test("a nested Content type is rejected")
-    func reservedContentTypeRejected() {
+    @Test("a nested ContentKind type is rejected")
+    func reservedContentKindTypeRejected() {
         assertExpansionThrows(
             """
             @HTMLComponent(.text("label"))
             struct Panel {
-                enum Content { case a }
+                enum ContentKind { case a }
             }
             """,
-            message: "'Content' is @HTMLComponent's enum — rename the nested type"
+            message: "'ContentKind' is @HTMLComponent's discriminator enum — rename the nested type"
         )
     }
 

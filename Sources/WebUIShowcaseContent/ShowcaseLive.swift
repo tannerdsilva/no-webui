@@ -169,18 +169,27 @@ func contentTabs(state: ShowcaseState) -> WebUITabs {
 /// with a typing indicator pinned at the newest edge. the scroller reverses its
 /// children internally, so this list stays chronological.
 func liveChat(state: ShowcaseState) -> WebUIMessageScroller {
-	WebUIMessageScroller(height: "22rem", id: "live-chat", ariaLabel: "Live conversation") {
-		WebUIMarker("Live session")
-		for line in state.chat {
+	// a runtime list of mixed bubble/marker/indicator views is exactly what the
+	// erased door is for: the scroller reverses its children, so it takes the
+	// array rather than a typed block.
+	var lines: [any View] = [WebUIMarker("Live session")]
+	for line in state.chat {
+		lines.append(
 			WebUIChatBubble(
 				line.text,
 				side: line.side == "sent" ? .sent : .received,
 				time: line.time,
 				receipt: line.side == "sent" ? .delivered : nil
 			)
-		}
-		WebUITypingIndicator(inline: true)
+		)
 	}
+	lines.append(WebUITypingIndicator(inline: true))
+	return WebUIMessageScroller(
+		height: "22rem",
+		id: "live-chat",
+		ariaLabel: "Live conversation",
+		content: lines
+	)
 }
 
 /// the column-visibility control for the interactive table demo. it is a plain

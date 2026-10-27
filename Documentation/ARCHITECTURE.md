@@ -436,6 +436,97 @@ historical detail — `Documentation/WASM_BOOTSTRAP.md` and
 `Documentation/WASM_IMPLEMENTATION_PLAN.md` — was deleted with the chamber; the
 island machinery that remains is described in `NEXT_ARCHITECTURE.md` §2c–§2d.
 
+## Layer 6: application state and the multi-tenant host
+
+two products sit above the layers above, and both exist because an app was
+hand-rolling them:
+
+```
+WebUIHost ──▶ WebUIServer ──▶ WebUICore ──▶ WebUISharedCore
+    │
+    ├────────▶ WebUIAuth ────▶ WebUI ──▶ WebUICore
+    │
+    └────────▶ WebUIState
+```
+
+`WebUIServer` still has **no edge to `WebUIAuth`** — the absent arrow is the
+compile-time proof that identity is not the transport's job. `WebUIHost` is the
+only target that knows both, so it is the composition point, not a second server.
+
+### WebUIState — a page as a pure function of state
+
+`Store<State>` is a `final class` over a `Mutex`, not an actor: render is
+synchronous (`func render(into:)`, `View` is not `async`), so a store an actor
+held could not be read from a body without `await`. mutation is the only write
+door, it is serialized, and it bumps a monotonic `revision`.
+
+| type | job |
+|---|---|
+| `Store<State>` | one page instance's committed state; `read()`, `mutate`/`commit`, `revision` |
+| `StatefulPage` | `initialState()` + `body(_ state: State)` — the body receives the only state it may see, by value |
+| `StatefulPageSession<Page>` | the render loop: `patch(in:)` renders, diffs the region digest and returns the bytes plus the regions that moved. it begins the router session itself, so a caller must not wrap it in `EventRouter.begin` |
+| `SessionStores` | one store per `(page, session)`, bounded; eviction is **idle-only** — a live session is never reaped |
+| `PageSubscription` | a commit becomes at most one patch, in revision order |
+| `.onClick(binding)` / `.onSubmit(binding)` | the handler mutates and returns nothing; it never authors html |
+
+what a consumer writes:
+
+```swift
+struct Counter: StatefulPage {
+    struct State: Sendable { var count = 0 }
+    func initialState() -> State { State() }
+    func body(_ state: State) -> some View {
+        VStack {
+            Text("count \(state.count)")
+            Button("+1").onClick(binding) { store in store.mutate { $0.count += 1 } }
+        }
+    }
+}
+```
+
+`binding` is non-nil only inside the loop: a page rendered by hand (`.markup`)
+still registers an identical control and logs what is missing when it fires,
+rather than silently mutating a store nobody observes.
+
+**honest limits.** a mutation the body does not read produces no visible patch,
+because the body is the only thing that renders. and the sugar passes the store,
+not the event: a control whose mutation depends on the value it carries (an
+input's text, a selected row's key) cannot use `.onClick(binding)`/`.onInput(binding)`
+yet — it needs the `(event) -> [FragmentUpdate]` handler, or a future
+`(StateBinding, EventData)` overload.
+
+### WebUIHost — principal, catalog, table, revocation
+
+four ports, each naming the rule it makes unrepresentable:
+
+| port | rule |
+|---|---|
+| `PrincipalResolver` | "a page renders without anyone having decided who asked" — `CookieSessionResolver` is the cookie → token hash → store → principal join |
+| `PageCatalog` | "one global page table serves every identity" — `AuthenticatedCatalog` needs a path **and** a principal; `StaticCatalog` is the public-page table |
+| `SessionRouterTable` | "a frame minted by session A dispatches into session B's handlers" — `RouterTable` keys routers by `(session, render token)` and keeps a forward chain across LRU eviction, so an evicted page migrates in place instead of losing its handlers |
+| `RevocationBus` | "a logged-out session keeps a live socket" — `SocketRevocationBus` closes every connection tracked under the session |
+
+`AuthenticatedHost` is a `struct` façade over those four plus `SessionRevocation`
+(the store half of logout) and `IdentityDirectory` (roles). it is a `Responder`,
+so it drops into a `Router` route; `dispatch(_:session:renderToken:)` answers one
+websocket event with `EventDispatch` (outcome + the token a refresh should hand
+the page), and `signOut` tears a session down in the one order that has no window:
+sockets, then the handler table, then the store record.
+
+### what these two do not yet carry
+
+named here because the example still pays for them, and a doc that omitted them
+would be the rot this file is supposed to avoid:
+
+- **no auth flow.** `WebUIHost` resolves an existing session and revokes one; it
+  does not sign anyone in. login/signup ceremony (csrf, throttle, password
+  verification, session minting, cookie issuance) stays the application's.
+- **no server binding.** `AuthenticatedHost` answers http, but nothing binds it to
+  a socket: `WebUIServer` owns the upgrade and dispatches into its own
+  `EventRouter`, with no seam to hand either to a host. an app that needs
+  session-gated upgrades and host dispatch still writes that loop
+  (`Sources/WebUIAuthExample/MainProgram.swift` is the worked case).
+
 ## Security Architecture
 
 | Threat | Mitigation |
@@ -473,7 +564,7 @@ self-contained and runnable by one human:
 | gate | run as | passes expected |
 |---|---|---|
 | build | `swift build` | clean |
-| test | `swift test` | 1406 tests / 0 issues — includes the frozen-surface gate and the showcase byte pin |
+| test | `swift test` | 1702 tests in 9 runs / 0 issues — includes the frozen-surface gate and the showcase byte pin. re-measure rather than trust: the number is the sum of the `Test run with …` lines, because argument-parameterized tests expand and a `@Test` grep over-counts |
 | smoke | `swift package --disable-sandbox plugin smoke` | 19/0 |
 | fullstack smoke | `swift package --disable-sandbox plugin fullstack-smoke` | 24/0 |
 | browser layout | `node designer/browser-smoke.mjs` | 50/0 |

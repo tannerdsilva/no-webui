@@ -6,6 +6,7 @@ import WebUIDesignSystem
 import WebUIAuth
 import WebUIBuild
 import WebUIServer
+import WebUIChart
 
 // MARK: - Public API surface pins
 //
@@ -377,10 +378,10 @@ func componentSurfacePins() {
 	#expect(unsafeFeed.contains("&lt;script&gt;x&lt;/script&gt;"))
 	#expect(unsafeFeed.contains("&lt;1m"))
 // p2 chat set: the sheet's chat family plus the scroller/marker/attachment.
-	let scroller = rendered(WebUIMessageScroller(height: "18rem", id: "sc", ariaLabel: "Thread") {
-		Text("first")
+	let scroller = rendered(WebUIMessageScroller(height: "18rem", id: "sc", ariaLabel: "Thread", content: [
+		Text("first"),
 		Text("second")
-	})
+	]))
 	#expect(scroller.contains("scroll-area scroll-area--reverse scroll-area--fade-y"))
 	#expect(scroller.contains("role=\"log\""))
 	#expect(scroller.contains("aria-live=\"polite\""))
@@ -390,7 +391,7 @@ func componentSurfacePins() {
 	let firstAt = scroller.range(of: "first")!
 	let secondAt = scroller.range(of: "second")!
 	#expect(secondAt.lowerBound < firstAt.lowerBound)
-	#expect(!rendered(WebUIMessageScroller(fade: false) { Text("x") }).contains("scroll-area--fade-y"))
+	#expect(!rendered(WebUIMessageScroller(fade: false, content: [Text("x")])).contains("scroll-area--fade-y"))
 
 	let marker = rendered(WebUIMarker("Today"))
 	#expect(marker.contains("class=\"marker\""))
@@ -502,10 +503,9 @@ func componentSurfacePins() {
 		meta: "42 ms",
 		icon: .server,
 		selected: true,
-		id: "row-1"
-	) {
-		WebUIButton("Open", variant: .ghost, size: .sm)
-	})
+		id: "row-1",
+		actions: [WebUIButton("Open", variant: .ghost, size: .sm)]
+	))
 	#expect(row.contains("list__item list__item--selected"))
 	#expect(row.contains("list__icon"))
 	#expect(row.contains("list__title"))
@@ -771,4 +771,147 @@ func renderBufferAdditionsPin() {
 	var wrapped = HTMLBuffer()
 	ModifiedView(content: Text("z"), modifier: ModifierOnly()).render(into: &wrapped)
 	#expect(wrapped.finish() == "<b>z</b>")
+}
+
+// MARK: - variadic content shapes (design D)
+//
+// every pin below is compile-time first: the annotation (`WebUICard<Text,
+// EmptyView>`) and the typed reads (`let _: Text = card.children`) only
+// type-check if the component really carries one generic parameter per builder
+// case, in that order. a component that lost a parameter, gained one, or
+// regressed to `[any View]` stops compiling here — which is the point, because
+// the shape is the contract. the runtime half proves the specialization renders
+// what the erased array rendered.
+
+@Test("every converted component pins its generic content shape")
+func componentContentShapesPin() {
+	// ── two builder cases: content first, then the optional one ────────────
+	let card: WebUICard<Text, EmptyView> = WebUICard(title: "t") { Text("in") }
+	let _: Text = card.children
+	let _: EmptyView = card.actions
+	#expect(card.markup.html.contains("<div class=\"card__body\">"))
+	#expect(!card.markup.html.contains("card__actions"))
+
+	let cardWithActions: WebUICard<Text, Button> = WebUICard(title: "t", actions: { Button("a") }) { Text("in") }
+	let _: Button = cardWithActions.actions
+	#expect(cardWithActions.hasActions)
+	#expect(cardWithActions.markup.html.contains("<div class=\"card__actions\"><button"))
+
+	let cardTuple: WebUICard<TupleView<Text, Text>, EmptyView> = WebUICard { Text("a"); Text("b") }
+	#expect(cardTuple.markup.html.contains("ab"))
+
+	let modal: WebUIModal<Text, EmptyView> = WebUIModal(title: "m") { Text("b") }
+	let _: EmptyView = modal.footer
+	#expect(!modal.hasFooter)
+	#expect(!modal.markup.html.contains("modal__footer"))
+
+	let modalFooter: WebUIModal<Text, Text> = WebUIModal(title: "m", content: { Text("b") }, footer: { Text("f") })
+	#expect(modalFooter.hasFooter)
+	#expect(modalFooter.markup.html.contains("modal__footer"))
+
+	let sheet: WebUIBottomSheet<Text, EmptyView> = WebUIBottomSheet(content: { Text("b") })
+	#expect(!sheet.hasFooter)
+	let sheetFooter: WebUIBottomSheet<Text, Text> = WebUIBottomSheet(content: { Text("b") }, footer: { Text("f") })
+	#expect(sheetFooter.hasFooter)
+
+	let drawer: WebUIDrawer<Text, EmptyView> = WebUIDrawer(content: { Text("b") })
+	#expect(!drawer.hasFooter)
+	let drawerFooter: WebUIDrawer<Text, Text> = WebUIDrawer(content: { Text("b") }, footer: { Text("f") })
+	#expect(drawerFooter.hasFooter)
+
+	// ── one builder case ───────────────────────────────────────────────────
+	let tooltip: WebUITooltip<Text> = WebUITooltip("t") { Text("c") }
+	let _: Text = tooltip.children
+	#expect(tooltip.markup.html.contains("tooltip__text"))
+
+	let field: WebUIField<Text> = WebUIField(label: "l") { Text("c") }
+	#expect(field.markup.html.contains("field__label"))
+
+	let speedDial: WebUISpeedDial<Text> = WebUISpeedDial { Text("a") }
+	#expect(speedDial.markup.html.contains("fab-stage--dial"))
+
+	let buttonGroup: WebUIButtonGroup<Text> = WebUIButtonGroup { Text("a") }
+	#expect(buttonGroup.markup.html.contains("button-group"))
+
+	let collapse: WebUICollapse<Text> = WebUICollapse("h") { Text("a") }
+	#expect(collapse.markup.html.contains("collapse__inner"))
+
+	let popover: WebUIPopover<Text> = WebUIPopover(title: "p") { Text("a") }
+	#expect(popover.hasContent)
+	let popoverEmpty: WebUIPopover<EmptyView> = WebUIPopover(title: "p")
+	#expect(!popoverEmpty.hasContent)
+
+	let hoverCard: WebUIHoverCard<Text> = WebUIHoverCard(name: "n", handle: "h") { Text("a") }
+	#expect(hoverCard.hasContent)
+
+	let panel: WebUIPanel<Text> = WebUIPanel(title: "p") { Text("a") }
+	#expect(panel.markup.html.contains("panel__body"))
+
+	let toastStack: WebUIToastStack<Text> = WebUIToastStack { Text("a") }
+	#expect(toastStack.markup.html.contains("toast-stack"))
+
+	let consent: WebUICookieConsent<Button> = WebUICookieConsent(text: "t") { Button("ok") }
+	#expect(consent.markup.html.contains("cookie-consent__actions"))
+
+	// ── an optional action list, and the branch it drives ──────────────────
+	let navbar: WebUINavbar<EmptyView> = WebUINavbar(brand: "b")
+	#expect(!navbar.hasActions)
+	let navbarActions: WebUINavbar<Button> = WebUINavbar(brand: "b", actions: { Button("a") })
+	#expect(navbarActions.hasActions)
+
+	// ── two builder cases on one component, plus the label-only form ───────
+	let dropdown: WebUIDropdown<EmptyView, Text> = WebUIDropdown("M") { Text("p") }
+	#expect(!dropdown.hasTriggerViews)
+	let dropdownViews: WebUIDropdown<Button, Text> = WebUIDropdown(trigger: { Button("t") }, panel: { Text("p") })
+	#expect(dropdownViews.hasTriggerViews)
+
+	// ── media: the tracks block is typed, not an array ────────────────────
+	let video: Video<Source> = Video(src: "v") { Source(src: "s", type: "video/mp4") }
+	#expect(video.markup.html.contains("<source"))
+	let audio: Audio<Source> = Audio(src: "a") { Source(src: "s", type: "audio/mpeg") }
+	#expect(audio.markup.html.contains("<source"))
+	let picture: Picture<Source> = Picture { Source(src: "s", type: "image/webp") }
+	#expect(picture.markup.html.contains("<source"))
+
+	// ── non-generic types with a generic init ─────────────────────────────
+	let item: WebUIAccordion.Item = WebUIAccordion.Item("t") { Text("a") }
+	#expect(item.children == "a")
+	let chart: Chart = Chart { ForEach([("Jan", 5.0)]) { d in BarMark(x: .value("M", d.0), y: .value("V", d.1)) } }
+	#expect(chart.markup.html.contains("<svg"))
+}
+
+@Test("the erased survivors take an array, and say so at the parameter")
+func erasedContentSurvivorsPin() {
+	// these are non-generic on purpose. a typed block has no per-child walk
+	// (`WebUIItem` wraps each action) and no reverse walk (`WebUIMessageScroller`
+	// renders children back to front), so both take the one documented door.
+	let item: WebUIItem = WebUIItem(title: "x", actions: [Button("a")])
+	#expect(item.markup.html.contains("list__action"))
+	let scroller: WebUIMessageScroller = WebUIMessageScroller(content: [Text("a"), Text("b")])
+	#expect(scroller.markup.html.contains("scroll-area--reverse"))
+	let table: WebUITable = WebUITable(headers: ["h"], rows: [[Text("c")]])
+	#expect(table.markup.html.contains("<table"))
+}
+
+@Test("an empty block takes the same branch an omitted one does")
+func emptyBlockArityPin() {
+	// `blockIsEmpty` reads the builder product's own arity once at init, so a
+	// block that yields nothing takes the branch an omitted block took over the
+	// erased array — `[any View]` was empty for exactly these products.
+	let falseIf: WebUICard<Text, OptionalView<Button>> = WebUICard(actions: { if false { Button("a") } }) { Text("x") }
+	#expect(!falseIf.hasActions)
+	#expect(!falseIf.markup.html.contains("card__actions"))
+
+	let emptyLoop: WebUICard<Text, RepeatedView<Button>> = WebUICard(actions: { for _ in [String]() { Button("a") } }) { Text("x") }
+	#expect(!emptyLoop.hasActions)
+
+	// a `ForEach` is one view, not a list of them: the erased array held the
+	// `ForEach` itself, so this branch has always emitted the wrapper — an empty
+	// collection does not make it disappear, and the migration must not change
+	// that.
+	let emptyForEach: WebUICard<Text, ForEach<[String], Button>> = WebUICard(actions: {
+		ForEach([String]()) { name in Button(name) }
+	}) { Text("x") }
+	#expect(emptyForEach.hasActions)
+	#expect(emptyForEach.markup.html.contains("card__actions"))
 }

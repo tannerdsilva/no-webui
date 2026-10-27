@@ -2,6 +2,41 @@
 
 all notable changes to this project are documented here.
 
+## [unreleased] — application state and the multi-tenant host
+
+### added
+
+- **`WebUIState`** — a page as a pure function of state. `Store<State>`
+  (`final class` + `Mutex`, synchronously readable because render cannot
+  `await`), `StatefulPage` (`initialState()` + `body(_:)`),
+  `StatefulPageSession` (`patch(in:)` → `PagePatch`), `SessionStores` (one
+  store per session, idle-only eviction), `PageSubscription`, and the
+  store-aware handler sugars `.onClick(binding)` / `.onSubmit(binding)` — a
+  handler mutates and returns nothing, so application code authors no html.
+- **`WebUIHost`** — the multi-tenant composition point, and the only target
+  that knows `WebUIServer` + `WebUIAuth` + `WebUIState` together (the absent
+  `WebUIServer` → `WebUIAuth` edge is the compile-time proof identity is not
+  the transport's job). `PrincipalResolver` / `CookieSessionResolver`,
+  `PageCatalog` (`StaticCatalog`, `AuthenticatedCatalog`), `SessionRouterTable`
+  (`RouterTable`: per-session render window + forward chain, so an evicted page
+  refreshes in place), `RevocationBus` (`SocketRevocationBus`: logout closes
+  the live socket), `IdentityDirectory`, `SessionRevocation`, and the
+  `AuthenticatedHost` façade (`Responder` + `dispatch` + `signOut`).
+
+### changed
+
+- **`WebUIAuthExample` rewritten onto the two new products: 1,183 → 741
+  lines** (432 app + 309 listener; the listener is the seam below). the hand-rolled `RouterRegistry`, `AuthConnectionRegistry`,
+  `SessionStates`, `AuthDemoState` and the `counterValueHTML`-style string
+  fragments are deleted; the dashboard is a `StatefulPage` whose controls are
+  mutations, sessions route through `RouterTable`, logout tears down through
+  `SocketRevocationBus`, and per-session state lives in `SessionStores`.
+  the remaining listener is the seam `WebUIServer` does not expose (see
+  `Documentation/ARCHITECTURE.md`, "what these two do not yet carry").
+- `swift test`: **1,702 tests in 9 runs** (was 1,406 in the docs, 1,571 in
+  `AGENTS.md`); frozen surface re-measured at **5,040 symbols across 11
+  modules**. the showcase byte pin is unchanged at 168,671 bytes.
+
 ## [2.0.0] — the typed web (2026-10-10)
 
 ### breaking changes

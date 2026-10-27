@@ -38,9 +38,17 @@ public struct RenderToken: Sendable, Hashable, CustomStringConvertible {
 	/// `nil` only when the platform entropy source fails. the caller must treat
 	/// that as a degraded render — never as a reason to substitute a guessable
 	/// token, which would be worse than none — see `WebUIServer.handleHTTP`.
-	public static func mint() -> RenderToken? {
-		guard let bytes = SecureRandom.bytes(16) else { return nil }
+	///
+	/// `source` is injectable so a test can drive the failure path; the default
+	/// `.system` is the platform call, so `mint()` keeps its exact meaning.
+	public static func mint(using source: any SecureRandomSource = .system) -> RenderToken? {
+		guard let bytes = source.bytes(16) else { return nil }
 		return RenderToken(Base64.encodeURL(bytes))
+	}
+
+	/// mint a fresh 128-bit token from the platform entropy source.
+	public static func mint() -> RenderToken? {
+		mint(using: .system)
 	}
 
 	public var description: String { value }

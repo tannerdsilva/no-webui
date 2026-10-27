@@ -56,10 +56,14 @@ public struct Div<Content: View>: View {
     }
 
     public func render(into buffer: inout HTMLBuffer) {
-        var attributes = ""
-        if let id { attributes += " id=\"\(htmlEscape(id))\"" }
-        if let `class` { attributes += " class=\"\(htmlEscape(`class`))\"" }
-        buffer.beginElement("div", attributes)
+        // the element opens first, then its own attributes join the frame's
+        // contribution slot: `addAttributeValue` prepends, so the calls run in
+        // reverse declaration order to emit `id` before `class` — exactly the
+        // order the concatenated base string used to produce, with no string
+        // built per element.
+        buffer.beginElement("div")
+        if let `class` { buffer.addAttributeValue("class", `class`) }
+        if let id { buffer.addAttributeValue("id", id) }
         buffer.endOpenTag()
         content.render(into: &buffer)
         buffer.endElement()
@@ -82,10 +86,9 @@ public struct Span<Content: View>: View {
     }
 
     public func render(into buffer: inout HTMLBuffer) {
-        var attributes = ""
-        if let id { attributes += " id=\"\(htmlEscape(id))\"" }
-        if let `class` { attributes += " class=\"\(htmlEscape(`class`))\"" }
-        buffer.beginElement("span", attributes)
+        buffer.beginElement("span")
+        if let `class` { buffer.addAttributeValue("class", `class`) }
+        if let id { buffer.addAttributeValue("id", id) }
         buffer.endOpenTag()
         content.render(into: &buffer)
         buffer.endElement()
@@ -122,13 +125,15 @@ public struct Button: View {
     }
 
     public func render(into buffer: inout HTMLBuffer) {
-        var attributeText = ""
-        if let id { attributeText += " id=\"\(htmlEscape(id))\"" }
-        if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
-        if let name { attributeText += " name=\"\(htmlEscape(name))\"" }
-        attributeText += " type=\"\(type.rawValue)\""
-        if disabled { attributeText += " disabled" }
-        buffer.beginElement("button", attributeText)
+        // reverse declaration order: the contribution slot prepends, and the
+        // emitted order stays `id`, `class`, `name`, `type`, then the valueless
+        // `disabled` — the order the concatenated attribute text produced.
+        buffer.beginElement("button")
+        if disabled { buffer.addAttribute("disabled") }
+        buffer.addAttributeValue("type", type.rawValue)
+        if let name { buffer.addAttributeValue("name", name) }
+        if let `class` { buffer.addAttributeValue("class", `class`) }
+        if let id { buffer.addAttributeValue("id", id) }
         buffer.endOpenTag()
         buffer.appendEscaped(label)
         buffer.endElement()
@@ -615,7 +620,7 @@ public struct Select: View {
 // part of the view. it therefore cannot read actor-isolated state.
 //
 // when a list's contents live on an actor, use a plain `for` INSIDE the
-// surrounding `@ViewBuilder` — the builder flattens its elements exactly as
+// surrounding `@ElementBuilder` — the builder flattens its elements exactly as
 // `ForEach` does, and the loop body stays on the actor that owns the data:
 //
 //     Group {

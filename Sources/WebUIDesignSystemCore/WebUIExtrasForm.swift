@@ -716,7 +716,7 @@ public struct WebUIInputGroup: View {
 /// a labelled form row: a label (with an optional required marker, a
 /// validation note and a counter on its row) above the control, and helper
 /// text below it. the control is whatever the caller passes as content.
-public struct WebUIField: View {
+public struct WebUIField<Content: View>: View {
     public enum Note: String, Sendable {
         case neutral = ""
         case error = "field__hint--error"
@@ -735,7 +735,7 @@ public struct WebUIField: View {
     /// helper text under the control; tinted when `helperIsError`.
     public let helper: String?
     public let helperIsError: Bool
-    public let children: [any View]
+    public let children: Content
 
     public init(
         label: String? = nil,
@@ -746,7 +746,7 @@ public struct WebUIField: View {
         count: String? = nil,
         helper: String? = nil,
         helperIsError: Bool = false,
-        @ViewBuilder content: () -> [any View]
+        @ElementBuilder content: () -> Content
     ) {
         self.label = label
         self.controlID = controlID
@@ -776,12 +776,14 @@ public struct WebUIField: View {
             }
             html += "</div>"
         }
-        for child in children { html += child.markup.html }
-        if let helper {
-            html += "<span class=\"field__helper\(helperIsError ? " field__helper--error" : "")\">\(htmlEscape(helper))</span>"
-        }
-        html += "</div>"
         buffer.append(html)
+        children.render(into: &buffer)
+        var tail = ""
+        if let helper {
+            tail += "<span class=\"field__helper\(helperIsError ? " field__helper--error" : "")\">\(htmlEscape(helper))</span>"
+        }
+        tail += "</div>"
+        buffer.append(tail)
     }
 }
 

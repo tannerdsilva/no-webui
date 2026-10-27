@@ -109,15 +109,14 @@ public struct WebUINotification: View {
 
 // MARK: WebUI Toast Stack
 /// a stack container for toasts.
-public struct WebUIToastStack: View {
-    public let children: [any View]
-    public init(@ViewBuilder content: () -> [any View]) { self.children = content() }
+public struct WebUIToastStack<Content: View>: View {
+    public let children: Content
+    public init(@ElementBuilder content: () -> Content) { self.children = content() }
 
     public func render(into buffer: inout HTMLBuffer) {
-        var html = "<div class=\"toast-stack\"" + Aria.live(.polite).render() + ">"
-        for c in children { html += c.markup.html }
-        html += "</div>"
-        buffer.append(html)
+        buffer.append("<div class=\"toast-stack\"" + Aria.live(.polite).render() + ">")
+        children.render(into: &buffer)
+        buffer.append("</div>")
     }
 }
 
@@ -251,14 +250,14 @@ public struct WebUICountdown: View {
 
 // MARK: WebUI Cookie Consent
 /// a cookie-consent banner.
-public struct WebUICookieConsent: View {
+public struct WebUICookieConsent<Content: View>: View {
     public let title: String?
     public let text: String
-    public let children: [any View]
+    public let children: Content
     public let id: String?
     public let onSelect: EventHandler?
     public init(title: String? = nil, text: String, id: String? = nil, onSelect: EventHandler? = nil,
-                @ViewBuilder content: () -> [any View]) {
+                @ElementBuilder content: () -> Content) {
         self.title = title; self.text = text; self.children = content(); self.id = id; self.onSelect = onSelect
     }
 
@@ -269,9 +268,9 @@ public struct WebUICookieConsent: View {
         if let title { html += "<div class=\"cookie-consent__title\">\(htmlEscape(title))</div>" }
         html += "<div class=\"cookie-consent__text\">\(htmlEscape(text))</div>"
         html += "<div class=\"cookie-consent__actions\">"
-        for c in children { html += c.markup.html }
-        html += "</div></div></div>"
         buffer.append(html)
+        children.render(into: &buffer)
+        buffer.append("</div></div></div>")
     }
 }
 
@@ -615,6 +614,10 @@ public struct WebUIMessageScroller: View {
     public let fade: Bool
     /// accessible name for the log region.
     public let ariaLabel: String
+    /// // erased: the scroller renders its children in REVERSE order
+    /// (`children.reversed()`), a runtime sequence walk with no pack equivalent —
+    /// a tuple cannot be reversed. an erased array is the one documented door
+    /// (``ErasedViews``). N19 site.
     public let children: [any View]
 
     public init(
@@ -622,13 +625,13 @@ public struct WebUIMessageScroller: View {
         id: String? = nil,
         fade: Bool = true,
         ariaLabel: String = WebUIStrings.english.messages,
-        @ViewBuilder content: () -> [any View]
+        content: [any View]           // erased: rendered in reverse (see `children`)
     ) {
         self.height = height
         self.id = id
         self.fade = fade
         self.ariaLabel = ariaLabel
-        self.children = content()
+        self.children = content
     }
 
     public func render(into buffer: inout HTMLBuffer) {

@@ -97,7 +97,7 @@ extension View {
 	/// condition holds.
 	///
 	/// concrete return type, not `some View`: an opaque result cannot be
-	/// inferred as the element type of a `ViewBuilder` loop body, so `some View`
+	/// inferred as the element type of an `@ElementBuilder` loop body, so `some View`
 	/// here blocks `for` loops that apply a tooltip. the sibling `.id`/`.class`
 	/// already return their concrete `ModifiedView`.
 	public func title(_ text: String, when condition: Bool = true) -> ModifiedView<Self, AttributeContribution> {

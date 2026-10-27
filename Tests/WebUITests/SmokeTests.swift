@@ -1308,10 +1308,11 @@ struct EdgeCaseTests {
         #expect(EmptyView().markup.html == "")
     }
 
-    @Test("ViewBuilder with empty block")
-    func emptyViewBuilder() {
-        let views = ViewBuilder.buildBlock()
-        #expect(views.isEmpty)
+    @Test("an empty @ElementBuilder block renders nothing")
+    func emptyElementBlockRendersNothing() {
+        // the block's product is a tuple with no members: no array, no boxes.
+        let html = Div { }.markup.html
+        #expect(html == "<div></div>")
     }
 
     @Test("conditional view with false branch")

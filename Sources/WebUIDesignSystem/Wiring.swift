@@ -69,15 +69,23 @@ public struct ContentCase: Sendable {
 /// struct becomes a shared parameter (declaration order and default
 /// expressions preserved verbatim); computed properties are skipped.
 ///
+/// the host declares one generic `: View` parameter per `.builder` case, in
+/// declaration order — a member macro cannot widen the host's generic parameter
+/// list, so a short declaration is a diagnostic (never a broken expansion).
+///
 /// ```swift
 /// @HTMLComponent(.text("label", unlabeled: true), .builder("views"))
-/// struct ArcButton: WebUI.View {
+/// struct ArcButton<Views: WebUI.View>: WebUI.View {
 ///     var id: String? = nil
 ///     var body: some View { … }
 /// }
 /// ```
-/// - Parameter cases: the content cases, one of which may be a `.builder`; it
-///   is always the trailing parameter and carries `@ViewBuilder`.
-@attached(member, names: named(init), named(content), named(Content))
+/// - Parameter cases: the content cases; each `.builder` case consumes the
+///   host's next generic parameter and is emitted as `@ElementBuilder`.
+// the emitted members are `init`, the `ContentKind` discriminator, `kind` and
+// one storage named after each content case — the last are built from the
+// attribute's arguments, so `named(...)` cannot enumerate them. `arbitrary` is
+// therefore required, not a shortcut.
+@attached(member, names: arbitrary)
 public macro HTMLComponent(_ cases: ContentCase...) =
     #externalMacro(module: "WebUIDesignSystemMacros", type: "ComponentMacro")

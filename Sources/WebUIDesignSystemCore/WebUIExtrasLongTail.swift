@@ -18,10 +18,13 @@ public struct WebUICarousel: View {
     public let id: String
     /// accessible name for the scroll region
     public let label: String
-    /// one entry per slide, in order
+    /// one entry per slide, in order.
+    /// // erased: a slide list is runtime-heterogeneous data (a caller's array of
+    /// mixed slide views), held as a plain array with no builder closure. N19 site.
     public let slides: [any View]
     public let showsDots: Bool
 
+    // erased: a runtime-heterogeneous slide list (see `slides`).
     public init(id: String, label: String, showsDots: Bool = true, slides: [any View]) {
         self.id = id
         self.label = label

@@ -27,8 +27,14 @@ public struct Chart: View {
 	/// Accessible name for the whole chart.
 	public let ariaLabel: String?
 
-	public init(@ViewBuilder content: () -> [any View]) {
-		self.marks = content().flatMap { Chart.resolve($0) }
+	/// the block is a typed `@ElementBuilder` block; its concrete type is read
+	/// once here and resolved to marks, because a chart's *output* is the mark
+	/// array, never the view tree. resolution is the dynamic walk
+	/// ``resolve(_:)-(C)`` describes — a styled mark, a `ForEach`, and a `Group`
+	/// are three different kinds of element — so it happens at init, once, and
+	/// never on a render.
+	public init<Content: View>(@ElementBuilder content: () -> Content) {
+		self.marks = Chart.resolve(content())
 		self.config = ChartConfig()
 		self.id = nil
 		self.ariaLabel = nil
@@ -45,6 +51,25 @@ public struct Chart: View {
 		// the renderer writes straight into the buffer: no intermediate string,
 		// same bytes.
 		ChartRenderer(marks: marks, config: config, id: id, ariaLabel: ariaLabel).render(into: &buffer)
+	}
+
+	/// extract marks from a typed block element.
+	///
+	/// the block yields concrete types, so this overload keeps the element typed
+	/// until the walk has to branch: a `Group` hands back `[any View]` by its own
+	/// definition (`ElementGroup`), and that recursion is the erased overload
+	/// below. nothing here is boxed per render — a chart renders its `marks`.
+	static func resolve<C: View>(_ view: C) -> [ChartMark] {
+		if let iterable = view as? ChartIterableMark {
+			return iterable.resolvedMarks
+		}
+		if let group = view as? ElementGroup {
+			return group.elements.flatMap { resolve($0) }
+		}
+		if let mark = view as? ChartContent {
+			return [mark.makeMark()]
+		}
+		return []
 	}
 
 	/// Extract marks from a view in the chart builder: a styled mark, a raw

@@ -286,6 +286,10 @@ public final class EventRouter: Sendable {
     /// the most render sessions the router holds before evicting the
     /// least-recently-used. bounds a long-lived server's routing state.
     public let maxSessions: Int
+    /// what a cap refusal does at a registration. `strict` records the failure
+    /// so ``raisePendingFailure(in:)`` can fail the render; `degrade` keeps the
+    /// 1.x warning-only shape.
+    public let policy: FailurePolicy
     private let state: State
     public let observers: ObserverList
     public let logger: Logger
@@ -301,6 +305,10 @@ public final class EventRouter: Sendable {
             var nextElementID: Int = 0
             /// the clock reading at this session's last use — the LRU key.
             var tick: UInt64 = 0
+            /// the first refusal this pass hit — a registration that could not
+            /// land, kept so the render owner can fail the pass instead of
+            /// shipping a page whose control answers nothing.
+            var failure: WebUIFailure?
         }
         private struct Values {
             var sessions: [RenderSessionID: Session] = [:]
@@ -309,6 +317,11 @@ public final class EventRouter: Sendable {
             /// and is skipped when the list is walked for eviction.
             var lru: [(id: RenderSessionID, tick: UInt64)] = []
             var clock: UInt64 = 0
+            /// sessions with at least one open socket. kept beside the session
+            /// table rather than inside `Session` because `begin` RESETS a
+            /// session (a re-render mints fresh state) while a re-render does
+            /// not close anybody's socket — liveness must survive the reset.
+            var live: Set<RenderSessionID> = []
         }
         private let values = Mutex(Values())
 
@@ -348,9 +361,30 @@ public final class EventRouter: Sendable {
         @discardableResult
         func end(_ session: RenderSessionID) -> Int {
             values.withLock { values in
+                values.live.remove(session)
                 guard let gone = values.sessions.removeValue(forKey: session) else { return 0 }
                 return gone.handlers.count
             }
+        }
+
+        /// mark `session`'s socket open: eviction must not reap a page that is
+        /// still on screen.
+        func markLive(_ session: RenderSessionID) {
+            values.withLock { _ = $0.live.insert(session) }
+        }
+
+        /// mark `session`'s last socket closed, so it becomes reapable again.
+        ///
+        /// the session itself is NOT dropped here — ending it is a lifecycle
+        /// decision (`end`), not a liveness one. this only takes the session out
+        /// of the protected set.
+        func markClosed(_ session: RenderSessionID) {
+            values.withLock { _ = $0.live.remove(session) }
+        }
+
+        /// whether `session` holds at least one open socket.
+        func isLive(_ session: RenderSessionID) -> Bool {
+            values.withLock { $0.live.contains(session) }
         }
 
         var sessionCount: Int {
@@ -366,15 +400,82 @@ public final class EventRouter: Sendable {
         /// drop least-recently-used sessions until `maxSessions` holds, returning
         /// the evicted ids. bounded state is the point: a server that renders for
         /// a year must not accumulate a session per request.
+        ///
+        /// a LIVE session is never reaped, however old it is: eviction is a
+        /// reaper for sessions whose sockets closed, not a way to make room by
+        /// dropping a page that is still open. a live incumbent at the cap is
+        /// refused by policy (§7.2 rule 3) — the caller decides that, not this
+        /// walk. when every over-cap session is live the table stays above the
+        /// cap, which is the honest outcome: the cap bounds *reapable* state.
         func evict(maxSessions: Int) -> [RenderSessionID] {
             values.withLock { values in
-                var evicted: [RenderSessionID] = []
-                while values.sessions.count > maxSessions, !values.lru.isEmpty {
-                    let head = values.lru.removeFirst()
-                    guard let live = values.sessions[head.id], live.tick == head.tick else { continue }
-                    values.sessions.removeValue(forKey: head.id)
-                    evicted.append(head.id)
+                Self.reap(&values, down: maxSessions)
+            }
+        }
+
+        /// reap least-recently-used NON-live sessions until `values` holds at
+        /// most `limit`, returning the ids dropped.
+        ///
+        /// the one walk both doors share: the legacy over-cap sweep (`evict`)
+        /// and the strict newcomer's make-room step (`beginStrict`), so a live
+        /// session is protected by one rule rather than two.
+        private static func reap(_ values: inout Values, down limit: Int) -> [RenderSessionID] {
+            guard values.sessions.count > limit else { return [] }
+            var evicted: [RenderSessionID] = []
+            var kept: [(id: RenderSessionID, tick: UInt64)] = []
+            kept.reserveCapacity(values.lru.count)
+            for head in values.lru {
+                // stale entry: the session was used again after this
+                // entry was appended, so the newer entry speaks for it.
+                guard let session = values.sessions[head.id], session.tick == head.tick else { continue }
+                if values.sessions.count <= limit || values.live.contains(head.id) {
+                    kept.append(head)
+                    continue
                 }
+                values.sessions.removeValue(forKey: head.id)
+                evicted.append(head.id)
+            }
+            values.lru = kept
+            return evicted
+        }
+
+        /// begin a render pass for `session`, refusing a newcomer outright when
+        /// the table already holds `maxSessions` sessions and none of them can
+        /// be reaped (every one of them is live).
+        ///
+        /// this is the strict door (§7.2 rule 3): a live incumbent is never the
+        /// price of admitting a newcomer. the capacity check and the insert are
+        /// one critical section, so two concurrent newcomers cannot both pass
+        /// the check and overshoot the cap.
+        ///
+        /// a session already in the table is a RE-RENDER, not a newcomer: it
+        /// costs no new row, so it is never refused (that is what keeps a page
+        /// at the cap able to refresh itself).
+        func beginStrict(
+            _ session: RenderSessionID,
+            preservingRegistrations: Bool,
+            maxSessions: Int
+        ) throws -> [RenderSessionID] {
+            try values.withLock { values in
+                var evicted: [RenderSessionID] = []
+                if values.sessions[session] == nil {
+                    evicted = Self.reap(&values, down: maxSessions - 1)
+                }
+                guard values.sessions[session] != nil || values.sessions.count < maxSessions else {
+                    throw WebUIFailure.atCapacity(kind: .sessions, limit: maxSessions)
+                }
+                values.clock += 1
+                var fresh = Session()
+                if preservingRegistrations, let existing = values.sessions[session] {
+                    // keep both tables; the counters stay fresh, so the render's
+                    // own ids are reused rather than appended.
+                    fresh.handlers = existing.handlers
+                    fresh.fallbacks = existing.fallbacks
+                }
+                fresh.tick = values.clock
+                values.sessions[session] = fresh
+                values.lru.append((session, values.clock))
+                Self.compact(&values)
                 return evicted
             }
         }
@@ -397,7 +498,26 @@ public final class EventRouter: Sendable {
 
         // MARK: handlers
 
-        func register(_ handler: @escaping OutcomeHandler, for componentID: ComponentID, in session: RenderSessionID) {
+        /// whether a registration landed or was refused by the handler cap.
+        enum Registration: Sendable, Equatable {
+            case registered
+            case capReached
+        }
+
+        /// register `handler`, refusing a NEW component id once the session
+        /// already holds `limit` handlers.
+        ///
+        /// re-registering an id the session already carries is an OVERWRITE: it
+        /// does not grow the table, so the cap must not refuse it. that is what
+        /// lets a page at the cap re-render itself — the previous code refused
+        /// the overwrite too, which is why a saturated page stopped routing at
+        /// all rather than merely stopping growing.
+        func register(
+            _ handler: @escaping OutcomeHandler,
+            for componentID: ComponentID,
+            in session: RenderSessionID,
+            limit: Int
+        ) -> Registration {
             values.withLock { values in
                 if values.sessions[session] == nil {
                     values.clock += 1
@@ -406,7 +526,35 @@ public final class EventRouter: Sendable {
                     values.sessions[session] = fresh
                     values.lru.append((session, values.clock))
                 }
+                guard let existing = values.sessions[session] else { return .capReached }
+                if existing.handlers[componentID] == nil, existing.handlers.count >= limit {
+                    return .capReached
+                }
                 values.sessions[session]?.handlers[componentID] = handler
+                return .registered
+            }
+        }
+
+        /// record the first refusal this pass hit. first-wins: a page that lost
+        /// three controls reports the first, which is the one that says why.
+        func recordFailure(_ failure: WebUIFailure, in session: RenderSessionID) {
+            values.withLock { values in
+                guard values.sessions[session]?.failure == nil else { return }
+                values.sessions[session]?.failure = failure
+            }
+        }
+
+        func failure(in session: RenderSessionID) -> WebUIFailure? {
+            values.withLock { $0.sessions[session]?.failure }
+        }
+
+        /// take the recorded failure, clearing it: a raised pass cannot be
+        /// raised twice, and the next pass starts clean.
+        func takeFailure(in session: RenderSessionID) -> WebUIFailure? {
+            values.withLock { values in
+                guard let failure = values.sessions[session]?.failure else { return nil }
+                values.sessions[session]?.failure = nil
+                return failure
             }
         }
 
@@ -468,13 +616,15 @@ public final class EventRouter: Sendable {
         logger: Logger = Logger(label: "webui.events"),
         observers: ObserverList? = nil,
         maxHandlers: Int = 10_000,
-        maxSessions: Int = 1_024
+        maxSessions: Int = 1_024,
+        policy: FailurePolicy = .strict
     ) {
         self.state = State()
         self.logger = logger
         self.observers = observers ?? ObserverList()
         self.maxHandlers = maxHandlers
         self.maxSessions = maxSessions
+        self.policy = policy
     }
 
     // MARK: render sessions
@@ -511,6 +661,40 @@ public final class EventRouter: Sendable {
         }
     }
 
+    /// start a render pass in `session`, refusing a NEWCOMER outright when the
+    /// table is full of live sessions (§7.2 rule 3).
+    ///
+    /// the loud counterpart of ``begin(_:preservingRegistrations:)``, and the
+    /// one a server's page route should call: at `maxSessions`, a newcomer
+    /// throws ``WebUIFailure/atCapacity(kind:limit:)`` with `kind == .sessions`
+    /// and the caller answers `503` — instead of the legacy door, which evicts
+    /// the least-recently-used session and can therefore delete a page somebody
+    /// is still looking at.
+    ///
+    /// a session already in the table is a RE-RENDER, never a newcomer: it is
+    /// admitted whatever the table holds, because it costs no new row. that is
+    /// what lets a page at the cap refresh itself.
+    ///
+    /// reaping is limited to sessions whose last socket closed. a live
+    /// incumbent is never the price of a newcomer, so when every session at the
+    /// cap is live the newcomer is refused rather than somebody's page broken.
+    public func beginStrict(
+        _ session: RenderSessionID,
+        preservingRegistrations: Bool = false
+    ) throws {
+        let evicted = try state.beginStrict(
+            session,
+            preservingRegistrations: preservingRegistrations,
+            maxSessions: maxSessions
+        )
+        if !evicted.isEmpty {
+            logger.emit(
+                ObservableEvent.debug(message: "EventRouter: reaped \(evicted.count) closed render session(s) to admit '\(session.rawValue)'"),
+                observers: observers
+            )
+        }
+    }
+
     /// drop `session`, returning how many handlers went with it. a host calls
     /// this when a page instance can no longer produce events (its socket closed
     /// and no re-render is coming).
@@ -529,7 +713,74 @@ public final class EventRouter: Sendable {
     /// how many render sessions the router currently holds.
     public var sessionCount: Int { state.sessionCount }
 
-    /// whether `session` is live.
+    /// mark `session`'s socket open, so eviction never reaps it.
+    ///
+    /// a server calls this when a page's socket (or its render) becomes live and
+    /// ``markClosed(_:)`` when that socket closes. liveness is not cleared by a
+    /// re-render: `begin(_:preservingRegistrations:)` resets a session's
+    /// handlers and counters, not whether somebody is looking at the page.
+    public func markLive(_ session: RenderSessionID) {
+        state.markLive(session)
+    }
+
+    /// mark `session`'s last socket closed: it becomes reapable again, and the
+    /// next registration that pushes the table past `maxSessions` reaps it.
+    ///
+    /// ending the session outright is still ``end(_:)`` — this only clears the
+    /// protection, because a closed page may still be re-rendered by a
+    /// reconnect that reuses its token.
+    public func markClosed(_ session: RenderSessionID) {
+        state.markClosed(session)
+    }
+
+    /// whether `session` is currently marked live.
+    public func isLive(_ session: RenderSessionID) -> Bool {
+        state.isLive(session)
+    }
+
+    /// end `session` because its last socket closed.
+    ///
+    /// the lifecycle half of the reaper (§7.2 rule 6), and the reason rule 3 is
+    /// affordable: the table shrinks because pages END, not because pressure
+    /// arrives. one atomic transition — liveness cleared and the session's
+    /// handlers dropped together — so a socket close can never leave a
+    /// half-reaped session that is neither routable nor reapable.
+    ///
+    /// returns the handlers that went with it. a session that was never in the
+    /// table (a socket that closed before its page rendered, or after the
+    /// session was already ended) is a no-op.
+    @discardableResult
+    public func sessionClosed(_ session: RenderSessionID) -> Int {
+        let removed = state.end(session)
+        logger.emit(
+            ObservableEvent.debug(message: "EventRouter: socket close ended render session '\(session.rawValue)' (\(removed) handler(s))"),
+            observers: observers
+        )
+        return removed
+    }
+
+    /// the first refusal this render pass recorded, without consuming it.
+    ///
+    /// non-nil means the pass is a failed render: a control's handler is not in
+    /// the table, so the page it is about to become would answer nothing.
+    public func pendingFailure(in session: RenderSessionID) -> WebUIFailure? {
+        state.failure(in: session)
+    }
+
+    /// throw the first refusal this render pass hit, and clear it.
+    ///
+    /// the one call a render owner makes after the pass and before it writes a
+    /// byte: `try router.raisePendingFailure(in: session)`. a page whose
+    /// controls could not register is a failed render (a `500`), never a page
+    /// that ships and then ignores clicks.
+    public func raisePendingFailure(in session: RenderSessionID) throws {
+        guard let failure = state.takeFailure(in: session) else { return }
+        throw failure
+    }
+
+    /// whether `session` is in the table — known to this router, live or not.
+    /// lets a server distinguish "unknown token" (reject) from "known page with
+    /// no controls" (nothing to route).
     public func contains(_ session: RenderSessionID) -> Bool {
         state.contains(session)
     }
@@ -555,16 +806,32 @@ public final class EventRouter: Sendable {
 
     /// register a handler that can answer with a redirect, a client-state write,
     /// a reload or a failure — not only fragments.
+    ///
+    /// at `maxHandlers`, this does NOT lose the registration silently
+    /// (§7.2 rule 2). in ``FailurePolicy/strict`` — the default — the refusal is
+    /// logged at `.error` and recorded on the session, so the render owner's
+    /// ``raisePendingFailure(in:)`` throws it and the page fails as a `500`
+    /// instead of shipping with a control that answers nothing. in
+    /// ``FailurePolicy/degrade`` it keeps the 1.x shape: one warning, no
+    /// registration.
+    ///
+    /// re-registering a component id the session already carries is an
+    /// overwrite, not growth, so it is never refused.
     public func register(
         outcome handler: @escaping OutcomeHandler,
         for componentID: ComponentID,
         in session: RenderSessionID
     ) {
-        if state.handlerCount(in: session) >= maxHandlers {
+        let registration = state.register(handler, for: componentID, in: session, limit: maxHandlers)
+        guard registration == .capReached else { return }
+        switch policy {
+        case .strict:
+            let refusal = WebUIFailure.handlerCapReached(session: session.rawValue, limit: maxHandlers)
+            state.recordFailure(refusal, in: session)
+            logger.error("EventRouter: handler cap reached (\(maxHandlers)) in session '\(session.rawValue)' — registration refused, the render fails. Call begin(_:) before each render, or increase maxHandlers.")
+        case .degrade:
             logger.warning("EventRouter: handler cap reached (\(maxHandlers)) in session '\(session.rawValue)'. Call begin(_:) before each render, or increase maxHandlers.")
-            return
         }
-        state.register(handler, for: componentID, in: session)
     }
 
     /// register into the shared default session — the single-page host's path.

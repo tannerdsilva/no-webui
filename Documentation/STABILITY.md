@@ -28,16 +28,18 @@ the canonical list of what may not change in a minor/patch is known as the
 ## the frozen surface
 
 the frozen surface is the consumer-facing API of the library products
-(`WebUI`, `WebUIDesignSystem`, `WebUIAuth`, `WebUIChart`, `WebUIServer`) and
-the modules a consumer reaches through their `@_exported` cores (`WebUICore`,
-`WebUIDesignSystemCore`, `WebUISharedCore`). it is enforced by **two
+(`WebUI`, `WebUIDesignSystem`, `WebUIAuth`, `WebUIChart`, `WebUIServer`,
+`WebUIState`, `WebUIHost`) and the modules a consumer reaches through their
+`@_exported` cores (`WebUICore`, `WebUIDesignSystemCore`, `WebUISharedCore`)
+and direct imports (`WebUIState`, `WebUIHost` are products, not re-exports).
+it is enforced by **two
 mechanisms**, and only what a mechanism demonstrably checks is claimed here as
 checked:
 
 **the generated pin list.** `Documentation/frozen-surface.symbols` is a
 generated, member-level enumeration of the frozen surface: every declared
 public init, method, property, subscript, enum case, typealias and macro in
-the eight modules, emitted by the real toolchain tool
+the eleven modules, emitted by the real toolchain tool
 `swift-symbolgraph-extract` (there is no `swift package api` verb, despite the
 earlier plan's claim — `swift package --help` has none, and the external
 `swift-package-tool` binary enumerates top-level declarations only).
@@ -49,7 +51,7 @@ left the tree. the list is generated, not hand-maintained: intentionally
 moving the surface means regenerating it (`FROZEN_SURFACE_EMIT=1 swift test
 --filter FrozenSurfaceTests` rewrites the file in place) and committing the
 regeneration in the same commit as the api change that forced it, justified
-there. re-measured 2026-10-25: 4789 symbols across 9 modules.
+there. re-measured 2026-10-27: 5040 symbols across 11 modules.
 compiler-synthesized members are excluded — a synthesized `==` is generated,
 not a declared contract, and including it would make the list churn on every
 equatable addition.

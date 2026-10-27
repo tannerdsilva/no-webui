@@ -75,7 +75,7 @@ struct VariantSplitTests {
     func deprecatedTypealiasResolves() {
         // a 1.x call site that spelled the type keeps compiling.
         let a: WebUISkeleton.Variant = .card
-        let b: WebUIBottomSheet.Variant = .full
+        let b: WebUIBottomSheet<EmptyView, EmptyView>.Variant = .full
         #expect(a == .card)
         #expect(b == .full)
         #expect(render(WebUISkeleton(variant: a)).contains("skeleton--card"))

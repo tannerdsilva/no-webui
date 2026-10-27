@@ -61,7 +61,7 @@ struct DuplicateTypeTests {
         // Placement's logical pair forwards the pattern rather than degrading.
         #expect(render(WebUIPopover(side: .leading)).contains("class=\"popover popover--leading\""))
         #expect(render(WebUIPopover(side: .trailing)).contains("class=\"popover popover--trailing\""))
-        #expect(WebUIPopover.Side.self == Placement.self)
+        #expect(WebUIPopover<EmptyView>.Side.self == Placement.self)
     }
 
     // MARK: Edge — a drawer's slide axis vs a panel's divider side
@@ -72,7 +72,7 @@ struct DuplicateTypeTests {
         #expect(render(WebUIDrawer(edge: .right) { Text("x") }).contains("class=\"drawer drawer--right\""))
         #expect(render(WebUIDrawer(edge: .top) { Text("x") }).contains("class=\"drawer drawer--top\""))
         #expect(render(WebUIDrawer(edge: .bottom) { Text("x") }).contains("class=\"drawer drawer--bottom\""))
-        #expect(WebUIDrawer.Edge.self == DrawerEdge.self)
+        #expect(WebUIDrawer<EmptyView, EmptyView>.Edge.self == DrawerEdge.self)
     }
 
     @Test("Panel's edge is PanelEdge, same three bytes")
@@ -80,15 +80,15 @@ struct DuplicateTypeTests {
         #expect(render(WebUIPanel(title: "t", edge: .none) { Text("x") }).contains("class=\"\""))
         #expect(render(WebUIPanel(title: "t", edge: .leading) { Text("x") }).contains("class=\"panel panel--leading\""))
         #expect(render(WebUIPanel(title: "t", edge: .trailing) { Text("x") }).contains("class=\"panel panel--trailing\""))
-        #expect(WebUIPanel.Edge.self == PanelEdge.self)
+        #expect(WebUIPanel<EmptyView>.Edge.self == PanelEdge.self)
     }
 
     @Test("the two edges are genuinely different axes now")
     func edgesAreDistinct() {
         // they were both spelled `Edge`; they are not the same vocabulary and
         // must not be one type — this is the point of the split.
-        #expect(WebUIDrawer.Edge.self != WebUIPanel.Edge.self)
-        #expect(WebUIDrawer.Edge.self == DrawerEdge.self)
-        #expect(WebUIPanel.Edge.self == PanelEdge.self)
+        #expect(WebUIDrawer<EmptyView, EmptyView>.Edge.self != WebUIPanel<EmptyView>.Edge.self)
+        #expect(WebUIDrawer<EmptyView, EmptyView>.Edge.self == DrawerEdge.self)
+        #expect(WebUIPanel<EmptyView>.Edge.self == PanelEdge.self)
     }
 }

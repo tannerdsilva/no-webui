@@ -16,6 +16,12 @@ import Darwin
 // extra dependencies, and no shared state between tests (each test gets a
 // fresh server).
 //
+// the suite is the rewrite's *parity contract*: it names behaviours, never
+// implementation, so the same ten cases passed before and after the example
+// moved onto `WebUIState`/`WebUIHost`. the last case pins the new path
+// positively: a click's reply is the page re-rendered from the session's
+// store, not a fragment an application author wrote.
+//
 // the binary must exist first: run `swift build` before `swift test`. the
 // test locates it under `.build/` (any triple layout) and fails with a clear
 // message when it is missing. the suite is `.serialized` so ephemeral ports
@@ -283,7 +289,32 @@ struct AuthServerCeremonyTests {
 		}
 	}
 
-	// MARK: harness plumbing
+	@Test("a click's patch is the page re-rendered from the session's state")
+	func clickPatchIsAStateRender() async throws {
+		try await withServer { server in
+			let cookie = try #require(try logIn(server: server))
+			let header = "auth=\(cookie)"
+			let dashboard = try httpRequest(port: server.port, path: "/", headers: [("cookie", header)])
+			let renderToken = try #require(extractRenderToken(dashboard.body))
+			let componentID = try #require(extractComponentID(dashboard.body))
+			let before = try #require(extractCounter(dashboard.body))
+
+			let upgraded = try wsUpgrade(port: server.port, cookie: header)
+			let socket = try #require(upgraded.socket)
+			let click = #"{"type":"event","component":"\#(componentID)","event":"click","data":{},"token":"\#(renderToken)"}"#
+			try wsSendText(socket, click)
+
+			// the reply is the whole page region as the store now describes
+			// it: no fragment was written by the application, and the counter
+			// in the bytes is the mutated value — not the one the client sent.
+			let html = try #require(try readUpdateHTML(socket, timeout: 3))
+			#expect(html.contains("id=\"app\""))
+			#expect(html.contains("counter-value"))
+			let after = try #require(extractCounter(html))
+			#expect(after != before)
+			#expect(html.contains("<span>\(after)</span>"))
+		}
+	}
 
 	private func withServer(arguments: [String] = [], _ body: (AuthServer) async throws -> Void) async throws {
 		let server = try AuthServer.launch(extraArguments: arguments)
@@ -534,6 +565,25 @@ private func readUpdateFrame(_ socket: RawSocket, timeout: TimeInterval) throws 
 		}
 	}
 	return false
+}
+
+/// the first fragment's html in an `update` frame, decoded through the frame's
+/// own json — the bytes a patch put on the wire, not a substring guess.
+private func readUpdateHTML(_ socket: RawSocket, timeout: TimeInterval) throws -> String? {
+	for _ in 0..<Int(timeout * 4) {
+		guard let frame = try wsReadFrame(socket) else { return nil }
+		guard frame.opcode == 1,
+		      let text = String(bytes: frame.payload, encoding: .utf8),
+		      text.contains("\"update\""),
+		      let data = text.data(using: .utf8),
+		      let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+		      let fragments = object["fragments"] as? [[String: Any]],
+		      let html = fragments.first?["html"] as? String else {
+			continue
+		}
+		return html
+	}
+	return nil
 }
 
 /// true when the server rejects a message: a redirect text frame followed by

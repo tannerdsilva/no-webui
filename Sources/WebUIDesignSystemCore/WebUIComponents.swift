@@ -271,7 +271,7 @@ public struct WebUIInput: View {
 /// glyph), the body itself, a footer meta line, and a full-bleed action bar.
 /// every anatomy slot defaults to absent, so a bare `WebUICard { … }` renders
 /// exactly the markup it always has.
-public struct WebUICard: View {
+public struct WebUICard<Content: View, Actions: View>: View {
     /// the 1.x fused enum, kept only for the deprecated initializer below.
     ///
     /// a `Variant` that could be `.disabled`, or `.compact`, was never a variant:
@@ -307,7 +307,7 @@ public struct WebUICard: View {
     public let compact: Bool
     public let disabled: Bool
     public let id: String?
-    public let children: [any View]
+    public let children: Content
     /// small caps label above the title.
     public let eyebrow: String?
     public let title: String?
@@ -325,7 +325,10 @@ public struct WebUICard: View {
     /// footer's meta line.
     public let footerMeta: String?
     /// full-bleed action bar under the body.
-    public let actions: [any View]
+    public let actions: Actions
+    /// whether the actions block has content. the action bar exists only when it
+    /// does — the `!actions.isEmpty` branch, decided once at init.
+    public let hasActions: Bool
 
     /// this component's own class for a shared elevation — the sheet's bytes are
     /// unchanged.
@@ -353,9 +356,10 @@ public struct WebUICard: View {
         mediaBadge: String? = nil,
         text: String? = nil,
         footerMeta: String? = nil,
-        @ViewBuilder actions: () -> [any View] = { [] },
-        @ViewBuilder content: () -> [any View]
+        @ElementBuilder actions: () -> Actions,
+        @ElementBuilder content: () -> Content
     ) {
+        let builtActions = actions()
         self.elevation = elevation
         self.interactive = interactive
         self.horizontal = horizontal
@@ -371,7 +375,47 @@ public struct WebUICard: View {
         self.mediaBadge = mediaBadge
         self.text = text
         self.footerMeta = footerMeta
-        self.actions = actions()
+        self.actions = builtActions
+        self.hasActions = !blockIsEmpty(builtActions)
+        self.children = content()
+    }
+
+    /// no action bar: `Actions` is the phantom `EmptyView` and the bar is absent.
+    public init(
+        elevation: Elevation? = .elevated,
+        interactive: Bool = false,
+        horizontal: Bool = false,
+        hover: Bool = false,
+        compact: Bool = false,
+        disabled: Bool = false,
+        id: String? = nil,
+        eyebrow: String? = nil,
+        title: String? = nil,
+        description: String? = nil,
+        headerIcon: IconName? = nil,
+        media: IconName? = nil,
+        mediaBadge: String? = nil,
+        text: String? = nil,
+        footerMeta: String? = nil,
+        @ElementBuilder content: () -> Content
+    ) where Actions == EmptyView {
+        self.elevation = elevation
+        self.interactive = interactive
+        self.horizontal = horizontal
+        self.hover = hover
+        self.compact = compact
+        self.disabled = disabled
+        self.id = id
+        self.eyebrow = eyebrow
+        self.title = title
+        self.description = description
+        self.headerIcon = headerIcon
+        self.media = media
+        self.mediaBadge = mediaBadge
+        self.text = text
+        self.footerMeta = footerMeta
+        self.actions = EmptyView()
+        self.hasActions = false
         self.children = content()
     }
 
@@ -392,8 +436,8 @@ public struct WebUICard: View {
         mediaBadge: String? = nil,
         text: String? = nil,
         footerMeta: String? = nil,
-        @ViewBuilder actions: () -> [any View] = { [] },
-        @ViewBuilder content: () -> [any View]
+        @ElementBuilder actions: () -> Actions,
+        @ElementBuilder content: () -> Content
     ) {
         var elevation: Elevation? = .elevated
         var interactive = false, horizontal = false, hover = false, compact = false, disabled = false
@@ -413,6 +457,42 @@ public struct WebUICard: View {
             id: id, eyebrow: eyebrow, title: title, description: description,
             headerIcon: headerIcon, media: media, mediaBadge: mediaBadge,
             text: text, footerMeta: footerMeta, actions: actions, content: content
+        )
+    }
+
+    /// the 1.x initializer without an action bar.
+    @available(*, deprecated, message: "use elevation: plus the typed flags")
+    public init(
+        variant: Variant,
+        id: String? = nil,
+        eyebrow: String? = nil,
+        title: String? = nil,
+        description: String? = nil,
+        headerIcon: IconName? = nil,
+        media: IconName? = nil,
+        mediaBadge: String? = nil,
+        text: String? = nil,
+        footerMeta: String? = nil,
+        @ElementBuilder content: () -> Content
+    ) where Actions == EmptyView {
+        var elevation: Elevation? = .elevated
+        var interactive = false, horizontal = false, hover = false, compact = false, disabled = false
+        switch variant {
+            case .elevated: break
+            case .outlined: elevation = .outlined
+            case .flat: elevation = .flat
+            case .interactive: elevation = nil; interactive = true
+            case .horizontal: elevation = nil; horizontal = true
+            case .hover: elevation = nil; hover = true
+            case .compact: elevation = nil; compact = true
+            case .disabled: elevation = nil; disabled = true
+        }
+        self.init(
+            elevation: elevation, interactive: interactive, horizontal: horizontal,
+            hover: hover, compact: compact, disabled: disabled,
+            id: id, eyebrow: eyebrow, title: title, description: description,
+            headerIcon: headerIcon, media: media, mediaBadge: mediaBadge,
+            text: text, footerMeta: footerMeta, content: content
         )
     }
 
@@ -451,16 +531,14 @@ public struct WebUICard: View {
         buffer.append("<div class=\"card__body\">")
         if let description { buffer.append("<div class=\"card__desc\">\(htmlEscape(description))</div>") }
         if let text { buffer.append("<div class=\"card__text\">\(htmlEscape(text))</div>") }
-        for child in children {
-            child.render(into: &buffer)
-        }
+        children.render(into: &buffer)
         if let footerMeta {
             buffer.append("<div class=\"card__footer\"><span class=\"card__meta\">\(htmlEscape(footerMeta))</span></div>")
         }
         buffer.append("</div>")
-        if !actions.isEmpty {
+        if hasActions {
             buffer.append("<div class=\"card__actions\">")
-            for action in actions { action.render(into: &buffer) }
+            actions.render(into: &buffer)
             buffer.append("</div>")
         }
         buffer.endElement()
@@ -989,11 +1067,14 @@ public struct WebUIToast: View, Dismissible {    @available(*, deprecated, renam
 }
 
 // MARK: - WebUI Modal
-public struct WebUIModal: View, Dismissible {
+public struct WebUIModal<Content: View, Footer: View>: View, Dismissible {
     public let title: String
     public let id: String?
-    public let children: [any View]
-    public let footer: [any View]?
+    public let children: Content
+    public let footer: Footer
+    /// whether the footer block has content. the footer wrapper exists only when
+    /// it does — the `footer?.isEmpty` check, decided once at init.
+    public let hasFooter: Bool
     /// handler wired onto the close button; `nil` renders the static
     /// `data-dismiss` marker only.
     public var onDismiss: DismissHandler?
@@ -1001,13 +1082,29 @@ public struct WebUIModal: View, Dismissible {
     public init(
         title: String,
         id: String? = nil,
-        @ViewBuilder content: () -> [any View],
-        @ViewBuilder footer: () -> [any View] = { [] }
+        @ElementBuilder content: () -> Content,
+        @ElementBuilder footer: () -> Footer
     ) {
+        let builtFooter = footer()
         self.title = title
         self.id = id
         self.children = content()
-        self.footer = footer()
+        self.footer = builtFooter
+        self.hasFooter = !blockIsEmpty(builtFooter)
+        self.onDismiss = nil
+    }
+
+    /// no footer: `Footer` is the phantom `EmptyView` and the wrapper is absent.
+    public init(
+        title: String,
+        id: String? = nil,
+        @ElementBuilder content: () -> Content
+    ) where Footer == EmptyView {
+        self.title = title
+        self.id = id
+        self.children = content()
+        self.footer = EmptyView()
+        self.hasFooter = false
         self.onDismiss = nil
     }
 
@@ -1029,15 +1126,11 @@ public struct WebUIModal: View, Dismissible {
         buffer.append(dismissal.buttonHTML)
         buffer.append("</div>")
         buffer.append("<div class=\"modal__body\">")
-        for child in children {
-            child.render(into: &buffer)
-        }
+        children.render(into: &buffer)
         buffer.append("</div>")
-        if let footer, !footer.isEmpty {
+        if hasFooter {
             buffer.append("<div class=\"modal__footer\">")
-            for item in footer {
-                item.render(into: &buffer)
-            }
+            footer.render(into: &buffer)
             buffer.append("</div>")
         }
         buffer.append("</div>")
@@ -1086,6 +1179,9 @@ public struct WebUITable: View {
     }
 
     public let headers: [String]
+    /// // erased: rows are runtime-heterogeneous data — an array of rows, each an
+    /// array of mixed cell views built from a data model. no builder block
+    /// describes that shape. N19 site.
     public let rows: [[any View]]
     public let striped: Bool
     public let hoverable: Bool
@@ -1093,6 +1189,9 @@ public struct WebUITable: View {
     public let responsive: Bool
     public let wrapped: Bool
     public let alignments: [Alignment]
+    /// // erased: paired with `rows` — the footer is a plain array the caller
+    /// assembles beside its rows, and `nil` (absent) is distinct from `[]`.
+    /// N19 site.
     public let footer: [any View]?
     public let emptyState: EmptyState?
 
@@ -1143,14 +1242,14 @@ public struct WebUITable: View {
 
     public init(
         headers: [String],
-        rows: [[any View]],
+        rows: [[any View]],          // erased: runtime-heterogeneous rows (see `rows`)
         striped: Bool = true,
         hoverable: Bool = true,
         compact: Bool = false,
         responsive: Bool = false,
         wrapped: Bool = false,
         alignments: [Alignment] = [],
-        footer: [any View]? = nil,
+        footer: [any View]? = nil,   // erased: paired with `rows` (see `footer`)
         emptyState: EmptyState? = nil,
         id: String? = nil,
         sortableColumns: Set<Int> = [],
@@ -1545,7 +1644,7 @@ public struct WebUISpinner: View {
 }
 
 // MARK: - WebUI Tooltip
-public struct WebUITooltip: View {
+public struct WebUITooltip<Content: View>: View {
     public enum Position: String, Sendable {
         case top    = "tooltip--top"
         case bottom = "tooltip--bottom"
@@ -1555,12 +1654,12 @@ public struct WebUITooltip: View {
 
     public let text: String
     public let position: Position
-    public let children: [any View]
+    public let children: Content
 
     public init(
     _ text: String,
         position: Position = .top,
-        @ViewBuilder content: () -> [any View]
+        @ElementBuilder content: () -> Content
     ) {
         self.text = text
         self.position = position
@@ -1571,9 +1670,7 @@ public struct WebUITooltip: View {
         let attributeText = " class=\"tooltip-container\""
         buffer.beginElement("div", attributeText)
         buffer.endOpenTag()
-        for child in children {
-            child.render(into: &buffer)
-        }
+        children.render(into: &buffer)
         buffer.append("<div class=\"tooltip \(position.rawValue)\"" + AriaRole.tooltip.render() + ">")
         buffer.append("<span class=\"tooltip__arrow\"></span>")
         buffer.append("<span class=\"tooltip__text\">\(htmlEscape(text))</span>")

@@ -2,6 +2,7 @@ import Foundation
 import RAW
 import RAW_hmac
 import RAW_sha256
+import WebUICore
 
 #if os(Linux)
 import Glibc
@@ -94,6 +95,7 @@ public func bytesToHex(_ bytes: [UInt8]) -> String {
 // on apple platforms. a thin os-entropy wrapper — no algorithm implemented
 // here.
 public enum SecureRandom {
+	/// `count` fresh random bytes, or `nil` when the platform source fails.
 	public static func bytes(_ count: Int) -> [UInt8]? {
 		guard count > 0 else { return count == 0 ? [] : nil }
 		var out = [UInt8](repeating: 0, count: count)
@@ -123,5 +125,69 @@ public enum SecureRandom {
 		guard status == errSecSuccess else { return nil }
 		return out
 		#endif
+	}
+}
+
+// MARK: - Secure Random Source
+
+/// the entropy source, as an injectable value.
+///
+/// `SecureRandom` is the platform call; this protocol is the same shape a
+/// caller can substitute so a test can make entropy *fail* — the one condition
+/// that must produce a degraded render rather than a tokenless page — without
+/// a process-wide switch. the render token is the only consumer today.
+public protocol SecureRandomSource: Sendable {
+	/// `count` fresh bytes, or `nil` when the source cannot produce them.
+	func bytes(_ count: Int) -> [UInt8]?
+}
+
+/// the platform source: `/dev/urandom` on linux, `SecRandomCopyBytes` on apple
+/// platforms — exactly ``SecureRandom/bytes(_:)``.
+public struct SystemSecureRandom: SecureRandomSource {
+	public init() {}
+
+	public func bytes(_ count: Int) -> [UInt8]? {
+		SecureRandom.bytes(count)
+	}
+}
+
+extension SecureRandomSource where Self == SystemSecureRandom {
+	/// the production source, spelled so a defaulted parameter can say
+	/// `.system` and mean today's behaviour.
+	public static var system: SystemSecureRandom { SystemSecureRandom() }
+}
+
+// MARK: - Strict entropy
+
+// the failure shape a render owner needs: `bytes` reports `nil` and the caller
+// has to decide. `requireBytes` is the decision already made — no token, no
+// page — so a render that cannot be token-bound fails as `entropyUnavailable`
+// instead of shipping a tokenless page (design C, §7.2 rule 4).
+
+extension SecureRandomSource {
+	/// `count` fresh bytes from this source, or
+	/// ``WebUIFailure/entropyUnavailable``.
+	///
+	/// this is the loud door every render path should use: a `nil` from
+	/// ``bytes(_:)`` is a *failure*, not a value to paper over with an empty
+	/// token, which would make every event on the page unroutable while the
+	/// page itself looked fine.
+	public func requireBytes(_ count: Int) throws -> [UInt8] {
+		guard let bytes = bytes(count) else { throw WebUIFailure.entropyUnavailable }
+		return bytes
+	}
+}
+
+extension SecureRandom {
+	/// `count` bytes from `source`, or ``WebUIFailure/entropyUnavailable``.
+	///
+	/// the sibling of ``SecureRandom/bytes(_:)`` that fails loudly, so a caller
+	/// that must not degrade (a render minting its token) writes one `try`
+	/// instead of an `if let` whose `else` is easy to leave empty.
+	public static func requireBytes(
+		_ count: Int,
+		using source: any SecureRandomSource = .system
+	) throws -> [UInt8] {
+		try source.requireBytes(count)
 	}
 }

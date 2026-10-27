@@ -31,6 +31,10 @@ enum FrozenSurface {
 		"WebUISharedCore", "WebUICore", "WebUI",
 		"WebUIDesignSystemCore", "WebUIDesignSystem",
 		"WebUIAuth", "WebUIChart", "WebUIServer",
+		// stage 1's two new products. without these a whole shipping product's
+		// public surface is invisible to the pin — agent B found it: its 15
+		// WebUICore symbols drifted while 64 WebUIState declarations went unpinned.
+		"WebUIState", "WebUIHost",
 		// the opt-in rawdog payload bridge: public surface, pinned like the rest.
 		"WebUIIslandWireRAW",
 	]

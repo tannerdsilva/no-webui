@@ -395,7 +395,7 @@ public struct WebUIComposer: View {
 /// a titled side panel: a header row (title, optional count, trailing
 /// actions) above a body that owns its own scroll. the base for the
 /// conversations list and the workspace/file-tree pane.
-public struct WebUIPanel: View {
+public struct WebUIPanel<Content: View>: View {
 
     /// which side carries the divider against an adjacent pane.
     @available(*, deprecated, renamed: "PanelEdge")
@@ -403,8 +403,11 @@ public struct WebUIPanel: View {
 
     public let title: String
     public let subtitle: String?
+    /// trailing header actions. a plain array, deliberately: a caller builds it
+    /// from a heterogeneous list (`[WebUIButton(...), WebUIBadge(...)]`), which a
+    /// typed block cannot infer. `// erased: heterogeneous caller-built array`.
     public let actions: [any View]
-    public let content: [any View]
+    public let content: Content
     public let id: String?
     public let edge: PanelEdge
 
@@ -423,8 +426,8 @@ public struct WebUIPanel: View {
         subtitle: String? = nil,
         id: String? = nil,
         edge: PanelEdge = .leading,
-        actions: [any View] = [],
-        @ViewBuilder content: () -> [any View]
+        actions: [any View] = [],    // erased: heterogeneous caller-built array
+        @ElementBuilder content: () -> Content
     ) {
         self.title = title
         self.subtitle = subtitle
@@ -453,12 +456,10 @@ public struct WebUIPanel: View {
         }
         html += "</header>"
         html += "<div class=\"panel__body\">"
-        for child in content {
-            html += child.markup.html
-        }
-        html += "</div>"
-        html += "</section>"
         buffer.append(html)
+        content.render(into: &buffer)
+        buffer.append("</div>")
+        buffer.append("</section>")
     }
 }
 
@@ -521,6 +522,11 @@ public struct WebUIItem: View {
     public let icon: IconName?
     public let selected: Bool
     public let id: String?
+    /// trailing actions, erased: every action renders inside its own
+    /// `list__action` span, so the component must walk the children one at a
+    /// time and wrap each — a typed block is a tuple with no per-child walk, and
+    /// wrapping the whole block in one span would change the bytes. an erased
+    /// array is the one documented door (``ErasedViews``); N19 site.
     public let actions: [any View]
 
     public init(
@@ -530,7 +536,7 @@ public struct WebUIItem: View {
         icon: IconName? = nil,
         selected: Bool = false,
         id: String? = nil,
-        @ViewBuilder actions: () -> [any View] = { [] }
+        actions: [any View] = []     // erased: one span per action (see `actions`)
     ) {
         self.title = title
         self.subtitle = subtitle
@@ -538,7 +544,7 @@ public struct WebUIItem: View {
         self.icon = icon
         self.selected = selected
         self.id = id
-        self.actions = actions()
+        self.actions = actions
     }
 
     public func render(into buffer: inout HTMLBuffer) {

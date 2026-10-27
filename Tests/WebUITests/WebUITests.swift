@@ -311,28 +311,30 @@ func multipleModifiersChainOnDiv() {
     #expect(html.contains("padding: 8px"))
 }
 
-// MARK: - ViewBuilder Tests
+// MARK: - ElementBuilder Tests
 
-@Test("ViewBuilder builds multiple views")
-func viewBuilderBuildsMultipleViews() {
-    let views = ViewBuilder.buildBlock(
-        [Text("A")],
-        [Text("B")],
-        [Text("C")]
-    )
-    #expect(views.count == 3)
+@Test("ElementBuilder builds several views as one tuple, in order")
+func elementBuilderBuildsSeveralViews() {
+    let view = Div {
+        Text("A")
+        Text("B")
+        Text("C")
+    }
+    #expect(view.markup.html == "<div>ABC</div>")
 }
 
-@Test("ViewBuilder buildOptional returns empty array for nil")
-func viewBuilderOptionalNil() {
-    let views = ViewBuilder.buildOptional(nil)
-    #expect(views.isEmpty)
+@Test("ElementBuilder buildOptional renders nothing for nil")
+func elementBuilderOptionalNil() {
+    let missing: Text? = nil
+    let view = Div { if let missing { missing } }
+    #expect(view.markup.html == "<div></div>")
 }
 
-@Test("ViewBuilder buildOptional returns component for non-nil")
-func viewBuilderOptionalSome() {
-    let views = ViewBuilder.buildOptional([Text("Hello")])
-    #expect(views.count == 1)
+@Test("an erased array is the one erasure door, and it renders in order")
+func erasedViewsDoorRenders() {
+    let erased: [any View] = [Text("Hello"), Text("World")]
+    let view = Div { ErasedViews(erased) }
+    #expect(view.markup.html == "<div>HelloWorld</div>")
 }
 
 // MARK: - CSS System Tests

@@ -6,7 +6,7 @@ import WebUICore
 
 // MARK: WebUI Navbar
 /// a top application bar: brand, nav links, and trailing actions.
-public struct WebUINavbar: View {
+public struct WebUINavbar<Actions: View>: View {
     public struct Link: Sendable {
         public let label: String
         public let href: String
@@ -29,7 +29,11 @@ public struct WebUINavbar: View {
     }
     public let brand: String?
     public let links: [Link]
-    public let actions: [any View]
+    public let actions: Actions
+    /// whether the caller supplied any trailing action. the wrapper is emitted
+    /// only when there is one — the same branch `!actions.isEmpty` made over the
+    /// erased array, now decided once at init from the block's own arity.
+    public let hasActions: Bool
     public let sticky: Bool
     /// search slot; `nil` renders no field.
     public let search: Search?
@@ -45,11 +49,28 @@ public struct WebUINavbar: View {
                 search: Search? = nil, mobileMenu: Bool = false,
                 mobileMenuLabel: String = WebUIStrings.english.menu,
                 id: String? = nil, onNavigate: EventHandler? = nil,
-                @ViewBuilder actions: () -> [any View]) {
+                @ElementBuilder actions: () -> Actions) {
+        let built = actions()
         self.brand = brand; self.links = links; self.sticky = sticky
         self.search = search; self.mobileMenu = mobileMenu
         self.mobileMenuLabel = mobileMenuLabel
-        self.id = id; self.onNavigate = onNavigate; self.actions = actions()
+        self.id = id; self.onNavigate = onNavigate
+        self.actions = built
+        self.hasActions = !blockIsEmpty(built)
+    }
+
+    /// no trailing actions: `Actions` is the phantom `EmptyView`, and the
+    /// wrapper is absent — the bytes a call site that omitted the block rendered.
+    public init(brand: String? = nil, links: [Link] = [], sticky: Bool = false,
+                search: Search? = nil, mobileMenu: Bool = false,
+                mobileMenuLabel: String = WebUIStrings.english.menu,
+                id: String? = nil, onNavigate: EventHandler? = nil) where Actions == EmptyView {
+        self.brand = brand; self.links = links; self.sticky = sticky
+        self.search = search; self.mobileMenu = mobileMenu
+        self.mobileMenuLabel = mobileMenuLabel
+        self.id = id; self.onNavigate = onNavigate
+        self.actions = EmptyView()
+        self.hasActions = false
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -79,11 +100,18 @@ public struct WebUINavbar: View {
             }
             html += "</div>"
         }
-        if !actions.isEmpty {
+        if hasActions {
             html += "<div class=\"navbar__actions\">"
-            for a in actions { html += a.markup.html }
-            html += "</div>"
         }
+        // the actions are a typed block: they render straight into the buffer
+        // between the prefix and the tail instead of being concatenated into one
+        // string. the bytes are the concatenation's.
+        buffer.append(html)
+        if hasActions {
+            actions.render(into: &buffer)
+            buffer.append("</div>")
+        }
+        html = ""
         if mobileMenu {
             html += "<button class=\"navbar__hamburger\" type=\"button\"" + Aria.label(mobileMenuLabel).render() + ">"
             html += "<span></span><span></span><span></span>"
@@ -209,15 +237,14 @@ public struct WebUIFab: View {    @available(*, deprecated, renamed: "Tone")
 
 // MARK: WebUI Speed Dial
 /// a container that lays out its child fabs in a speed-dial stack.
-public struct WebUISpeedDial: View {
-    public let children: [any View]
-    public init(@ViewBuilder content: () -> [any View]) { self.children = content() }
+public struct WebUISpeedDial<Content: View>: View {
+    public let children: Content
+    public init(@ElementBuilder content: () -> Content) { self.children = content() }
 
     public func render(into buffer: inout HTMLBuffer) {
-        var html = "<div class=\"fab-stage fab-stage--dial\">"
-        for c in children { html += c.markup.html }
-        html += "</div>"
-        buffer.append(html)
+        buffer.append("<div class=\"fab-stage fab-stage--dial\">")
+        children.render(into: &buffer)
+        buffer.append("</div>")
     }
 }
 
@@ -308,15 +335,14 @@ public struct WebUITransfer: View {
 
 // MARK: WebUI Button Group
 /// a joined group of buttons.
-public struct WebUIButtonGroup: View {
-    public let children: [any View]
-    public init(@ViewBuilder content: () -> [any View]) { self.children = content() }
+public struct WebUIButtonGroup<Content: View>: View {
+    public let children: Content
+    public init(@ElementBuilder content: () -> Content) { self.children = content() }
 
     public func render(into buffer: inout HTMLBuffer) {
-        var html = "<div class=\"button-group\"" + AriaRole.group.render() + ">"
-        for c in children { html += c.markup.html }
-        html += "</div>"
-        buffer.append(html)
+        buffer.append("<div class=\"button-group\"" + AriaRole.group.render() + ">")
+        children.render(into: &buffer)
+        buffer.append("</div>")
     }
 }
 
@@ -401,8 +427,12 @@ public struct WebUIAccordion: View {
         public let title: String
         public let open: Bool
         public let children: String
-        public init(_ title: String, open: Bool = false, @ViewBuilder content: () -> [any View]) {
-            self.title = title; self.open = open; self.children = content().map { $0.markup.html }.joined()
+        /// the item stores rendered markup (`children: String`), because an
+        /// `Item` is a `Sendable` value held in an array and a generic item would
+        /// make `[Item]` heterogeneous. the block is typed, so its type reaches
+        /// this init — the flattening happens once, here, and never per render.
+        public init<Content: View>(_ title: String, open: Bool = false, @ElementBuilder content: () -> Content) {
+            self.title = title; self.open = open; self.children = content().markup.html
         }
     }
     public let items: [Item]
@@ -445,16 +475,16 @@ public struct WebUIAccordion: View {
 
 // MARK: WebUI Collapse
 /// a single collapsible region.
-public struct WebUICollapse: View {
+public struct WebUICollapse<Content: View>: View {
     public let header: String
     public let open: Bool
-    public let children: [any View]
+    public let children: Content
     /// stable container id. when set alongside `onToggle`, the collapse
     /// self-wires its header toggle.
     public let id: String?
     public let onToggle: EventHandler?
     public init(_ header: String, open: Bool = false, id: String? = nil, onToggle: EventHandler? = nil,
-                @ViewBuilder content: () -> [any View]) {
+                @ElementBuilder content: () -> Content) {
         self.header = header; self.open = open; self.id = id; self.onToggle = onToggle; self.children = content()
     }
 
@@ -469,9 +499,9 @@ public struct WebUICollapse: View {
         let headerID = id.map { " id=\"\(htmlEscape($0))\"" } ?? ""
         html += "<button class=\"collapse__header\"\(headerID)" + Aria.expanded(open ? .yes : .no).render() + "><span class=\"collapse__chevron\"></span>\(htmlEscape(header))</button>"
         html += "<div class=\"collapse__content\"><div class=\"collapse__inner\">"
-        for c in children { html += c.markup.html }
-        html += "</div></div></div>"
         buffer.append(html)
+        children.render(into: &buffer)
+        buffer.append("</div></div></div>")
     }
 }
 
@@ -522,12 +552,16 @@ public struct WebUIActionSheet: View {
 
 // MARK: WebUI Bottom Sheet
 /// bottom-anchored modal surface.
-public struct WebUIBottomSheet: View {
+public struct WebUIBottomSheet<Content: View, Footer: View>: View {
     @available(*, deprecated, renamed: "SlidePosition")
     public typealias Variant = SlidePosition
     public let title: String?
-    public let children: [any View]
-    public let footer: [any View]
+    public let children: Content
+    public let footer: Footer
+    /// whether the footer block has content. the footer wrapper exists only when
+    /// it does — the branch `!footer.isEmpty` made over the erased array, decided
+    /// once at init.
+    public let hasFooter: Bool
     public let position: SlidePosition
     /// stable container id; when set with `onDismiss` the close button
     /// self-wires (`targetId == "<id>-close"`).
@@ -545,16 +579,33 @@ public struct WebUIBottomSheet: View {
     }
 
     public init(title: String? = nil, position: SlidePosition = .half, id: String? = nil, onDismiss: EventHandler? = nil,
-                @ViewBuilder content: () -> [any View], @ViewBuilder footer: () -> [any View] = { [] }) {
+                @ElementBuilder content: () -> Content, @ElementBuilder footer: () -> Footer) {
+        let builtFooter = footer()
         self.title = title; self.position = position; self.id = id; self.onDismiss = onDismiss
-        self.children = content(); self.footer = footer()
+        self.children = content(); self.footer = builtFooter
+        self.hasFooter = !blockIsEmpty(builtFooter)
+    }
+
+    /// no footer: `Footer` is the phantom `EmptyView` and the wrapper is absent.
+    public init(title: String? = nil, position: SlidePosition = .half, id: String? = nil, onDismiss: EventHandler? = nil,
+                @ElementBuilder content: () -> Content) where Footer == EmptyView {
+        self.title = title; self.position = position; self.id = id; self.onDismiss = onDismiss
+        self.children = content(); self.footer = EmptyView()
+        self.hasFooter = false
     }
 
     /// the 1.x initializer, kept so `variant:` call sites still compile.
     @available(*, deprecated, message: "use position: — SlidePosition is the shared vocabulary")
     public init(title: String? = nil, variant: SlidePosition, id: String? = nil, onDismiss: EventHandler? = nil,
-                @ViewBuilder content: () -> [any View], @ViewBuilder footer: () -> [any View] = { [] }) {
+                @ElementBuilder content: () -> Content, @ElementBuilder footer: () -> Footer) {
         self.init(title: title, position: variant, id: id, onDismiss: onDismiss, content: content, footer: footer)
+    }
+
+    /// the 1.x initializer without a footer.
+    @available(*, deprecated, message: "use position: — SlidePosition is the shared vocabulary")
+    public init(title: String? = nil, variant: SlidePosition, id: String? = nil, onDismiss: EventHandler? = nil,
+                @ElementBuilder content: () -> Content) where Footer == EmptyView {
+        self.init(title: title, position: variant, id: id, onDismiss: onDismiss, content: content)
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -571,21 +622,21 @@ public struct WebUIBottomSheet: View {
             html += "<div class=\"bottom-sheet__header\"><div class=\"bottom-sheet__title\">\(htmlEscape(title))</div><button class=\"bottom-sheet__close\"\(closeID)" + Aria.label(RenderContext.currentStrings.close).render() + ">×</button></div>"
         }
         html += "<div class=\"bottom-sheet__body\">"
-        for c in children { html += c.markup.html }
-        html += "</div>"
-        if !footer.isEmpty {
-            html += "<div class=\"bottom-sheet__footer\">"
-            for f in footer { html += f.markup.html }
-            html += "</div>"
-        }
-        html += "</div>"
         buffer.append(html)
+        children.render(into: &buffer)
+        buffer.append("</div>")
+        if hasFooter {
+            buffer.append("<div class=\"bottom-sheet__footer\">")
+            footer.render(into: &buffer)
+            buffer.append("</div>")
+        }
+        buffer.append("</div>")
     }
 }
 
 // MARK: WebUI Drawer
 /// edge-anchored sliding surface.
-public struct WebUIDrawer: View {
+public struct WebUIDrawer<Content: View, Footer: View>: View {
     @available(*, deprecated, renamed: "DrawerEdge")
     public typealias Edge = DrawerEdge
 
@@ -595,8 +646,10 @@ public struct WebUIDrawer: View {
     public let title: String?
     public let edge: DrawerEdge
     public let size: ControlSize
-    public let children: [any View]
-    public let footer: [any View]
+    public let children: Content
+    public let footer: Footer
+    /// whether the footer block has content — see ``WebUIBottomSheet/hasFooter``.
+    public let hasFooter: Bool
     /// stable container id; when set with `onDismiss` the close button
     /// self-wires (`targetId == "<id>-close"`).
     public let id: String?
@@ -623,9 +676,19 @@ public struct WebUIDrawer: View {
     }
 
     public init(title: String? = nil, edge: DrawerEdge = .right, size: ControlSize = .md, id: String? = nil, onDismiss: EventHandler? = nil,
-                @ViewBuilder content: () -> [any View], @ViewBuilder footer: () -> [any View] = { [] }) {
+                @ElementBuilder content: () -> Content, @ElementBuilder footer: () -> Footer) {
+        let builtFooter = footer()
         self.title = title; self.edge = edge; self.size = size; self.id = id; self.onDismiss = onDismiss
-        self.children = content(); self.footer = footer()
+        self.children = content(); self.footer = builtFooter
+        self.hasFooter = !blockIsEmpty(builtFooter)
+    }
+
+    /// no footer: `Footer` is the phantom `EmptyView` and the wrapper is absent.
+    public init(title: String? = nil, edge: DrawerEdge = .right, size: ControlSize = .md, id: String? = nil, onDismiss: EventHandler? = nil,
+                @ElementBuilder content: () -> Content) where Footer == EmptyView {
+        self.title = title; self.edge = edge; self.size = size; self.id = id; self.onDismiss = onDismiss
+        self.children = content(); self.footer = EmptyView()
+        self.hasFooter = false
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -642,28 +705,31 @@ public struct WebUIDrawer: View {
             html += "<div class=\"drawer__header\"><div class=\"drawer__title\">\(htmlEscape(title))</div><button class=\"drawer__close\"\(closeID)" + Aria.label(RenderContext.currentStrings.close).render() + ">×</button></div>"
         }
         html += "<div class=\"drawer__content\">"
-        for c in children { html += c.markup.html }
-        html += "</div>"
-        if !footer.isEmpty {
-            html += "<div class=\"drawer__footer\">"
-            for f in footer { html += f.markup.html }
-            html += "</div>"
-        }
-        html += "</div></div>"
         buffer.append(html)
+        children.render(into: &buffer)
+        buffer.append("</div>")
+        if hasFooter {
+            buffer.append("<div class=\"drawer__footer\">")
+            footer.render(into: &buffer)
+            buffer.append("</div>")
+        }
+        buffer.append("</div></div>")
     }
 }
 
 // MARK: WebUI Popover
 /// an anchored floating popover with arrow.
-public struct WebUIPopover: View {
+public struct WebUIPopover<Content: View>: View {
     @available(*, deprecated, renamed: "Placement")
     public typealias Side = Placement
 
     public let title: String?
     public let text: String?
     public let side: Placement
-    public let children: [any View]
+    public let children: Content
+    /// whether the content block has content — the `!children.isEmpty` branch,
+    /// decided once at init.
+    public let hasContent: Bool
 
     /// this component's own class for a shared placement — the four 1.x anchors
     /// keep their bytes; `leading`/`trailing` forward the pattern.
@@ -679,8 +745,19 @@ public struct WebUIPopover: View {
     }
 
     public init(title: String? = nil, text: String? = nil, side: Placement = .bottom,
-                @ViewBuilder content: () -> [any View] = { [] }) {
-        self.title = title; self.text = text; self.side = side; self.children = content()
+                @ElementBuilder content: () -> Content) {
+        let built = content()
+        self.title = title; self.text = text; self.side = side
+        self.children = built
+        self.hasContent = !blockIsEmpty(built)
+    }
+
+    /// no content: `Content` is the phantom `EmptyView` and the actions wrapper
+    /// is absent.
+    public init(title: String? = nil, text: String? = nil, side: Placement = .bottom) where Content == EmptyView {
+        self.title = title; self.text = text; self.side = side
+        self.children = EmptyView()
+        self.hasContent = false
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -688,29 +765,45 @@ public struct WebUIPopover: View {
         html += "<span class=\"popover__arrow\"></span>"
         if let title { html += "<div class=\"popover__title\">\(htmlEscape(title))</div>" }
         if let text { html += "<div class=\"popover__text\">\(htmlEscape(text))</div>" }
-        if !children.isEmpty {
+        if hasContent {
             html += "<div class=\"popover__actions\">"
-            for c in children { html += c.markup.html }
-            html += "</div>"
         }
-        html += "</div>"
         buffer.append(html)
+        if hasContent {
+            children.render(into: &buffer)
+            buffer.append("</div>")
+        }
+        buffer.append("</div>")
     }
 }
 
 // MARK: WebUI Hover Card
 /// a rich card revealed on hover of an anchor.
-public struct WebUIHoverCard: View {
+public struct WebUIHoverCard<Content: View>: View {
     public let name: String
     public let handle: String
     public let bio: String?
     public let meta: [(String, String)]
     public let domain: String
-    public let children: [any View]
+    public let children: Content
+    /// whether the content block has content — the `!children.isEmpty` branch,
+    /// decided once at init.
+    public let hasContent: Bool
     public init(name: String, handle: String, bio: String? = nil, meta: [(String, String)] = [],
-                domain: String = "", @ViewBuilder content: () -> [any View] = { [] }) {
+                domain: String = "", @ElementBuilder content: () -> Content) {
+        let built = content()
         self.name = name; self.handle = handle; self.bio = bio; self.meta = meta
-        self.domain = domain; self.children = content()
+        self.domain = domain; self.children = built
+        self.hasContent = !blockIsEmpty(built)
+    }
+
+    /// no content: `Content` is the phantom `EmptyView` and the actions wrapper
+    /// is absent.
+    public init(name: String, handle: String, bio: String? = nil, meta: [(String, String)] = [],
+                domain: String = "") where Content == EmptyView {
+        self.name = name; self.handle = handle; self.bio = bio; self.meta = meta
+        self.domain = domain; self.children = EmptyView()
+        self.hasContent = false
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -724,13 +817,15 @@ public struct WebUIHoverCard: View {
             html += "</div>"
         }
         if !domain.isEmpty { html += "<div class=\"hovercard__domain\">\(htmlEscape(domain))</div>" }
-        if !children.isEmpty {
+        if hasContent {
             html += "<div class=\"hovercard__actions\">"
-            for c in children { html += c.markup.html }
-            html += "</div>"
         }
-        html += "</div></div>"
         buffer.append(html)
+        if hasContent {
+            children.render(into: &buffer)
+            buffer.append("</div>")
+        }
+        buffer.append("</div></div>")
     }
 }
 
@@ -961,18 +1056,22 @@ public struct WebUIContextMenu: View {
 /// server-driven, nothing in the client runtime toggles a dropdown, so opening
 /// and closing is a render that flips one bool — not client state, not an
 /// animation.
-public struct WebUIDropdown: View {
+public struct WebUIDropdown<Trigger: View, Panel: View>: View {
     /// the component-rendered trigger's label; `nil` when the caller supplies
     /// ``triggerViews`` instead.
     public let trigger: String?
     /// the caller-rendered trigger, emitted verbatim in place of the button;
-    /// empty for the label form.
-    public let triggerViews: [any View]
+    /// the phantom `EmptyView` for the label form.
+    public let triggerViews: Trigger
+    /// which init built this value: the label form renders the component's own
+    /// button, the view form emits the caller's trigger verbatim. this replaces
+    /// `triggerViews.isEmpty`, the branch that used to decide it.
+    public let hasTriggerViews: Bool
     /// server state: `true` adds `dropdown--open` to the wrapper and
     /// `aria-expanded="true"` to a component-rendered trigger — the pair that
     /// makes `.dropdown--open .dropdown__panel` paint.
     public let isOpen: Bool
-    public let children: [any View]
+    public let children: Panel
     /// stable component id; when set with `onSelect` the trigger carries both
     /// `id="<id>"` and `data-component-id="<id>"` — no `-trigger` suffix, so
     /// the id the engine dispatches to is the id the caller keyed on.
@@ -983,8 +1082,9 @@ public struct WebUIDropdown: View {
     /// the button that is the click boundary.
     public init(_ trigger: String, id: String? = nil, onSelect: EventHandler? = nil,
                 isOpen: Bool = false,
-                @ViewBuilder content: () -> [any View]) {
-        self.trigger = trigger; self.triggerViews = []
+                @ElementBuilder content: () -> Panel) where Trigger == EmptyView {
+        self.trigger = trigger; self.triggerViews = EmptyView()
+        self.hasTriggerViews = false
         self.isOpen = isOpen; self.id = id; self.onSelect = onSelect
         self.children = content()
     }
@@ -997,9 +1097,11 @@ public struct WebUIDropdown: View {
     /// register the handler too — this form emits no attributes of its own, so
     /// the markup carrying the matching `data-component-id` stays the caller's.
     public init(id: String? = nil, onSelect: EventHandler? = nil, isOpen: Bool = false,
-                @ViewBuilder trigger: () -> [any View],
-                @ViewBuilder panel: () -> [any View]) {
-        self.trigger = nil; self.triggerViews = trigger()
+                @ElementBuilder trigger: () -> Trigger,
+                @ElementBuilder panel: () -> Panel) {
+        let builtTrigger = trigger()
+        self.trigger = nil; self.triggerViews = builtTrigger
+        self.hasTriggerViews = !blockIsEmpty(builtTrigger)
         self.isOpen = isOpen; self.id = id; self.onSelect = onSelect
         self.children = panel()
         // register-only: the caller owns the attributes, so the canonical
@@ -1011,7 +1113,7 @@ public struct WebUIDropdown: View {
 
     public func render(into buffer: inout HTMLBuffer) {
         var html = isOpen ? "<div class=\"dropdown dropdown--open\">" : "<div class=\"dropdown\">"
-        if triggerViews.isEmpty {
+        if !hasTriggerViews {
             var attrs = ""
             if let id {
                 attrs += " id=\"\(htmlEscape(id))\""
@@ -1023,13 +1125,16 @@ public struct WebUIDropdown: View {
             let expanded = isOpen ? Aria.expanded(.yes).render() : ""
             html += "<button class=\"dropdown__trigger\"\(attrs)\(expanded)>"
             html += "\(htmlEscape(trigger ?? ""))<span class=\"dropdown__chevron\">▾</span></button>"
+            html += "<div class=\"dropdown__panel\">"
+            buffer.append(html)
         } else {
-            for view in triggerViews { html += view.markup.html }
+            // the caller's trigger is emitted verbatim, before the panel opens.
+            buffer.append(html)
+            triggerViews.render(into: &buffer)
+            buffer.append("<div class=\"dropdown__panel\">")
         }
-        html += "<div class=\"dropdown__panel\">"
-        for c in children { html += c.markup.html }
-        html += "</div></div>"
-        buffer.append(html)
+        children.render(into: &buffer)
+        buffer.append("</div></div>")
     }
 }
 

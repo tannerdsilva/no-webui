@@ -1,17 +1,23 @@
 // MARK: - ElementBuilder
 //
-// the typed counterpart to `ViewBuilder`. a `ViewBuilder` block becomes an
-// `[any View]` — one array plus one existential box per child — because
-// `buildExpression(_ expression: any View) -> [any View]` intercepts every
-// expression. an `ElementBuilder` block becomes a *tuple of concrete views*:
-// the element's own type flows into the render loop, so there is no array and
-// no box.
+// the framework's one result builder. an `ElementBuilder` block becomes a
+// *tuple of concrete views*: the element's own type flows into the render loop,
+// so there is no array and no existential box per child.
 //
-// which one a call site sees is decided by the parameter's attribute, never by
-// the caller. the rule is the array's one capability: `[any View]` can answer
-// `count`, `isEmpty` and `enumerated`, and the design-system components use
-// exactly that to decide markup. everything the framework itself loops over
-// (`ForEach`) does not need to count, so it takes the typed builder instead.
+// erasure is still expressible, and it is deliberately narrow: a caller who
+// already holds an `[any View]` (a runtime-heterogeneous list from a data model)
+// reaches for ``ErasedViews``. `buildExpression(_ expression: [any View])` picks
+// an array literal up automatically, so the door is `ErasedViews` and nothing
+// else — there is no second, weaker builder that erases implicitly. the former
+// `ViewBuilder` was exactly that weaker builder: it turned *every* block into
+// `[any View]`, one array plus one box per child, because its `buildExpression`
+// intercepted every expression. it is gone.
+//
+// what a typed block cannot do is the reason `ErasedViews` stays: a block is a
+// tuple, so it has no `count`, no `isEmpty`, no `enumerated`, and no reverse
+// walk. a component whose *markup* depends on one of those reads a stored
+// `hasX` flag decided once at init (``blockIsEmpty(_:)``) or takes an erased
+// array, and says so at the parameter.
 //
 // measured on 2000 rows (release, byte-identical output): an erased element
 // costs 366 ns/row, a typed one 244 ns/row.
@@ -143,12 +149,30 @@ extension RepeatedView: ElementGroup {
 	public var elements: [any View] { content.map { $0 as any View } }
 }
 
-/// the typed result builder: a block becomes concrete views, not an array.
+extension ErasedViews: ElementGroup {
+	public var elements: [any View] { content }
+}
+
+/// whether a builder block produced nothing.
 ///
-/// use it where the framework owns the loop and no code counts children
-/// (`ForEach`); use ``ViewBuilder`` where arity itself decides the markup (the
-/// design-system components). the attribute lives on the parameter, so a call
-/// site never names the builder.
+/// the design-system components branch on "did the caller supply children" (a
+/// footer div exists only when the footer has content), and a generic
+/// `Content: View` has no `isEmpty`. the builder products that *can* be empty
+/// answer here; a single view is never empty. this walks the products once, at
+/// init — never inside a render, which is the cost the typed builder exists to
+/// remove.
+public func blockIsEmpty<C: View>(_ content: C) -> Bool {
+	guard let group = content as? ElementGroup else { return false }
+	return group.elements.isEmpty
+}
+
+/// the result builder: a block becomes concrete views, not an array.
+///
+/// every block in the framework and the design system takes it — a component
+/// parameter, `ForEach`'s body, a page's body. the attribute lives on the
+/// parameter, so a call site never names the builder. a caller who genuinely
+/// holds an erased list passes it as ``ErasedViews`` (or as an `[any View]`
+/// array parameter, which is the same door).
 @resultBuilder
 public enum ElementBuilder {
 	/// several elements, as a tuple.

@@ -69,7 +69,7 @@ struct DeprecatedVocabularyTests {
         #expect(WebUIOTP.Size.self == ControlSize.self)
         #expect(WebUIRating.Size.self == ControlSize.self)
         #expect(WebUIFab.Size.self == ControlSize.self)
-        #expect(WebUIDrawer.Size.self == ControlSize.self)
+        #expect(WebUIDrawer<EmptyView, EmptyView>.Size.self == ControlSize.self)
         #expect(WebUIKbd.Size.self == ControlSize.self)
     }
 
@@ -92,10 +92,10 @@ struct DeprecatedVocabularyTests {
         #expect(WebUIAccordion.Variant.self == WebUIAccordion.Appearance.self)
         #expect(WebUITag.Variant.self == WebUITag.Appearance.self)
         #expect(WebUIButton.Variant.self == WebUIButton.Appearance.self)
-        #expect(WebUIBottomSheet.Variant.self == SlidePosition.self)
-        #expect(WebUIDrawer.Edge.self == DrawerEdge.self)
-        #expect(WebUIPopover.Side.self == Placement.self)
-        #expect(WebUIPanel.Edge.self == PanelEdge.self)
+        #expect(WebUIBottomSheet<EmptyView, EmptyView>.Variant.self == SlidePosition.self)
+        #expect(WebUIDrawer<EmptyView, EmptyView>.Edge.self == DrawerEdge.self)
+        #expect(WebUIPopover<EmptyView>.Side.self == Placement.self)
+        #expect(WebUIPanel<EmptyView>.Edge.self == PanelEdge.self)
         #expect(WebUIPayCard.Brand.self == Brand.self)
         #expect(WebUICardInput.Brand.self == Brand.self)
     }

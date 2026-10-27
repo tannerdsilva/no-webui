@@ -4,380 +4,89 @@ import NIOCore
 import NIOHTTP1
 import NIOPosix
 import NIOWebSocket
-import Synchronization
 import WebUI
 import WebUIDesignSystem
 import WebUIAuth
+import WebUIHost
+import WebUIServer
+import WebUIState
 
-// MARK: - Session registry (per-session interactive routers)
+// MARK: - the authenticated page
 
-// maps a session's token hash to the EventRouters of its recent full renders,
-// keyed by the per-render websocket token minted into each page. replaced as
-// pages re-render (one router per render pass). keeping the recent N render
-// tokens per session lets several tabs of the same session route events while
-// a stale page from a *different* session can never present a valid token for
-// this one (cross-session replay); logout removes the whole session entry.
-final class RouterRegistry: Sendable {
-	private struct Values {
-		var routers: [[UInt8]: [String: EventRouter]] = [:]
-		var order: [[UInt8]: [String]] = [:]
-		// evicted-but-real render tokens forward to the token that replaced
-		// them. an active page whose token was LRU-evicted resolves through
-		// the chain and is handed the live token as a `token` refresh — never
-		// a reload, never a login kick. only tokens this session actually
-		// minted ever enter the chain, so a forged or foreign token still
-		// fails resolution (the cross-session gate stays intact).
-		var forward: [[UInt8]: [String: String]] = [:]
-		// lru of forward keys, so the chain stays bounded like the router map.
-		var forwardOrder: [[UInt8]: [String]] = [:]
-	}
-	private let values = Mutex(Values())
-	private let maxRendersPerSession: Int
-
-	init(maxRendersPerSession: Int = 8) {
-		self.maxRendersPerSession = maxRendersPerSession
-	}
-
-	/// resolve a page's presented token to its router. direct hits return the
-	/// token unchanged; hits through the forward chain return the live token
-	/// the page should adopt (`needsRefresh` true) so it migrates in place.
-	/// `nil` for tokens this session never minted — forged/foreign stay gated.
-	func resolve(forTokenHash hash: [UInt8], renderToken: String) -> (router: EventRouter, liveToken: String, needsRefresh: Bool)? {
-		values.withLock { values in
-			var current = renderToken
-			var hops = 0
-			let bound = maxRendersPerSession + 1
-			while hops <= bound {
-				if let router = values.routers[hash]?[current] {
-					// touch: an actively-used token is re-promoted in the lru
-					// so frequent renderers do not evict a live page mid-flight.
-					if var list = values.order[hash], let idx = list.firstIndex(of: current) {
-						list.remove(at: idx)
-						list.append(current)
-						values.order[hash] = list
-					}
-					return (router, current, current != renderToken)
-				}
-				guard let next = values.forward[hash]?[current] else { return nil }
-				current = next
-				hops += 1
-			}
-			return nil
-		}
-	}
-	func set(_ router: EventRouter, forTokenHash hash: [UInt8], renderToken: String) {
-		values.withLock { values in
-			// bind the session's four parallel maps once: every read is total,
-			// and the write-back happens in one place.
-			var routers = values.routers[hash] ?? [:]
-			var order = values.order[hash] ?? []
-			var forward = values.forward[hash] ?? [:]
-			var forwardOrder = values.forwardOrder[hash] ?? []
-			if let seen = order.firstIndex(of: renderToken) {
-				order.remove(at: seen)
-			}
-			routers[renderToken] = router
-			order.append(renderToken)
-			while order.count > maxRendersPerSession {
-				let evicted = order.removeFirst()
-				routers.removeValue(forKey: evicted)
-				// record the forward before the entry is gone, bounded by the
-				// same capacity as the router map.
-				forward[evicted] = renderToken
-				forwardOrder.append(evicted)
-				while forwardOrder.count > maxRendersPerSession {
-					let old = forwardOrder.removeFirst()
-					forward.removeValue(forKey: old)
-				}
-			}
-			values.routers[hash] = routers
-			values.order[hash] = order
-			values.forward[hash] = forward
-			values.forwardOrder[hash] = forwardOrder
-		}
-	}
-	func remove(forTokenHash hash: [UInt8]) {
-		values.withLock { values in
-			values.routers.removeValue(forKey: hash)
-			values.order.removeValue(forKey: hash)
-			values.forward.removeValue(forKey: hash)
-			values.forwardOrder.removeValue(forKey: hash)
-		}
-	}
-
-	/// snapshot of every session token hash that has live router entries —
-	/// used by the maintenance sweep to drop entries whose session has expired
-	/// or been purged.
-	func allTokenHashes() -> [[UInt8]] {
-		values.withLock { Array($0.routers.keys) }
-	}
-}
-
-// MARK: - Authenticated connection registry (logout teardown)
-
-// maps a session's token hash to the live WebSocket channels bound to it.
-// logout (and any future server-side invalidation) closes every channel here
-// so revocation tears the connection down immediately — the per-event liveness
-// check is the backstop, not the primary mechanism. channels self-unregister
-// when the connection ends (including idle-reaped ones).
-actor AuthConnectionRegistry {
-	private var nextID = 0
-	private var channels: [[UInt8]: [Int: NIOAsyncChannel<WebSocketFrame, WebSocketFrame>]] = [:]
-
-	/// register `channel` under its session; returns a handle for unregister.
-	func register(_ channel: NIOAsyncChannel<WebSocketFrame, WebSocketFrame>, tokenHash: [UInt8]) -> Int {
-		nextID += 1
-		channels[tokenHash, default: [:]][nextID] = channel
-		return nextID
-	}
-
-	func unregister(_ id: Int, tokenHash: [UInt8]) {
-		guard var byID = channels[tokenHash] else { return }
-		byID.removeValue(forKey: id)
-		if byID.isEmpty {
-			channels.removeValue(forKey: tokenHash)
-		} else {
-			channels[tokenHash] = byID
-		}
-	}
-
-	/// close every socket bound to `tokenHash` (fire-and-forget).
-	func closeAll(forTokenHash tokenHash: [UInt8]) {
-		guard let byID = channels.removeValue(forKey: tokenHash) else { return }
-		for channel in byID.values {
-			_ = channel.channel.close()
-		}
-	}
-}
-
-// MARK: - Idle socket reaping
-
-/// signal a refused admission: `--max-connections` reached.
-enum ConnectionGateError: Error { case atCapacity }
-
-/// release a `ConnectionGate` slot when the channel closes. the gate is
-/// acquired in the child channel initializer — BEFORE any request or upgrade
-/// negotiation — so bare connect-only sockets count toward the cap and a
-/// connect-flood cannot sidestep it through negotiation that never completes.
-final class ConnectionGateReleaser: ChannelInboundHandler {
-	typealias InboundIn = IOData
-	private let gate: ConnectionGate
-	init(gate: ConnectionGate) { self.gate = gate }
-	func channelInactive(context: ChannelHandlerContext) {
-		gate.release()
-		context.fireChannelInactive()
-	}
-}
-
-// an authenticated socket that stops sending (no pings, no events) is closed
-// after the read-idle window — a silent zombie never outlives its timeout.
-// the runtime pings every 30s, so a healthy connection resets the counter.
-final class AuthIdleCloseHandler: ChannelInboundHandler {
-	typealias InboundIn = WebSocketFrame
-	func userInboundEventTriggered(context: ChannelHandlerContext, event: Any) {
-		if event is IdleStateHandler.IdleStateEvent {
-			context.close(promise: nil)
-		} else {
-			context.fireUserInboundEventTriggered(event)
-		}
-	}
-}
-
-// MARK: - Demo state (per-session interactive model)
-
-final class AuthDemoState: Sendable {
-	private struct Values {
+/// the demo's only authenticated screen, as a pure function of its state. every
+/// control is a mutation and nothing else: the body never authors a fragment,
+/// never escapes a string, and never sees a request.
+struct Dashboard: StatefulPage {
+	struct State: Sendable {
+		var identity = ""
+		var roles = ""
+		/// the session's csrf token for the logout form. a session-lifetime
+		/// token, not a per-render one: validation is stateless hmac, so it
+		/// survives every re-render of the page it was minted for.
+		var logoutToken = ""
 		var count = 0
 		var progress = 0.25
-		var echo = ""
-	}
-	private let values = Mutex(Values())
-
-	var count: Int {
-		get { values.withLock { $0.count } }
-		set { values.withLock { $0.count = newValue } }
-	}
-	var progress: Double {
-		get { values.withLock { $0.progress } }
-		set { values.withLock { $0.progress = newValue } }
-	}
-	var echo: String {
-		get { values.withLock { $0.echo } }
-		set { values.withLock { $0.echo = newValue } }
-	}
-}
-
-/// per-session interactive state containers. each authenticated session gets
-/// its own counter/progress/echo — the isolation a real consumer needs (one
-/// session's state must never leak into another tab's or user's view). states
-/// are created on first dashboard render, dropped on logout or when the
-/// maintenance sweep finds the session gone, and the total set is bounded so
-/// a session flood cannot grow memory without limit.
-actor SessionStates {
-	/// the largest number of live per-session states the demo retains; the
-	/// oldest is evicted beyond this (each state is tiny, so even the cap is
-	/// modest — the bound is about unbounded set growth, not memory).
-	static let maxStates = 256
-
-	private var states: [[UInt8]: AuthDemoState] = [:]
-	private var order: [[UInt8]] = []
-
-	/// the state for `sessionID`, creating it on first request. creation is
-	/// cheap and idempotent per session id; eviction is oldest-first.
-	func state(for sessionID: [UInt8]) -> AuthDemoState {
-		if let existing = states[sessionID] {
-			return existing
-		}
-		let fresh = AuthDemoState()
-		states[sessionID] = fresh
-		order.append(sessionID)
-		while order.count > Self.maxStates {
-			let evicted = order.removeFirst()
-			states.removeValue(forKey: evicted)
-		}
-		return fresh
 	}
 
-	func remove(sessionID: [UInt8]) {
-		states.removeValue(forKey: sessionID)
-		order.removeAll { $0 == sessionID }
-	}
+	func initialState() -> State { State() }
 
-	/// drop every state whose session no longer exists (called by the
-	/// maintenance sweep after the store purge).
-	func prune(keeping live: Set<[UInt8]>) {
-		let dead = states.keys.filter { !live.contains($0) }
-		for id in dead {
-			remove(sessionID: id)
-		}
-	}
-}
-
-// MARK: - Display-element renderers (stable ids, no event handlers)
-
-func counterValueHTML(_ n: Int) -> String {
-	"<div id=\"counter-value\" class=\"counter-value\" role=\"status\"><span>\(n)</span></div>"
-}
-
-func progressValueHTML(_ value: Double) -> String {
-	let bar = WebUIProgress(value: value, variant: .primary, showLabel: true, size: .md).markup.html
-	return "<div id=\"progress-value\">\(bar)</div>"
-}
-
-func echoOutHTML(_ text: String) -> String {
-	let safe = text.replacingOccurrences(of: "&", with: "&amp;").replacingOccurrences(of: "<", with: "&lt;")
-	return "<div id=\"echo-out\" class=\"echo-out\" role=\"status\"><span class=\"echo-out__text\">\(safe)</span></div>"
-}
-
-// MARK: - Page renderers
-
-/// render the interactive dashboard for an authenticated session. the page is
-/// a full re-render with a *fresh* `EventRouter` per render pass (house rule),
-/// registered under the session's token hash so the WebSocket can dispatch to
-/// it. `AuthContext` flows into the tree so views can branch on the identity.
-func renderDashboard(state: AuthDemoState, auth: AuthContext, logoutToken: String, renderToken: String) -> (html: String, router: EventRouter) {
-	let router = EventRouter()
-	let html = AuthContext.$current.withValue(auth) {
-		RenderContext.$current.withValue(RenderContext(router: router)) {
-			Div(class: "app") {
-				Header(class: "app__header") {
-					Heading("Member Dashboard", level: .h1)
-					Div(class: "app__session") {
-						Text("signed in as \(auth.identity?.id ?? "?") · roles: \(auth.identity?.roles.sorted().joined(separator: ", ") ?? "none")")
-						// logout is a native POST form (no event handler
-						// modifier -> the runtime does not hijack its submit)
-						// carrying a per-render CSRF token.
-						Form(action: "/logout", method: "post", class: "app__logout", csrfToken: logoutToken) {
-							Button("sign out", class: "button button--ghost button--sm", type: .submit)
-						}
-					}
-				}
-				Main(class: "app__content") {
-					WebUICard(variant: .elevated) {
-						Heading("Counter", level: .h3)
-						Raw(counterValueHTML(state.count))
-						Div(class: "app__actions") {
-							WebUIButton("−", variant: .secondary, size: .md, id: "btn-dec")
-								.onClick { _ in
-									state.count -= 1
-									return [FragmentUpdate(id: "counter-value", html: counterValueHTML(state.count))]
-								}
-							WebUIButton("+", variant: .primary, size: .md, id: "btn-inc")
-								.onClick { _ in
-									state.count += 1
-									return [FragmentUpdate(id: "counter-value", html: counterValueHTML(state.count))]
-								}
-							WebUIButton("Reset", variant: .ghost, size: .sm, id: "btn-reset")
-								.onOptimisticClick(
-									predict: { [FragmentUpdate(id: "counter-value", html: counterValueHTML(0))] },
-									perform: { _ in
-										state.count = 0
-										return [FragmentUpdate(id: "counter-value", html: counterValueHTML(0))]
-									}
-								)
-						}
-					}
-					WebUICard(variant: .outlined) {
-						Heading("Progress", level: .h3)
-						Raw(progressValueHTML(state.progress))
-						Div(class: "app__actions") {
-							WebUIButton("−10%", variant: .secondary, size: .sm, id: "btn-pdec")
-								.onClick { _ in
-									state.progress = max(0, state.progress - 0.1)
-									return [FragmentUpdate(id: "progress-value", html: progressValueHTML(state.progress))]
-								}
-							WebUIButton("+10%", variant: .primary, size: .sm, id: "btn-pinc")
-								.onClick { _ in
-									state.progress = min(1, state.progress + 0.1)
-									return [FragmentUpdate(id: "progress-value", html: progressValueHTML(state.progress))]
-								}
-						}
-					}
-					WebUICard(variant: .flat) {
-						Heading("Echo", level: .h3)
-						WebUIInput(placeholder: "Type something…", id: "echo-input", label: "Input")
-							.onInput { event in
-								state.echo = event.value ?? ""
-								return [FragmentUpdate(id: "echo-out", html: echoOutHTML(state.echo))]
-							}
-						Raw(echoOutHTML(state.echo))
+	func body(_ state: State) -> some View {
+		let binding = self.binding
+		return Div(id: "app", class: "app") {
+			Header(class: "app__header") {
+				Heading("Member Dashboard", level: .h1)
+				Div(class: "app__session") {
+					Text("signed in as \(state.identity) · roles: \(state.roles)")
+					// a native post form: no event handler, so the runtime does
+					// not hijack the submit; the token is the session's.
+					Form(action: "/logout", method: "post", class: "app__logout", csrfToken: state.logoutToken) {
+						Button("sign out", class: "button button--ghost button--sm", type: .submit)
 					}
 				}
 			}
-			.markup.html
+			Main(class: "app__content") {
+				WebUICard(elevation: .elevated) {
+					Heading("Counter", level: .h3)
+					Div(id: "counter-value", class: "counter-value") {
+						Span { Text("\(state.count)") }
+					}
+					Div(class: "app__actions") {
+						WebUIButton("−", appearance: .secondary, size: .md, id: "btn-dec")
+							.onClick(binding) { $0.mutate { state in state.count -= 1 } }
+						WebUIButton("+", appearance: .primary, size: .md, id: "btn-inc")
+							.onClick(binding) { $0.mutate { state in state.count += 1 } }
+						WebUIButton("Reset", appearance: .ghost, size: .sm, id: "btn-reset")
+							.onClick(binding) { $0.mutate { state in state.count = 0 } }
+					}
+				}
+				WebUICard(elevation: .outlined) {
+					Heading("Progress", level: .h3)
+					Div(id: "progress-value") {
+						WebUIProgress(value: state.progress, tone: .primary, showLabel: true, size: .md)
+					}
+					Div(class: "app__actions") {
+						WebUIButton("−10%", appearance: .secondary, size: .sm, id: "btn-pdec")
+							.onClick(binding) { $0.mutate { state in state.progress = max(0, state.progress - 0.1) } }
+						WebUIButton("+10%", appearance: .primary, size: .sm, id: "btn-pinc")
+							.onClick(binding) { $0.mutate { state in state.progress = min(1, state.progress + 0.1) } }
+					}
+				}
+			}
 		}
 	}
-	let document = WebUIDocument(
-		title: "Member Dashboard",
-		body: .trusted(html),
-		// the per-render websocket token: the runtime echoes it with every
-		// event/ping, and the server only routes messages carrying a token it
-		// minted for this session (cross-session replay protection).
-		runtimeConfig: RuntimeConfig(renderToken: renderToken)
-	).markup.html
-	return (html: document, router: router)
 }
 
-/// render the login page. per AD-1 this is a *static* document — no JS
-/// runtime, native form POST, a synchronizer CSRF token, and a hardened CSP
-/// with `form-action 'self'` (the framework default only covers
-/// default/script/style/img/connect-src; auth pages add the rest explicitly).
-///
-/// the `.login*` classes are this page's own layout vocabulary (the design
-/// sheet deliberately has no rule for them — it ships in every page, and
-/// this is the only consumer). the layout is delivered as page-scoped
-/// rawStyles: centered card, full-width form rows, a soft-danger error
-/// panel. comment-free on purpose — the styles ship verbatim (the first law).
+// MARK: - the login page (public, static, no runtime)
+
+// the page's own layout vocabulary. the design sheet ships in every page and
+// deliberately has no rule for `.login*`, so it is scoped here. comment-free on
+// purpose — these bytes ship verbatim.
 let loginLayoutStyles = """
 .login { display: flex; align-items: center; justify-content: center; min-height: 100vh; padding: var(--space-4); }
 .login__card { width: 100%; max-width: 24rem; background: var(--color-bg-raised); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-card); box-shadow: var(--shadow-lg); padding: var(--space-8); }
 .login__card h1 { margin-bottom: var(--space-6); }
 .login__form { display: flex; flex-direction: column; gap: var(--space-4); }
-.login__form label { display: block; font-size: var(--font-size-sm); font-weight: var(--font-weight-medium); color: var(--color-text); margin-bottom: var(--space-1); }
-.login__form input { width: 100%; }
-.login__form button { width: 100%; }
 .login__error { background: var(--color-danger-soft); border: var(--border-width) solid var(--color-danger); border-radius: var(--radius-md); padding: var(--space-3) var(--space-4); margin-bottom: var(--space-5); font-size: var(--font-size-sm); color: var(--color-danger); }
-@media (max-width: 40rem) { .login__card { padding: var(--space-6); } }
 """
 
 func renderLoginPage(error: String?, csrfToken: String) -> String {
@@ -385,9 +94,7 @@ func renderLoginPage(error: String?, csrfToken: String) -> String {
 		Div(class: "login__card") {
 			Heading("Sign in", level: .h1)
 			if let error {
-				Div(class: "login__error") {
-					Text(error)
-				}
+				Div(class: "login__error") { Text(error) }
 			}
 			Form(action: "/login", method: "post", class: "login__form", csrfToken: csrfToken) {
 				Label("Username", for: "username")
@@ -402,782 +109,633 @@ func renderLoginPage(error: String?, csrfToken: String) -> String {
 		title: "Sign in",
 		body: body.markup,
 		includeRuntime: false,
-		// form-action + base-uri are meta-valid CSP directives; clickjacking
-		// control is delivered as an X-Frame-Options header on the response
-		// (frame-ancestors is header-only and inert in a meta element).
+		// form-action + base-uri are meta-valid; clickjacking control is
+		// header-only and the transport sends it.
 		contentSecurityPolicy: "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; form-action 'self'; base-uri 'self'",
 		rawStyles: [loginLayoutStyles]
 	).markup.html
 }
 
-// MARK: - URL-encoded body parsing (single-purpose, for POST /login)
+// MARK: - per-session scope
 
-enum URLEncodedForm {
-	enum ParseError: Error {
-		case invalidPercentEncoding
+enum DemoError: Error {
+	case stateTypeConflict
+	case renderBusy
+	case refused
+}
+
+/// the per-session half of the app: one store per session, the table its
+/// renders route through, and the secret a logout token is minted with. a
+/// reference type because the registry and the table are shared state that
+/// every render and every socket must see through the same identity.
+final class SessionScope: Sendable {
+	let stores = SessionStores()
+	let table = RouterTable()
+	let secret: String
+
+	init(secret: String) {
+		self.secret = secret
 	}
-	static func parse(_ body: String) throws -> [String: String] {
-		var result: [String: String] = [:]
-		for pair in body.split(separator: "&") {
-			let components = pair.split(separator: "=", maxSplits: 1, omittingEmptySubsequences: false)
-			guard components.count == 2 else { continue }
-			let key = String(components[0]).replacingOccurrences(of: "+", with: " ")
-			let value = String(components[1]).replacingOccurrences(of: "+", with: " ")
-			guard let decodedKey = key.removingPercentEncoding,
-			      let decodedValue = value.removingPercentEncoding else {
-				throw ParseError.invalidPercentEncoding
+
+	/// render the dashboard for `request`, binding this pass's router to the
+	/// render token the catalog minted.
+	func dashboard(_ request: PageRequest) async throws -> RenderedPage {
+		let key = SessionKey(hash: request.principal.session.tokenHash)
+		let resolution = stores.resolve(for: key) {
+			Dashboard.State(
+				identity: request.principal.identity?.id ?? request.principal.session.identityID,
+				roles: request.principal.identity?.roles.sorted().joined(separator: ", ") ?? "none",
+				logoutToken: (try? CSRFProtection.token(for: "logout", secret: secret)) ?? ""
+			)
+		}
+		// a reaped store whose session still routes is a leak the registry
+		// cannot see, so the caller ends each reaped session's handlers.
+		for evicted in resolution.evicted {
+			await table.drop(session: evicted)
+		}
+		guard let store = resolution.store else { throw DemoError.stateTypeConflict }
+		// the logout token is minted with the store and lives 30 minutes
+		// (CSRFProtection.defaultMaxAge), while a session lives eight hours.
+		// refresh it on the first render that finds it stale, or the demo's
+		// sign-out button dies an hour into a long tab.
+		if let expires = CSRFProtection.expiry(of: store.read().logoutToken),
+		   Date(timeIntervalSince1970: TimeInterval(expires)) < Date() {
+			store.commit { state in
+				state.logoutToken = (try? CSRFProtection.token(for: "logout", secret: secret)) ?? state.logoutToken
 			}
-			result[decodedKey] = decodedValue
 		}
-		return result
+		let router = EventRouter()
+		let loop = StatefulPageSession(Dashboard(), store: store)
+		guard let patch = loop.patch(in: RenderContext(router: router, session: request.renderSession)) else {
+			throw DemoError.renderBusy
+		}
+		let document = WebUIDocument(
+			title: "Member Dashboard",
+			body: .trusted(patch.html),
+			runtimeConfig: RuntimeConfig(renderToken: request.renderToken.value)
+		)
+		return RenderedPage(html: document.markup, router: router, renderToken: request.renderToken)
+	}
+
+	/// re-render `key`'s page after a mutation, or nil when the store's revision
+	/// did not move — a handler that changed nothing produces no patch.
+	func patch(after before: UInt64, for key: SessionKey, renderToken: RenderKey) async -> String? {
+		guard let store = stores.existing(for: key, as: Dashboard.State.self),
+		      store.revision != before,
+		      let resolved = await table.router(for: key, renderToken: renderToken) else {
+			return nil
+		}
+		let loop = StatefulPageSession(Dashboard(), store: store)
+		let context = RenderContext(router: resolved.router, session: RenderSessionID(resolved.liveToken.value))
+		return loop.patch(in: context)?.html
 	}
 }
 
-// MARK: - Session plumbing
+// MARK: - the app
 
-enum DemoSession {
-	static let cookieName = "auth" // deliberately *not* __Host-: the demo runs on
-	// plain http where `Secure` cannot be promised; production uses
-	// __Host-auth + Secure + TLS (see the cookie __Host- rules in WebUIAuth).
-	static let maxAgeSeconds = 8 * 60 * 60
-}
-
-// MARK: - HTTP / WebSocket server
-
-final class HTTPByteBufferResponsePartHandler: ChannelOutboundHandler {
-	typealias OutboundIn = HTTPPart<HTTPResponseHead, ByteBuffer>
-	typealias OutboundOut = HTTPServerResponsePart
-	func write(context: ChannelHandlerContext, data: NIOAny, promise: EventLoopPromise<Void>?) {
-		let part = Self.unwrapOutboundIn(data)
-		switch part {
-		case .head(let head):
-			context.write(Self.wrapOutboundOut(.head(head)), promise: promise)
-		case .body(let buffer):
-			context.write(Self.wrapOutboundOut(.body(.byteBuffer(buffer))), promise: promise)
-		case .end(let trailers):
-			context.write(Self.wrapOutboundOut(.end(trailers)), promise: promise)
-		}
-	}
-}
-
-// MARK: - Auth server entry point
-
-/// the auth demo server: `@main` entry type (see `--port` above).
-@main
-struct WebUIAuthExample {
-	// demo credentials (trivial by design — this is the demonstration login)
+/// the whole composition: the framework's resolver, catalogs, router table,
+/// revocation bus and state stores, plus the routes this demo serves.
+struct AuthDemo: Sendable {
 	static let demoUsername = "admin"
 	static let demoPassword = "password"
-
-	let sessionStates: SessionStates
-	let sessionStore: InMemoryAuthSessionStore
-	let csrfSecret: String
-	let adminPasswordRecord: PasswordRecord
-	let argonPool: NIOThreadPool
-	let connectionGate: ConnectionGate
-	let routers = RouterRegistry()
-	let connections = AuthConnectionRegistry()
-	let argon2Limiter = AsyncSemaphore(permits: 4)
-	let loginThrottle = LoginThrottle(windowSeconds: 60, maxAttempts: 20)
-	// the mint page gets its own, more generous budget — separate from submit
-	// attempts so a user can refresh the login page without burning their
-	// attempt budget, but still bounds how fast one ip can load it.
-	let loginPageThrottle = LoginThrottle(windowSeconds: 60, maxAttempts: 60)
-	let loginTokenStore = SingleUseTokenStore()
-
-	// uploads beyond this are rejected with 413 — the demo accepts only tiny
-	// urlencoded forms.
 	static let maxBodyBytes = 16 * 1024
 
-	// MARK: auth helpers
+	let store: InMemoryAuthSessionStore
+	let resolver: CookieSessionResolver
+	let sessions: SessionScope
+	let bus: SocketRevocationBus
+	let host: AuthenticatedHost
+	let passwordRecord: PasswordRecord
+	let argonPool: NIOThreadPool
+	let limiter = AsyncSemaphore(permits: 4)
+	let throttle = LoginThrottle(windowSeconds: 60, maxAttempts: 20)
+	/// the mint page has its own, more generous budget: refreshing the login
+	/// page must not burn a submit attempt.
+	let pageThrottle = LoginThrottle(windowSeconds: 60, maxAttempts: 60)
+	let tokens = SingleUseTokenStore()
+	let gate: ConnectionGate
 
-	func sessionDescription(for request: HTTPRequestHead) async -> (session: AuthenticatedSession, token: [UInt8])? {
-		guard let cookieHeader = request.headers.first(name: "cookie"),
-		      let cookieValue = CookieParser.requestCookies(cookieHeader)[DemoSession.cookieName] else {
-			return nil
-		}
-		let tokenBytes = Self.decodeCookieToken(cookieValue)
-		guard let tokenHash = try? SessionToken.hash(tokenBytes) else { return nil }
-		guard let session = try? await sessionStore.find(tokenHash: tokenHash),
-		      !session.isExpired() else {
-			return nil
-		}
-		return (session, tokenBytes)
-	}
-
-	func tokenHash(for request: HTTPRequestHead) -> [UInt8]? {
-		guard let cookieHeader = request.headers.first(name: "cookie"),
-		      let cookieValue = CookieParser.requestCookies(cookieHeader)[DemoSession.cookieName] else {
-			return nil
-		}
-		return try? SessionToken.hash(Self.decodeCookieToken(cookieValue))
-	}
-
-	static func decodeCookieToken(_ token: String) -> [UInt8] {
-		// sessions are minted as base64 of the raw 32-byte token; only that
-		// form is accepted (no utf8 fallback — the encoding is unambiguous).
-		Base64.decode(token) ?? []
-	}
-
-	/// the WebSocket upgrade is refused for foreign origins: a same-origin
-	/// page is the only thing that should drive the session's socket, and
-	/// `SameSite=Lax` cookies are still sent to same-host (port-agnostic)
-	/// siblings, so the true host check is the upgrade-time gate.
-	func originMatchesHost(head: HTTPRequestHead) -> Bool {
-		guard let origin = head.headers.first(name: "origin") else { return false }
-		let host = (head.headers.first(name: "host") ?? "").lowercased()
-		guard let url = URL(string: origin) else { return false }
-		var authority = (url.host ?? "").lowercased()
-		if let port = url.port {
-			authority += ":\(port)"
-		}
-		return authority == host
-	}
-
-	/// write a full http response and await the terminal write's promise. the
-	/// `NIOAsyncChannel` outbound writer does not await write promises, so a
-	/// response larger than the socket send buffer could be truncated when the
-	/// connection closes right after writing (probe-verified: ~327 kb pages
-	/// lost their tail). writing through the raw channel and awaiting the
-	/// terminal flush guarantees every byte reached the kernel before the
-	/// connection closes — no send-buffer sizing required.
-	func writeResponse(channel: Channel, head: HTTPResponseHead, body: ByteBuffer) async throws {
-		_ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.head(head))
-		_ = channel.write(HTTPPart<HTTPResponseHead, ByteBuffer>.body(body))
-		try await channel.writeAndFlush(HTTPPart<HTTPResponseHead, ByteBuffer>.end(nil)).get()
-	}
-
-	func loginResponse(channel: Channel, status: HTTPResponseStatus, headers: [(String, String)], body: String) async throws {
-		var head = HTTPResponseHead(version: .http1_1, status: status)
-		// clickjacking control — X-Frame-Options is header-only (the
-		// frame-ancestors CSP directive is inert in a <meta> element).
-		head.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
-		// authenticated pages must not be cacheable: no-store keeps the
-		// dashboard (username, roles, logout token) out of the http cache and
-		// out of the back-forward cache after logout on shared machines.
-		head.headers.replaceOrAdd(name: "Cache-Control", value: "no-store")
-		head.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
-		head.headers.replaceOrAdd(name: "Service-Worker-Allowed", value: "/")
-		for (name, value) in headers {
-			head.headers.replaceOrAdd(name: name, value: value)
-		}
-		head.headers.replaceOrAdd(name: "Content-Length", value: "\(body.utf8.count)")
-		head.headers.replaceOrAdd(name: "Connection", value: "close")
-		var buf = ByteBuffer()
-		buf.writeString(body)
-		try await writeResponse(channel: channel, head: head, body: buf)
-	}
-
-	func redirect(channel: Channel, to target: String, setCookies: [(String, String)] = []) async throws {
-		var setCookieHeaders = setCookies
-		setCookieHeaders.insert(("Location", target), at: 0)
-		try await loginResponse(channel: channel, status: .seeOther, headers: setCookieHeaders, body: "")
-	}
-
-	/// refused upgrade response: write the rejection and close, then return
-	/// `nil` so the upgrader declines. the typed upgrader's fallback replay
-	/// re-delivers only `.end` (the request head is not buffered), so routing
-	/// can never see a refused upgrade — the answer has to go out here.
-	func rejectUpgrade(channel: Channel, status: HTTPResponseStatus) -> EventLoopFuture<HTTPHeaders?> {
-		var head = HTTPResponseHead(version: .http1_1, status: status)
-		head.headers.replaceOrAdd(name: "Content-Length", value: "0")
-		head.headers.replaceOrAdd(name: "Connection", value: "close")
-		head.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
-		let body = ByteBuffer(string: "")
-		_ = channel.writeAndFlush(HTTPServerResponsePart.head(head))
-		_ = channel.writeAndFlush(HTTPServerResponsePart.body(.byteBuffer(body)))
-		return channel.writeAndFlush(HTTPServerResponsePart.end(nil))
-			.map { nil as HTTPHeaders? }
-	}
-
-	// MARK: server
-
-	/// parse a positive-integer flag (`--name N`) with a fallback.
-	static func intFlag(named name: String, default fallback: Int) -> Int {
-		if let i = CommandLine.arguments.firstIndex(of: name),
-		   i + 1 < CommandLine.arguments.count,
-		   let v = Int(CommandLine.arguments[i + 1]), v > 0 {
-			return v
-		}
-		return fallback
-	}
-
-	static func main() async throws {
-		// port is a flag so the ceremony tests can boot on an ephemeral port
-		// without contending with a running demo on :9091.
-		let port: Int
-		if let flagIndex = CommandLine.arguments.firstIndex(of: "--port"),
-		   flagIndex + 1 < CommandLine.arguments.count,
-		   let parsed = Int(CommandLine.arguments[flagIndex + 1]), parsed > 0, parsed < 65536 {
-			port = parsed
-		} else {
-			port = 9091
-		}
-		// resource budget for small hosts (a 2 gb linux box): event loops size
-		// the nio group, argon2 workers size the kdf thread pool, and the
-		// connection cap is a hard memory ceiling — each open connection can
-		// hold a page-sized response while an awaited write drains.
-		let csrfSecret = try CSRFProtection.generateSecret()
-		let passwordRecord = PasswordRecord(
-			salt: try PasswordVerifier.makeSalt(),
-			hash: [],
+	init(gate: ConnectionGate, argonPool: NIOThreadPool) throws {
+		let store = InMemoryAuthSessionStore()
+		let sessions = SessionScope(secret: try CSRFProtection.generateSecret())
+		let resolver = CookieSessionResolver(
+			store: store,
+			identities: DictionaryIdentityDirectory([
+				Identity(id: Self.demoUsername, roles: [Role.member, Role.admin])
+			])
+		)
+		let bus = SocketRevocationBus()
+		let catalog = AuthenticatedCatalog(
+			pages: [Page(pattern: "/", render: sessions.dashboard)],
+			loginPath: "/login",
+			table: sessions.table
+		)
+		let salt = try PasswordVerifier.makeSalt()
+		self.store = store
+		self.resolver = resolver
+		self.sessions = sessions
+		self.bus = bus
+		self.passwordRecord = PasswordRecord(
+			salt: salt,
+			hash: try PasswordVerifier.hash(password: [UInt8](Self.demoPassword.utf8), salt: salt, parameters: .interactive),
 			parameters: .interactive
 		)
-		let hash = try PasswordVerifier.hash(
-			password: [UInt8](demoPassword.utf8),
-			salt: passwordRecord.salt,
-			parameters: .interactive
+		self.argonPool = argonPool
+		self.gate = gate
+		self.host = AuthenticatedHost(
+			resolver: resolver,
+			catalog: catalog,
+			routers: sessions.table,
+			revocation: bus,
+			sessions: resolver,
+			loginPath: "/login",
+			secureCookies: false
 		)
-		let record = PasswordRecord(salt: passwordRecord.salt, hash: hash, parameters: .interactive)
+	}
 
-		let argonPool = NIOThreadPool(numberOfThreads: Self.intFlag(named: "--argon2-workers", default: 2))
-		argonPool.start()
-		let connectionGate = ConnectionGate(maximum: Self.intFlag(named: "--max-connections", default: 256))
-		let example = WebUIAuthExample(
-			sessionStates: SessionStates(),
-			sessionStore: InMemoryAuthSessionStore(),
-			csrfSecret: csrfSecret,
-			adminPasswordRecord: record,
-			argonPool: argonPool,
-			connectionGate: connectionGate
+	/// the route table. a computed value because every closure names `self`, and
+	/// a stored one could not be built before the rest of the demo exists.
+	var router: Router {
+		Router {
+			Route.get("/login") { request in await self.loginPage(request) }
+			Route.post("/login") { request in await self.login(request) }
+			Route.post("/logout") { request in await self.logout(request) }
+			Route.get("/") { request in await self.page(request) }
+		}
+	}
+
+	/// the framework's own assets. a host that owns its listener serves these
+	/// itself; `WebUIServer` serves them for a host that does not.
+	static func asset(_ path: String) -> HTTPResponse? {
+		guard path.hasPrefix("/__assets/css") || path.hasPrefix("/ui/webui-") else { return nil }
+		let (body, type): (String, String) = path.contains("engine")
+			? (WebUIAssets.engine, "text/javascript; charset=utf-8")
+			: path.contains("shell")
+				? (WebUIAssets.shell, "text/javascript; charset=utf-8")
+				: (DesignSystemAssets.minifiedCss, "text/css; charset=utf-8")
+		return HTTPResponse(
+			status: .ok,
+			headers: ["Content-Type": type, "Cache-Control": "public, max-age=3600"],
+			body: .bytes(Array(body.utf8), contentType: type)
 		)
+	}
 
-		let logger = Logger(label: "webui.auth.example")
-		logger.info("auth demo ready — sign in with '\(demoUsername)' / '\(demoPassword)'")
-		// prewarm the hoisted minified sheets so the one-time ~10 ms minify
-		// never lands inside the first request handler.
-		DesignSystemAssets.prewarm()
+	func page(_ request: HTTPRequest) async -> HTTPResponse {
+		do {
+			return try await host.respond(to: request)
+		} catch {
+			return HTTPResponse(status: 500, body: .text("500 — the page failed to render: \(error)"))
+		}
+	}
+}
 
-		let group = MultiThreadedEventLoopGroup(numberOfThreads: Self.intFlag(named: "--event-loops", default: System.coreCount))
+// MARK: - ceremony
+
+extension AuthDemo {
+	static var tooMany: HTTPResponse {
+		HTTPResponse(
+			status: 429,
+			headers: ["Retry-After": "60"],
+			body: .text("too many requests — try again later")
+		)
+	}
+
+	/// the caller's throttle key. the transport overwrites `X-WebUI-Peer` from
+	/// the socket's remote address, so a client cannot choose its own bucket.
+	static func peer(_ request: HTTPRequest) -> String {
+		"ip:\(request.headers.first(name: "X-WebUI-Peer") ?? "unknown")"
+	}
+
+	func mint() -> (token: String, expiresAt: TimeInterval)? {
+		guard let token = try? CSRFProtection.token(for: "login", secret: sessions.secret) else { return nil }
+		return (token, CSRFProtection.expiry(of: token).map { TimeInterval($0) } ?? Date().timeIntervalSince1970)
+	}
+
+	/// the failure page's token is minted but not reserved: reserving it would
+	/// spend the caller's outstanding budget on every wrong guess, and a
+	/// submitter may legitimately carry it straight back.
+	func failure(_ message: String) -> HTTPResponse {
+		guard let minted = mint() else { return Self.tooMany }
+		return HTTPResponse(.trusted(renderLoginPage(error: message, csrfToken: minted.token)))
+	}
+
+	/// GET /login: throttle the mint, reserve the single-use token under the
+	/// caller's outstanding budget, then render the static page.
+	func loginPage(_ request: HTTPRequest) async -> HTTPResponse {
+		let peer = Self.peer(request)
+		guard pageThrottle.record(peer) else { return Self.tooMany }
+		guard let minted = mint() else { return HTTPResponse(status: 500, body: .text("500 — entropy unavailable")) }
+		guard await tokens.reserve(minted.token, expiresAt: minted.expiresAt, key: peer) else { return Self.tooMany }
+		return HTTPResponse(.trusted(renderLoginPage(error: nil, csrfToken: minted.token)))
+	}
+
+	func login(_ request: HTTPRequest) async -> HTTPResponse {
+		guard case .form(let fields) = request.body,
+		      let csrf = fields["_csrf"],
+		      CSRFProtection.validate(csrf, for: "login", secret: sessions.secret) else {
+			return failure("invalid or expired form token — try again")
+		}
+		let peer = Self.peer(request)
+		let expiresAt = CSRFProtection.expiry(of: csrf).map { TimeInterval($0) } ?? Date().timeIntervalSince1970
+		guard await tokens.consume(csrf, expiresAt: expiresAt, key: peer) else {
+			return failure("invalid or expired form token — try again")
+		}
+		let username = fields["username"] ?? ""
+		let userKey = "user:\(username.lowercased())"
+		guard throttle.record(peer), throttle.record(userKey) else { return Self.tooMany }
+
+		// constant-time username compare, then argon2 on the pool behind a
+		// global permit cap. an unknown user burns the same verify so the
+		// timing of "no such user" equals "wrong password".
+		let matches = constantTimeEquals([UInt8](username.utf8), [UInt8](Self.demoUsername.utf8))
+		await limiter.wait()
+		let valid = (try? await argonPool.runIfActive {
+			try PasswordVerifier.verify(password: [UInt8](fields["password"]?.utf8 ?? "".utf8), record: passwordRecord)
+		}) ?? false
+		limiter.signal()
+		guard matches, valid else { return failure("invalid credentials") }
+		throttle.reset(userKey)
+
+		guard let token = try? SessionToken.generate(),
+		      let sessionID = SecureRandom.bytes(16),
+		      let seed = SecureRandom.bytes(16),
+		      let hash = try? SessionToken.hash(token) else {
+			return HTTPResponse(status: 500, body: .text("500 — entropy unavailable"))
+		}
+		try? await store.create(AuthenticatedSession(
+			id: sessionID,
+			tokenHash: hash,
+			identityID: Self.demoUsername,
+			csrfSeed: seed,
+			createdAt: Date(),
+			expiresAt: Date().addingTimeInterval(8 * 60 * 60),
+			lastSeenAt: Date()
+		))
+		return HTTPResponse(
+			status: .redirect,
+			cookies: [host.sessionCookie(token: token, maxAge: 8 * 60 * 60)],
+			body: .redirect(to: "/")
+		)
+	}
+
+	/// POST /logout: the form token, then the host's one-call teardown
+	/// (sockets, handler table, store record) and a cleared cookie.
+	func logout(_ request: HTTPRequest) async -> HTTPResponse {
+		guard case .form(let fields) = request.body,
+		      let csrf = fields["_csrf"],
+		      CSRFProtection.validate(csrf, for: "logout", secret: sessions.secret) else {
+			return HTTPResponse(status: 403, body: .text("invalid or expired form token"))
+		}
+		return (try? await host.signOut(for: request)) ?? Self.tooMany
+	}
+
+	/// bounded housekeeping: expired sessions lose their store, their router
+	/// entries, and their throttle bookkeeping.
+	func sweep() async {
+		let now = Date()
+		_ = (try? await store.purgeExpired(before: now)) ?? 0
+		throttle.prune(before: now)
+		pageThrottle.prune(before: now)
+		await tokens.prune(now: now.timeIntervalSince1970)
+		for key in sessions.table.liveSessions() {
+			if (try? await store.find(tokenHash: key.hash)) == nil {
+				await sessions.table.drop(session: key)
+				sessions.stores.remove(key)
+			}
+		}
+	}
+}
+
+// MARK: - transport
+
+/// the listener. it exists because `WebUIHost` has no server binding: the host
+/// answers http as a `Responder`, but the websocket upgrade and the loop that
+/// calls `dispatch` belong to `WebUIServer`, with no seam to hand either to a
+/// host. everything below is that missing seam and nothing else.
+struct Transport: Sendable {
+	enum Negotiation: Sendable {
+		case websocket(NIOAsyncChannel<WebSocketFrame, WebSocketFrame>, key: SessionKey?)
+		case http(NIOAsyncChannel<HTTPServerRequestPart, HTTPServerResponsePart>)
+	}
+
+	let demo: AuthDemo
+	let log = Logger(label: "webui.auth.example")
+
+	func run(port: Int) async throws {
+		let group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
+		do {
+			let channel = try await bind(group: group, port: port)
+			log.info("auth demo on http://localhost:\(port) (ws://localhost:\(port)/ws)")
+			try await withThrowingDiscardingTaskGroup { tasks in
+				tasks.addTask {
+					while !Task.isCancelled {
+						try? await Task.sleep(for: .seconds(60))
+						await demo.sweep()
+					}
+				}
+				try await channel.executeThenClose { inbound in
+					for try await negotiation in inbound {
+						tasks.addTask { await self.handle(negotiation) }
+					}
+				}
+			}
+			try await group.shutdownGracefully()
+		} catch {
+			try? await group.shutdownGracefully()
+			throw error
+		}
+	}
+
+	private func bind(group: EventLoopGroup, port: Int) async throws -> NIOAsyncChannel<EventLoopFuture<Negotiation>, Never> {
 		let bootstrap = ServerBootstrap(group: group)
 			.serverChannelOption(ChannelOptions.backlog, value: 128)
 			.serverChannelOption(ChannelOptions.socketOption(.so_reuseaddr), value: 1)
-
-		let channel: NIOAsyncChannel<EventLoopFuture<AuthUpgradeResult>, Never> = try await bootstrap.bind(
-			host: "0.0.0.0", port: port
-		) { channel in
-			channel.eventLoop.makeCompletedFuture { () -> EventLoopFuture<AuthUpgradeResult> in
-				// admission: every connection — request-bearing or a bare connect —
-				// counts toward the cap (acquired before any negotiation), so a
-				// connect-flood cannot sidestep the gate through channels whose
-				// negotiation never completes. at capacity the channel is closed
-				// before any parsing happens.
-				guard example.connectionGate.tryAcquire() else {
+			.childChannelOption(ChannelOptions.tcpOption(.tcp_nodelay), value: 1)
+		return try await bootstrap.bind(host: "0.0.0.0", port: port) { channel in
+			channel.eventLoop.makeCompletedFuture {
+				guard demo.gate.tryAcquire() else {
 					channel.close(promise: nil)
-					return channel.eventLoop.makeFailedFuture(ConnectionGateError.atCapacity)
+					return channel.eventLoop.makeFailedFuture(DemoError.refused)
 				}
-				// a single idle reaper guards every channel — plain http (an idle
-				// keep-alive or a slow reader that never drains) and upgraded
-				// websockets alike — so no silent connection outlives the window.
-				try channel.pipeline.syncOperations.addHandler(IdleStateHandler(readTimeout: .seconds(120)))
-				try channel.pipeline.syncOperations.addHandler(AuthIdleCloseHandler())
-				// release the gate slot when this channel finally closes.
-				try channel.pipeline.syncOperations.addHandler(ConnectionGateReleaser(gate: example.connectionGate))
-				let upgrader = NIOTypedWebSocketServerUpgrader<AuthUpgradeResult>(
-					shouldUpgrade: { channel, head in
-						// the demo binds the socket to the page's per-session
-						// router at upgrade time (cookie -> token hash -> router
-						// registered by the last full render), refuses foreign
-						// origins, and — since the login page never connects —
-						// requires a real, unexpired session cookie before the
-						// 101 is ever sent. refusals are answered directly here
-						// (the upgrader's fallback replay only re-delivers
-						// `.end`, so routing can't see the request head).
-						let structurallyValid = head.method == .GET
-							&& head.uri == "/ws"
-							&& example.originMatchesHost(head: head)
-						guard structurallyValid else {
-							return example.rejectUpgrade(channel: channel, status: .forbidden)
-						}
-						let sessionValid: EventLoopFuture<Bool> = channel.eventLoop.makeFutureWithTask {
-							guard let tokenHash = example.tokenHash(for: head),
-							      let session = try? await example.sessionStore.find(tokenHash: tokenHash),
-							      !session.isExpired() else {
-								return false
-							}
-							return true
-						}
-						return sessionValid.flatMap { valid in
-							if valid {
-								return channel.eventLoop.makeSucceededFuture(HTTPHeaders())
-							}
-							return example.rejectUpgrade(channel: channel, status: .forbidden)
-						}
-					},
-						upgradePipelineHandler: { channel, head in
+				try channel.pipeline.syncOperations.addHandler(GateRelease(gate: demo.gate))
+				let upgrader = NIOTypedWebSocketServerUpgrader<Negotiation>(
+					shouldUpgrade: { channel, head in authorize(channel, head) },
+					upgradePipelineHandler: { channel, head in
 						channel.eventLoop.makeCompletedFuture {
-							// the top-level IdleStateHandler already reaps
-							// silent sockets (read-idle, incl. missing ws
-							// pings) — no per-upgrade reaper needed.
-							let ws = try NIOAsyncChannel<WebSocketFrame, WebSocketFrame>(wrappingChannelSynchronously: channel)
-							let tokenHash = example.tokenHash(for: head)
-							// the router is NOT resolved at upgrade: the first
-							// event/ping carries the page's render token, which
-							// selects the router (and proves the page belongs to
-							// this session). see `boundRouter`.
-							return AuthUpgradeResult.websocket(ws, tokenHash: tokenHash)
+							.websocket(try NIOAsyncChannel<WebSocketFrame, WebSocketFrame>(wrappingChannelSynchronously: channel), key: sessionKey(head))
 						}
 					}
 				)
-				let config = NIOTypedHTTPServerUpgradeConfiguration(
+				let configuration = NIOTypedHTTPServerUpgradeConfiguration(
 					upgraders: [upgrader],
 					notUpgradingCompletionHandler: { channel in
 						channel.eventLoop.makeCompletedFuture {
-							try channel.pipeline.syncOperations.addHandler(HTTPByteBufferResponsePartHandler())
-							let http = try NIOAsyncChannel<HTTPServerRequestPart, HTTPPart<HTTPResponseHead, ByteBuffer>>(wrappingChannelSynchronously: channel)
-							return AuthUpgradeResult.http(http)
+							.http(try NIOAsyncChannel<HTTPServerRequestPart, HTTPServerResponsePart>(wrappingChannelSynchronously: channel))
 						}
 					}
 				)
-				let pipelineConfig = NIOUpgradableHTTPServerPipelineConfiguration(upgradeConfiguration: config)
-				let negotiation = try channel.pipeline.syncOperations.configureUpgradableHTTPServerPipeline(configuration: pipelineConfig)
-				return negotiation
+				return try channel.pipeline.syncOperations.configureUpgradableHTTPServerPipeline(
+					configuration: NIOUpgradableHTTPServerPipelineConfiguration(upgradeConfiguration: configuration)
+				)
 			}
 		}
-
-		logger.info("auth demo on http://localhost:\(port) (ws://localhost:\(port)/ws)")
-
-		try await withThrowingDiscardingTaskGroup { group in
-			group.addTask {
-				// maintenance: keep the session store, router registry, and
-				// throttle windows bounded for the life of the process.
-				while !Task.isCancelled {
-					do { try await Task.sleep(for: .seconds(60)) } catch { break }
-					await example.runMaintenance()
-				}
-			}
-			try await channel.executeThenClose { inbound in
-				for try await negotiationFuture in inbound {
-					group.addTask {
-						await example.handle(negotiationFuture)
-					}
-				}
-			}
-		}
-
-		try await group.shutdownGracefully()
-		argonPool.shutdownGracefully { _ in }
 	}
 
-	func handle(_ negotiationFuture: EventLoopFuture<AuthUpgradeResult>) async {
+	private func handle(_ negotiation: EventLoopFuture<Negotiation>) async {
 		do {
-			switch try await negotiationFuture.get() {
-			case .websocket(let ws, let tokenHash):
-				try await handleWebsocket(ws, tokenHash: tokenHash)
-			case .http(let http):
-				try await handleHTTP(http)
+			switch try await negotiation.get() {
+			case .websocket(let channel, let key): try await webSocket(channel, key: key)
+			case .http(let channel): try await http(channel)
 			}
-		} catch {
-			// connection error or a refused admission (gate failure); ignore.
-		}
+		} catch {}
 	}
 
-	/// bounded housekeeping sweep (every 60 s on the maintenance task): expired
-	/// sessions are purged from the store, their router entries removed, and
-	/// throttle + token-store bookkeeping pruned. a long-lived server must
-	/// never accumulate dead sessions or attacker-rotated throttle keys.
-	func runMaintenance() async {
-		let now = Date()
-		_ = (try? await sessionStore.purgeExpired(before: now)) ?? 0
-		loginThrottle.prune(before: now)
-		loginPageThrottle.prune(before: now)
-		await loginTokenStore.prune(now: now.timeIntervalSince1970)
-		for hash in routers.allTokenHashes() {
-			if !(await sessionExists(hash)) {
-				routers.remove(forTokenHash: hash)
-			}
-		}
-		if let live = try? await sessionStore.listSessions(for: Self.demoUsername) {
-			await sessionStates.prune(keeping: Set(live.map { $0.id }))
-		}
-	}
+	// MARK: http
 
-	private func sessionExists(_ tokenHash: [UInt8]) async -> Bool {
-		guard let session = try? await sessionStore.find(tokenHash: tokenHash) else { return false }
-		return !session.isExpired()
-	}
-
-	private func handleWebsocket(_ channel: NIOAsyncChannel<WebSocketFrame, WebSocketFrame>, tokenHash: [UInt8]?) async throws {
-		// register before reading so logout teardown can close this socket;
-		// unregister when the connection ends (normal close or idle reap).
-		var connectionID: Int?
-		if let tokenHash {
-			connectionID = await connections.register(channel, tokenHash: tokenHash)
-		}
-		do {
-			try await channel.executeThenClose { inbound, outbound in
-				try await withThrowingTaskGroup(of: Void.self) { tg in
-					tg.addTask {
-						for try await frame in inbound {
-							switch frame.opcode {
-							case .text:
-								let payload = String(buffer: frame.unmaskedData)
-								await self.dispatch(eventText: payload, tokenHash: tokenHash, outbound: outbound)
-							case .ping:
-								let buf = ByteBuffer()
-								let pong = WebSocketFrame(fin: true, opcode: .pong, data: buf)
-								try await outbound.write(pong)
-							case .connectionClose:
-								var data = frame.unmaskedData
-								let code = data.readSlice(length: 2) ?? ByteBuffer()
-								let close = WebSocketFrame(fin: true, opcode: .connectionClose, data: code)
-								try await outbound.write(close)
-								return
-							default:
-								break
-							}
-						}
-					}
-					try await tg.next()
-					tg.cancelAll()
-				}
-			}
-		} catch {
-			// connection error; the unregister below still runs.
-		}
-		if let tokenHash, let connectionID {
-			await connections.unregister(connectionID, tokenHash: tokenHash)
-		}
-	}
-
-	// the socket carries no identity in its messages — each `event`/`ping`
-	// carries the page's render token, which selects the router (a token this
-	// session never minted means a stale or foreign page, and is rejected).
-	// revocation (logout) and expiry are enforced per event too: the session
-	// must still exist and be unexpired in the store, or the client is
-	// redirected to /login and the socket closed — an already-open socket has
-	// no residual power after logout.
-	private func dispatch(eventText payload: String, tokenHash: [UInt8]?, outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>) async {
-		do {
-			let msg = try WSIncoming(jsonText: payload)
-			switch msg {
-			case .event(let component, let event, let data, let token):
-				guard await sessionIsAlive(tokenHash: tokenHash, outbound: outbound) else { return }
-				guard let router = await boundRouter(token: token, tokenHash: tokenHash, outbound: outbound) else { return }
-				let eventData = EventData(component: ComponentID(component), event: event, data: data)
-				let updates = await router.handle(eventData)
-				guard !updates.isEmpty else { return }
-				let out = WSOutgoing.update(fragments: updates)
-				try await writeJSON(out, outbound: outbound)
-			case .ping(let token):
-				// pings keep an idle socket alive — session liveness is
-				// enforced here too, so an expired or revoked session's
-				// socket cannot ping forever.
-				guard await sessionIsAlive(tokenHash: tokenHash, outbound: outbound) else { return }
-				guard await boundRouter(token: token, tokenHash: tokenHash, outbound: outbound) != nil else { return }
-				try await writeJSON(WSOutgoing.pong, outbound: outbound)
-			case .navigate:
-				break
-			}
-		} catch {
-			let err = WSOutgoing.error(code: "decode", message: "bad event: \(error)")
-			try? await writeJSON(err, outbound: outbound)
-		}
-	}
-
-	/// the router for a message presenting `token` on a session's socket, or
-	/// `nil` when the token is absent or unknown to this session. a token this
-	/// session minted but LRU-evicted resolves through the registry's forward
-	/// chain and the page is handed the live token as an in-place `token`
-	/// refresh — no reload, no login kick. a genuinely foreign/forged token
-	/// never resolves; a *valid* session that has lost all router entries
-	/// reloads the page (fresh render + fresh token), and a gone session
-	/// (expired/logged out/foreign) is sent to /login. the socket closes only
-	/// on the reject paths: nothing unknown is ever routed.
-	private func boundRouter(token: String?, tokenHash: [UInt8]?, outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>) async -> EventRouter? {
-		guard let tokenHash else {
-			try? await writeJSON(WSOutgoing.redirect(url: "/login", replace: true), outbound: outbound)
-			try? await writeClose(outbound: outbound)
-			return nil
-		}
-		if let token, let hit = routers.resolve(forTokenHash: tokenHash, renderToken: token) {
-			if hit.needsRefresh {
-				try? await writeJSON(WSOutgoing.token(hit.liveToken), outbound: outbound)
-			}
-			return hit.router
-		}
-		if await sessionExists(tokenHash) {
-			try? await writeJSON(WSOutgoing.redirect(url: "/", replace: true), outbound: outbound)
-		} else {
-			try? await writeJSON(WSOutgoing.redirect(url: "/login", replace: true), outbound: outbound)
-		}
-		try? await writeClose(outbound: outbound)
-		return nil
-	}
-
-	/// `true` when the session behind `tokenHash` still exists and is
-	/// unexpired. when it is not, the client is redirected to `/login` and the
-	/// socket closed — revocation is enforced on the next interaction, and
-	/// this backstop runs for events and pings alike.
-	private func sessionIsAlive(tokenHash: [UInt8]?, outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>) async -> Bool {
-		if let tokenHash {
-			let session = try? await sessionStore.find(tokenHash: tokenHash)
-			guard session != nil, !(session?.isExpired() ?? true) else {
-				try? await writeJSON(WSOutgoing.redirect(url: "/login", replace: true), outbound: outbound)
-				try? await writeClose(outbound: outbound)
-				return false
-			}
-		}
-		return true
-	}
-
-	private func writeClose(outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>) async throws {
-		var buf = ByteBuffer()
-		buf.writeInteger(UInt16(1000))
-		let close = WebSocketFrame(fin: true, opcode: .connectionClose, data: buf)
-		try await outbound.write(close)
-	}
-
-	private func writeJSON(_ msg: WSOutgoing, outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>) async throws {
-		let bytes = msg.jsonBytes
-		var buf = ByteBuffer()
-		buf.writeBytes(bytes)
-		let frame = WebSocketFrame(fin: true, opcode: .text, data: buf)
-		try await outbound.write(frame)
-	}
-
-	// MARK: HTTP
-
-	private func handleHTTP(_ channel: NIOAsyncChannel<HTTPServerRequestPart, HTTPPart<HTTPResponseHead, ByteBuffer>>) async throws {
+	private func http(_ channel: NIOAsyncChannel<HTTPServerRequestPart, HTTPServerResponsePart>) async throws {
+		let peer = channel.channel.remoteAddress?.ipAddress ?? "unknown"
 		try await channel.executeThenClose { inbound, outbound in
-			var requestHead: HTTPRequestHead?
-			var bodyBytes: [UInt8] = []
-			var bodyTooLarge = false
+			var head: HTTPRequestHead?
+			var body: [UInt8] = []
 			for try await part in inbound {
 				switch part {
-				case .head(let head):
-					requestHead = head
+				case .head(let value): head = value
 				case .body(let buffer):
-					guard !bodyTooLarge else { continue }
-					var buffer = buffer
-					if let b = buffer.readBytes(length: buffer.readableBytes) {
-						bodyBytes.append(contentsOf: b)
-						if bodyBytes.count > Self.maxBodyBytes {
-							bodyTooLarge = true
-							bodyBytes = []
-						}
+					body.append(contentsOf: buffer.readableBytesView)
+					// the cap is enforced while reading, not after: a client
+					// that streams gigabytes is cut off at the limit.
+					if body.count > AuthDemo.maxBodyBytes {
+						try await write(
+							HTTPResponse(status: 413, body: .text("413 — request body too large")),
+							to: outbound
+						)
+						return
 					}
 				case .end:
-					guard let head = requestHead else { return }
-					if bodyTooLarge {
-						try await loginResponse(channel: channel.channel, status: .payloadTooLarge, headers: [], body: "request body too large")
-					} else {
-						let peerIP = channel.channel.remoteAddress?.ipAddress ?? "unknown"
-						try await self.route(head: head, body: bodyBytes, peerIP: peerIP, channel: channel.channel)
-					}
+					guard let head else { return }
+					try await write(await answer(head, body: body, peer: peer), to: outbound)
 					return
 				}
 			}
 		}
 	}
 
-	private func route(head: HTTPRequestHead, body: [UInt8], peerIP: String, channel: Channel) async throws {
-		// assets are public (the design system css + js runtime)
-		switch (head.method, head.uri) {
-		case (.GET, "/__assets/css"):
-			// the minified sheet — the raw working file carries designer
-			// comments (the first law) and ~6% more bytes on the wire.
-			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/css; charset=utf-8"), ("Cache-Control", "public, max-age=3600")], body: DesignSystemAssets.minifiedCss)
-			return
-		case (.GET, let cssURL) where cssURL.hasPrefix("/__assets/css."):
-			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/css; charset=utf-8"), ("Cache-Control", "public, max-age=31536000, immutable")], body: DesignSystemAssets.minifiedCss)
-			return
-		case (.GET, "/login"):
-			// the mint page is throttled (separate, more generous budget) and
-			// every issued token is reserved under the caller's outstanding
-			// budget, so one ip cannot stockpile tokens and later flood the
-			// single-use store past capacity, locking out other logins.
-			let ipKey = "ip:\(peerIP)"
-			guard loginPageThrottle.record(ipKey) else {
-				return try await loginResponse(channel: channel, status: .tooManyRequests, headers: [("Content-Type", "text/plain; charset=utf-8"), ("Retry-After", "60")], body: "too many login pages — try again later")
-			}
-			let token = try CSRFProtection.token(for: "login", secret: csrfSecret)
-			// `Epoch` -> `TimeInterval` at the one boundary that still speaks
-			// wall-clock doubles: the token store's models are out of this arc.
-			let expiresAt = CSRFProtection.expiry(of: token).map { TimeInterval($0) } ?? Date().timeIntervalSince1970
-			guard await loginTokenStore.reserve(token, expiresAt: expiresAt, key: ipKey) else {
-				return try await loginResponse(channel: channel, status: .tooManyRequests, headers: [("Content-Type", "text/plain; charset=utf-8"), ("Retry-After", "60")], body: "too many outstanding login forms — submit one first")
-			}
-			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/html; charset=utf-8")], body: renderLoginPage(error: nil, csrfToken: token))
-		case (.POST, "/login"):
-			try await handleLogin(head: head, body: body, peerIP: peerIP, channel: channel)
-		case (.POST, "/logout"):
-			try await handleLogout(head: head, body: body, channel: channel)
-		case (.GET, "/logout"):
-			// logout is POST-only (CSRF-protected); a plain GET is a CSRF
-			// vector, so it gets no treatment.
-			try await loginResponse(channel: channel, status: .methodNotAllowed, headers: [], body: "")
-		case (.GET, "/"):
-			try await handleIndex(head: head, channel: channel)
-		case (_, "/ws"):
-			// the upgrade path handles this; reaching here means no upgrade.
-			try await loginResponse(channel: channel, status: .notFound, headers: [("Content-Type", "text/plain; charset=utf-8")], body: "not found")
-		default:
-			try await loginResponse(channel: channel, status: .notFound, headers: [("Content-Type", "text/plain; charset=utf-8")], body: "not found")
+	private func answer(_ head: HTTPRequestHead, body: [UInt8], peer: String) async -> HTTPResponse {
+		guard body.count <= AuthDemo.maxBodyBytes else {
+			return HTTPResponse(status: 413, body: .text("413 — request body too large"))
 		}
-	}
-
-	private func handleLogin(head: HTTPRequestHead, body: [UInt8], peerIP: String, channel: Channel) async throws {
-		func failure(_ message: String) async throws {
-			let token = try CSRFProtection.token(for: "login", secret: csrfSecret)
-			try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/html; charset=utf-8")], body: renderLoginPage(error: message, csrfToken: token))
+		guard let method = HTTPMethod(rawValue: head.method.rawValue.lowercased()) else {
+			return HTTPResponse(status: 405, body: .text("405 — unsupported method"))
 		}
-		func tooMany(_ message: String) async throws {
-			try await loginResponse(channel: channel, status: .tooManyRequests, headers: [("Content-Type", "text/plain; charset=utf-8"), ("Retry-After", "60")], body: message)
-		}
-
-		// the only accepted encoding is the browser's urlencoded form POST.
-		guard let contentType = head.headers.first(name: "content-type")?.lowercased(),
-		      contentType.hasPrefix("application/x-www-form-urlencoded") else {
-			try await loginResponse(channel: channel, status: .unsupportedMediaType, headers: [], body: "expected application/x-www-form-urlencoded")
-			return
-		}
-
-		let bodyText = String(decoding: body, as: UTF8.self)
-		guard let fields = try? URLEncodedForm.parse(bodyText),
-		      let csrf = fields["_csrf"],
-		      CSRFProtection.validate(csrf, for: "login", secret: csrfSecret) else {
-			return try await failure("invalid or expired form token — try again")
-		}
-		let username = fields["username"] ?? ""
-		let password = fields["password"] ?? ""
-
-		// single-use login tokens: the stateless HMAC token may only be
-		// submitted once. a replayed or scraped token is rejected here, before
-		// any KDF work is spent. consume also releases the issuer's outstanding
-		// budget (keyed by the ip the token was reserved under).
-		let ipKey = "ip:\(peerIP)"
-		// same boundary widening as the reserve above: the store speaks seconds
-		// as a `TimeInterval`, the token speaks them as an `Epoch`.
-		let expiresAt = CSRFProtection.expiry(of: csrf).map { TimeInterval($0) } ?? Date().timeIntervalSince1970
-		guard await loginTokenStore.consume(csrf, expiresAt: expiresAt, key: ipKey) else {
-			return try await failure("invalid or expired form token — try again")
-		}
-
-		// per-IP + per-account throttles key on the socket peer (no trusted
-		// proxy is configured, so X-Forwarded-For is never honored here).
-		guard loginThrottle.record(ipKey) else {
-			return try await tooMany("too many attempts — try again later")
-		}
-		let userKey = "user:\(username.lowercased())"
-		guard loginThrottle.record(userKey) else {
-			return try await tooMany("too many attempts — try again later")
-		}
-
-		// username + password verification: constant-time username compare and
-		// Argon2id verification against the precomputed demo record. the KDF is
-		// the one-box DoS amplifier on a public endpoint, so it runs under a
-		// global concurrency cap AND on a dedicated thread pool — a ~100-300 ms
-		// synchronous hash must never stall the event loop every connection on
-		// it shares (worst on a 4-core pi).
-		let userMatches = constantTimeEquals([UInt8](username.utf8), [UInt8](Self.demoUsername.utf8))
-		let passwordValid: Bool
-		if userMatches {
-			await argon2Limiter.wait()
-			defer { argon2Limiter.signal() }
-			passwordValid = try await argonPool.runIfActive {
-				try PasswordVerifier.verify(password: [UInt8](password.utf8), record: adminPasswordRecord)
-			}
-		} else {
-			// dummy-hash discipline: burn the same cost as a real verify so the
-			// timing of "unknown user" equals "wrong password".
-			await argon2Limiter.wait()
-			defer { argon2Limiter.signal() }
-			_ = try await argonPool.runIfActive {
-				try PasswordVerifier.verify(password: [UInt8](password.utf8), record: adminPasswordRecord)
-			}
-			passwordValid = false
-		}
-		guard userMatches, passwordValid else {
-			return try await failure("invalid credentials")
-		}
-		loginThrottle.reset(userKey)
-
-		// establish the session: fresh token, hash-at-rest, in-memory store.
-		let token = try SessionToken.generate()
-		// the session id and csrf seed are entropy-minted like the token: a
-		// silent `?? []` fallback would let two sessions collide on an empty id.
-		guard let sessionID = SecureRandom.bytes(16),
-		      let sessionSeed = SecureRandom.bytes(16) else {
-			throw SessionToken.TokenError.entropyUnavailable
-		}
-		let session = AuthenticatedSession(
-			id: sessionID,
-			tokenHash: try SessionToken.hash(token),
-			identityID: Self.demoUsername,
-			csrfSeed: sessionSeed,
-			createdAt: Date(),
-			expiresAt: Date().addingTimeInterval(TimeInterval(DemoSession.maxAgeSeconds)),
-			lastSeenAt: Date()
+		let path = String(head.uri.prefix(while: { $0 != "?" }))
+		if let asset = AuthDemo.asset(path) { return asset }
+		var headers = head.headers
+		// the transport owns the peer key: a client-supplied value is replaced.
+		headers.replaceOrAdd(name: "X-WebUI-Peer", value: peer)
+		var request = HTTPRequest(
+			method: method,
+			path: path,
+			headers: headers
 		)
-		try await sessionStore.create(session)
-
-		let cookie = try HTTPCookie(
-			name: DemoSession.cookieName,
-			value: Base64.encode(token),
-			attributes: .init(maxAge: DemoSession.maxAgeSeconds, path: "/", httpOnly: true, sameSite: .lax)
-		).setCookieHeaderValue()
-		try await redirect(channel: channel, to: "/", setCookies: [("Set-Cookie", cookie)])
+		if !body.isEmpty {
+			let type = head.headers.first(name: "Content-Type") ?? ""
+			request.body = type.hasPrefix("application/x-www-form-urlencoded")
+				? .form(BodyReader(maxBodyBytes: AuthDemo.maxBodyBytes, maxMultipartParts: 8).urlencoded(body))
+				: .bytes(body)
+		}
+		do {
+			return try await demo.router.respond(to: request)
+		} catch {
+			return HTTPResponse(status: 500, body: .text("500 — the page failed to render: \(error)"))
+		}
 	}
 
-	private func handleLogout(head: HTTPRequestHead, body: [UInt8], channel: Channel) async throws {
-		// CSRF-protected POST logout: the token comes from the per-render
-		// logout form on the dashboard (plan M2-T4 spirit).
-		let bodyText = String(decoding: body, as: UTF8.self)
-		guard let fields = try? URLEncodedForm.parse(bodyText),
-		      let csrf = fields["_csrf"],
-		      CSRFProtection.validate(csrf, for: "logout", secret: csrfSecret) else {
-			try await loginResponse(channel: channel, status: .forbidden, headers: [], body: "invalid or expired form token")
-			return
+	private func write(_ response: HTTPResponse, to outbound: NIOAsyncChannelOutboundWriter<HTTPServerResponsePart>) async throws {
+		var head = HTTPResponseHead(version: .http1_1, status: HTTPResponseStatus(statusCode: response.status.code))
+		var body = ByteBuffer()
+		switch response.body {
+		case .html(let markup):
+			head.headers.replaceOrAdd(name: "Content-Type", value: "text/html; charset=utf-8")
+			body.writeString(markup.html)
+		case .text(let text):
+			head.headers.replaceOrAdd(name: "Content-Type", value: "text/plain; charset=utf-8")
+			body.writeString(text)
+		case .bytes(let bytes, let contentType):
+			head.headers.replaceOrAdd(name: "Content-Type", value: contentType)
+			body.writeBytes(bytes)
+		case .redirect(let target, let status):
+			head = HTTPResponseHead(version: .http1_1, status: HTTPResponseStatus(statusCode: status.code))
+			head.headers.replaceOrAdd(name: "Location", value: target)
+		case .empty, .stream:
+			break
 		}
-
-		var clearCookie: String?
-		if let cookieHeader = head.headers.first(name: "cookie"),
-		   let token = CookieParser.requestCookies(cookieHeader)[DemoSession.cookieName],
-		   let tokenHash = try? SessionToken.hash(Self.decodeCookieToken(token)) {
-			if let session = try? await sessionStore.find(tokenHash: tokenHash) {
-				try? await sessionStore.invalidate(id: session.id)
-				routers.remove(forTokenHash: tokenHash)
-				await sessionStates.remove(sessionID: session.id)
-				// teardown: close every live socket bound to this session now,
-				// not on the next client event. the per-event liveness check
-				// remains as the backstop for sockets opened during the race.
-				await connections.closeAll(forTokenHash: tokenHash)
+		// the security block every response carries: no-store keeps an
+		// authenticated page out of any cache, the rest are the auth-page
+		// headers a browser is entitled to.
+		head.headers.replaceOrAdd(name: "Content-Length", value: "\(body.readableBytes)")
+		head.headers.replaceOrAdd(name: "Cache-Control", value: "no-store")
+		head.headers.replaceOrAdd(name: "X-Content-Type-Options", value: "nosniff")
+		head.headers.replaceOrAdd(name: "X-Frame-Options", value: "SAMEORIGIN")
+		for (name, value) in response.headers {
+			head.headers.replaceOrAdd(name: name, value: value)
+		}
+		for cookie in response.cookies {
+			if let header = try? cookie.setCookieHeaderValue() {
+				head.headers.add(name: "Set-Cookie", value: header)
 			}
-			clearCookie = try HTTPCookie(
-				name: DemoSession.cookieName,
-				value: "",
-				attributes: .init(maxAge: 0, path: "/", httpOnly: true, sameSite: .lax)
-			).setCookieHeaderValue()
 		}
-		var cookies: [(String, String)] = []
-		if let clearCookie {
-			cookies.append(("Set-Cookie", clearCookie))
-		}
-		try await redirect(channel: channel, to: "/login", setCookies: cookies)
+		try await outbound.write(.head(head))
+		try await outbound.write(.body(.byteBuffer(body)))
+		try await outbound.write(.end(nil))
 	}
 
-	private func handleIndex(head: HTTPRequestHead, channel: Channel) async throws {
-		guard let (session, token) = await sessionDescription(for: head) else {
-			try await redirect(channel: channel, to: "/login")
-			return
+	// MARK: websocket
+
+	/// a session cookie must resolve before the 101 is sent, and the origin
+	/// must be the host's own: a same-site sibling could otherwise drive this
+	/// session's socket.
+	private func authorize(_ channel: Channel, _ head: HTTPRequestHead) -> EventLoopFuture<HTTPHeaders?> {
+		guard head.method == .GET, head.uri == "/ws", originMatches(head) else {
+			return refuse(channel)
 		}
-		let identity = Identity(id: session.identityID, roles: [Role.member, Role.admin])
-		let auth = AuthContext(session: session, identity: identity)
-		let logoutToken = try CSRFProtection.token(for: "logout", secret: csrfSecret)
-		// a fresh render token per full page render: only pages minted for this
-		// session can drive its sockets. entropy failure is fatal (fail loud).
-		guard let renderTokenBytes = SecureRandom.bytes(16) else {
-			throw SessionToken.TokenError.entropyUnavailable
+		return channel.eventLoop.makeFutureWithTask {
+			let request = HTTPRequest(method: .get, path: "/ws", headers: head.headers)
+			return (try? await demo.resolver.principal(for: request)) != nil
+		}.flatMap { valid in
+			valid ? channel.eventLoop.makeSucceededFuture(HTTPHeaders()) : refuse(channel)
 		}
-		let renderToken = Base64.encodeURL(renderTokenBytes)
-		let (html, router) = renderDashboard(state: await sessionStates.state(for: session.id), auth: auth, logoutToken: logoutToken, renderToken: renderToken)
-		routers.set(router, forTokenHash: try SessionToken.hash(token), renderToken: renderToken)
-		try await loginResponse(channel: channel, status: .ok, headers: [("Content-Type", "text/html; charset=utf-8")], body: html)
+	}
+
+	private func refuse(_ channel: Channel) -> EventLoopFuture<HTTPHeaders?> {
+		var head = HTTPResponseHead(version: .http1_1, status: .forbidden)
+		head.headers.replaceOrAdd(name: "Content-Length", value: "0")
+		head.headers.replaceOrAdd(name: "Connection", value: "close")
+		_ = channel.write(HTTPServerResponsePart.head(head))
+		_ = channel.write(HTTPServerResponsePart.body(.byteBuffer(ByteBuffer())))
+		return channel.writeAndFlush(HTTPServerResponsePart.end(nil)).map { nil }
+	}
+
+	private func originMatches(_ head: HTTPRequestHead) -> Bool {
+		guard let origin = head.headers.first(name: "origin"),
+		      let host = head.headers.first(name: "host")?.lowercased(),
+		      let url = URL(string: origin) else { return false }
+		var authority = (url.host ?? "").lowercased()
+		if let port = url.port { authority += ":\(port)" }
+		return authority == host
+	}
+
+	private func sessionKey(_ head: HTTPRequestHead) -> SessionKey? {
+		guard let cookie = head.headers.first(name: "cookie"),
+		      let value = WebUISharedCore.CookieParser.requestCookies(cookie)[demo.resolver.cookieName],
+		      let token = Base64.decodeURL(value),
+		      let hash = try? SessionToken.hash(token) else { return nil }
+		return SessionKey(hash: hash)
+	}
+
+	private func webSocket(_ channel: NIOAsyncChannel<WebSocketFrame, WebSocketFrame>, key: SessionKey?) async throws {
+		guard let key else { return }
+		let connection = ConnectionToken.next { _ = channel.channel.close(promise: nil) }
+		await demo.bus.track(connection, session: key)
+		demo.sessions.stores.markLive(key)
+		do {
+			try await channel.executeThenClose { inbound, outbound in
+				for try await frame in inbound {
+					switch frame.opcode {
+					case .text: await event(String(buffer: frame.unmaskedData), key: key, outbound: outbound)
+					case .ping: try await send(.pong, outbound)
+					case .connectionClose: try await sendClose(outbound); return
+					default: break
+					}
+				}
+			}
+		} catch {}
+		await demo.bus.untrack(connection)
+		demo.sessions.stores.markClosed(key)
+	}
+
+	private func event(_ text: String, key: SessionKey, outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>) async {
+		do {
+			switch try WSIncoming(jsonText: text) {
+			case .event(let component, let name, let data, let token):
+				guard let token, !token.isEmpty else { return try await reject(outbound) }
+				let renderKey = RenderKey(value: token)
+				let before = demo.sessions.stores.existing(for: key, as: Dashboard.State.self)?.revision ?? 0
+				let dispatched = await demo.host.dispatch(
+					EventData(component: ComponentID(component), event: name, data: data),
+					session: key,
+					renderToken: renderKey
+				)
+				if let refreshed = dispatched.refreshedToken {
+					try await send(.token(refreshed.value), outbound)
+				}
+				if dispatched.isRefused { return try await reject(outbound) }
+				if case .redirect(let url, let replace) = dispatched.outcome {
+					try await send(.redirect(url: url, replace: replace), outbound)
+					return try await sendClose(outbound)
+				}
+				// the dispatch committed a mutation: re-render the page it now
+				// describes and ship the bytes. one commit, one patch.
+				if let html = await demo.sessions.patch(after: before, for: key, renderToken: renderKey) {
+					try await send(.update(fragments: [FragmentUpdate(id: "app", html: html)]), outbound)
+				}
+			case .ping:
+				try await send(.pong, outbound)
+			case .navigate:
+				break
+			}
+		} catch {
+			try? await send(.error(code: "decode", message: "bad event: \(error)"), outbound)
+		}
+	}
+
+	private func reject(_ outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>) async throws {
+		try await send(.redirect(url: "/login", replace: true), outbound)
+		try await sendClose(outbound)
+	}
+
+	private func send(_ message: WSOutgoing, _ outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>) async throws {
+		try await outbound.write(WebSocketFrame(fin: true, opcode: .text, data: ByteBuffer(bytes: message.jsonBytes)))
+	}
+
+	private func sendClose(_ outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>) async throws {
+		var buffer = ByteBuffer()
+		buffer.writeInteger(UInt16(1000))
+		try await outbound.write(WebSocketFrame(fin: true, opcode: .connectionClose, data: buffer))
 	}
 }
 
-enum AuthUpgradeResult: Sendable {
-	case websocket(NIOAsyncChannel<WebSocketFrame, WebSocketFrame>, tokenHash: [UInt8]?)
-	case http(NIOAsyncChannel<HTTPServerRequestPart, HTTPPart<HTTPResponseHead, ByteBuffer>>)
+/// release an admitted connection's slot when it closes.
+final class GateRelease: ChannelInboundHandler {
+	typealias InboundIn = IOData
+	let gate: ConnectionGate
+	init(gate: ConnectionGate) { self.gate = gate }
+	func channelInactive(context: ChannelHandlerContext) {
+		gate.release()
+		context.fireChannelInactive()
+	}
+}
+
+// MARK: - entry point
+
+@main
+struct WebUIAuthExample {
+	static func main() async throws {
+		let port = intFlag("--port", fallback: 9091)
+		let pool = NIOThreadPool(numberOfThreads: intFlag("--argon2-workers", fallback: 2))
+		pool.start()
+		let demo = try AuthDemo(
+			gate: ConnectionGate(maximum: intFlag("--max-connections", fallback: 256)),
+			argonPool: pool
+		)
+		DesignSystemAssets.prewarm()
+		try await Transport(demo: demo).run(port: port)
+		pool.shutdownGracefully { _ in }
+	}
+}
+
+func intFlag(_ name: String, fallback: Int) -> Int {
+	guard let index = CommandLine.arguments.firstIndex(of: name),
+	      index + 1 < CommandLine.arguments.count,
+	      let value = Int(CommandLine.arguments[index + 1]), value > 0 else { return fallback }
+	return value
 }

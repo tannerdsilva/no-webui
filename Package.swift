@@ -36,6 +36,17 @@ let package = Package(
             name: "WebUIServer",
             targets: ["WebUIServer"]
         ),
+        // design B's application-state target and design A's multi-tenant host.
+        // both are declared by the spine (stage 0) rather than by the agent that
+        // fills them, so stage 1's three parallel agents never edit this file.
+        .library(
+            name: "WebUIState",
+            targets: ["WebUIState"]
+        ),
+        .library(
+            name: "WebUIHost",
+            targets: ["WebUIHost"]
+        ),
         // the host-side build library: gzip, generated-source emission and the asset
         // manifest, shared by the framework's own tool and a consumer's tool (a plugin
         // cannot import a library, so the plugin ships this and invokes a tool).
@@ -98,6 +109,13 @@ let package = Package(
         .executable(
             name: "WebUIShowcaseServer",
             targets: ["WebUIShowcaseServer"]
+        ),
+        // the repo's first benchmark target (plan §12 / task 0.7): render µs,
+        // bytes per page, peak RSS, and the allocation column (libmalloc's
+        // `malloc_logger` on macOS; `n/a (platform)` elsewhere).
+        .executable(
+            name: "WebUIBench",
+            targets: ["WebUIBench"]
         ),
     ],
     dependencies: [
@@ -276,6 +294,11 @@ let package = Package(
                 // the typed request/response model and the cookie types it
                 // carries (`HTTPResponse.cookies`) live on the shared leaf.
                 "WebUISharedCore",
+                // design E's wire half: the server diffs a re-render by region
+                // hash and ships only the regions that moved. the edge is one
+                // way — WebUIState never imports the server — so the state
+                // layer stays testable without a socket.
+                "WebUIState",
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
                 .product(name: "NIOPosix", package: "swift-nio"),
@@ -294,6 +317,26 @@ let package = Package(
                 .product(name: "RAW", package: "rawdog"),
                 .product(name: "RAW_sha256", package: "rawdog"),
                 .product(name: "RAW_argon2", package: "rawdog"),
+            ]
+        ),
+        // design B: the store, the render-diff patch and the stateful page. depends
+        // on the core only — it is consumed by the host and, from stage 2, by the
+        // server's diff wiring.
+        .target(
+            name: "WebUIState",
+            dependencies: [
+                "WebUICore",
+            ]
+        ),
+        // design A: the composition point. the only target that imports both the
+        // server and auth, which is what keeps `WebUIServer` free of auth.
+        .target(
+            name: "WebUIHost",
+            dependencies: [
+                "WebUI",
+                "WebUIServer",
+                "WebUIAuth",
+                "WebUIState",
             ]
         ),
 
@@ -380,6 +423,8 @@ let package = Package(
                 "WebUI",
                 "WebUIDesignSystem",
                 "WebUIAuth",
+                "WebUIState",
+                "WebUIHost",
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOHTTP1", package: "swift-nio"),
@@ -442,6 +487,21 @@ let package = Package(
                 "WebUIServer",
                 .product(name: "Logging", package: "swift-log"),
                 .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
+            ]
+        ),
+
+        // ── Benchmark (plan §12 / task 0.7) ──────────────────────────────────
+        // the numbers D6's allocation gate reads: it renders the smoke view and
+        // the full showcase and prints µs/render, bytes, allocs/render (macOS
+        // only) and peak RSS. not a plugin: it binds nothing and writes nothing,
+        // so `swift run WebUIBench` is the whole invocation.
+        .executableTarget(
+            name: "WebUIBench",
+            dependencies: [
+                "WebUI",
+                "WebUIDesignSystem",
+                "WebUIShowcaseContent",
+                "WebUISmokeShared",
             ]
         ),
 
@@ -601,6 +661,24 @@ let package = Package(
         ),
 
         // ── Tests ────────────────────────────────────────────────
+        // stage 1's isolated test targets. declared by the spine, not by the agents
+        // that fill them: two parallel tracks both needed a test bundle, and
+        // `Package.swift` is the one file neither may share.
+        .testTarget(
+            name: "WebUIStateTests",
+            dependencies: [
+                "WebUIState",
+                "WebUICore",
+            ]
+        ),
+        .testTarget(
+            name: "WebUIHostTests",
+            dependencies: [
+                "WebUIHost",
+                "WebUIServer",
+                "WebUIAuth",
+            ]
+        ),
         .testTarget(
             name: "WebUITests",
             dependencies: [
@@ -620,6 +698,9 @@ let package = Package(
                 // `HTTPHeaders` (case-insensitive by construction), so the
                 // model tests link NIOHTTP1 directly.
                 .product(name: "NIOHTTP1", package: "swift-nio"),
+                // the admission seam answers a refused channel that carries no
+                // codec, so its responder is driven over a raw embedded channel.
+                .product(name: "NIOEmbedded", package: "swift-nio"),
                 // the surface pins reference the toolkit's public types (STABILITY.md
                 // change discipline).
                 "WebUIBuild",

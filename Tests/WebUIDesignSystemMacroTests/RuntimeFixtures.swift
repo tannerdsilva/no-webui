@@ -161,14 +161,14 @@ struct ProbeWiring {
 
 /// an ArcButton-shaped component proving the generated inits are disjoint:
 /// the text source cannot be passed to the builder init and vice versa,
-/// and `content`/`Content` stay private to the type.
+/// and `kind`/the per-case storage stay private to the type.
 @Suite("@HTMLComponent compiled runtime")
 struct HTMLComponentCompiledRuntimeTests {
 
 	@Test("text source renders distinct bytes from builder source")
 	func textAndBuilderRenderDistinctBytes() {
 		let asText = ArcButton("Submit")
-		let asBuilder = ArcButton(id: nil, disabled: false, views: { [Text("Submit")] })
+		let asBuilder = ArcButton(id: nil, disabled: false, views: { Text("Submit") })
 
 		#expect(asText.markup.html != asBuilder.markup.html,
 			"text source and builder source must produce distinct bytes")
@@ -186,24 +186,34 @@ struct HTMLComponentCompiledRuntimeTests {
 		#expect(explicit.markup.html.contains("btn-1"), "explicit id is emitted")
 		#expect(defaulted.markup.html.contains("Cancel"), "default path emits the label")
 	}
+
+	@Test("two distinct content types are two distinct struct types")
+	func distinctContentTypesAreDistinctTypes() {
+		let text = ArcButton(views: { Text("a") })
+		let button = ArcButton(views: { Button("b") })
+
+		#expect(ObjectIdentifier(type(of: text)) != ObjectIdentifier(type(of: button)),
+			"Content == Text and Content == Button must be different specializations")
+		#expect(text.markup.html.contains("a"))
+		#expect(button.markup.html.contains("b"))
+	}
 }
 
 /// ArcButton-shaped component: shared props (`id`, `disabled`) plus one
 /// unlabeled text case and one builder case. renders as a button wrapper.
-/// the inits, `content` storage, and `Content` enum are macro-generated.
+/// the inits, `kind` discriminator, and per-case storage are macro-generated;
+/// `Views` is the host's own generic parameter, one per builder case.
 @HTMLComponent(.text("label", unlabeled: true), .builder("views"))
-struct ArcButton: View {
+struct ArcButton<Views: View>: View {
 	var id: String? = nil
 	var disabled: Bool = false
 
 	public func render(into buffer: inout HTMLBuffer) {
-		switch content {
-		case .label(let label):
+		switch kind {
+		case .label:
 			Button(label, id: id, disabled: disabled).render(into: &buffer)
-		case .views(let views):
-			for view in views {
-				view.render(into: &buffer)
-			}
+		case .views:
+			views.render(into: &buffer)
 		}
 	}
 }
@@ -219,8 +229,8 @@ struct LabelPanel: View {
 	var id: String? = nil
 
 	public func render(into buffer: inout HTMLBuffer) {
-		switch content {
-		case .label(let label):
+		switch kind {
+		case .label:
 			Text(label).render(into: &buffer)
 		}
 	}

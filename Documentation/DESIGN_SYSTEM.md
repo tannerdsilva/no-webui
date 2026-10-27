@@ -182,65 +182,119 @@ struct ChatWiring: Sendable {
 ### `@HTMLComponent` — disjoint-content component declarations
 
 `@HTMLComponent` is a member macro on a `struct` that replaces the
-three-initializer + private `Content`-enum ceremony with a single attribute
-declaration. one init is generated per content case; every stored property of
-the host struct becomes a shared parameter (declaration order and default
-expressions preserved verbatim); computed properties (`var body`) are skipped.
+three-initializer + discriminator ceremony with a single attribute declaration.
+one init is generated per content case; every stored property of the host struct
+becomes a shared parameter (declaration order and default expressions preserved
+verbatim); computed properties (`var body`) are skipped.
+
+the host declares **one generic `: View` parameter per `.builder` case**, in
+declaration order. a member macro cannot widen the host's generic parameter
+list, so the count is checked — too few parameters is a diagnostic, never a
+broken expansion.
 
 ```swift
 @HTMLComponent(.text("label", unlabeled: true), .builder("views"))
-struct ArcButton: WebUI.View {
+struct ArcButton<Views: WebUI.View>: WebUI.View {
     var id: String? = nil
-    var `class`: ClassName = .none
-    var type: ButtonType = .button
     var disabled = false
-    var hidden = false
 
-    var body: some WebUI.View { … switch content { … } }
+    var body: some WebUI.View { … switch kind { … } }
 }
 ```
 
-the generated expansion:
+the generated expansion (one text case, one builder case):
 
 ```swift
-private enum Content {
-    case label(String)
-    case views([any WebUI.View])
-}
-private let content: Content
+private enum ContentKind { case label, views }
+private let kind: ContentKind
+private let label: String
+private let views: Views
 
-init(_ label: String, id: String? = nil, `class`: ClassName = .none,
-     type: ButtonType = .button, disabled: Bool = false, hidden: Bool = false) {
-    self.id = id; self.`class` = `class`
-    self.type = type; self.disabled = disabled; self.hidden = hidden
-    self.content = .label(label)
+init(_ label: String, id: String? = nil, disabled: Bool = false) where Views == EmptyView {
+    …; self.kind = .label; self.label = label; self.views = EmptyView()
 }
 
-init(id: String? = nil, `class`: ClassName = .none, type: ButtonType = .button,
-     disabled: Bool = false, hidden: Bool = false,
-     @ViewBuilder views: () -> [any WebUI.View]) {
-    … self.content = .views(views())
+init(id: String? = nil, disabled: Bool = false, @ElementBuilder views: () -> Views) {
+    …; self.kind = .views; self.label = ""; self.views = views()
 }
 ```
+
+a Swifty enum case cannot carry a generic parameter, so the erasing `Content`
+enum is gone: the discriminator is payload-free (`ContentKind`) and each case's
+payload is its own stored property — a `String` for a text case, the host's own
+generic for a builder case. a case the init does not build is pinned with the
+phantom `EmptyView`; that pin is what keeps every init typeable without an
+overload per combination, and it is why `ArcButton("x")` infers
+`Views == EmptyView` while `ArcButton { Text("x") }` infers `Views == Text`.
 
 **contract (each enforced by a diagnostic, never `fatalError`):**
 
 - every stored property is a shared parameter — declaration order and default
   expressions preserved verbatim; computed properties are skipped;
-- 1–2 content cases; at most one `.builder`, which is always the last parameter
-  and carries `@ViewBuilder`;
+- the host declares one `: View` generic parameter per `.builder` case, in
+  declaration order;
 - `.text` cases whose `unlabeled: true` are the leading `_`-labeled parameters,
-  in declaration order; labeled text cases sit after them;
+  in declaration order; labeled text cases sit after them; builder inits come
+  last, in declaration order;
+- a builder parameter carries `@ElementBuilder`, and its generic is inferred
+  from the block — no array and no existential box per child;
 - generated inits copy the host type's access level; the memberwise init is
   thereby replaced, so passing a second content source is inexpressible at every
   call site;
-- `body` stays author-written and switches on `content`;
-- diagnostics: zero cases, 2+ builders, duplicate case names, `unlabeled:` on a
-  builder, a stored property with no type annotation.
+- `body` stays author-written and switches on `kind`;
+- diagnostics: zero cases, more builder cases than generic parameters, duplicate
+  case names, `unlabeled:` on a builder, a stored property with no type
+  annotation, a stored property named `kind`, a nested `ContentKind`.
 
 app-side: `@HTMLComponent` inits replace the memberwise init, so any call site
 relying on memberwise construction of an adopted component breaks. arc's
 components are constructed only through their explicit inits today.
+
+## Typed content and the one erasure door
+
+every design-system component that takes content takes it **typed**:
+`@ElementBuilder content: () -> Content` with `Content: View`, so a block becomes
+a tuple of concrete views. rendering is pack-expanded — no array allocation, no
+existential box per child, no indirect call per child.
+
+what a tuple cannot do is decide *markup* by counting: a block has no `count`, no
+`isEmpty`, no `enumerated`, no `reversed()`. three patterns replace those:
+
+| the markup needed | what the component does |
+|---|---|
+| a wrapper that exists only when the caller supplied content (`if !footer.isEmpty`) | stores `hasFooter: Bool`, decided once at init with `blockIsEmpty(_:)`, and takes a second init without the parameter (`Footer == EmptyView`) |
+| which of two shapes to render (`triggerViews.isEmpty`) | the same: one init per shape, each pinning the other's parameter |
+| a per-child wrapper, or a reverse walk | keeps an erased `[any View]` array parameter, with a `// erased: <reason>` comment at the declaration |
+
+**the one erasure door is `ErasedViews`.** there is no second, weaker builder:
+`ViewBuilder` — which turned *every* block into `[any View]`, one array plus one
+box per child — is deleted. a caller who genuinely holds a runtime-heterogeneous
+list (mixed component types from a data model) passes `ErasedViews(list)`, or a
+component declares `[any View]` at the parameter and says why.
+`@ElementBuilder`'s `buildExpression(_ expression: [any View])` picks an array
+literal up automatically.
+
+the surviving erased parameters, each with its reason at the declaration:
+`WebUIItem.actions` (each action renders inside its own `list__action` span),
+`WebUIMessageScroller.content` (children render in reverse),
+`WebUITable.rows` / `WebUITable.footer` / `WebUICarousel.slides` (rows, cells and
+slides are runtime-heterogeneous data), `WebUIPanel.actions` (a caller-built
+array of mixed trailing controls).
+
+### the stack cost of a typed tree
+
+a typed tree's *value* is the tree: a component's layout nests its content's
+layout inside its own. an erased array broke that chain at 8 bytes, which is why
+the old design was cheap on stack. a page composing fifteen sections of ten cards
+each therefore holds a few hundred KB of view value, and a 512 KB stack — a NIO
+event loop, a Swift Testing task — overflows while *constructing* it.
+
+the fix is not to un-type the components; it is to erase at coarse page
+boundaries. `ShowcasePage.section(_:_:content:)` returns `ErasedViews`, so each
+section's tree lives in its own frame and the composition holds an array. the
+markup is identical, because `ErasedViews` renders its children in order.
+guidance: **erase where a subtree is built** — a section, a pane, a route body —
+never per component.
 
 app-invented property names bind to the token vocabulary with `TokenAlias`:
 `TokenAlias("--bg", .colorBg)` emits `--bg: var(--color-bg)` — an indirection, so

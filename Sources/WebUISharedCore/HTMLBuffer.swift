@@ -12,6 +12,53 @@
 // it lives in the zero-dep leaf and imports nothing, so the wasm islands can
 // render through it too.
 
+// MARK: - Regions
+
+/// a subtree that can be patched by id.
+///
+/// a region is declared by the view that renders it (`beginRegion` /
+/// `endRegion` around the subtree); the buffer records only its hash, never its
+/// bytes, so a session's diff state is 8 bytes per region rather than a page.
+public struct RegionID: Hashable, Sendable {
+	/// the id the page knows the region by.
+	public let rawValue: String
+
+	public init(rawValue: String) {
+		self.rawValue = rawValue
+	}
+}
+
+/// per-region hashes of a finished render: 8 bytes per region, not the html.
+///
+/// a differ compares two digests and asks the live buffer for the bytes of the
+/// regions that changed — which is why the previous render's html is never
+/// stored.
+public struct RenderDigest: Sendable {
+	/// region id → hash of the bytes that region rendered.
+	public let regions: [RegionID: UInt64]
+
+	public init(regions: [RegionID: UInt64]) {
+		self.regions = regions
+	}
+}
+
+/// fnv-1a, 64-bit, over a region's bytes.
+///
+/// it lives here rather than in a crypto module for three reasons: the recorder
+/// must not import Foundation (the wasm islands render through this type), the
+/// hash needs no secrecy (it detects change, it does not authenticate), and one
+/// dependency-free function is cheaper than pulling `CryptoKit`'s
+/// platform-split facade into the leaf target.
+@inline(__always)
+private func regionHash(_ bytes: ArraySlice<UInt8>) -> UInt64 {
+	var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+	for byte in bytes {
+		hash ^= UInt64(byte)
+		hash = hash &* 0x0000_0100_0000_01b3
+	}
+	return hash
+}
+
 /// a growable utf-8 html buffer with element framing and a pending-attribute
 /// slot.
 ///
@@ -51,6 +98,8 @@ public struct HTMLBuffer {
 	/// `beginElement` drains them.
 	private var pending: String = ""
 	private var frames: [Frame] = []
+	/// region id → hash of the bytes that region's subtree rendered.
+	private var regions: [RegionID: UInt64] = [:]
 
 	/// create an empty buffer.
 	///
@@ -117,16 +166,40 @@ public struct HTMLBuffer {
 
 	/// the one place an opening tag is assembled, so a framed element and a
 	/// void element cannot drift.
+	///
+	/// it writes bytes: the tag name, its attributes and the closing `>` are
+	/// appended straight into `storage`, so framing an element allocates no
+	/// intermediate `String`. the two shapes are exactly the string path's:
+	/// with no contribution the element's own attribute text re-emits verbatim
+	/// (one separator space unless it already leads with one), and with a
+	/// contribution both lists merge through the shared attribute model.
 	private mutating func writeOpenTag(_ tag: String, base: String, incoming: String) {
+		storage.append(UInt8(ascii: "<"))
+		storage.append(contentsOf: tag.utf8)
 		if incoming.isEmpty {
-			// a separator space joins the tag to its own attribute text —
-			// callers may pass `id="x"` or ` id="x"`, the same allowance the
-			// merge path makes below
-			append(base.isEmpty
-				? "<" + tag + ">"
-				: "<" + tag + (base.hasPrefix(" ") ? base : " " + base) + ">")
+			if !base.isEmpty {
+				if !base.hasPrefix(" ") { storage.append(UInt8(ascii: " ")) }
+				storage.append(contentsOf: base.utf8)
+			}
 		} else {
-			append("<" + tag + mergedAttributeText(base: base, incoming: incoming) + ">")
+			writeMergedAttributes(base: base, incoming: incoming)
+		}
+		storage.append(UInt8(ascii: ">"))
+	}
+
+	/// append `mergeAttributes`'s output one attribute at a time.
+	///
+	/// `serializeAttr` already owns the quote and escape rules, so this appends
+	/// its text rather than re-implementing them — the win over
+	/// `mergedAttributeText` is that no whole-tag `String` is built and the
+	/// pieces go straight into the buffer.
+	private mutating func writeMergedAttributes(base: String, incoming: String) {
+		let merged = mergeAttributes(
+			base: parseAttributeString(base),
+			incoming: parseAttributeString(incoming)
+		)
+		for attribute in merged {
+			storage.append(contentsOf: serializeAttr(attribute).utf8)
 		}
 	}
 
@@ -135,7 +208,36 @@ public struct HTMLBuffer {
 		precondition(!frames.isEmpty, "endElement with no open element")
 		let frame = frames.removeLast()
 		precondition(frame.openTagWritten, "endElement before endOpenTag")
-		append("</" + frame.tag + ">")
+		storage.append(UInt8(ascii: "<"))
+		storage.append(UInt8(ascii: "/"))
+		storage.append(contentsOf: frame.tag.utf8)
+		storage.append(UInt8(ascii: ">"))
+	}
+
+	// MARK: regions
+
+	/// mark the start of `id`'s region and return the mark to hand back to
+	/// `endRegion`.
+	///
+	/// nesting is free: an outer region's mark precedes its children's, so its
+	/// hash covers every byte they wrote, including their own hashes' inputs.
+	/// the recorder never writes to `storage` — rendered bytes are identical
+	/// with and without regions, which is what keeps a region a pure
+	/// observation.
+	package mutating func beginRegion(_ id: RegionID) -> Int {
+		storage.count
+	}
+
+	/// close `id`'s region, hashing everything written since `mark`.
+	package mutating func endRegion(_ id: RegionID, from mark: Int) {
+		precondition(mark >= 0 && mark <= storage.count, "endRegion mark out of range")
+		regions[id] = regionHash(storage[mark...])
+	}
+
+	/// the hashes recorded so far — what a differ compares against the previous
+	/// render.
+	package var renderDigest: RenderDigest {
+		RenderDigest(regions: regions)
 	}
 
 	/// contribute attribute text.

@@ -7,6 +7,7 @@ import NIOWebSocket
 import Synchronization
 import WebUI
 import WebUIDesignSystem
+import WebUIState
 
 // MARK: - cached assets
 
@@ -214,93 +215,6 @@ public struct WebUIServerRequest: Sendable {
 	}
 }
 
-// MARK: - Configuration
-
-/// tuning for `WebUIServer`. defaults match the reference servers: bind any
-/// interface, 256-connection admission cap, 120 s read idle, one-hour asset
-/// cache.
-public struct WebUIServerConfig: Sendable {
-	public var host: String
-	public var port: Int
-	public var maxConnections: Int
-	public var readIdleSeconds: Int64
-	public var assetCacheSeconds: Int
-	public var pagePath: String
-	/// the host's rendered theme catalog (see ``ThemeSheet``), served at its
-	/// content-addressed `url` with a year-long immutable cache. the same value's `url` is
-	/// what a ``WebUIDocument`` links, so the page and the server agree by construction.
-	public var themeSheet: ThemeSheet?
-	/// extra assets this host serves (see ``WebUIServerAsset``). the framework
-	/// routes and the page route are matched first, so an entry here can
-	/// neither shadow nor disable them. duplicate paths: the last entry wins.
-	public var assets: [WebUIServerAsset]
-
-	/// when true, a websocket `event`/`ping` whose render token is absent or
-	/// unknown is answered with a `token` error frame and the socket is closed
-	/// (AGENTS.md security invariant 11).
-	///
-	/// defaults to false so a 1.x host that never threaded a token keeps working
-	/// unchanged; it flips to true at the 2.0 cut. a host that threads the token
-	/// today — pass `WebUIServerRequest.renderToken.value` into the document's
-	/// `renderToken:` — can turn it on now.
-	public var requireRenderToken: Bool
-
-	/// what the server does when a handler throws.
-	///
-	/// defaults to ``HandlerFailurePolicy/notifyClient``: the page is told and,
-	/// when the component registered a fallback, given something to render in the
-	/// broken control's place. a silent failure is what made C3 invisible.
-	public var handlerFailurePolicy: HandlerFailurePolicy
-	/// what a failed page render answers over http: the host's error page for
-	/// the thrown error. `nil` answers a plain-text 500 naming the failure.
-	///
-	/// a render throw used to surface as a dead page — the error propagated up
-	/// and the connection was dropped. with this set, the request is answered
-	/// with a 500 carrying `onRenderFailure(error)`, so the failure is visible
-	/// and the connection survives. a swift trap is not an error and never
-	/// reaches this closure (see `STABILITY.md`).
-	public var onRenderFailure: (@Sendable (any Error) -> String)?
-
-	/// the hard cap on one request body, in bytes. a declared `Content-Length`
-	/// over the cap is refused before a single body byte is buffered, and a
-	/// body that grows past it mid-stream is cut off — an upload endpoint
-	/// without a cap is a DoS (plan w3.3). default 1 MiB.
-	public var maxBodyBytes: Int
-	/// the hard cap on one multipart body's parts. exceeding it is a 422 that
-	/// names the limit. default 64.
-	public var maxMultipartParts: Int
-
-	public init(
-		host: String = "0.0.0.0",
-		port: Int = 9090,
-		maxConnections: Int = 256,
-		readIdleSeconds: Int64 = 120,
-		assetCacheSeconds: Int = 3600,
-		pagePath: String = "/",
-		themeSheet: ThemeSheet? = nil,
-		assets: [WebUIServerAsset] = [],
-		requireRenderToken: Bool = false,
-		handlerFailurePolicy: HandlerFailurePolicy = .notifyClient,
-		onRenderFailure: (@Sendable (any Error) -> String)? = nil,
-		maxBodyBytes: Int = 1 << 20,
-		maxMultipartParts: Int = 64
-	) {
-		self.host = host
-		self.port = port
-		self.maxConnections = maxConnections
-		self.readIdleSeconds = readIdleSeconds
-		self.assetCacheSeconds = assetCacheSeconds
-		self.pagePath = pagePath
-		self.themeSheet = themeSheet
-		self.assets = assets
-		self.requireRenderToken = requireRenderToken
-		self.handlerFailurePolicy = handlerFailurePolicy
-		self.onRenderFailure = onRenderFailure
-		self.maxBodyBytes = maxBodyBytes
-		self.maxMultipartParts = maxMultipartParts
-	}
-}
-
 // MARK: - WebUIServer
 
 /// one-call serving of a no-webui page: http page route, the framework asset
@@ -402,6 +316,11 @@ public actor WebUIServer {
 	/// the engine's `navigate` answered. this actor owns its event router —
 	/// handlers a page wires through `.onX`/`controlAttributes` register into
 	/// it, exactly as they did with the render-closure inits.
+	///
+	/// the router this init builds carries the config's caps, so
+	/// `WebUIServerConfig.maxSessions`/`maxHandlers` are the numbers the table
+	/// actually enforces (the doc claim on ``RenderToken``). an init that takes
+	/// a caller's `EventRouter` leaves those limits to the caller.
 	public init(
 		router: Router,
 		config: WebUIServerConfig = WebUIServerConfig(),
@@ -409,7 +328,7 @@ public actor WebUIServer {
 	) {
 		self.config = config
 		self.logger = logger
-		self.router = EventRouter()
+		self.router = EventRouter(maxHandlers: config.maxHandlers, maxSessions: config.maxSessions)
 		self.pageRouter = router
 	}
 
@@ -438,9 +357,12 @@ public actor WebUIServer {
 			port: cfg.port
 		) { channel in
 			channel.eventLoop.makeCompletedFuture {
-				// admission: bare connects count; at capacity close up front.
-				guard runner.gate.tryAcquire() else {
-					channel.close(promise: nil)
+				// admission: bare connects count; at capacity the seam refuses.
+				// the decision (and, when its disposition says so, the 503 the
+				// client sees) lives in `Admission.swift` — not here — so a
+				// later stage can own capacity policy without editing this
+				// bootstrap.
+				guard runner.admission.admit(channel) else {
 					return channel.eventLoop.makeFailedFuture(ServerGateError.atCapacity)
 				}
 				try channel.pipeline.syncOperations.addHandler(
@@ -538,6 +460,14 @@ public actor WebUIServer {
 	/// how many pages are connected right now (diagnostics and tests).
 	public var connectedPages: Int {
 		sinks.count
+	}
+
+	/// the router this server dispatches through: the one it built from
+	/// `config.maxSessions`/`maxHandlers`, or the `EventRouter` its host passed
+	/// in. package-visible so a test can assert the config caps reached the
+	/// table without standing up a socket.
+	package var eventRouter: EventRouter {
+		router
 	}
 
 	// MARK: - lifecycle state
@@ -675,6 +605,9 @@ final class Runner: Sendable {
 	private let config: WebUIServerConfig
 	private let logger: Logger
 	let gate: ConnectionGate
+	/// the admission seam: the slot decision and what a refusal looks like.
+	/// it holds `gate`, so the releaser below and the decision share one counter.
+	let admission: Admission
 	/// the push targets this connection joins for its lifetime.
 	let sinks: ConnectionSinks
 
@@ -689,6 +622,96 @@ final class Runner: Sendable {
 	/// the catalog's pre-compressed variant, when the host shipped one.
 	private let themeSheetGzip: ByteBuffer?
 	private let themeSheetPath: String?
+
+	// MARK: region diff state (design E)
+
+	/// what a re-render is diffed against: the last render's region hashes per
+	/// render session, and the session each live socket has already spoken as.
+	///
+	/// hashes only — never html. 8 bytes per region per session is the whole
+	/// reason a patch can be built without keeping the previous page.
+	private struct DiffState: Sendable {
+		var baselines: [RenderSessionID: (baseline: RenderBaseline, tick: UInt64)] = [:]
+		/// connection id → the render session its page belongs to. the engine's
+		/// `navigate` frame carries no token (it is a client-side history
+		/// event), so the socket's last token-bearing frame is what a navigate
+		/// can be attributed to.
+		var sessions: [Int: RenderSessionID] = [:]
+		var tick: UInt64 = 0
+	}
+
+	private let diff = Mutex(DiffState())
+
+	/// the `id` a page's patchable root carries, as a substring test.
+	private static var pageRegionMarker: String { "id=\"\(WebUIServer.pageRegionID)\"" }
+
+	/// remember what a finished render looked like, so the next render of the
+	/// same page can be diffed against it.
+	///
+	/// bounded by `maxSessions`, oldest first: a baseline is only useful while
+	/// its page can still speak, and a page that cannot is exactly the one whose
+	/// session the router reaped.
+	private func recordBaseline(_ snapshot: RenderSnapshot, for session: RenderSessionID) {
+		let cap = max(1, config.maxSessions)
+		diff.withLock { state in
+			state.tick &+= 1
+			state.baselines[session] = (snapshot.baseline, state.tick)
+			guard state.baselines.count > cap else { return }
+			let doomed = state.baselines
+				.sorted { $0.value.tick < $1.value.tick }
+				.prefix(state.baselines.count - cap)
+				.map(\.key)
+			for key in doomed { state.baselines.removeValue(forKey: key) }
+		}
+	}
+
+	/// the previous render's hashes for `session`, or nil when this session's
+	/// page has not been rendered by this server.
+	private func baseline(for session: RenderSessionID) -> RenderBaseline? {
+		diff.withLock { $0.baselines[session]?.baseline }
+	}
+
+	private func bind(_ connection: Int, to session: RenderSessionID) {
+		diff.withLock { $0.sessions[connection] = session }
+	}
+
+	private func session(ofConnection connection: Int) -> RenderSessionID? {
+		diff.withLock { $0.sessions[connection] }
+	}
+
+	private func releaseConnection(_ connection: Int) {
+		diff.withLock { _ = $0.sessions.removeValue(forKey: connection) }
+	}
+
+	/// what an in-place re-render puts on the wire.
+	///
+	/// the regions whose bytes moved, in byte order — or the whole page when the
+	/// diff cannot express the change (a first render, a change outside every
+	/// region, a region that appeared or vanished). nil means nothing moved:
+	/// a re-render that reproduces the page byte for byte sends no frame at all.
+	private func diffFrame(
+		after html: String,
+		session: RenderSessionID,
+		url: String
+	) -> WSOutgoing? {
+		let snapshot = RenderSnapshot.derived(fromMarkup: html)
+		let prior = baseline(for: session)
+		let patch = RenderDiffer(previous: prior).patch(snapshot)
+		FileHandle.standardError.write(Data("DEBUGDIFF baseline=\(prior != nil) spans=\(snapshot.spans.count) priorSpans=\(prior?.digest.regions.count ?? -1) removed=\(patch.removed.count) full=\(patch.isFullPage) changed=\(patch.changed.count)\n".utf8))
+		recordBaseline(snapshot, for: session)
+		if !patch.isFullPage {
+			guard !patch.changed.isEmpty else { return nil }
+			return .update(fragments: patch.changed)
+		}
+		// the whole page. patching the page region is a soft update for a page
+		// that carries one; a page without it has no element to receive the
+		// bytes (the engine drops an update to a missing id), so the honest
+		// answer is a document load at the url the client navigated to.
+		guard html.contains(Self.pageRegionMarker) else {
+			return .redirect(url: url, replace: true)
+		}
+		return .update(fragments: [FragmentUpdate(id: WebUIServer.pageRegionID, html: html)])
+	}
 
 	struct HostAsset: Sendable {
 		let body: ByteBuffer
@@ -709,7 +732,13 @@ final class Runner: Sendable {
 		self.pageRouter = pageRouter
 		self.config = config
 		self.logger = logger
-		self.gate = ConnectionGate(maximum: config.maxConnections)
+		let gate = ConnectionGate(maximum: config.maxConnections)
+		self.gate = gate
+		self.admission = Admission(
+			gate: gate,
+			logger: logger,
+			readIdleSeconds: config.readIdleSeconds
+		)
 		self.sinks = sinks
 		var encoded: [String: HostAsset] = [:]
 		encoded.reserveCapacity(config.assets.count)
@@ -761,7 +790,10 @@ final class Runner: Sendable {
 		try await channel.executeThenClose { inbound, outbound in
 			// a connected page is a push target for the life of the socket.
 			let connectionID = sinks.register(outbound)
-			defer { sinks.unregister(connectionID) }
+			defer {
+				sinks.unregister(connectionID)
+				releaseConnection(connectionID)
+			}
 			try await withThrowingTaskGroup(of: Void.self) { tg in
 				tg.addTask {
 					for try await frame in inbound {
@@ -771,7 +803,9 @@ final class Runner: Sendable {
 							// a frame the server refuses (an unknown render token)
 							// ends the connection: that page can no longer be
 							// trusted to drive this router.
-							let keepGoing = await self.dispatch(eventText: payload, outbound: outbound)
+							let keepGoing = await self.dispatch(
+								eventText: payload, outbound: outbound, connection: connectionID
+							)
 							if !keepGoing { return }
 						case .ping:
 							let buf = ByteBuffer()
@@ -796,7 +830,8 @@ final class Runner: Sendable {
 
 	private func dispatch(
 		eventText payload: String,
-		outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>
+		outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>,
+		connection: Int
 	) async -> Bool {
 		do {
 			let msg = try WSIncoming(jsonText: payload)
@@ -809,27 +844,35 @@ final class Runner: Sendable {
 					)
 					return false
 				}
+				// this socket speaks for that render from here on: the navigate
+				// frame carries no token, so this is the binding it answers on.
+				bind(connection, to: session)
 				let eventData = EventData(component: ComponentID(component), event: event, data: data)
 				let outcome = await router.dispatch(eventData, in: session)
 				for frame in frames(of: outcome) {
 					try await writeJSON(frame, outbound: outbound)
 				}
 			case .ping(let token):
-				guard boundSession(token) != nil else {
+				guard let session = boundSession(token) else {
 					try? await writeJSON(
 						WSOutgoing.error(code: "token", message: "unknown or missing render token"),
 						outbound: outbound
 					)
 					return false
 				}
+				bind(connection, to: session)
 				try await writeJSON(WSOutgoing.pong, outbound: outbound)
 			case .navigate(let url):
 				// a client-side navigation (the engine reports popstate):
 				// answer it instead of discarding it. an in-scope path
-				// re-renders the matched route into a fragment patch of the
-				// page region (see `pageRegionID`); anything the router
-				// cannot answer is a full-page redirect to the url itself.
-				guard let session = boundSession(nil) else {
+				// re-renders the matched route and patches the page region;
+				// anything the router cannot answer is a full-page redirect
+				// to the url itself.
+				//
+				// the frame carries no render token, so the socket's last
+				// token-bearing frame is what attributes it to a page — and
+				// therefore to that page's diff baseline.
+				guard let session = session(ofConnection: connection) ?? boundSession(nil) else {
 					try? await writeJSON(
 						WSOutgoing.error(code: "token", message: "unknown or missing render token"),
 						outbound: outbound
@@ -925,10 +968,13 @@ final class Runner: Sendable {
 			)
 			return
 		}
-		let frame: WSOutgoing
+		let frame: WSOutgoing?
 		switch response.body {
 		case .html(let markup):
-			frame = .update(fragments: [FragmentUpdate(id: WebUIServer.pageRegionID, html: markup.html)])
+			// design E: ship only the regions whose bytes moved. a re-render
+			// that reproduces the page sends nothing at all, and a change the
+			// region set cannot express is answered with the whole page.
+			frame = diffFrame(after: markup.html, session: session, url: url)
 		case .redirect(let to, _):
 			frame = .redirect(url: to, replace: true)
 		default:
@@ -937,6 +983,7 @@ final class Runner: Sendable {
 			// redirect to the url the engine navigated to.
 			frame = .redirect(url: url, replace: true)
 		}
+		guard let frame else { return }
 		try? await writeJSON(frame, outbound: outbound)
 	}
 
@@ -1263,6 +1310,13 @@ final class Runner: Sendable {
 				body = .text("500 — the page failed to render: \(error)")
 			}
 			response = HTTPResponse(status: 500, body: body)
+		}
+		// design E's baseline: what this render looked like, so the next render
+		// of the same page can be diffed against it and an interaction ships
+		// only the regions that moved. hashes only — the page's bytes are not
+		// retained. one byte scan per page render, and nothing after it.
+		if case .html(let markup) = response.body, !token.value.isEmpty {
+			recordBaseline(RenderSnapshot.derived(fromMarkup: markup.html), for: session)
 		}
 		return try await respond(channel: channel, response: response)
 	}

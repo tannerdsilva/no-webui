@@ -5,19 +5,29 @@ import SwiftSyntaxMacros
 // MARK: - ComponentMacro
 
 /// `@HTMLComponent` is a member macro that replaces the three-initializer +
-/// private `Content`-enum ceremony with a single attribute declaration.
+/// discriminator ceremony with a single attribute declaration.
 ///
 /// one init is generated per content case; every stored property of the host
 /// struct becomes a shared parameter (declaration order and default expressions
 /// preserved verbatim); computed properties are skipped.
 ///
+/// the host declares the generic parameter for every `.builder` case itself —
+/// a member macro cannot widen the host's generic parameter list, so the count
+/// is checked here and a short declaration is a diagnostic, never a broken
+/// expansion. builder case *n* in the attribute consumes the host's generic
+/// parameter *n*, in declaration order.
+///
 /// ```swift
 /// @HTMLComponent(.text("label", unlabeled: true), .builder("views"))
-/// struct ArcButton: WebUI.View {
+/// struct ArcButton<Views: WebUI.View>: WebUI.View {
 ///     var id: String? = nil
 ///     var body: some View { … }
 /// }
 /// ```
+///
+/// the emitted storage is a discriminator (`kind`), one `String` per text case
+/// and one generic value per builder case; an init for a text case pins every
+/// builder parameter to `EmptyView`, so the unused ones stay typeable.
 public struct ComponentMacro: MemberMacro {
     public static func expansion(
         of node: AttributeSyntax,
@@ -41,8 +51,34 @@ public struct ComponentMacro: MemberMacro {
         // ── names shared between a content case and a stored property ────
         checkCasePropertyCollisions(cases: cases, properties: properties, in: context)
 
+        // ── the host's own generic parameters: one per builder case ───────
+        let generics = genericParameterNames(structDecl)
+        let builders = cases.filter { $0.isBuilder }
+        guard builders.count <= generics.count else {
+            context.diagnose(
+                Diagnostic(
+                    node: structDecl.name,
+                    message: MacroExpansionErrorMessage(
+                        "@HTMLComponent declares \(builders.count) builder case(s) but the host declares \(generics.count) generic parameter(s) — one `: View` parameter per builder case, in declaration order"
+                    )
+                )
+            )
+            return []
+        }
+
         // ── generate members ─────────────────────────────────────────────
-        return generateMembers(structDecl, cases: cases, properties: properties)
+        return generateMembers(
+            structDecl,
+            cases: cases,
+            properties: properties,
+            generics: Array(generics.prefix(builders.count))
+        )
+    }
+
+    /// the host struct's generic parameter names, in declaration order.
+    private static func genericParameterNames(_ structDecl: StructDeclSyntax) -> [String] {
+        guard let clause = structDecl.genericParameterClause else { return [] }
+        return clause.parameters.map { $0.name.text }
     }
 
     // MARK: - parsed representations
@@ -204,13 +240,6 @@ public struct ComponentMacro: MemberMacro {
             throw MacroExpansionErrorMessage("@HTMLComponent requires at least one content case")
         }
 
-        let builders = cases.filter { $0.isBuilder }
-        guard builders.count <= 1 else {
-            throw MacroExpansionErrorMessage(
-                "@HTMLComponent declares \(builders.count) builder cases; at most one is allowed"
-            )
-        }
-
         return cases
     }
 
@@ -303,9 +332,11 @@ public struct ComponentMacro: MemberMacro {
 
     // MARK: - reserved names
 
-    /// the macro emits `private enum Content` and `private let content`. a host that
-    /// already declares either one would produce a redeclaration error far from the
-    /// cause, so both are reported at the declaration that collides.
+    /// the macro emits `kind`, `ContentKind` and one storage per content case
+    /// (named after the case). a host that already declares `kind` or a nested
+    /// `ContentKind` would produce a redeclaration error far from the cause, so
+    /// both are reported at the declaration that collides. a *case* colliding
+    /// with a property is `checkCasePropertyCollisions`' job.
     private static func checkReservedMembers(
         _ structDecl: StructDeclSyntax,
         in context: some MacroExpansionContext
@@ -314,34 +345,34 @@ public struct ComponentMacro: MemberMacro {
             if let variable = member.decl.as(VariableDeclSyntax.self) {
                 for binding in variable.bindings {
                     let name = binding.pattern.as(IdentifierPatternSyntax.self)?.identifier.text
-                    if name == "content" {
+                    if name == "kind" {
                         context.diagnose(
                             Diagnostic(
                                 node: binding,
                                 message: MacroExpansionErrorMessage(
-                                    "'content' is @HTMLComponent's storage — rename the property"
+                                    "'kind' is @HTMLComponent's discriminator — rename the property"
                                 )
                             )
                         )
                     }
                 }
             }
-            if let typeDecl = member.decl.as(StructDeclSyntax.self), typeDecl.name.text == "Content" {
+            if let typeDecl = member.decl.as(StructDeclSyntax.self), typeDecl.name.text == "ContentKind" {
                 context.diagnose(
                     Diagnostic(
                         node: typeDecl.name,
                         message: MacroExpansionErrorMessage(
-                            "'Content' is @HTMLComponent's enum — rename the nested type"
+                            "'ContentKind' is @HTMLComponent's discriminator enum — rename the nested type"
                         )
                     )
                 )
             }
-            if let typeDecl = member.decl.as(EnumDeclSyntax.self), typeDecl.name.text == "Content" {
+            if let typeDecl = member.decl.as(EnumDeclSyntax.self), typeDecl.name.text == "ContentKind" {
                 context.diagnose(
                     Diagnostic(
                         node: typeDecl.name,
                         message: MacroExpansionErrorMessage(
-                            "'Content' is @HTMLComponent's enum — rename the nested type"
+                            "'ContentKind' is @HTMLComponent's discriminator enum — rename the nested type"
                         )
                     )
                 )
@@ -374,38 +405,73 @@ public struct ComponentMacro: MemberMacro {
     private static func generateMembers(
         _ structDecl: StructDeclSyntax,
         cases: [ParsedCase],
-        properties: [ParsedProperty]
+        properties: [ParsedProperty],
+        generics: [String]
     ) -> [DeclSyntax] {
         let access = accessPrefix(structDecl)
 
         var members: [DeclSyntax] = []
 
-        // the private Content enum, one case per content case
-        let enumCases = cases.map { case_ in
-            let associatedType = case_.isBuilder ? "[any WebUI.View]" : "String"
-            return "    case \(case_.name)(\(associatedType))"
-        }.joined(separator: "\n")
+        // the discriminator: one bare case per content case. it carries no
+        // payload — the payloads are the storages below, one generic per
+        // builder case, which an enum case cannot express.
+        let kindCases = cases.map { "    case \($0.name)" }.joined(separator: "\n")
         members.append(DeclSyntax("""
-        private enum Content {
-        \(raw: enumCases)
+        private enum ContentKind {
+        \(raw: kindCases)
         }
         """))
 
-        // the private content storage (no blank line between the enum and storage)
-        members.append(DeclSyntax("private let content: Content"))
-
-        // one init per content case, in canonical order:
-        // unlabeled text cases first, then labeled text cases, then the builder.
-        let ordered = cases.sorted {
-            if $0.isBuilder != $1.isBuilder { return !$0.isBuilder }
-            if $0.unlabeled != $1.unlabeled { return $0.unlabeled }
-            return false
+        // the discriminator storage, then one storage per content case in
+        // declaration order (a text case holds its `String`, a builder case its
+        // generic content).
+        members.append(DeclSyntax("private let kind: ContentKind"))
+        var builderIndex = 0
+        var genericFor: [String: String] = [:]
+        for case_ in cases {
+            if case_.isBuilder {
+                let generic = generics[builderIndex]
+                genericFor[case_.name] = generic
+                builderIndex += 1
+                members.append(DeclSyntax("private let \(raw: case_.name): \(raw: generic)"))
+            } else {
+                members.append(DeclSyntax("private let \(raw: case_.name): String"))
+            }
         }
+
+        // one init per content case, in canonical order: unlabeled text cases
+        // first, then labeled text cases, then the builders in declaration
+        // order. an explicit index tiebreaker keeps the emission independent of
+        // `sorted`'s (unstable) tie behaviour.
+        let ordered = cases.enumerated().sorted { lhs, rhs in
+            let l = lhs.element, r = rhs.element
+            if l.isBuilder != r.isBuilder { return !l.isBuilder }
+            if l.unlabeled != r.unlabeled { return l.unlabeled }
+            return lhs.offset < rhs.offset
+        }.map { $0.element }
+
         for case_ in ordered {
             if case_.isBuilder {
-                members.append(generateBuilderInit(case_: case_, properties: properties, access: access))
+                members.append(
+                    generateBuilderInit(
+                        case_: case_,
+                        cases: cases,
+                        properties: properties,
+                        generic: genericFor[case_.name]!,
+                        otherGenerics: generics.filter { $0 != genericFor[case_.name]! },
+                        access: access
+                    )
+                )
             } else {
-                members.append(generateTextInit(case_: case_, properties: properties, access: access))
+                members.append(
+                    generateTextInit(
+                        case_: case_,
+                        cases: cases,
+                        properties: properties,
+                        generics: generics,
+                        access: access
+                    )
+                )
             }
         }
 
@@ -444,9 +510,15 @@ public struct ComponentMacro: MemberMacro {
     }
 
     /// generate the init for a single `.text` content case.
+    ///
+    /// every builder parameter is pinned to `EmptyView` here: a text case has no
+    /// content for them, and the pin is what keeps the init typeable without a
+    /// second overload.
     private static func generateTextInit(
         case_: ParsedCase,
+        cases: [ParsedCase],
         properties: [ParsedProperty],
+        generics: [String],
         access: String
     ) -> DeclSyntax {
         // the content parameter comes first, then the shared properties
@@ -456,34 +528,69 @@ public struct ComponentMacro: MemberMacro {
         let shared = parameters(properties)
         let paramText = shared.isEmpty ? caseParameter : "\(caseParameter), \(shared)"
 
-        let assignmentsText = assignments(properties)
-        let contentLine = "    self.content = .\(case_.name)(\(case_.name))"
-        let body = assignmentsText.isEmpty ? contentLine : "\(assignmentsText)\n\(contentLine)"
+        let whereClause = generics.isEmpty
+            ? ""
+            : " where " + generics.map { "\($0) == EmptyView" }.joined(separator: ", ")
+
+        var lines = properties.map { "    self.\($0.name) = \($0.name)" }
+        lines.append("    self.kind = .\(case_.name)")
+        for other in cases {
+            if other.name == case_.name {
+                lines.append("    self.\(other.name) = \(other.name)")
+            } else if other.isBuilder {
+                lines.append("    self.\(other.name) = EmptyView()")
+            } else {
+                lines.append("    self.\(other.name) = \"\"")
+            }
+        }
+        let body = lines.joined(separator: "\n")
 
         return DeclSyntax("""
-        \(raw: access)init(\(raw: paramText)) {
+        \(raw: access)init(\(raw: paramText))\(raw: whereClause) {
         \(raw: body)
         }
         """)
     }
 
-    /// generate the init for the single `.builder` content case.
+    /// generate the init for one `.builder` content case.
+    ///
+    /// the case's own generic is inferred from the block (`@ElementBuilder`
+    /// yields the block's concrete type); every *other* builder parameter is
+    /// pinned to `EmptyView`, which is the phantom the plan describes: the
+    /// struct still carries a parameter for each case, and the init only
+    /// type-checks for the one it builds.
     private static func generateBuilderInit(
         case_: ParsedCase,
+        cases: [ParsedCase],
         properties: [ParsedProperty],
+        generic: String,
+        otherGenerics: [String],
         access: String
     ) -> DeclSyntax {
         let paramText = parameters(
             properties,
-            appending: ["@ViewBuilder \(case_.name): () -> [any WebUI.View]"]
+            appending: ["@ElementBuilder \(case_.name): () -> \(generic)"]
         )
 
-        let assignmentsText = assignments(properties)
-        let contentLine = "    self.content = .\(case_.name)(\(case_.name)())"
-        let body = assignmentsText.isEmpty ? contentLine : "\(assignmentsText)\n\(contentLine)"
+        let whereClause = otherGenerics.isEmpty
+            ? ""
+            : " where " + otherGenerics.map { "\($0) == EmptyView" }.joined(separator: ", ")
+
+        var lines = properties.map { "    self.\($0.name) = \($0.name)" }
+        lines.append("    self.kind = .\(case_.name)")
+        for other in cases {
+            if other.name == case_.name {
+                lines.append("    self.\(other.name) = \(other.name)()")
+            } else if other.isBuilder {
+                lines.append("    self.\(other.name) = EmptyView()")
+            } else {
+                lines.append("    self.\(other.name) = \"\"")
+            }
+        }
+        let body = lines.joined(separator: "\n")
 
         return DeclSyntax("""
-        \(raw: access)init(\(raw: paramText)) {
+        \(raw: access)init(\(raw: paramText))\(raw: whereClause) {
         \(raw: body)
         }
         """)
