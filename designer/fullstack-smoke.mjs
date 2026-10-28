@@ -2,7 +2,7 @@
 // Full-stack deployment smoke test (live WS round-trip).
 //
 // Connects to the deployed server, verifies the WebSocket upgrade, then drives
-// real events through the wire protocol the WebUIRuntime uses and asserts the
+// real events through the wire protocol the engine uses and asserts the
 // Swift EventRouter patches the DOM via FragmentUpdate. This proves the whole
 // stack (HTTP + WS upgrade + event routing + fragment rendering) deploys.
 //

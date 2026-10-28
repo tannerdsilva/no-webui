@@ -18,7 +18,8 @@ no-webui/
 ├── designer/                    ← YOU ARE HERE — your workspace
 │   ├── assets/
 │   │   ├── design-system.css    ← THE file you edit (8,100+ lines)
-│   │   └── webui-runtime.js     ← JS runtime (rarely needs changes)
+│   │   ├── webui-engine.js      ← the client runtime (rarely needs changes)
+│   │   └── webui-shell.js       ← the offline shell
 │   ├── icons/
 │   │   └── icon-manifest.json   ← the svg icon catalog (618 glyphs, edit to add)
 │   ├── previews/
@@ -35,7 +36,7 @@ no-webui/
 ### Your workflow
 
 ```
-1. EDIT   designer/assets/design-system.css   (or designer/assets/webui-runtime.js)
+1. EDIT   designer/assets/design-system.css   (or designer/assets/webui-engine.js)
 2. SAVE   the file
 3. RELOAD designer/previews/designer-preview.html  in your browser
 ```

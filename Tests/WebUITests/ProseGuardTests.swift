@@ -82,7 +82,6 @@ struct ProseGuardTests {
 	@Test("every payload a client can receive is prose-free")
 	func shippedPayloadsAreProseFree() {
 		let payloads: [(String, String, ProseGuard.Language)] = [
-			("WebUIAssets.js", WebUIAssets.js, .javaScript),
 			("WebUIAssets.engine", WebUIAssets.engine, .javaScript),
 			("WebUIAssets.shell", WebUIAssets.shell, .javaScript),
 			("WebUIAssets.cssMinified", WebUIAssets.cssMinified, .css),

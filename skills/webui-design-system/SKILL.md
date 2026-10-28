@@ -338,9 +338,9 @@ Your server serves the rendered document and assets, and upgrades `/ws`:
 
 - Serve the page (`WebUIDocument(...).render(into: &buffer)` + materialize)
   plus the design-system assets
-  (`DesignSystemAssets.minifiedCss`, `WebUIAssets.js`) — the `WebUIDocument`
-  already inlines the CSS/runtime, so commonly only the document + `/ws` are
-  needed.
+  (`DesignSystemAssets.minifiedCss`, `WebUIAssets.engine`) — the `WebUIDocument`
+  already links the sheet and the engine, so commonly only the document + `/ws`
+  are needed.
 - **`includeRuntime: true` requires a working `/ws`.** The JS runtime opens a
   `/ws` socket at load. Your server must upgrade `/ws` and answer `.ping`
   frames with `.pong` (and echo the close frame), or every load logs a
@@ -386,7 +386,6 @@ Serve the page and check it in a browser before shipping:
 | Top-bar provider + thinking-effort (RuntimeSettings, `reasoning_effort`, `WebUISelect`) | `references/runtime-provider-effort-settings.md` |
 | Interactive server-re-rendered regions (table sort/select/expand) | `references/interactive-table-recipe.md` |
 | WCAG contrast audit + guardrail tests | `references/contrast-audit.md` |
-| Render-token whitelist bounce (token-gated socket) | `references/render-token-whitelist-bounce.md` |
 | Pitfalls & debugging (CSS cascade, Swift escape/arg-order) | `references/pitfalls-and-debugging.md` |
 
 Everything else — **maintaining the no-webui package itself**: the designer

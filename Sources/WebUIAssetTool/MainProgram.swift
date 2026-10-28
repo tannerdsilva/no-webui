@@ -189,12 +189,13 @@ enum WebUIAssetTool {
             // strip step, so their source must be clean. a comment in any payload
             // below fails the build here, naming file, line and text, rather than
             // shipping (a prose-filled release is exactly what nobody notices).
-            let payloads: [(label: String, text: String, language: ProseGuard.Language)] = [
-                (jsInput ?? "webui-runtime.js", jsContent, .javaScript),
-                (engineInput ?? "webui-engine.js", engineContent, .javaScript),
-                (shellInput ?? "webui-shell.js", shellContent, .javaScript),
-                ("design-system.css (minified)", cssMinified, .css),
-            ]
+            var payloads: [(label: String, text: String, language: ProseGuard.Language)] = []
+            if let jsInput {
+                payloads.append((jsInput, jsContent, .javaScript))
+            }
+            payloads.append((engineInput ?? "webui-engine.js", engineContent, .javaScript))
+            payloads.append((shellInput ?? "webui-shell.js", shellContent, .javaScript))
+            payloads.append(("design-system.css (minified)", cssMinified, .css))
             var proseFound = false
             for payload in payloads {
                 let findings = ProseGuard.findings(in: payload.text, language: payload.language)
@@ -236,8 +237,13 @@ enum WebUIAssetTool {
                               "workingRaw": cssBytes],
                     "engine": ["raw": engineBytes, "gz": engineGz?.count ?? 0],
                     "shell": ["raw": shellBytes, "gz": shellGz?.count ?? 0],
-                    "webui-runtime.js": ["raw": jsBytes, "gz": jsGz?.count ?? 0],
                 ]
+                // the js asset is optional: a target that ships no separate js
+                // (the framework itself, since the engine replaced the runtime)
+                // records no entry rather than a zero.
+                if jsInput != nil {
+                    served["js"] = ["raw": jsBytes, "gz": jsGz?.count ?? 0]
+                }
                 // pruning is a build-time decision, so its effect belongs in the build-time
                 // record: a sheet that quietly stopped declaring 134 tokens should be
                 // visible in the manifest a budget gate reads, not inferred from byte counts.
@@ -292,6 +298,20 @@ enum WebUIAssetTool {
             .map { "    \($0)" }
             .joined(separator: "\n")
 
+        // the js asset is optional: the framework ships none now that the engine
+        // replaced the legacy runtime, so when no `--js-input` is supplied the
+        // generated enum declares no `js`/`jsGzip` at all. emitting an empty
+        // string instead would read as a live (but blank) asset.
+        let jsProperty = js.isEmpty
+            ? ""
+            : "    public static let js: String = \"\"\"\n\(indentedJS)\n    \"\"\"\n"
+        let jsGzipDeclaration = js.isEmpty
+            ? ""
+            : "    private static let jsGzipBase64 = \"\(jsGzip)\"\n"
+        let jsGzipProperty = js.isEmpty
+            ? ""
+            : "    public static let jsGzip: [UInt8]? = decodeGzip(jsGzipBase64)\n"
+
         let assets = """
         import Foundation
         import WebUICore
@@ -299,10 +319,7 @@ enum WebUIAssetTool {
             public static let css: String = \"\"\"
         \(indentedCSS)
             \"\"\"
-            public static let js: String = \"\"\"
-        \(indentedJS)
-            \"\"\"
-            public static let engine: String = \"\"\"
+        \(jsProperty)    public static let engine: String = \"\"\"
         \(indentedEngine)
             \"\"\"
             public static let shell: String = \"\"\"
@@ -317,12 +334,10 @@ enum WebUIAssetTool {
             /// slow to type-check). `nil` means the build host had no `gzip`; the
             /// server then falls back to the raw bytes rather than serving nothing.
             private static let cssGzipBase64 = "\(cssGzip)"
-            private static let jsGzipBase64 = "\(jsGzip)"
-            private static let engineGzipBase64 = "\(engineGzip)"
+        \(jsGzipDeclaration)    private static let engineGzipBase64 = "\(engineGzip)"
             private static let shellGzipBase64 = "\(shellGzip)"
             public static let cssGzip: [UInt8]? = decodeGzip(cssGzipBase64)
-            public static let jsGzip: [UInt8]? = decodeGzip(jsGzipBase64)
-            public static let engineGzip: [UInt8]? = decodeGzip(engineGzipBase64)
+        \(jsGzipProperty)    public static let engineGzip: [UInt8]? = decodeGzip(engineGzipBase64)
             public static let shellGzip: [UInt8]? = decodeGzip(shellGzipBase64)
             private static func decodeGzip(_ text: String) -> [UInt8]? {
                 guard !text.isEmpty, let bytes = Base64.decode(text), !bytes.isEmpty else { return nil }

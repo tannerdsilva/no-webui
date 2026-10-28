@@ -48,11 +48,11 @@ struct URLPolicyFixtureTests {
 		}
 	}
 
-	@Test("the js probe mirror matches the shipped runtime verbatim")
+	@Test("the js probe mirror matches the shipped engine verbatim")
 	func probeMirrorsRuntime() throws {
-		let runtime = try String(contentsOfFile: "designer/assets/webui-runtime.js", encoding: .utf8)
+		let runtime = try String(contentsOfFile: "designer/assets/webui-engine.js", encoding: .utf8)
 		let probe = try String(contentsOfFile: "designer/url-smoke.mjs", encoding: .utf8)
-		// the exact spans the probe must carry and the runtime must carry —
+		// the exact spans the probe must carry and the engine must carry —
 		// drift on either side breaks the pin.
 		let needles = [
 			"var UNSAFE_PROTOCOLS = /^(javascript|data|vbscript):/i;",
@@ -60,7 +60,7 @@ struct URLPolicyFixtureTests {
 			"function isSafeUrl(url) {",
 		]
 		for needle in needles {
-			#expect(runtime.contains(needle), "runtime lost \(needle)")
+			#expect(runtime.contains(needle), "engine lost \(needle)")
 			#expect(probe.contains(needle), "probe lost \(needle)")
 		}
 	}

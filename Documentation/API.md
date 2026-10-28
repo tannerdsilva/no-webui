@@ -163,7 +163,7 @@ real `POST` — bodies, uploads, redirect-after-post — lands in **W3**
 | `ElementRef.stable(_:)` | framework-facing factory for a ref to an element with a caller-chosen stable id (minted by typed component handlers for their root). callers should keep receiving refs rather than fabricating them |
 | `ElementRef` | typed handle to a rendered element minted by the framework. `remove()` → empty-html fragment (the runtime removes the element), `replace(with:)` → outerHTML swap, `update(view)` → re-render from a `View`. no caller-supplied ids |
 | `Dismissible` | protocol for views with a dismiss/remove affordance. `.onDismiss { me, _ in }` wires the close button to a routed component and receives the root `ElementRef` |
-| `FragmentUpdate` | `{ id: String, html: String }` — DOM patch instruction. `html: ""` removes the element (pinned contract, see `JS_RUNTIME.md` patcher) |
+| `FragmentUpdate` | `{ id: String, html: String }` — DOM patch instruction. `html: ""` removes the element (pinned contract, see the engine's fragment patcher) |
 | `SpaceToken` | spacing-scale tokens (`.one`…`.twentyFour`) → `var(--space-N)` |
 | `ColorToken` | nexus color tokens (`.primary`, `.text`, `.danger`, …) → `var(--color-...)` |
 | `FontWeight` | `.thin` … `.black`, `.custom(_:)` → numeric `font-weight` |
@@ -193,9 +193,9 @@ including the render nonce — is carried over. restating the whole policy inste
 nonce source, and `HTMLDocument` then suppresses the pre-paint theme prelude rather than
 emit an inline script the browser refuses.
 
-`runtimeConfig` (a `RuntimeConfig?`) changes only the runtime bootstrap: with a
-non-empty config the page emits `WebUIRuntime.init({...})`; with no config the
-default `WebUIRuntime.init();` is emitted byte-for-byte.
+`runtimeConfig` (a `RuntimeConfig?`) changes only the boot config: with a
+non-empty config the page emits a `webui-config` meta carrying it; with no config
+the meta carries `{}` and the engine boots with its defaults.
 
 `RuntimeConfig` keys: `wsUrl`, `wsReconnect`, `wsMaxReconnectDelay`,
 `wsPingInterval`, `wsPongTimeout`, `maxQueueSize`, `debounceInputMs`,

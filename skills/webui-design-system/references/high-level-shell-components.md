@@ -91,8 +91,8 @@ indicate the authored content. Prefer multiline `"""` strings to avoid `\"`.
    background is `rgb(6,9,16)` before screenshotting) — dark mode is automatic.
 5. Confirm the search-field computed `padding-left` is `36px` (2.25rem) — if
    it's `12px` the reset `:not()` chain is clobbering it (add `:not(.search-field__input)`).
-6. Confirmed the render token is baked into the served page
-   (`WebUIRuntime.init({"renderToken":"…"})`).
+6. Confirmed the render token is baked into the served page's `webui-config`
+   meta (`{"renderToken":"…"}`).
 
 ## Composer round-trip — VERIFIED WORKING (2026-09-19)
 
@@ -106,10 +106,8 @@ sockets close with code 1006). Both are test-harness confounds.
 
 The faithfully-working path (verified in a CLEAN, uninstrumented browser
 context):
-1. `config.renderToken` is baked in (`WebUIRuntime.init({"renderToken":"…"})`)
-   and preserved in the live runtime (the `DEFAULTS`-whitelist fix in
-   `render-token-whitelist-bounce.md` is applied; `renderToken: null` is in
-   `DEFAULTS`).
+1. `config.renderToken` is baked into the `webui-config` meta
+   (`{"renderToken":"…"}`) and read by the engine at boot.
 2. The runtime connects to `/ws`, socket reaches readyState OPEN, and
    `wsClient.isConnected()` is true. `handleEvent` process the form `submit`
    (it `preventDefault`s).

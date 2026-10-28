@@ -98,8 +98,6 @@ private final class ShowcaseHTTPHandler: ChannelInboundHandler, @unchecked Senda
             response = ("text/html; charset=utf-8", pageHTML)
         case (.GET, "/ui/styles.css"):
             response = ("text/css; charset=utf-8", WebUIAssets.css)
-        case (.GET, "/ui/scripts.js"):
-            response = ("application/javascript; charset=utf-8", WebUIAssets.js)
         default:
             response = ("text/plain; charset=utf-8", "404 Not Found")
         }

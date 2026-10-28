@@ -28,7 +28,7 @@ internal skill, and the consumer-facing guidance lives there (plus the repo's
   `WebUISmokeTest` (the interactive page the smoke gates drive),
   `WebUIShowcaseServer` (live swift-generated showcase on :9092).
 - **`designer/`** — the design system's working dir: `assets/design-system.css`
-  + `assets/webui-runtime.js` (canonical, read at build time), 
+  + `assets/webui-engine.js` (the client runtime, read at build time),
   `icons/icon-manifest.json`, `previews/` (regenerated artifacts).
 - **Shared composition libs:** `WebUISmokeShared`, `WebUIShowcaseContent`
   (holds `ShowcasePage`, shared by the generator and the live server).
@@ -70,7 +70,7 @@ modules). Full stage map: `Documentation/ASSEMBLY.md`.
 
 ## Asset embedding
 
-- Edit `designer/assets/design-system.css` / `webui-runtime.js`, then
+- Edit `designer/assets/design-system.css` / `webui-engine.js`, then
   `swift build` — the `WebUIAssetPlugin` regenerates `Assets+Generated.swift`
   (WebUI) and `DesignTokens+Generated.swift` (WebUIDesignSystemCore) from them.
 - `designer/previews/designer-preview.html` links `assets/design-system.css`

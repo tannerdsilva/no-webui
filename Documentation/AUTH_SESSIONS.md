@@ -86,9 +86,9 @@ not a restructuring of the render model.
 
 The framework hijacks any `submit` event originating from a
 `[data-component-id]` element into a WebSocket event
-(`webui-runtime.js:261–263`). Verified: the event delegator early-returns for
-events with no component element (`handleEvent`, `webui-runtime.js:233–237`),
-so a login form rendered **without** an event-handler modifier submits natively.
+(`webui-engine.js`, the submit branch of the event delegator). Verified: the
+delegator early-returns for events with no component element (`handleEvent`), so
+a login form rendered **without** an event-handler modifier submits natively.
 
 **Decision:** the login page is a static document built with
 `includeRuntime: false` — no WebSocket, no delegation. `LoginView` renders

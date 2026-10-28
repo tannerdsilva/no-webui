@@ -26,10 +26,10 @@ every developer action is a single command. there are no shell scripts.
 
 `WebUIAssetPlugin` (build tool plugin, applied to the `WebUI` target) runs
 `WebUIAssetTool` during every `swift build`. it reads
-`designer/assets/design-system.css` and `designer/assets/webui-runtime.js` —
+`designer/assets/design-system.css`, `webui-engine.js` and `webui-shell.js` —
 the canonical source of truth — and generates `Assets+Generated.swift` into the
 plugin work directory (under `.build/`, gitignored) as swift string constants
-consumed by `WebUIDocument` and `WebUIRuntime`.
+consumed by `WebUIDocument` and `ClientBoot`.
 
 to update assets: edit the files in `designer/assets/`, then `swift build`
 (any plugin/gate invocation that builds `WebUI` also picks them up).

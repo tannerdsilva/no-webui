@@ -6,8 +6,9 @@ for live UI updates.
 
 ## Modules
 
-the package ships 26 targets (13 libraries, 12 executables, 1 macro), 11 plugins
-and 7 test targets. the consumer-facing ones:
+the package ships 55 targets — 35 in `Sources/` (14 library products, 12
+executable products, 3 CLI tools, 1 macro, 5 internal), 11 plugins and 9 test
+targets. the consumer-facing ones:
 
 | Module (import) | what it is | depends on |
 |---|---|---|
@@ -20,7 +21,7 @@ and 7 test targets. the consumer-facing ones:
 | `WebUIAuth` | authentication + sessions: identity model, session tokens, cookies, `AuthSessionStore` protocol + in-memory store, Argon2id verification, `AuthContext` | `WebUI`, swift-log, rawdog |
 | `WebUIBuild` | host-side asset toolkit: gzip, emitter, manifest, cache headers | rawdog |
 | `WebUIBlocks` | standalone page scaffolds — dashboard, login, signup, four sidebar variants, patterns — served one per process by `WebUIBlocksServer` | `WebUI`, `WebUIDesignSystem`, `WebUIChart` |
-| `WebUIIslandCore` | island-side core: pure-Swift logic that cross-compiles to wasm per capability | `WebUISharedCore` |
+| `WebUIIslandWire` | the typed island contract (envelope + payload pair) implemented by both host and wasm | `WebUISharedCore` |
 
 the remaining targets are the demo servers (`WebUIExample` :9090,
 `WebUIAuthExample` :9091, `WebUIShowcase`, `WebUIShowcaseServer`, `WebUISmokeTest`,
@@ -71,7 +72,7 @@ See `Sources/WebUIExample/main.swift` and `Documentation/GETTING_STARTED.md`.
 
 ```bash
 swift build          # WebUIAssetPlugin auto-generates Assets+Generated.swift
-swift test           # 1406 tests, 7 test targets
+swift test           # 1774 tests, 9 test targets
 swift run WebUIExample  # example server on :9090
 ```
 
@@ -126,7 +127,7 @@ swift package plugin showcase --allow-writing-to-package-directory  # refresh de
 
 ```
 no-webui/
-├── Package.swift                  # one manifest: 26 targets, 11 plugins, 7 test targets
+├── Package.swift                  # one manifest: 55 targets, 11 plugins, 9 test targets
 ├── Sources/                       # 26 target directories
 │   ├── WebUI/                     # framework entry: re-exports core + embedded assets
 │   ├── WebUICore/                 # render core (view protocol, router, JSONValue, ClientBoot)
@@ -140,7 +141,8 @@ no-webui/
 │   ├── WebUIBuild/                # host-side asset toolkit (gzip, emitter, manifest)
 │   ├── WebUIBlocks/               # page scaffolds — also the block-sweep harness
 │   ├── WebUIBlocksServer/         # serves one block per process
-│   ├── WebUIIslandCore/           # island-side core (cross-compiles to wasm)
+│   ├── WebUIIslandWire/           # typed island contract (host + wasm)
+│   ├── WebUIIslandRuntime/        # the wasi harness (wasm-only)
 │   ├── WebUIExample/              # example server (:9090)
 │   ├── WebUIAuthExample/          # login-gated demo server (:9091)
 │   ├── WebUIShowcase/             # showcase server + static generator
@@ -159,10 +161,11 @@ no-webui/
 │   └── WebUIServePlugin/ · WebUISmokePlugin/ · WebUIFullstackSmokePlugin/
 │       WebUIProbePlugin/ · WebUIShowcasePlugin/ · WebUIShowcaseServePlugin/
 │       WebUIBudgetPlugin/ · WebUIIslandPlugin/         # the 8 command verbs
-├── Tests/                         # 7 test targets
+├── Tests/                         # 9 test targets
 │   ├── WebUITests/                # the bulk of the suite (+ WebUIAuthTests, the tool suites)
 │   └── WebUIAuthTests/ · WebUIBuildTests/ · WebUIAssetToolTests/
-│       WebUIWasmToolTests/ · WebUIIslandCoreTests/ · WebUIDesignSystemMacroTests/
+│       WebUIWasmToolTests/ · WebUIIslandFixturesTests/ · WebUIDesignSystemMacroTests/
+│       WebUIStateTests/ · WebUIHostTests/
 ├── Documentation/                 # 18 documentation files (see below)
 ├── designer/                      # designer sandbox: css/js, icon manifest, node gates, previews
 ├── CHANGELOG.md
@@ -176,7 +179,7 @@ The `designer/` directory is a CSS/JS-only sandbox for UI design work:
 ```bash
 # Edit assets:
 designer/assets/design-system.css
-designer/assets/webui-runtime.js
+designer/assets/webui-engine.js
 
 # Preview in browser (instant, no build step):
 open designer/previews/designer-preview.html
@@ -205,10 +208,8 @@ See `designer/README.md` for the full designer guide.
 - `Documentation/ASSETS.md` — the asset toolkit for hosts (`WebUIBuild`, embed plugin, budgets)
 - `Documentation/AUTH_SESSIONS.md` — authentication + sessions design and decisions
 - `Documentation/ICONS.md` — icon catalog, tooling and SVG sanitization
-- `Documentation/JS_RUNTIME.md` — JavaScript runtime API
 - `Documentation/SHEETS_CLASS.md` — the emitted class vocabulary
 - `Documentation/NEXT_ARCHITECTURE.md` — the engine + capability-island target architecture
-- `Documentation/NEXT_IMPLEMENTATION_PLAN.md` — its implementation plan
 - `Documentation/README.md` — the docs index
 - `CHANGELOG.md` (repo root) — all notable changes
 

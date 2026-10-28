@@ -272,7 +272,7 @@ funnel. use the stack for logging, metrics, or debugging.
 
 ## Layer 3: HTML Document Assembly
 
-**Files:** `HTMLDocument.swift`, `WebUIDocument.swift`, `WebUIRuntime.swift`
+**Files:** `HTMLDocument.swift`, `WebUIDocument.swift`, `ClientBoot.swift`
 
 ### HTMLDocument
 
@@ -302,9 +302,11 @@ sheet) outranks the framework by cascade origin rather than by selector weight.
 layers; the browser gate proves the consequence (a single-class consumer rule
 beats a two-class framework rule).
 
-A `RuntimeConfig?` parameter changes the runtime bootstrap: with a non-empty
-config the page emits `WebUIRuntime.init({...})` with only the set keys;
-otherwise the default `WebUIRuntime.init();` is emitted byte-for-byte.
+A `RuntimeConfig?` parameter changes the boot config: when non-empty the page
+emits a `<meta name="webui-config" content="{...}">` carrying only the set keys;
+otherwise the meta carries `{}` and the engine auto-boots with its defaults.
+the legacy inline `WebUIRuntime.init(...)` bootstrap was deleted with the
+runtime it belonged to.
 
 ### WebUIDocument
 
@@ -314,14 +316,15 @@ hoisted to `DesignSystemAssets.minifiedCss` and served content-addressed
 (`/__assets/css.<sha256>`, linked by default). Use this for apps that want the
 complete design system.
 
-### WebUIRuntime
+### ClientBoot
 
-A Swift enum with a static `source` property containing the embedded JS runtime
-(compiled into the binary via `Assets+Generated.swift`).
+`ClientBoot` is the emitted client boot: it renders the `webui-config` meta and
+the `<script src="/ui/webui-engine.js">` tag, and supplies the nonce-aware
+default CSP (`csp(nonce:)`). `includeRuntime: false` suppresses both.
 
 ## Layer 4: WebSocket Protocol
 
-**Files:** `WebSocketProtocol.swift`, `Assets/webui-runtime.js`
+**Files:** `WebSocketProtocol.swift`, `Assets/webui-engine.js`
 
 ### Message Types (Server → Client)
 
@@ -344,10 +347,9 @@ A Swift enum with a static `source` property containing the embedded JS runtime
 
 ### JS Runtime Modules
 
-The JS runtime (`webui-runtime.js`) is organized around a set of factory
-functions plus a `Router` helper and a `createMessageDispatcher` that routes
-incoming WebSocket messages to the patcher, state store, and router. the core
-factories:
+The engine (`webui-engine.js`) is organized around a set of factory functions
+plus a `Router` helper and a `createMessageDispatcher` that routes incoming
+WebSocket messages to the patcher, state store, and router. the core factories:
 
 | Module | Lines | Responsibility |
 |---|---|---|
@@ -357,7 +359,8 @@ factories:
 | `createStateStore` | ~75 | Key-value store with dot-path access, change subscriptions, and prototype-pollution protection |
 | `createWSClient` | ~140 | WebSocket connection with exponential backoff + jitter reconnect, ping/pong keepalive (a pong clears the pending reconnect timer), message queue, and disconnect handling |
 
-See `Documentation/JS_RUNTIME.md` for detailed documentation of each module.
+See `Documentation/ARCHITECTURE.md` Layer 5 and `NEXT_ARCHITECTURE.md` layer b for
+the engine's delivery contract; the engine's own source is `designer/assets/webui-engine.js`.
 
 ## Layer 5: Capability Islands (wasm)
 
@@ -590,7 +593,7 @@ self-contained and runnable by one human:
 | gate | run as | passes expected |
 |---|---|---|
 | build | `swift build` | clean |
-| test | `swift test` | 1702 tests in 9 runs / 0 issues — includes the frozen-surface gate and the showcase byte pin. re-measure rather than trust: the number is the sum of the `Test run with …` lines, because argument-parameterized tests expand and a `@Test` grep over-counts |
+| test | `swift test` | 1774 tests in 9 runs / 0 issues — includes the frozen-surface gate and the showcase byte pin. re-measure rather than trust: the number is the sum of the `Test run with …` lines, because argument-parameterized tests expand and a `@Test` grep over-counts |
 | smoke | `swift package --disable-sandbox plugin smoke` | 19/0 |
 | fullstack smoke | `swift package --disable-sandbox plugin fullstack-smoke` | 24/0 |
 | browser layout | `node designer/browser-smoke.mjs` | 50/0 |

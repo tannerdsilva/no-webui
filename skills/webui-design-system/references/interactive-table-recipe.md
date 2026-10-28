@@ -22,7 +22,7 @@ contract, this is the worked detail.
 ## The five load-bearing facts
 
 1. **`replaceElement` CONSUMES the patched node.**
-   `webui-runtime.js` does `replaceChild(fragment, el)` — the element you
+   `webui-engine.js` does `replaceChild(fragment, el)` — the element you
    patch is destroyed and swapped. So any node re-rendered by the server
    must re-carry its routing anchor, and the anchor must live on a
    *persistent wrapper* that is NOT the patch target.

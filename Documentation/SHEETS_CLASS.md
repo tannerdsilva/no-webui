@@ -1,7 +1,7 @@
 # sheets-class target — capability gap analysis and phased path
 
 _status: proposal (not executed) · 2026-10-02 · companion to `NEXT_ARCHITECTURE.md`
-(engine-first, d1–d8) and `NEXT_IMPLEMENTATION_PLAN.md` (p0–p5); cross-references
+(engine-first, d1–d8); cross-references
 `STABILITY.md` (#7, the applet harness) and the `CHANGELOG.md` unreleased block
 (fragment ops)._
 
@@ -53,11 +53,11 @@ server-side diffing and the row/range ops, not the envelope.
 | island host imports | every declared import stubbed to `function () { return 0; }` | `webui-engine.js:1295-1304` |
 | island event wiring | `input` only, via `data-island-input` → full region re-render | `webui-engine.js:1395-1410` |
 | island capability gate | fetch-time only; the `capabilities` / `persistence` config seams are no-ops on the engine path | `webui-engine.js:1384`; `Sources/WebUICore/RuntimeConfig.swift:20-28` |
-| shipped island (validate) | 164,447 B stripped — the kB tier landed (336× from the 52.8 mb full-sdk build) | `NEXT_IMPLEMENTATION_PLAN.md` (p2 measured outcome) |
+| shipped island (validate) | 164,447 B stripped — the kB tier landed (336× from the 52.8 mb full-sdk build) | measured p2 outcome |
 | table rendering | server-rendered; a sort/select/expand re-emits the whole table as one fragment (`me.update(...)`) | `Sources/WebUIDesignSystemCore/WebUIComponents.swift:832,903-909,976-980` |
 | table cost (measured) | 29–47 B per cell simple, 196 B per cell rich; 71–143 B per simple row, 825 B per rich row | measured 2026-10-02 on `designer/previews/showcase.html` (14 tables) |
 | virtualization primitives | none (`(?i)virtual` over `Sources/` = 0 hits) | measured 2026-10-02 |
-| input debounce defaults | 300 ms trailing, 1,000 ms max-wait; `change`/`blur`/`submit` immediate | `Documentation/JS_RUNTIME.md:62-68`; `RuntimeConfig.swift:10-11` |
+| input debounce defaults | 300 ms trailing, 1,000 ms max-wait; `change`/`blur`/`submit` immediate | `designer/assets/webui-engine.js`; `RuntimeConfig.swift:10-11` |
 | key events on the wire | `key` + `ctrlKey` / `shiftKey` / `altKey` / `metaKey` | `webui-engine.js:516-525` |
 | ime composition / clipboard / range selection / undo | absent (one harness-era `clipboard` mention, unwired) | grep `composition\|clipboard\|undo` over `Sources/` + engine, 2026-10-02 |
 | handler ceiling | 10,000 handlers per `EventRouter` | `AGENTS.md` |
@@ -120,7 +120,7 @@ sequence:
 
 0. **(no wasm)** virtualized grid spike + cell/row patch granularity on the
    server-authoritative path, and *measure*. this is the p3 spike
-   (`NEXT_IMPLEMENTATION_PLAN.md`) with a forcing function, and it lands reusable
+   with a forcing function, and it lands reusable
    value either way: a `WebUIDataGrid`-shaped primitive (or engine-side
    windowing) and evidence about diffing against the ops that already exist.
 1. decide from the numbers. if the budgets fail on the ws path (typing at wan

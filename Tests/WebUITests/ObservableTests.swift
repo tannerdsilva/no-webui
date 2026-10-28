@@ -254,22 +254,12 @@ func webuiAssetsContainsComponents() {
     #expect(WebUIAssets.css.contains(".tabs {"))
 }
 
-@Test("WebUIAssets.js contains runtime functions")
+@Test("WebUIAssets.engine contains the runtime functions")
 func webuiAssetsContainsRuntime() {
-    #expect(WebUIAssets.js.contains("WebUIRuntime"))
-    #expect(WebUIAssets.js.contains("createWSClient"))
-    #expect(WebUIAssets.js.contains("createEventDelegator"))
-    #expect(WebUIAssets.js.contains("createFragmentPatcher"))
-    #expect(WebUIAssets.js.contains("createStateStore"))
-}
-
-@Test("WebUIRuntime.source loads from embedded assets")
-func webuiRuntimeSource() {
-    let source = WebUIRuntime.source
-    #expect(source.contains("WebUIRuntime"))
-    #expect(source.contains("createWSClient"))
-    // should not contain the fallback warning message
-    #expect(!source.contains("Runtime source not found"))
+    #expect(WebUIAssets.engine.contains("createWSClient"))
+    #expect(WebUIAssets.engine.contains("createEventDelegator"))
+    #expect(WebUIAssets.engine.contains("createFragmentPatcher"))
+    #expect(WebUIAssets.engine.contains("createStateStore"))
 }
 
 // MARK: - HTMLDocument with Raw Styles Tests

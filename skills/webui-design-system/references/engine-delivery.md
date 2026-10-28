@@ -22,8 +22,7 @@ gone; the wasm client remains available via an explicit
   (`wsUrl`, `debounceInputMs`, `optimisticSettleMs`, `logLevel`,
   `renderToken`, `capabilities: ["validate", "offline", …]`, `persistence`).
   tests that read config must decode the entity-escaped meta
-  (`&quot;` → `"`), not search for `WebUIRuntime.init`.
-  the chamber/applet path still serves byte-for-byte.
+  (`&quot;` → `"`), not search for an inline bootstrap script.
 - CSP is the client csp (no nonce, `script-src 'self' …`); the engine adds no
   inline scripts, so it needs nothing beyond 'self'.
 

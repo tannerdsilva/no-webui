@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // url-smoke.mjs — drives the SHARED url-payloads.json fixture against the js
 // side of the url policy. the three definitions below mirror
-// designer/assets/webui-runtime.js (lines ~702-710) VERBATIM; a swift-side pin
+// designer/assets/webui-engine.js VERBATIM; a swift-side pin
 // (URLPolicyFixtureTests.probeMirrorsRuntime) asserts these exact spans exist
 // in the runtime, so any drift on either side fails CI.
 import { readFileSync } from 'node:fs';

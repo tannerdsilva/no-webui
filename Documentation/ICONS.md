@@ -40,8 +40,8 @@ same generator the CLI does, so a `swift build` cannot produce an icon library
 that disagrees with `designer/icons/icon-manifest.json`.
 
 this mirrors the existing `WebUIAssetPlugin` / `WebUIAssetTool` pipeline that
-embeds `design-system.css` and `webui-runtime.js` (see `Documentation/ASSEMBLY.md`,
-stage 1).
+embeds `design-system.css`, `webui-engine.js` and `webui-shell.js` (see
+`Documentation/ASSEMBLY.md`, stage 1).
 
 ## the catalog
 

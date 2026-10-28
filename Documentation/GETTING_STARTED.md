@@ -253,9 +253,9 @@ receives `me` even when the component carries no `id:`; the framework mints an
 element id (`e0`, `e1`, ...) for the render pass. `me` also supports
 `replace(with:)` and `update(view)` for swapping the element's contents.
 
-`me.remove()` emits `FragmentUpdate(id:, html: "")`; the runtime treats an
+`me.remove()` emits `FragmentUpdate(id:, html: "")`; the engine treats an
 empty fragment as element removal (`el.remove()`). this is a pinned, documented
-contract (see `JS_RUNTIME.md`) and the preferred way to clear a dismissed
+contract (`DeploymentIntegrityTests`) and the preferred way to clear a dismissed
 component — no container re-render needed.
 
 the legacy container-handler pattern is still supported unchanged: without an

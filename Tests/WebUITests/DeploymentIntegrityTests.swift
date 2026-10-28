@@ -33,13 +33,6 @@ func embeddedCSSMatchesSource() throws {
 	#expect(source == embedded, "embedded WebUIAssets.css differs from designer/assets/design-system.css (\(embedded.count) vs \(source.count) bytes)")
 }
 
-@Test("embedded js is byte-identical to designer/assets/webui-runtime.js")
-func embeddedJSMatchesSource() throws {
-	let source = try readDesignerAsset("webui-runtime.js")
-	let embedded = Array(WebUIAssets.js.utf8)
-	#expect(source == embedded, "embedded WebUIAssets.js differs from designer/assets/webui-runtime.js (\(embedded.count) vs \(source.count) bytes)")
-}
-
 @Test("embedded css pins the progress groove and left-anchor fixes")
 func embeddedCSPinsVisualFixes() {
 	let css = WebUIAssets.css
@@ -51,7 +44,7 @@ func embeddedCSPinsVisualFixes() {
 
 @Test("runtime resolves form controls whose data-component-id sits on their label")
 func runtimeResolvesLabelForInputs() throws {
-	let js = WebUIAssets.js
+	let js = WebUIAssets.engine
 	#expect(js.contains("data-component-id"), "runtime no longer carries the component-id lookup")
 	#expect(js.contains("target.labels"), "runtime lost the labels[] resolution for inputs (typing would stop round-tripping)")
 	#expect(js.contains("label[for=\""), "runtime lost the label[for=id] fallback for inputs")
@@ -59,7 +52,7 @@ func runtimeResolvesLabelForInputs() throws {
 
 @Test("runtime sends keydown modifier keys as strings to match the wire protocol")
 func runtimeStringifiesKeydownModifiers() throws {
-	let js = WebUIAssets.js
+	let js = WebUIAssets.engine
 	#expect(js.contains("String(event.ctrlKey)"), "runtime sends ctrlKey as a JS boolean, but WSIncoming.data is [String: String]")
 	#expect(js.contains("String(event.shiftKey)"), "runtime sends shiftKey as a JS boolean; Swift decode would reject the event")
 	#expect(js.contains("String(event.altKey)"), "runtime sends altKey as a JS boolean; Swift decode would reject the event")
@@ -68,14 +61,14 @@ func runtimeStringifiesKeydownModifiers() throws {
 
 @Test("composer submits on Enter; Shift+Enter inserts a newline")
 func runtimeComposerEnterSubmits() throws {
-	let js = WebUIAssets.js
+	let js = WebUIAssets.engine
 	#expect(js.contains("closest('form.composer')"), "runtime lost the composer detection for Enter-to-send (Enter would just insert a newline)")
 	#expect(js.contains("requestSubmit"), "runtime lost the composer Enter submit path (Enter would never send the message)")
 }
 
 @Test("an empty fragment html removes the element (ElementRef.remove() contract)")
 func runtimeEmptyFragmentRemovesElement() throws {
-	let js = WebUIAssets.js
+	let js = WebUIAssets.engine
 	// ElementRef.remove()/me.remove() emit FragmentUpdate(id:, html: "") — the
 	// runtime must treat an empty fragment as "remove the element", never as a
 	// no-op replace. this is the pinned contract behind the .onDismiss API.
@@ -250,22 +243,22 @@ func alertCloseContrast() {
 
 @Test("runtime debounces input with trailing + max-wait semantics")
 func runtimeInputDebounceSemantics() {
-	let js = WebUIAssets.js
-	#expect(js.contains("setTimeout(flush, config.debounceInputMs)"), "input debounce no longer schedules a trailing flush on debounceInputMs")
+	let js = WebUIAssets.engine
+	#expect(js.contains("setTimeout(entry.flush, config.debounceInputMs)"), "input debounce no longer schedules a trailing flush on debounceInputMs")
 	#expect(js.contains("config.debounceMaxWaitMs"), "input debounce lost its max-wait cap")
 	#expect(js.contains("entry.lastSent"), "input debounce lost its last-send timestamp (max-wait would stop enforcing)")
 }
 
 @Test("runtime clears the keepalive timer when a pong arrives")
 func runtimePongClearsKeepalive() {
-	let js = WebUIAssets.js
+	let js = WebUIAssets.engine
 	#expect(js.contains("msg.type === 'pong'"), "runtime no longer detects pong messages")
 	#expect(js.contains("clearTimeout(pongTimer)"), "pong no longer cancels the pending reconnect timer (liveness detection is dead)")
 }
 
 @Test("runtime preserves focus across fragment patches")
 func runtimePreservesFocusOnPatch() {
-	let js = WebUIAssets.js
+	let js = WebUIAssets.engine
 	#expect(js.contains("document.activeElement"), "runtime no longer records which input had focus before a patch")
 	#expect(js.contains("record.focused = true"), "runtime lost the per-input focused flag")
 	#expect(js.contains("focusTarget.focus()"), "runtime no longer restores focus after replacing a fragment")
@@ -273,13 +266,13 @@ func runtimePreservesFocusOnPatch() {
 
 @Test("runtime coerces multi-select form values to a string for the wire protocol")
 func runtimeStringifiesMultiSelect() {
-	let js = WebUIAssets.js
+	let js = WebUIAssets.engine
 	#expect(js.contains("values.join(',')"), "select-multiple now sends an array, but WSIncoming.data is [String: String] (Swift decode would reject the form)")
 }
 
 @Test("runtime guards against a missing WebSocket")
 func runtimeHandlesNoWebSocket() {
-	let js = WebUIAssets.js
+	let js = WebUIAssets.engine
 	#expect(js.contains("typeof WebSocket === 'undefined'"), "runtime lost its guard for environments without WebSocket")
 }
 
@@ -320,7 +313,7 @@ func documentedTokensExistInCss() throws {
 
 @Test("runtime wires the router with its logger in scope")
 func runtimeRouterLoggerInScope() {
-	let js = WebUIAssets.js
+	let js = WebUIAssets.engine
 	#expect(js.contains("function createRouter(log)"), "router lost its logger param — redirect/navigate would reference an out-of-scope log")
 	#expect(js.contains("createMessageDispatcher(log, fragmentPatcher, stateStore, router, config)"), "dispatcher no longer receives the router and config — the client redirect/token-refresh paths are dead")
 	#expect(js.contains("if (msg.token) config.renderToken = msg.token"), "runtime lost the in-place render-token refresh handler")
@@ -328,7 +321,7 @@ func runtimeRouterLoggerInScope() {
 
 @Test("runtime preserves the server-minted render token in init")
 func runtimeInitPreservesRenderToken() {
-	let js = WebUIAssets.js
+	let js = WebUIAssets.engine
 	// `init` builds `config` by copying only the keys named in `DEFAULTS`.
 	// the server mints a per-render token into the bootstrap config; if it is
 	// not listed in `DEFAULTS`, `init` silently drops it and every subsequent
@@ -343,7 +336,7 @@ func runtimeInitPreservesRenderToken() {
 
 @Test("runtime applies optimistic predictions before sending the event")
 func runtimeAppliesOptimisticPredictions() {
-	let js = WebUIAssets.js
+	let js = WebUIAssets.engine
 	#expect(js.contains("data-optimistic"), "runtime lost the optimistic prediction hook")
 	#expect(js.contains("optimisticSettleMs"), "runtime lost the optimistic settle timeout knob")
 	#expect(js.contains("patch(pred, null, true)"), "runtime no longer patches predictions with the optimistic flag before send")
@@ -351,13 +344,13 @@ func runtimeAppliesOptimisticPredictions() {
 
 @Test("runtime EVENT_TYPES covers every fluent event modifier")
 func runtimeEventTypesCoverFluentModifiers() {
-	let js = WebUIAssets.js
+	let js = WebUIAssets.engine
 	#expect(js.contains("'click', 'input', 'change', 'submit', 'keydown', 'keyup', 'keypress', 'focus', 'blur', 'focusin', 'focusout', 'mouseover', 'mouseout', 'mousedown', 'mouseup'"), "EVENT_TYPES drifted from the delivered set")
 }
 
 @Test("runtime saves and restores scroll position across fragment patches")
 func runtimePreservesScrollOnPatch() {
-	let js = WebUIAssets.js
+	let js = WebUIAssets.engine
 	#expect(js.contains("saveScroll"), "runtime lost the scroll-snapshot helper")
 	#expect(js.contains("scrollTop") && js.contains("scrollLeft"), "runtime no longer reads scroll positions")
 	#expect(js.contains("'scroll:'"), "runtime scroll records missing")

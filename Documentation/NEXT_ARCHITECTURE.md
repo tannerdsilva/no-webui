@@ -160,7 +160,7 @@ free core already exists; embedded tier is kB-scale per `WASM_TRAJECTORY.md` §
 | `webui-client.js` (35.6 kb chamber) | replaced by the engine | its event proxy was the whole reason the monolith stayed on every page |
 | `webui-worker.js` (11 kb) | merged into engine/worker-island path | offload stays, scoped to islands |
 | `WebUIClient.wasm` (~55 mb) as default boot | dropped from the default path | kept only if applet consumers remain, otherwise deleted; `WebUIWasmPlugin` hard-fail softened to a per-capability existence check |
-| `webui-runtime.js` (29 kb) | already retired; do not resurrect wholesale | the engine's feature set is a superset in the places that matter (optimistic, a11y, scroll/focus) |
+| `webui-runtime.js` (29 kb) | **deleted** — the file is gone, not merely retired | the engine's feature set is a superset in the places that matter (optimistic, a11y, scroll/focus) |
 | server core, `EventRouter`, `FragmentUpdate`, csp/nonce, security invariants | kept | this half is right |
 
 ## 4. phased migration (in-repo gates only; no ci)
@@ -194,7 +194,7 @@ free core already exists; embedded tier is kB-scale per `WASM_TRAJECTORY.md` §
 | page shell bytes | — | **2.6 kb** document + linked sheet `/__assets/css` 308,930 bytes (`public, max-age=3600`; once per build, not per page — inline mode was 310 kb per navigation); island artifact 164 kb (embedded sdk, stripped) |
 | interaction latency | optimistic same-turn; server confirm | same-turn prediction + confirm over `/ws` (measured by browser-smoke probes) |
 | keyboard parity | full (tree enter/space, escape-dismiss, focus trap + return) | implemented + probed in `designer/browser-smoke.mjs` (engine path) |
-| offline | opt-in island; reconcile on reconnect | offline capability → service-worker shell (cache-first engine/css + `/__assets`, network-first navs); engine reconnects on `online`. indexeddb sync reconcile is deferred (needs the worker/bridge machinery — see p4 note in `NEXT_IMPLEMENTATION_PLAN.md`) |
+| offline | opt-in island; reconcile on reconnect | offline capability → service-worker shell (cache-first engine/css + `/__assets`, network-first navs); engine reconnects on `online`. indexeddb sync reconcile is deferred (needs the worker/bridge machinery — p4) |
 | contrast | wcag aa | guarded by `DeploymentIntegrityTests` wcag-ratio assertions (≥ 4.5:1) |
 | wasm on the default page | none | none — `meta[name="webui-wasm"]` absent on the engine default page |
 

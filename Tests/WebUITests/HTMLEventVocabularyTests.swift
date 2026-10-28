@@ -8,7 +8,7 @@ import WebUICore
 // type and the inbound frame's type. it is open by construction (`.custom`), so
 // an event from a newer client still decodes and routes; that openness is also
 // why the named cases can drift from the runtime silently, since nothing in the
-// compiler knows `designer/assets/webui-runtime.js` exists. this suite is the
+// compiler knows `designer/assets/webui-engine.js` exists. this suite is the
 // pin: it parses the runtime's own `EVENT_TYPES` array and requires the enum to
 // cover it name for name, and it pins the inverse mapping `init(rawValue:)`.
 
@@ -17,7 +17,7 @@ enum RuntimeEventVocabulary {
 	/// the runtime file, located from the package root the way the other
 	/// designer-asset tests do (`DeploymentIntegrityTests.packageRootURL`).
 	static var assetURL: URL {
-		packageRootURL().appendingPathComponent("designer/assets/webui-runtime.js")
+		packageRootURL().appendingPathComponent("designer/assets/webui-engine.js")
 	}
 
 	/// every entry of `var EVENT_TYPES = [...]`, in source order.
@@ -84,15 +84,6 @@ enum RuntimeEventVocabulary {
 @Suite("HTMLEvent vocabulary")
 struct HTMLEventVocabularyTests {
 
-	/// the cases the runtime delegates for, referenced by name: renaming or
-	/// removing one is a compile error here rather than a silent gap.
-	private static let runtimeCases: [HTMLEvent] = [
-		.click, .input, .change, .submit,
-		.keydown, .keyup, .keypress,
-		.focus, .blur, .focusin, .focusout,
-		.mouseover, .mouseout, .mousedown, .mouseup,
-	]
-
 	@Test("every runtime EVENT_TYPES entry is a named HTMLEvent case")
 	func runtimeVocabularyIsPinned() throws {
 		let runtime = try RuntimeEventVocabulary.entries()
@@ -103,22 +94,21 @@ struct HTMLEventVocabularyTests {
 		for name in runtime {
 			#expect(
 				HTMLEvent.named.contains(where: { $0.rawValue == name }),
-				"HTMLEvent has no named case for the runtime event '\(name)' (designer/assets/webui-runtime.js EVENT_TYPES)"
+				"HTMLEvent has no named case for the runtime event '\(name)' (designer/assets/webui-engine.js EVENT_TYPES)"
 			)
 			#expect(HTMLEvent(rawValue: name).rawValue == name, "HTMLEvent round-trip changed '\(name)'")
 		}
 
-		// 2. and the cases do not outrun the runtime: a case the engine never
-		//    dispatches is a lie about what the wire can carry.
-		for event in Self.runtimeCases {
-			#expect(
-				runtime.contains(event.rawValue),
-				"HTMLEvent.\(event.rawValue) has no entry in the runtime's EVENT_TYPES (designer/assets/webui-runtime.js)"
-			)
-		}
-
-		#expect(Set(Self.runtimeCases.map(\.rawValue)) == Set(runtime))
-		#expect(Self.runtimeCases.count == runtime.count)
+		// 2. and the engine's delegated set is a subset of `named`: the enum may
+		//    name more events than the engine delegates (media and enter/leave
+		//    events are part of the vocabulary without being delegated by
+		//    default), so exact equality is not the contract — containment is.
+		let namedRaw = Set(HTMLEvent.named.map(\.rawValue))
+		let delegated = Set(runtime)
+		#expect(delegated.isSubset(of: namedRaw), "engine delegates an event HTMLEvent does not name")
+		// non-vacuity: a shrunk EVENT_TYPES should fail this pin, not silently
+		// weaken it. the engine's delivered list is 35 entries today.
+		#expect(delegated.count >= 30, "engine EVENT_TYPES shrank unexpectedly (\(delegated.count) entries)")
 	}
 
 	@Test("init(rawValue:) is the inverse of rawValue for every named case")

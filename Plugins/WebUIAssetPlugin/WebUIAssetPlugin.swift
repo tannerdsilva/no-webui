@@ -25,16 +25,14 @@ struct WebUIAssetPlugin: BuildToolPlugin {
         }
 
         let cssFile = assetsDir.appendingPathComponent("design-system.css")
-        let jsFile = assetsDir.appendingPathComponent("webui-runtime.js")
         let engineFile = assetsDir.appendingPathComponent("webui-engine.js")
         let shellFile = assetsDir.appendingPathComponent("webui-shell.js")
         let cssExists = FileManager.default.fileExists(atPath: cssFile.path)
-        let jsExists = FileManager.default.fileExists(atPath: jsFile.path)
         let engineExists = FileManager.default.fileExists(atPath: engineFile.path)
         let shellExists = FileManager.default.fileExists(atPath: shellFile.path)
 
-        guard cssExists || jsExists else {
-            throw AssetError("no css or js files found in designer/assets/ at \(assetsDir.path) — required to embed the shipped assets")
+        guard cssExists else {
+            throw AssetError("no css file found in designer/assets/ at \(assetsDir.path) — required to embed the shipped sheet")
         }
 
         let assetTool = try context.tool(named: "WebUIAssetTool")
@@ -68,10 +66,6 @@ struct WebUIAssetPlugin: BuildToolPlugin {
         if cssExists {
             args += ["--css-input", cssFile.path]
             inputs.append(cssFile)
-        }
-        if jsExists {
-            args += ["--js-input", jsFile.path]
-            inputs.append(jsFile)
         }
         if engineExists {
             args += ["--engine-input", engineFile.path]
