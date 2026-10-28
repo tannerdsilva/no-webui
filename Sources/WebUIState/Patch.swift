@@ -15,22 +15,26 @@ import WebUICore
 // digest derived from finished markup agree for the same region boundaries.
 
 /// where one region's element starts and ends in a render's bytes.
-public struct RegionSpan: Sendable, Hashable {
+///
+/// `package`: a span is the differ's own vocabulary. it is derived inside the
+/// module and read only by ``RenderDiffer``; a consumer patches by ``RegionID``
+/// and a fragment, never by byte offset.
+package struct RegionSpan: Sendable, Hashable {
 	/// the id the client patches by — the element's DOM `id`.
-	public let id: RegionID
+	package let id: RegionID
 	/// the first byte of the region's opening `<`.
-	public let start: Int
+	package let start: Int
 	/// one past the region's last byte.
-	public let end: Int
+	package let end: Int
 
-	public init(id: RegionID, start: Int, end: Int) {
+	package init(id: RegionID, start: Int, end: Int) {
 		self.id = id
 		self.start = start
 		self.end = end
 	}
 
 	/// the byte range this span covers.
-	public var range: Range<Int> { start..<end }
+	package var range: Range<Int> { start..<end }
 }
 
 /// one finished render, ready to diff: the bytes, where each region sits in
@@ -39,7 +43,11 @@ public struct RenderSnapshot: Sendable {
 	/// the render's bytes, exactly as they went (or will go) on the wire.
 	public let bytes: [UInt8]
 	/// region id → where it sits in ``bytes``, in byte order.
-	public let spans: [RegionSpan]
+	///
+	/// `package`: the spans are the differ's byte offsets, and nothing outside
+	/// this module reads them — a consumer addresses a region by id. the snapshot
+	/// itself stays public because the server derives one per render.
+	package let spans: [RegionSpan]
 	/// region id → hash of that region's bytes.
 	public let digest: RenderDigest
 	/// the byte range this snapshot diffs — a document's `<body>` subtree when
@@ -55,17 +63,25 @@ public struct RenderSnapshot: Sendable {
 	/// heading bound to state, a row that appeared — moves the residue, and the
 	/// differ answers that with a full page rather than a patch that would
 	/// leave the client stale.
-	public let residue: UInt64
+	///
+	/// `package`: the residue is the differ's veto, not a number a caller acts
+	/// on. the verdict it produces is what reaches a caller, through
+	/// ``RenderPatch/isFullPage`` and ``PagePatch/fragments``.
+	package let residue: UInt64
 
 	/// a snapshot of a render whose region spans the caller recorded.
 	///
 	/// `root` defaults to the whole render; a document passes its `<body>`
 	/// range so per-render head bytes stay out of the diff.
-	public init(html: String, spans: [RegionSpan], root: Range<Int>? = nil) {
+	///
+	/// `package`: constructing a snapshot from caller-recorded spans is how this
+	/// module's own scanner and tests build one. a consumer that has bytes asks
+	/// for ``derived(fromMarkup:)``.
+	package init(html: String, spans: [RegionSpan], root: Range<Int>? = nil) {
 		self.init(bytes: Array(html.utf8), spans: spans, root: root)
 	}
 
-	public init(bytes: [UInt8], spans: [RegionSpan], root: Range<Int>? = nil) {
+	package init(bytes: [UInt8], spans: [RegionSpan], root: Range<Int>? = nil) {
 		let ordered = spans.sorted { $0.start < $1.start }
 		var regions: [RegionID: UInt64] = [:]
 		regions.reserveCapacity(ordered.count)
@@ -236,7 +252,7 @@ private enum MarkupScan {
 
 	/// the value of the element's `data-component-id`, when its opening tag
 	/// carries one.
-	static func componentID(in bytes: [UInt8], tag: Range<Int>) -> String? {
+static func componentID(in bytes: [UInt8], tag: Range<Int>) -> String? {
 		guard let hit = find(componentIDPrefix, in: bytes, from: tag.lowerBound, limit: tag.upperBound)
 		else { return nil }
 		let valueStart = hit + componentIDPrefix.count
@@ -340,9 +356,14 @@ private enum MarkupScan {
 /// residue hash. 8 bytes per region, never the html.
 public struct RenderBaseline: Sendable {
 	public let digest: RenderDigest
-	public let residue: UInt64
+	/// the residue hash the next diff vetoes on.
+	///
+	/// `package`: like ``RenderSnapshot/residue``, it is the differ's input, not
+	/// a caller's. a baseline is obtained from ``RenderSnapshot/baseline`` and
+	/// handed back to ``RenderDiffer``; nothing outside this module inspects it.
+	package let residue: UInt64
 
-	public init(digest: RenderDigest, residue: UInt64) {
+	package init(digest: RenderDigest, residue: UInt64) {
 		self.digest = digest
 		self.residue = residue
 	}

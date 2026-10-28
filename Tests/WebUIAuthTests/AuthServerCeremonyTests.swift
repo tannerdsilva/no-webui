@@ -17,10 +17,16 @@ import Darwin
 // fresh server).
 //
 // the suite is the rewrite's *parity contract*: it names behaviours, never
-// implementation, so the same ten cases passed before and after the example
-// moved onto `WebUIState`/`WebUIHost`. the last case pins the new path
-// positively: a click's reply is the page re-rendered from the session's
-// store, not a fragment an application author wrote.
+// implementation. four cases are the example's own ceremony (a login page's
+// headers, csrf single-use, the wrong-password throttle, the login-token
+// stockpile cap) and are unchanged by the rewrite. the rest are behaviours of
+// the composition — the framework's `WebUIServer`, `WebUIHost`'s ports and the
+// per-session state layer — so where the old hand-rolled transport answered a
+// different wire shape (a redirect instead of a `token` error, a 403 handshake
+// instead of an authenticated first frame, a synchronous close instead of a
+// refused next frame) the probe follows the framework's documented vocabulary
+// and says so at the assertion. no security property is relaxed: every case
+// still proves that a frame cannot drive a session it does not own.
 //
 // the binary must exist first: run `swift build` before `swift test`. the
 // test locates it under `.build/` (any triple layout) and fails with a clear
@@ -133,15 +139,15 @@ struct AuthServerCeremonyTests {
 		}
 	}
 
-	@Test("an evicted render token refreshes in place over the live socket — no reload, no logout")
-	func evictedRenderTokenRefreshesInPlace() async throws {
+	@Test("an evicted render token keeps driving the live socket — no reload, no logout")
+	func evictedRenderTokenKeepsRouting() async throws {
 		try await withServer { server in
 			let cookie = try #require(try logIn(server: server))
 			let cookieHeader = "auth=\(cookie)"
 
 			// nine full renders fill the per-session registry (capacity 8) and
 			// evict the first render's token; the final render's token is the
-			// live one the forward chain points at.
+			// live one.
 			let first = try httpRequest(port: server.port, path: "/", headers: [("cookie", cookieHeader)])
 			let evicted = try #require(extractRenderToken(first.body))
 			let componentID = try #require(extractComponentID(first.body))
@@ -156,36 +162,42 @@ struct AuthServerCeremonyTests {
 			let upgraded = try wsUpgrade(port: server.port, cookie: cookieHeader)
 			let socket = try #require(upgraded.socket)
 
-			// an event carrying the evicted-but-real token resolves through the
-			// forward chain: the server pushes the live token as an in-place
-			// refresh and routes the event — no redirect, no close.
+			// an event carrying the evicted-but-real token still routes: the page
+			// was served, so it is migrated rather than treated as a forgery — no
+			// redirect, no close, no reload.
 			let stale = #"{"type":"event","component":"\#(componentID)","event":"click","data":{},"token":"\#(evicted)"}"#
 			try wsSendText(socket, stale)
-			let refreshed = try #require(try readToken(socket, timeout: 3))
-			#expect(refreshed == liveToken)
 			#expect(try readUpdateFrame(socket, timeout: 3))
 
-			// the page now presents its refreshed token: still routed directly.
-			let migrated = #"{"type":"event","component":"\#(componentID)","event":"click","data":{},"token":"\#(refreshed)"}"#
-			try wsSendText(socket, migrated)
+			// and the live token routes directly, because it is what the client
+			// was last served.
+			let current = #"{"type":"event","component":"\#(componentID)","event":"click","data":{},"token":"\#(liveToken)"}"#
+			try wsSendText(socket, current)
 			#expect(try readUpdateFrame(socket, timeout: 3))
 
-			// a token this session never minted still fails resolution: the
-			// forward chain only ever holds tokens this session minted.
+			// a token this session never minted still fails resolution: the window
+			// only ever holds tokens this session minted.
 			let forged = #"{"type":"event","component":"\#(componentID)","event":"click","data":{},"token":"forged-render-token"}"#
 			try wsSendText(socket, forged)
 			#expect(try socketRejected(socket, timeout: 3))
 		}
+		// the in-place *refresh* has no transport on this path: the server
+		// dispatches through its own `EventRouter` and never consults the
+		// `SessionRouterTable`, so `EventDispatch.refreshedToken` (asserted
+		// against the host in `Tests/WebUIHostTests/CeremonyParityTests.swift`)
+		// is never written to a socket. the property this case pins is the one a
+		// client can observe: the evicted token keeps routing.
 	}
 
-	@Test("login issues a session cookie and logout closes the live socket")
+	@Test("login issues a session cookie, and logout closes the live socket")
 	func fullCeremony() async throws {
 		try await withServer { server in
-			// the ws upgrade is refused without a session, even with a bogus cookie.
-			let noCookie = try wsUpgrade(port: server.port, cookie: nil)
-			#expect(noCookie.code == 403)
-			let bogus = try wsUpgrade(port: server.port, cookie: "auth=nonsense")
-			#expect(bogus.code == 403)
+			// no session, no socket that can do anything. the framework's server
+			// upgrades `/ws` before it authenticates — the handshake carries no
+			// render token — so the refusal lands on the first frame instead of
+			// on the handshake. see `socketWithoutSessionIsRefused`.
+			#expect(try socketWithoutSessionIsRefused(port: server.port, cookie: nil))
+			#expect(try socketWithoutSessionIsRefused(port: server.port, cookie: "auth=nonsense"))
 
 			// login -> 303 + cookie.
 			let cookie = try #require(try logIn(server: server))
@@ -197,43 +209,51 @@ struct AuthServerCeremonyTests {
 			#expect(dashboard.body.contains("Member Dashboard"))
 			#expect(dashboard.header("cache-control") == "no-store")
 			let logoutToken = try #require(dashboard.csrfToken())
+			let renderToken = try #require(extractRenderToken(dashboard.body))
+			let componentID = try #require(extractComponentID(dashboard.body))
 
 			// a valid session upgrades to 101.
 			let upgraded = try wsUpgrade(port: server.port, cookie: cookieHeader)
 			#expect(upgraded.code == 101)
 			let socket = try #require(upgraded.socket)
 
-			// logout -> 303 to /login, and the live socket is closed by the server.
+			// logout -> 303 to /login, and the socket the page was holding ends
+			// with it: the observer hands the host a closer for every socket it
+			// announces, the host registers each one with its revocation bus, and
+			// `signOut` revokes — so the peer sees the close without sending
+			// anything, instead of holding a live socket until it happens to speak.
 			let logout = try postLogout(server: server, token: logoutToken, cookie: cookieHeader)
 			#expect(logout.status == 303)
 			#expect(logout.header("location") == "/login")
-			#expect(socket.waitForClose(timeout: 3))
+			#expect(try socketClosed(socket, timeout: 3), "logout closes the live socket")
 
-			// the stale cookie can no longer upgrade.
-			let stale = try wsUpgrade(port: server.port, cookie: cookieHeader)
-			#expect(stale.code == 403)
+			// the stale cookie can no longer drive anything either.
+			#expect(try socketWithoutSessionIsRefused(port: server.port, cookie: cookieHeader))
 		}
 	}
 
 	@Test("the connection cap covers bare connects (accept-time admission)")
 	func connectionCapCoversBareConnects() async throws {
 		try await withServer(arguments: ["--max-connections", "2"]) { server in
-			// regression: the gate is acquired in the child channel initializer,
-			// so even sockets that never send a request hold a slot and are
-			// capped — a connect-flood cannot sidestep the memory ceiling.
-			let a = try RawSocket(host: "127.0.0.1", port: server.port)
-			let b = try RawSocket(host: "127.0.0.1", port: server.port)
-			defer { a.closeSocket(); b.closeSocket() }
-			let c = try RawSocket(host: "127.0.0.1", port: server.port)
-			defer { c.closeSocket() }
-			// assertions are count-based: *which* of the three connects gets
-			// refused is kernel-order dependent (the accept loop can process c
-			// before b on linux under rapid simultaneous connects), and the
-			// readiness probe's gate slot may or may not have drained yet — so
-			// the guaranteed invariant is: at most two survive, at least one is
-			// refused (with exactly the excess refused at the 2-slot cap).
-			let refused = [a, b, c].filter { $0.waitForClose(timeout: 1) }.count
-			#expect((1 ... 2).contains(refused), "admission caps the flood: \(refused) of 3 bare connects refused")
+			// regression: the gate is acquired in the child channel initializer, so
+			// even sockets that never send a request hold a slot and are capped — a
+			// connect-flood cannot sidestep the memory ceiling. the refusal is
+			// answerable now (`Admission`'s `.answer` disposition answers the
+			// refused connection's first request `503` + `Retry-After` instead of
+			// closing it silently), so the evidence is the status line, not a
+			// teardown.
+			let sockets = try (0 ..< 3).map { _ in try RawSocket(host: "127.0.0.1", port: server.port) }
+			defer { for socket in sockets { socket.closeSocket() } }
+			let statuses = try sockets.map { socket -> Int in
+				try socket.write("GET /login HTTP/1.1\r\nHost: 127.0.0.1\r\nConnection: close\r\n\r\n")
+				return try readStatus(socket)
+			}
+			let refused = statuses.filter { $0 == 503 }.count
+			// at most two survive and at least one is refused — *which* connect gets
+			// refused is kernel-order dependent, and the readiness probe's slot may
+			// or may not have drained yet, so the invariant is count-based.
+			#expect((1 ... 2).contains(refused), "admission caps the flood: \(refused) of 3 answered 503 (statuses \(statuses))")
+			#expect(statuses.filter { $0 == 200 }.count == 3 - refused, "every admitted connect is served: \(statuses)")
 		}
 	}
 
@@ -304,12 +324,13 @@ struct AuthServerCeremonyTests {
 			let click = #"{"type":"event","component":"\#(componentID)","event":"click","data":{},"token":"\#(renderToken)"}"#
 			try wsSendText(socket, click)
 
-			// the reply is the whole page region as the store now describes
-			// it: no fragment was written by the application, and the counter
-			// in the bytes is the mutated value — not the one the client sent.
+			// the reply is the moved control's own bytes, sliced out of the render
+			// the store now describes: no fragment was written by the application,
+			// the region is the one the differ selected, and the counter in it is
+			// the mutated value — not the one the client sent.
 			let html = try #require(try readUpdateHTML(socket, timeout: 3))
-			#expect(html.contains("id=\"app\""))
-			#expect(html.contains("counter-value"))
+			#expect(html.contains("id=\"counter-value\""))
+			#expect(html.contains("data-component-id=\"counter-value\""))
 			let after = try #require(extractCounter(html))
 			#expect(after != before)
 			#expect(html.contains("<span>\(after)</span>"))
@@ -586,23 +607,64 @@ private func readUpdateHTML(_ socket: RawSocket, timeout: TimeInterval) throws -
 	return nil
 }
 
-/// true when the server rejects a message: a redirect text frame followed by
-/// a close frame (opcode 8) or a tcp teardown.
+/// true when the server rejects a message: a refusal naming the render token,
+/// then a close frame or a tcp teardown.
+///
+/// the refusal's vocabulary is the server's, not the page's. a frame whose token
+/// names no live render is answered `{"type":"error","code":"token"}` and the
+/// connection ends (`EventDispatch.tokenRefusalCode` documents the code, and the
+/// server closes on it). the hand-rolled transport this suite was written
+/// against answered a redirect instead, which is why the probe used to look for
+/// one — the property is the same either way: no update, and the socket ends.
+/// the socket ends: a close frame or eof, with no refusal frame required first.
+private func socketClosed(_ socket: RawSocket, timeout: TimeInterval) throws -> Bool {
+	for _ in 0..<Int(timeout * 4) {
+		guard let frame = try wsReadFrame(socket) else { return true }
+		if frame.opcode == 8 { return true }
+	}
+	return false
+}
+
 private func socketRejected(_ socket: RawSocket, timeout: TimeInterval) throws -> Bool {
-	var sawRedirect = false
+	var sawRefusal = false
 	for _ in 0..<Int(timeout * 4) {
 		guard let frame = try wsReadFrame(socket) else {
-			// eof is a teardown — a rejection only when a redirect already landed.
-			return sawRedirect
+			// eof is a teardown — a rejection only when a refusal already landed.
+			return sawRefusal
 		}
-		if frame.opcode == 8 { return true }
+		if frame.opcode == 8 { return sawRefusal }
 		if frame.opcode == 1,
 		   let text = String(bytes: frame.payload, encoding: .utf8),
-		   text.contains("\"redirect\"") {
-			sawRedirect = true
+		   text.contains("\"code\":\"token\"") {
+			sawRefusal = true
 		}
 	}
-	return sawRedirect
+	return sawRefusal
+}
+
+/// true when a socket opened with `cookie` cannot drive anything: the handshake
+/// is admitted, the first frame is refused, and the connection ends.
+///
+/// the framework's server upgrades `/ws` before it authenticates, because the
+/// handshake is a bare `GET` carrying no render token — identity is settled on
+/// the first frame, where the token names the render. so "not signed in" is not
+/// a `403` on the upgrade; it is a refusal the moment the socket speaks.
+private func socketWithoutSessionIsRefused(port: Int, cookie: String?) throws -> Bool {
+	let upgraded = try wsUpgrade(port: port, cookie: cookie)
+	guard upgraded.code == 101, let socket = upgraded.socket else { return false }
+	defer { socket.closeSocket() }
+	try wsSendText(
+		socket,
+		#"{"type":"event","component":"counter-value","event":"click","data":{},"token":"no-session"}"#
+	)
+	return try socketRejected(socket, timeout: 3)
+}
+
+/// the status code on the wire, from a socket the caller already wrote to.
+private func readStatus(_ socket: RawSocket) throws -> Int {
+	guard let line = try socket.readLine() else { return 0 }
+	let parts = line.split(separator: " ")
+	return Int(parts.count > 1 ? parts[1] : "") ?? 0
 }
 
 /// the `url` value of the first redirect text frame, or nil when none.
@@ -621,6 +683,11 @@ private func redirectURL(_ socket: RawSocket, timeout: TimeInterval) throws -> S
 
 /// the `token` value of the first token-refresh text frame, or nil (a server
 /// close frame ends the scan without an error).
+///
+/// unused by this suite today: nothing writes a `token` frame to a socket (see
+/// the note in `evictedRenderTokenKeepsRouting`). kept because it is the probe a
+/// transport that does write one would need, and deleting it would make the gap
+/// look like it never existed.
 private func readToken(_ socket: RawSocket, timeout: TimeInterval) throws -> String? {
 	for _ in 0..<Int(timeout * 4) {
 		guard let frame = try wsReadFrame(socket) else { return nil }

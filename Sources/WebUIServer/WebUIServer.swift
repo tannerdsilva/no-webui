@@ -371,17 +371,33 @@ public actor WebUIServer {
 				try channel.pipeline.syncOperations.addHandler(ServerIdleCloseHandler())
 				try channel.pipeline.syncOperations.addHandler(ServerGateReleaser(gate: runner.gate))
 
+				// the upgrade request belongs to this connection only, so it is
+				// carried here rather than in a table: `shouldUpgrade` sees the
+				// head, the pipeline handler sees the channel, and nothing else
+				// sees either.
+				let upgradeRequest = Mutex<HTTPRequest?>(nil)
 				let upgrader = NIOTypedWebSocketServerUpgrader<ServerUpgradeResult>(
 					shouldUpgrade: { channel, head in
-						let ok = head.method == .GET && head.uri == "/ws"
-						return channel.eventLoop.makeSucceededFuture(ok ? HTTPHeaders() : nil)
+						guard head.method == .GET, head.uri == "/ws" else {
+							return channel.eventLoop.makeSucceededFuture(nil)
+						}
+						// only when something would read it: a config with no
+						// observer has no session to announce, so the unconfigured
+						// path does no extra work and allocates nothing.
+						if cfg.socketObserver != nil, cfg.authorizer != nil {
+							upgradeRequest.withLock { $0 = Runner.upgradeRequest(head) }
+						}
+						return channel.eventLoop.makeSucceededFuture(HTTPHeaders())
 					},
 					upgradePipelineHandler: { channel, _ in
 						channel.eventLoop.makeCompletedFuture {
 							let ws = try NIOAsyncChannel<WebSocketFrame, WebSocketFrame>(
 								wrappingChannelSynchronously: channel
 							)
-							return ServerUpgradeResult.websocket(ws)
+							return ServerUpgradeResult.websocket(
+								ws,
+								request: upgradeRequest.withLock { $0 }
+							)
 						}
 					}
 				)
@@ -530,7 +546,10 @@ private struct LegacyPageResponder: Responder {
 // MARK: - upgrade result
 
 enum ServerUpgradeResult: Sendable {
-	case websocket(NIOAsyncChannel<WebSocketFrame, WebSocketFrame>)
+	/// an upgraded socket, plus the request it upgraded from: the one identity
+	/// a page presents before its first frame, and therefore what the lifecycle
+	/// observer's session is resolved from.
+	case websocket(NIOAsyncChannel<WebSocketFrame, WebSocketFrame>, request: HTTPRequest?)
 	case http(NIOAsyncChannel<HTTPServerRequestPart, HTTPPart<HTTPResponseHead, ByteBuffer>>)
 }
 
@@ -697,7 +716,6 @@ final class Runner: Sendable {
 		let snapshot = RenderSnapshot.derived(fromMarkup: html)
 		let prior = baseline(for: session)
 		let patch = RenderDiffer(previous: prior).patch(snapshot)
-		FileHandle.standardError.write(Data("DEBUGDIFF baseline=\(prior != nil) spans=\(snapshot.spans.count) priorSpans=\(prior?.digest.regions.count ?? -1) removed=\(patch.removed.count) full=\(patch.isFullPage) changed=\(patch.changed.count)\n".utf8))
 		recordBaseline(snapshot, for: session)
 		if !patch.isFullPage {
 			guard !patch.changed.isEmpty else { return nil }
@@ -774,8 +792,8 @@ final class Runner: Sendable {
 	func handle(_ negotiationFuture: EventLoopFuture<ServerUpgradeResult>) async {
 		do {
 			switch try await negotiationFuture.get() {
-			case .websocket(let ws):
-				try await handleWebsocket(ws)
+			case .websocket(let ws, let request):
+				try await handleWebsocket(ws, request: request)
 			case .http(let http):
 				try await handleHTTP(http)
 			}
@@ -786,7 +804,45 @@ final class Runner: Sendable {
 
 	// MARK: websocket
 
-	private func handleWebsocket(_ channel: NIOAsyncChannel<WebSocketFrame, WebSocketFrame>) async throws {
+	/// the typed request a socket upgrade presents.
+	///
+	/// only the parts an authorizer can read are filled: the upgrade is a bare
+	/// `GET /ws`, so there is no body and no render token — the identity is in
+	/// the headers (a cookie, an authorization header), and this module does
+	/// not parse them. a host's authorizer reads what it put there.
+	static func upgradeRequest(_ head: HTTPRequestHead) -> HTTPRequest {
+		let uri = head.uri
+		let path = String(uri.prefix(while: { $0 != "?" }))
+		let queryText = uri.dropFirst(path.count).dropFirst()
+		return HTTPRequest(
+			method: .get,
+			path: path,
+			query: parseQuery(String(queryText)),
+			headers: head.headers
+		)
+	}
+
+	/// serve one upgraded socket.
+	///
+	/// the lifecycle observer is told exactly once at each end: `socketOpened`
+	/// before a frame is read, `socketClosed` after the last one — in that
+	/// order, on every exit path, and never at all for a connection that did
+	/// not upgrade (this function is only reached from a `.websocket` result).
+	private func handleWebsocket(
+		_ channel: NIOAsyncChannel<WebSocketFrame, WebSocketFrame>,
+		request: HTTPRequest?
+	) async throws {
+		// the socket's session, resolved before it speaks: this is the same
+		// authorizer the page route used, asked about the same request — the
+		// upgrade — so a host resolves a user once and its pages and sockets
+		// agree by construction.
+		let principal: SessionKey?
+		if let request, let authorizer = config.authorizer {
+			principal = await authorizer.authorize(request)
+		} else {
+			principal = nil
+		}
+		let observer = config.socketObserver
 		try await channel.executeThenClose { inbound, outbound in
 			// a connected page is a push target for the life of the socket.
 			let connectionID = sinks.register(outbound)
@@ -794,36 +850,63 @@ final class Runner: Sendable {
 				sinks.unregister(connectionID)
 				releaseConnection(connectionID)
 			}
-			try await withThrowingTaskGroup(of: Void.self) { tg in
-				tg.addTask {
-					for try await frame in inbound {
-						switch frame.opcode {
-						case .text:
-							let payload = String(buffer: frame.unmaskedData)
-							// a frame the server refuses (an unknown render token)
-							// ends the connection: that page can no longer be
-							// trusted to drive this router.
-							let keepGoing = await self.dispatch(
-								eventText: payload, outbound: outbound, connection: connectionID
-							)
-							if !keepGoing { return }
-						case .ping:
-							let buf = ByteBuffer()
-							let pong = WebSocketFrame(fin: true, opcode: .pong, data: buf)
-							try await outbound.write(pong)
-						case .connectionClose:
-							var data = frame.unmaskedData
-							let code = data.readSlice(length: 2) ?? ByteBuffer()
-							let close = WebSocketFrame(fin: true, opcode: .connectionClose, data: code)
-							try await outbound.write(close)
-							return
-						default:
-							break
+			// once, before a frame is read: the socket is up and the socket
+			// has an owner. nothing is announced for a socket that never
+			// reached this point, which is exactly the connection that failed
+			// before upgrading.
+			if let principal, let observer {
+				await observer.socketOpened(
+					session: principal,
+					connection: UInt64(connectionID),
+					close: { channel.channel.close(promise: nil) }
+				)
+			}
+			do {
+				try await withThrowingTaskGroup(of: Void.self) { tg in
+					tg.addTask {
+						for try await frame in inbound {
+							switch frame.opcode {
+							case .text:
+								let payload = String(buffer: frame.unmaskedData)
+								// a frame the server refuses (an unknown render token)
+								// ends the connection: that page can no longer be
+								// trusted to drive this router.
+								let keepGoing = await self.dispatch(
+									eventText: payload,
+									outbound: outbound,
+									connection: connectionID,
+									principal: principal
+								)
+								if !keepGoing { return }
+							case .ping:
+								let buf = ByteBuffer()
+								let pong = WebSocketFrame(fin: true, opcode: .pong, data: buf)
+								try await outbound.write(pong)
+							case .connectionClose:
+								var data = frame.unmaskedData
+								let code = data.readSlice(length: 2) ?? ByteBuffer()
+								let close = WebSocketFrame(fin: true, opcode: .connectionClose, data: code)
+								try await outbound.write(close)
+								return
+							default:
+								break
+							}
 						}
 					}
+					try await tg.next()
+					tg.cancelAll()
 				}
-				try await tg.next()
-				tg.cancelAll()
+			} catch {
+				// the socket ended badly, and it still ended: the owner is told
+				// exactly once on this path too, before the error leaves.
+				if let principal, let observer {
+					await observer.socketClosed(session: principal, connection: UInt64(connectionID))
+				}
+				throw error
+			}
+			// once, after the last frame: the session has no socket again.
+			if let principal, let observer {
+				await observer.socketClosed(session: principal, connection: UInt64(connectionID))
 			}
 		}
 	}
@@ -831,7 +914,8 @@ final class Runner: Sendable {
 	private func dispatch(
 		eventText payload: String,
 		outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>,
-		connection: Int
+		connection: Int,
+		principal: SessionKey?
 	) async -> Bool {
 		do {
 			let msg = try WSIncoming(jsonText: payload)
@@ -879,7 +963,12 @@ final class Runner: Sendable {
 					)
 					return false
 				}
-				await answerNavigate(url: url, session: session, outbound: outbound)
+				await answerNavigate(
+					url: url,
+					session: session,
+					principal: principal,
+					outbound: outbound
+				)
 			}
 		} catch {
 			let err = WSOutgoing.error(code: "decode", message: "bad event: \(error)")
@@ -928,16 +1017,22 @@ final class Runner: Sendable {
 	private func answerNavigate(
 		url: String,
 		session: RenderSessionID,
+		principal: SessionKey?,
 		outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>
 	) async {
 		// the engine reports `location.pathname + location.search`; derive
 		// the routed path and query the same way an http request is derived.
 		let pathPart = navigatePath(url)
+		// the principal the socket was authorized with at upgrade, carried
+		// onto the re-render: a navigate frame has no headers of its own, and
+		// a host that renders per-identity content needs the identity the
+		// socket already proved rather than a second, weaker resolution.
 		let request = HTTPRequest(
 			method: .get,
 			path: pathPart,
 			query: parseQuery(navigateQuery(url)),
-			renderToken: RenderToken("")
+			renderToken: RenderToken(""),
+			principal: principal
 		)
 		// the re-render takes the same path a fresh page request takes: a
 		// session pass, the render context established for its duration — but
@@ -1276,7 +1371,7 @@ final class Runner: Sendable {
 			}
 		}
 
-		let request = HTTPRequest(
+		var request = HTTPRequest(
 			method: method,
 			path: path,
 			query: parseQuery(String(queryText)),
@@ -1284,6 +1379,15 @@ final class Runner: Sendable {
 			body: requestBody,
 			renderToken: token
 		)
+		// the authorizer is asked here — once, before the router sees the
+		// request — and its answer is stamped on the request rather than kept
+		// by the server. that is the whole seam: a responder reads identity
+		// off `principal`, and this module never learns what a session is
+		// made of. no authorizer leaves `principal` nil, which is the same
+		// request every host handed the server before the seam existed.
+		if let authorizer = config.authorizer {
+			request.principal = await authorizer.authorize(request)
+		}
 		let response: HTTPResponse
 		do {
 			response = try await RenderContext.$current.withValue(

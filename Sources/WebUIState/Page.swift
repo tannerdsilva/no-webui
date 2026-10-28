@@ -50,32 +50,54 @@ public struct Mutation<State: Sendable>: Sendable {
 
 /// one render of a page: the bytes, the revision they were rendered from, and
 /// whether a commit raced the pass.
-public struct PageRender: Sendable {
+///
+/// `package`, not `public`: nothing outside this module reads it. the wire door
+/// a host drives is ``PagePatch`` — the loop's whole-page render is the settling
+/// step that produces it, and the package door keeps a type with no consumer off
+/// the frozen surface.
+package struct PageRender: Sendable {
 	/// the page's html for this revision.
-	public let html: String
+	package let html: String
 	/// the revision the bytes were rendered from.
-	public let revision: UInt64
+	package let revision: UInt64
 	/// how many passes the loop spent settling; 1 when nothing raced.
-	public let passes: Int
+	package let passes: Int
 	/// false when `maxRenderPasses` ran out with the store still moving — the
 	/// bytes are honest about a revision, but a newer one already exists.
-	public let settled: Bool
+	package let settled: Bool
 	/// per-region hashes of this render, for the next patch's comparison.
-	public let digest: RenderDigest
+	package let digest: RenderDigest
 }
 
 /// the bytes that moved since a page's previous render: at most one per call.
 public struct PagePatch: Sendable {
 	/// the page's html at ``revision``.
+	///
+	/// always the whole page, so a caller whose change ``fragments`` cannot
+	/// express (a first render, a value outside every control) has the bytes it
+	/// needs without a second render.
 	public let html: String
 	public let revision: UInt64
 	/// region ids whose bytes moved, sorted by id.
 	///
-	/// design E's differ turns these into wire fragments in stage 2; stage 1's
-	/// loop only names them, because slicing the changed regions' bytes out of a
-	/// live buffer is the differ's job and not the state layer's.
+	/// the loop's own mark, not the scan: this is the digest the render buffer
+	/// recorded, which is one region for the whole body. it stays because a
+	/// caller that predates ``fragments`` reads it; the per-control ids that can
+	/// actually be patched are ``fragments``'.
 	public let changedRegions: [RegionID]
-	/// true for a page's first render: there is no previous digest to compare.
+	/// the per-control bytes that moved, in byte order.
+	///
+	/// one entry per element carrying `data-component-id` whose bytes moved, and
+	/// nothing for a change the wire cannot express: a first render, a value
+	/// outside every control (the differ's `residue`), or a control that
+	/// appeared or vanished. ``html`` is the answer in every one of those cases,
+	/// which is why it is never absent.
+	public let fragments: [FragmentUpdate]
+	/// true for a page's first render: there is no previous render to compare.
+	///
+	/// it is not the fragment verdict. ``fragments`` is empty whenever the whole
+	/// page must be sent, and ``html`` always is that page — a caller that only
+	/// needs to know whether it can patch reads `fragments.isEmpty`.
 	public let isFullPage: Bool
 	/// the passes the loop spent settling this patch.
 	public let passes: Int
@@ -105,6 +127,11 @@ public final class StatefulPageSession<Page: StatefulPage>: Sendable {
 
 	private struct Loop: Sendable {
 		var previous: PageRender?
+		/// what the next patch's fragment diff compares against: one hash per
+		/// region plus the residue hash. never the page's bytes — a session's
+		/// diff state is 8 bytes per region, which is the whole reason a patch
+		/// can be built without keeping the previous page.
+		var baseline: RenderBaseline?
 		/// true while a pass is settling on some thread. a second caller
 		/// coalesces into that pass instead of interlacing with it: two passes
 		/// over one session would mint the same component ids twice and register
@@ -114,11 +141,12 @@ public final class StatefulPageSession<Page: StatefulPage>: Sendable {
 
 	private let loop = Mutex(Loop())
 
-	/// the region stage 1 wraps the whole body in.
+	/// the coarse mark the render buffer records around the whole body.
 	///
-	/// design E's finer per-view regions replace this mark in stage 2; until
-	/// then a page's patch has one region and the loop's claim is the honest one:
-	/// the bytes changed, here is the new html.
+	/// it is not the wire's region set: ``patch(in:)`` derives one region per
+	/// `data-component-id` element from the finished bytes. this mark is what
+	/// ``PagePatch/changedRegions`` reports, kept for a caller written against
+	/// the digest the buffer records.
 	private static var bodyRegion: RegionID { RegionID(rawValue: "body") }
 
 	public init(
@@ -137,7 +165,7 @@ public final class StatefulPageSession<Page: StatefulPage>: Sendable {
 	}
 
 	/// the most recent render this loop produced.
-	public var lastRender: PageRender? {
+	package var lastRender: PageRender? {
 		loop.withLock { $0.previous }
 	}
 
@@ -147,12 +175,21 @@ public final class StatefulPageSession<Page: StatefulPage>: Sendable {
 	/// coalescing, not a failure: the pass in flight re-reads the revision after
 	/// rendering (the settle loop), so the bytes it produces already include this
 	/// caller's commit and there is nothing for a second pass to add.
+	///
+	/// `package`: the consumer-facing door is ``patch(in:)``, which carries the
+	/// same bytes plus the fragments. this one exists for the settling step and
+	/// for a caller inside the package that only wants the render.
 	@discardableResult
-	public func render(in context: RenderContext) -> PageRender? {
+	package func render(in context: RenderContext) -> PageRender? {
 		guard claimRender() else { return nil }
 		let rendered = renderSettled(in: context)
+		// the same scan a patch takes, so "the last render" means one thing
+		// whichever door produced it: a render followed by a patch diffs against
+		// this render, not against nothing.
+		let baseline = RenderSnapshot.derived(fromMarkup: rendered.html).baseline
 		loop.withLock { state in
 			state.previous = rendered
+			state.baseline = baseline
 			state.rendering = false
 		}
 		return rendered
@@ -161,21 +198,28 @@ public final class StatefulPageSession<Page: StatefulPage>: Sendable {
 	/// render the page and describe what moved since the previous render.
 	///
 	/// one call, one patch: the loop renders at most `maxRenderPasses` times to
-	/// settle, and the diff is a digest comparison over the regions the pass
-	/// declared. nil when another pass is already in flight — see ``render(in:)``.
+	/// settle, then derives the page's regions from the finished bytes and diffs
+	/// them against the baseline this session keeps. the regions are the elements
+	/// carrying `data-component-id` — the same scan the server runs — so a
+	/// control's change ships as that control's bytes and nothing else. nil when
+	/// another pass is already in flight — see ``render(in:)``.
 	@discardableResult
 	public func patch(in context: RenderContext) -> PagePatch? {
 		guard claimRender() else { return nil }
-		let before = loop.withLock { $0.previous }
+		let (before, prior) = loop.withLock { ($0.previous, $0.baseline) }
 		let rendered = renderSettled(in: context)
+		let snapshot = RenderSnapshot.derived(fromMarkup: rendered.html)
+		let moved = RenderDiffer(previous: prior).patch(snapshot)
 		loop.withLock { state in
 			state.previous = rendered
+			state.baseline = snapshot.baseline
 			state.rendering = false
 		}
 		return PagePatch(
 			html: rendered.html,
 			revision: rendered.revision,
 			changedRegions: Self.changed(from: before?.digest, to: rendered.digest),
+			fragments: moved.changed,
 			isFullPage: before == nil,
 			passes: rendered.passes
 		)

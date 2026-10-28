@@ -74,7 +74,7 @@ extension PageRequest {
 	/// this pass's router and session, and hand back the router so the catalog
 	/// can bind it. a page author writes the body and nothing else.
 	public func render<D: BufferRendering>(
-		on router: EventRouter = EventRouter(),
+		on router: EventRouter,
 		_ body: () throws -> D
 	) rethrows -> RenderedPage {
 		router.begin(renderSession)

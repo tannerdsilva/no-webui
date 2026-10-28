@@ -836,7 +836,7 @@ window.WebUIEngine = (function () {
         var f = fragments[i];
         if (f && (f.op === 'append' || f.op === 'text')) return false;
         if (f && f.transition === false) return false;
-        var el = f && f.id ? document.getElementById(f.id) : null;
+        var el = f && f.id ? regionElement(f.id) : null;
         if (el && el.closest && el.closest('[data-webui-transition="off"]')) return false;
       }
       return true;
@@ -903,14 +903,14 @@ window.WebUIEngine = (function () {
           continue;
         }
         replaceElement(f.id, f.html);
-        var node = document.getElementById(f.id);
+        var node = regionElement(f.id);
         if (node) { changed.push(node); }
       }
       if (changed.length) { refreshIslandRegions(changed); runHooks(afterPatchHooks, changed); }
     }
 
     function setTextContent(id, value) {
-      var el = document.getElementById(id);
+      var el = regionElement(id);
       if (!el) { log.warn('Element not found: #' + id); return; }
       if (el.textContent === value) { return; }
       if (el.childNodes.length === 1 && el.firstChild.nodeType === 3) {
@@ -921,7 +921,7 @@ window.WebUIEngine = (function () {
     }
 
     function appendChildFragment(id, html, before) {
-      var container = document.getElementById(id);
+      var container = regionElement(id);
       if (!container) { log.warn('Element not found: #' + id); return null; }
       var fragment = sanitizeFragment(html, container);
       var first = fragment.firstChild;
@@ -931,7 +931,7 @@ window.WebUIEngine = (function () {
       }
       var anchor = null;
       if (before) {
-        anchor = document.getElementById(before);
+        anchor = regionElement(before);
         if (anchor && !container.contains(anchor)) { anchor = null; }
         if (!anchor) { log.warn('append anchor #' + before + ' not found in #' + id + ' — appended at the end'); }
       }
@@ -941,7 +941,7 @@ window.WebUIEngine = (function () {
     }
 
     function armPending(id) {
-      var el = document.getElementById(id);
+      var el = regionElement(id);
       if (!el) return;
       clearPending(id);
       pending[id] = { html: el.outerHTML, timer: null };
@@ -997,8 +997,16 @@ window.WebUIEngine = (function () {
       return frag;
     }
 
-    function replaceElement(id, html) {
+    function regionElement(id) {
+      if (!id) { return null; }
       var el = document.getElementById(id);
+      if (el) { return el; }
+      var escaped = String(id).replace(/["\\]/g, '\\$&');
+      return document.querySelector('[data-component-id="' + escaped + '"]');
+    }
+
+    function replaceElement(id, html) {
+      var el = regionElement(id);
       if (!el) {
         log.warn('Element not found: #' + id);
         return;

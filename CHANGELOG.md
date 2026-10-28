@@ -22,19 +22,43 @@ all notable changes to this project are documented here.
   refreshes in place), `RevocationBus` (`SocketRevocationBus`: logout closes
   the live socket), `IdentityDirectory`, `SessionRevocation`, and the
   `AuthenticatedHost` façade (`Responder` + `dispatch` + `signOut`).
+- **the hosting `Service`, and the last seams between the halves.** the
+  composition is one type now, so an app hosts it instead of rebuilding it:
+  `AuthenticatedHostService` (a `Service` owning `WebUIServer` + the four ports
+  + the state layer + an `IdleSessionReaper` in one `ServiceGroup`),
+  `HostAuthorizer` and `SessionLivenessObserver` (the two server seams),
+  `SessionPages` (one `Store`, one render loop and therefore one
+  `RenderBaseline` per session — a loop rebuilt per pass can never patch),
+  `PageActions` / `PageScope` (a control's handler commits *and* returns the
+  bytes the mutation moved), `PagePatch.fragments` (per-`data-component-id`
+  wire fragments, so a mutation ships the control and not the page), and
+  `IdleSessionReaper` / `LifecycleClock` (a clock-injected reap on the store
+  registry). `WebUIServer` grows `RequestAuthorizer` and
+  `SocketLifecycleObserver` and consults both.
 
 ### changed
 
-- **`WebUIAuthExample` rewritten onto the two new products: 1,183 → 741
-  lines** (432 app + 309 listener; the listener is the seam below). the hand-rolled `RouterRegistry`, `AuthConnectionRegistry`,
-  `SessionStates`, `AuthDemoState` and the `counterValueHTML`-style string
-  fragments are deleted; the dashboard is a `StatefulPage` whose controls are
-  mutations, sessions route through `RouterTable`, logout tears down through
-  `SocketRevocationBus`, and per-session state lives in `SessionStores`.
-  the remaining listener is the seam `WebUIServer` does not expose (see
-  `Documentation/ARCHITECTURE.md`, "what these two do not yet carry").
-- `swift test`: **1,702 tests in 9 runs** (was 1,406 in the docs, 1,571 in
-  `AGENTS.md`); frozen surface re-measured at **5,040 symbols across 11
+- **`WebUIAuthExample` is the composition, not the plumbing: 1,183 → 741 → 315
+  lines.** the last 309 lines of hand-rolled NIO transport are gone — no
+  `ServerBootstrap`, no upgrade pipeline, no hand-parsed `Cookie` header, no
+  hand-written `Set-Cookie`. the app is one `StatefulPage` (the dashboard) plus
+  a runtime-free login screen, an `AuthenticatedHostService`, and its own login
+  ceremony: 40 lines login screen, 60 dashboard, 105 composition, 77 ceremony,
+  22 entry point. a click on the dashboard's counter ships `counter-value`'s own
+  bytes rather than the page, and the value lives inside the
+  `data-component-id` element precisely so the differ has a control to ship.
+  still application code, and named as such in `Documentation/API.md` and
+  `ARCHITECTURE.md`: the login flow (no auth flow in `WebUIHost`), the extra
+  route table (no extra-route door on `AuthenticatedHostService`), the
+  principal-derived initial state (a store is seeded from `initialState()`,
+  which sees no request), and the throttle key (`HTTPRequest` carries no
+  transport peer). the ceremony suite follows the framework's documented wire
+  vocabulary where the old transport's is gone — a `token` error frame instead
+  of a redirect, a refused first frame instead of a `403` handshake, a refused
+  *next* frame instead of a synchronous logout close, a `503` capacity answer
+  instead of a silent accept-time close — and names each at its assertion.
+- `swift test`: **1,774 tests in 9 runs** (was 1,702 in this entry, 1,571 in
+  `AGENTS.md`); frozen surface re-measured at **5,118 symbols across 11
   modules**. the showcase byte pin is unchanged at 168,671 bytes.
 
 ## [2.0.0] — the typed web (2026-10-10)

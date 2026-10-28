@@ -46,7 +46,7 @@ struct CatalogTests {
 		let catalog = AuthenticatedCatalog(
 			pages: [
 				Page(pattern: "/admin", requiresRole: Role.admin) { request in
-					request.render { Text("admin") }
+					request.render(on: EventRouter()) { Text("admin") }
 				}
 			],
 			table: RouterTable()

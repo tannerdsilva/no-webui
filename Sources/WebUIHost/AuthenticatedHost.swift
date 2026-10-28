@@ -1,6 +1,7 @@
 import WebUI
 import WebUIServer
 import WebUIAuth
+import WebUIState
 
 // MARK: - EventDispatch
 
@@ -58,6 +59,14 @@ public struct AuthenticatedHost: Sendable, Responder {
 	/// bus closes sockets and this ends the session record; a logout must do
 	/// both and neither can do the other's job.
 	public let sessions: any SessionRevocation
+	/// the per-session state layer: one store per session, one render loop per
+	/// session, and the router the passes register into.
+	///
+	/// the host owns it because "who is asking" and "which state is theirs" are
+	/// one question at this seam: a page table can only be consulted with a
+	/// principal, and the store a pass renders is resolved from that same
+	/// principal's session. two hosts that shared a catalog share no state.
+	public let pages: SessionPages
 	/// where a signed-out or unauthenticated visitor is sent.
 	public let loginPath: String
 	public let cookieName: String
@@ -74,7 +83,8 @@ public struct AuthenticatedHost: Sendable, Responder {
 		sessions: any SessionRevocation,
 		loginPath: String = "/login",
 		cookieName: String = CookieSessionResolver.defaultCookieName,
-		secureCookies: Bool = true
+		secureCookies: Bool = true,
+		pages: SessionPages
 	) {
 		self.resolver = resolver
 		self.catalog = catalog
@@ -84,7 +94,15 @@ public struct AuthenticatedHost: Sendable, Responder {
 		self.loginPath = loginPath
 		self.cookieName = cookieName
 		self.secureCookies = secureCookies
+		// the page layer is handed in, never invented here: a host that built
+		// its own would stand on a router the server does not dispatch through,
+		// and every control it rendered would be silently unreachable. the
+		// caller owns the composition, so the caller supplies it.
+		self.pages = pages
 	}
+
+	/// the registry every session's store lives in.
+	public var stores: SessionStores { pages.stores }
 
 	// MARK: http
 
@@ -148,6 +166,22 @@ public struct AuthenticatedHost: Sendable, Responder {
 		)
 	}
 
+	// MARK: state
+
+	/// the store `session` holds, created from `initial` when it holds none.
+	///
+	/// the door a caller reaches a session's state through without rendering:
+	/// a background job, a test, a second route. it reads the same registry the
+	/// render path reads, so a commit here is what the session's next pass
+	/// renders — and it drops any store the insert evicted, handler tables
+	/// included, exactly as the render path does.
+	public func store<State: Sendable>(
+		for session: SessionKey,
+		initial: @Sendable () -> State
+	) async throws -> Store<State> {
+		try await pages.store(for: session, initial: initial)
+	}
+
 	// MARK: logout
 
 	/// the session cookie that plants `token` — the one thing a login route needs
@@ -161,18 +195,24 @@ public struct AuthenticatedHost: Sendable, Responder {
 		)
 	}
 
-	/// end `principal`'s session: sockets, handler table, then the store record.
+	/// end `principal`'s session: sockets, handler table, page state, then the
+	/// store record.
 	///
 	/// the order is the guarantee. sockets first so nothing can dispatch once
 	/// revocation starts; the router table second so the handlers those sockets
-	/// would have reached are gone (a frame in flight resolves to nothing);
-	/// the store last, because it is the record everyone else reads. reverse any
-	/// two and there is a window where a live socket resolves against a session
-	/// the store has already forgotten.
+	/// would have reached are gone (a frame in flight resolves to nothing); the
+	/// page state third, because a reaped store whose session still routes is a
+	/// leak — the handlers hold the store's binding, so dropping the registry's
+	/// reference alone would leave the page dispatching into state nothing can
+	/// reach; the session record last, because it is the record everyone else
+	/// reads. reverse any two and there is a window where a live socket
+	/// resolves against a session the store has already forgotten.
 	public func signOut(_ principal: AuthContext) async throws -> HTTPResponse {
 		let key = SessionKey(hash: principal.session.tokenHash)
 		await revocation.revoke(session: key)
 		await routers.drop(session: key)
+		pages.forget(key)
+		stores.remove(key)
 		try await sessions.endSession(tokenHash: key.hash)
 		return signedOutResponse()
 	}

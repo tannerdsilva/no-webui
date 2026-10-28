@@ -71,6 +71,26 @@ public struct WebUIServerConfig: Sendable {
 	/// names the limit. default 64.
 	public var maxMultipartParts: Int
 
+	/// decides which session a request belongs to (see ``RequestAuthorizer``).
+	///
+	/// `nil` — the default — is "no authorizer": the server mints a render
+	/// session per request exactly as it did before this seam existed, byte for
+	/// byte. a host supplies one to bind a request to an already-authenticated
+	/// session; composing a `Router` is the other, unchanged door.
+	public var authorizer: (any RequestAuthorizer)?
+
+	/// told when a page's socket opens and closes (see
+	/// ``SocketLifecycleObserver``).
+	///
+	/// `nil` — the default — is "no observer", and the server's socket handling
+	/// is unchanged.
+	///
+	/// the observer's vocabulary is a `SessionKey`, so it is only told about a
+	/// socket whose session the ``authorizer`` resolved: the upgrade request is
+	/// the only identity a page presents before its first frame. a config with
+	/// an observer and no authorizer announces nothing.
+	public var socketObserver: (any SocketLifecycleObserver)?
+
 	public init(
 		host: String = "0.0.0.0",
 		port: Int = 9090,
@@ -86,7 +106,9 @@ public struct WebUIServerConfig: Sendable {
 		handlerFailurePolicy: HandlerFailurePolicy = .notifyClient,
 		onRenderFailure: (@Sendable (any Error) -> String)? = nil,
 		maxBodyBytes: Int = 1 << 20,
-		maxMultipartParts: Int = 64
+		maxMultipartParts: Int = 64,
+		authorizer: (any RequestAuthorizer)? = nil,
+		socketObserver: (any SocketLifecycleObserver)? = nil
 	) {
 		self.host = host
 		self.port = port
@@ -103,5 +125,7 @@ public struct WebUIServerConfig: Sendable {
 		self.onRenderFailure = onRenderFailure
 		self.maxBodyBytes = maxBodyBytes
 		self.maxMultipartParts = maxMultipartParts
+		self.authorizer = authorizer
+		self.socketObserver = socketObserver
 	}
 }

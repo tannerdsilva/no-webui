@@ -743,10 +743,11 @@ mutates that state, and the host re-renders — no handler authors a fragment.
 | `StateStore<State>` | the port: `read()` / `mutate(_:)` / `revision`. synchronous by contract |
 | `StatefulPage` | `associatedtype State: Sendable`, `initialState()`, `body(_ state: State) -> Body`. the body receives the only state it may see |
 | `StatefulPageSession<Page>` | the render loop. `render(in:)` and `patch(in:)` take a `RenderContext` and return `PageRender` / `PagePatch`. `patch` renders, settles against the store's revision (`maxRenderPasses`, default 3), and diffs the region digest. it begins the router session itself — never wrap it in `EventRouter.begin` |
-| `PagePatch` | `html`, `revision`, `changedRegions: [RegionID]`, `isFullPage`, `passes`. the whole page at that revision (finer slicing is the differ's job) |
+| `PagePatch` | `html`, `revision`, `changedRegions: [RegionID]`, `fragments: [FragmentUpdate]`, `isFullPage`, `passes`. `html` is always the whole page at that revision; `fragments` is the per-control bytes that moved — one entry per `data-component-id` element whose bytes changed, and empty when the wire cannot express the change (a first render, a value outside every control, a control that appeared or vanished). the fragment verdict is `fragments.isEmpty`, not `isFullPage` |
 | `SessionStores` | one `Store` per `(page, session)`. `resolve(for:initial:)` returns the store plus the idle sessions the insert reaped (callers end those router sessions); `markLive` / `markClosed` / `isLive`; eviction is idle-only, so a live page is never reaped |
 | `StateBinding<State>` | the typed door a render hands its controls: `revision` + `mutate(_:)` and nothing else — a binding has no html door |
 | `StateRenderScope` | `@TaskLocal` binding the current render pass. `StatefulPage.binding` reads it; nil outside a state-bound render |
+| `PageActions<State>` / `PageScope` | the *hosted* door: `handler(_:)` returns an `EventHandler` that commits and then renders the same session loop, so the answer to a click is the patch the mutation caused. `PageScope` is the task-local the pass installs; `StatefulPage.actions` reads it, and it is nil outside a render the host drove — which is what lets a page that also renders standalone degrade visibly instead of shipping dead controls |
 | `.onClick(binding)` `.onSubmit(binding)` `.onInput(binding)` `.onChange(binding)` `.on(_:binding)` | handler sugars: `(StateBinding<State>) -> Void`. the handler mutates and returns nothing. the markup is byte-identical to `.onClick(perform:)` — only the handler body differs |
 | `Mutation<State>` | a described mutation (`apply: (inout State) -> Void`), for a caller that passes intent instead of a closure |
 | `StateObserver` / `PageSubscription` | `stateDidChange(revision:session:)` after a commit, and the subscription that turns it into at most one `PagePatch`, dropping out-of-order revisions |
@@ -768,12 +769,14 @@ not the transport's job.
 | `RevocationBus` | `track(_:session:)` / `untrack(_:)` / `revoke(session:)` over `ConnectionToken` (an id plus a close action, so the bus never names a transport) |
 | `SessionRevocation` | `endSession(tokenHash:)` — the store half of logout, paired with the bus |
 | `IdentityDirectory` | `identity(for:)` — the roles a session's `identityID` carries; `DictionaryIdentityDirectory` is the fixed table |
+| `RequestAuthorizer` | (`WebUIServer`) `authorize(_ request: HTTPRequest) async -> SessionKey?`. the server asks it about the page route and about the `/ws` upgrade, and stamps the answer on `HTTPRequest.principal`. non-throwing by design: a resolver failure is "no session", never a dead socket. `HostAuthorizer` is the conformance over any `PrincipalResolver` |
+| `SocketLifecycleObserver` | (`WebUIServer`) `socketOpened(session:)` / `socketClosed(session:)`, once at each end on every exit path, and never at all for a connection that failed to upgrade. `SessionLivenessObserver` is the conformance that keeps `SessionStores`' liveness table honest |
 
 ### Types
 
 | Type | Description |
 |---|---|
-| `AuthenticatedHost` | `struct` façade over resolver + catalog + table + revocation + sessions. a `Responder` (so it drops into a `Router` route); `dispatch(_:session:renderToken:) -> EventDispatch`; `signOut(_:)` / `signOut(for:)`; `sessionCookie(token:maxAge:)`. `secureCookies` is opt-in `false` for a loopback demo |
+| `AuthenticatedHost` | `struct` façade over resolver + catalog + table + revocation + sessions + the per-session state layer (`pages`, and `stores` as its registry). a `Responder` (so it drops into a `Router` route); `dispatch(_:session:renderToken:) -> EventDispatch`; `store(for:initial:)`; `signOut(_:)` / `signOut(for:)`; `sessionCookie(token:maxAge:)`. `secureCookies` is opt-in `false` for a loopback demo |
 | `EventDispatch` | `outcome: HandlerOutcome` + `refreshedToken: RenderKey?`. `isRefused` is the `.fail(code: "token")` case — the transport closes the socket on it |
 | `CookieSessionResolver` | `PrincipalResolver` + `SessionRevocation`: cookie (base64url, 32 bytes) → `SessionToken.hash` → store → `AuthContext`. also `sessionCookie(...)` / `clearingCookie(...)` |
 | `AuthenticatedCatalog` | `[Page]` + `loginPath` + the table every render binds into. matching is `PathPattern` specificity; an anonymous request for a known page gets a `303` to the login path |
@@ -784,48 +787,78 @@ not the transport's job.
 | `ConnectionToken` | `id` + `close: @Sendable () -> Void`; `next(close:)` draws a process-unique id |
 | `SessionKey` / `RenderKey` | the two routing keys (in `WebUICore`): a session's token hash and one render token |
 | `SessionCookie` | `typealias` for `HTTPCookie` |
+| `AuthenticatedHostService` | the whole product as a `Service`: the server, the host's four ports, the per-session state layer and an `IdleSessionReaper` in one `ServiceGroup`, started and stopped together. the primary init takes the ports (`resolver:routers:revocation:sessions:stores:loginPath:cookieName:secureCookies:config:shutdownGrace:logger:routes:`) and builds the host, the catalog and the server — `routes` receives the `SessionPages` so a page value is never built before the store it renders is reachable — and wires `HostAuthorizer` + `SessionLivenessObserver` into the server config. `init(host:server:config:)` hosts a composition assembled elsewhere, which is the door an app needs when it serves routes of its own (a login form) beside the host's pages |
+| `SessionPages` | the per-session render table: one `Store` per session (via `SessionStores`), one `HostedPage` (loop, and therefore the `RenderBaseline`) per session and page, and the `EventRouter` every pass registers into. `page(_:at:title:requiresRole:document:)` declares a page; `render(_:for:document:)` renders the session's own store; `store(for:initial:)` is the door a test or a background job reaches a session's state through. the server must be handed `events` (`WebUIServer.init(router:eventRouter:…)`), or a rendered page's controls are unreachable from its socket |
+| `IdleSessionReaper` / `LifecycleClock` | a `Service` that ticks `SessionStores.reapIdle()` and drops each reaped session's routers. the interval is a dependency and the *sleeping* is one (`LifecycleClock`, production conformer `ContinuousLifecycleClock`), so a test drives the same loop with no real time. cleanup is the last thing `run()` does |
 
 ## WebUIAuthExample
 
 a login-gated interactive demo on :9091 (sign in with `admin` / `password`),
-built on `WebUIHost` + `WebUIState`. it is the framework's worked case for
-multi-tenancy: **741 lines**, down from 1,183. of those, 432 are the app (page,
-login page, session scope, composition, ceremony) and 309 are the listener —
-the part `WebUIServer` cannot host yet (`ARCHITECTURE.md`, "what these two do
-not yet carry").
+built on `WebUIHost` + `WebUIState` + `WebUIServer`. it is the framework's worked
+case for **the composition**: an authenticated, multi-tenant, stateful app is a
+`StatefulPage` per screen plus one `AuthenticatedHostService`, and the app owns
+its login ceremony and nothing else. **315 lines**, down from 741 — and the 309
+lines of hand-rolled NIO transport the 741 still carried are gone, along with
+the hand-rolled cookie parsing and `Set-Cookie` writing.
+
+the file's five sections, measured:
+
+| section | lines | what it is |
+|---|---|---|
+| the login screen | 40 | a scoped `.login*` stylesheet and the runtime-free sign-in document |
+| the dashboard | 60 | one `StatefulPage`: `State` + `body(_:)`, every control a `PageActions` handler |
+| the app | 105 | the composition — ports, the service, the route table, the page declaration, the document |
+| ceremony | 77 | login CSRF mint/reserve/consume, two throttle budgets, one Argon2id verify, logout |
+| entry point | 22 | `@main`, the kdf pool, the three flags |
 
 demonstrates: a runtime-free login page (native POST, synchronizer CSRF,
 hardened CSP), single-use login CSRF tokens with a per-issuer outstanding
-budget, per-IP + per-account throttles, a global Argon2id concurrency cap on a
-dedicated `NIOThreadPool`, dummy-hash equalization, `SessionToken` + in-memory
-store + cookie issuance, `CookieSessionResolver`, `AuthenticatedCatalog` with
-one authenticated page, `RouterTable` (per-render token, forward chain, in-place
-refresh), `SocketRevocationBus` (logout closes the live socket), `SessionStores`
-(one `Dashboard.State` per session, idle-only eviction), a `StatefulPage`
-dashboard whose controls are mutations (counter, progress) rendered through
-`StatefulPageSession.patch`, a session-gated same-origin WebSocket upgrade
-(`403` otherwise), an accept-time connection gate (`--max-connections`), and
-`Cache-Control: no-store` + `nosniff` + `X-Frame-Options` on every response.
+budget, per-account submit + global mint throttles, a global Argon2id
+concurrency cap on a dedicated `NIOThreadPool`, `SessionToken` + in-memory store
++ cookie issuance, `CookieSessionResolver`, `AuthenticatedCatalog` with one
+authenticated page, `SessionPages` (one `Store` and one render loop per session,
+so two signed-in people patch independently), a `StatefulPage` dashboard whose
+controls are mutations shipped as fragments — the counter's value lives *inside*
+the `data-component-id` element, so a click ships that control's bytes and not
+the page — `HostAuthorizer` and `SessionLivenessObserver` wired by the service,
+`AuthenticatedHost.signOut` (sockets, handler table, page state, session record,
+cleared cookie), `IdleSessionReaper` on its own clock, an accept-time connection
+gate (`--max-connections`, answered `503` + `Retry-After` at capacity), and
+`Cache-Control: no-store` + `nosniff` + `X-Frame-Options` on every response —
+the last four all the server's, not the app's.
 
 **Endpoints:**
 - `GET /login` — static login page (no JS runtime); mints and reserves a CSRF token
 - `POST /login` — urlencoded credentials + single-use CSRF → `303` + `Set-Cookie`;
   `429` under throttle
 - `GET /` — authenticated dashboard, else `303` to `/login` (from the catalog)
-- `POST /logout` — CSRF-protected; `AuthenticatedHost.signOut` closes sockets,
-  drops the handler table, ends the store record, clears the cookie (`GET` → 405)
+- `POST /logout` — CSRF-protected; `AuthenticatedHost.signOut` drops the socket,
+  the handler table and the store record, and clears the cookie (`GET` → 405)
 - `GET /__assets/css*`, `/ui/webui-engine.js`, `/ui/webui-shell.js` — the
-  framework's own assets, served by the demo's listener
-- `WebSocket /ws` — valid-session same-origin events only
+  framework's routes, served by `WebUIServer`
+- `WebSocket /ws` — a frame is admitted only under a live render token
 
 **Port:** 9091
 
 **Flags:** `--port`, `--argon2-workers` (kdf pool, default 2),
 `--max-connections` (default 256).
 
-not a deployment template: the login ceremony (csrf, throttle, verification,
-session minting) is application code because `WebUIHost` has no auth flow, and
-the listener is application code because it has no server binding.
+**What the app still writes, and why.** the login ceremony is application code
+because `WebUIHost` has no auth flow — nothing in the framework signs anyone in.
+and two seams the demo pays for by hand:
+
+- **no extra-route door on `AuthenticatedHostService`.** its primary init builds
+  the route table from the declared pages, so an app with a login form assembles
+  the host and the server itself and uses `init(host:server:config:)`. the demo
+  does exactly that, and hands the server `pages.events` — a page rendered into
+  a fresh `EventRouter` ships controls the server can never dispatch.
+- **no principal-aware initial state.** `SessionPages.render` seeds a session's
+  store from `StatefulPage.initialState()`, which cannot see the request, so the
+  demo seeds the store first (`SessionPages.store(for:initial:)`, built from the
+  resolved principal) and then lets the loop render it.
+
+the framework's own gaps on this path are recorded in `ARCHITECTURE.md` ("what
+these products do not yet carry").
 
 ## WebUIBuild
 

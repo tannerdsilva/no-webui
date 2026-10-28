@@ -513,19 +513,45 @@ websocket event with `EventDispatch` (outcome + the token a refresh should hand
 the page), and `signOut` tears a session down in the one order that has no window:
 sockets, then the handler table, then the store record.
 
-### what these two do not yet carry
+### what these products do not yet carry
 
 named here because the example still pays for them, and a doc that omitted them
 would be the rot this file is supposed to avoid:
 
 - **no auth flow.** `WebUIHost` resolves an existing session and revokes one; it
   does not sign anyone in. login/signup ceremony (csrf, throttle, password
-  verification, session minting, cookie issuance) stays the application's.
-- **no server binding.** `AuthenticatedHost` answers http, but nothing binds it to
-  a socket: `WebUIServer` owns the upgrade and dispatches into its own
-  `EventRouter`, with no seam to hand either to a host. an app that needs
-  session-gated upgrades and host dispatch still writes that loop
-  (`Sources/WebUIAuthExample/MainProgram.swift` is the worked case).
+  verification, session minting, cookie issuance) stays the application's — it
+  is the 77-line `ceremony` section of `Sources/WebUIAuthExample/MainProgram.swift`
+  and the only reason that file is not a page plus a `Service`.
+- **no extra-route door on `AuthenticatedHostService`.** its primary init builds
+  the server's route table from the declared `Page`s, so an app that also serves
+  a login form assembles the host and the server itself and hosts them through
+  `init(host:server:config:)`. that door also puts the `EventRouter` choice on
+  the caller: the server must be handed `SessionPages.events`, or a rendered
+  page's controls are unreachable from its socket.
+- **no principal-aware initial state.** `SessionPages.render` seeds a session's
+  store from `StatefulPage.initialState()`, which sees no request. a page whose
+  first state derives from the identity seeds its own store first
+  (`SessionPages.store(for:initial:)`) and then renders.
+- **no transport peer on `HTTPRequest`.** there is no remote-address field and
+  the server does not stamp one, so an app-level per-IP throttle is impossible
+  without the client choosing its own key. the auth demo therefore keys its
+  submit throttle on the account and its mint budget on a single process-wide
+  bucket — a real deployment behind a proxy wants the address, and the field
+  does not exist.
+- **no upgrade-time authorization, and no Origin check.** `WebUIServer` upgrades
+  `GET /ws` before it resolves a session, and never compares `Origin` to `Host`.
+  the hand-rolled transport the auth example used to carry did both and answered
+  `403`. what still holds is the dispatch gate: no frame drives a session
+  without a live render token, so an anonymous socket can open and cannot act.
+  restoring the handshake gate belongs in `WebUIServer` (`RequestAuthorizer` is
+  already there; the upgrade does not consult it for admission), not in an app.
+- **the render-token *refresh* has no transport.** `RouterTable` keeps a forward
+  chain and `AuthenticatedHost.dispatch` reports `needsRefresh`, but the server
+  dispatches through its own `EventRouter` and never consults the table, so no
+  `token` frame reaches a socket. an evicted token keeps routing because its
+  render session was never ended — the property holds, the migration notice does
+  not.
 
 ## Security Architecture
 
@@ -540,8 +566,8 @@ would be the rot this file is supposed to avoid:
 | CSP bypass | Auto-generated nonce per document, default CSP with `script-src 'nonce-...'` |
 | CSRF | `CSRFProtection` enum with HMAC-SHA256 stateless tokens, optional `Form.csrfToken` parameter — secret/token minting throws on entropy or hmac failure (no prng fallback) and `validate` rejects on signing failure, never accepting an empty signature |
 | Stack overflow via deeply nested json | `JSONValue.parse` caps container nesting at 128 (`JSONError.nestingTooDeep`); a nested-bracket frame inside NIO's 16 kb frame budget was probe-verified to segfault the process before the cap (2026-09) |
-| Login-token exhaustion | `SingleUseTokenStore` budgets outstanding (reserved, unsubmitted) tokens per issuer key (`maxOutstandingPerKey`, default 5), and the auth demo throttles both the mint page (60/min/ip) and submit attempts (20/min/ip) — one caller cannot stockpile login tokens and flood the store past capacity |
-| Cross-session ws replay | pages mint a per-render token (`RuntimeConfig.renderToken`) that the runtime echoes with every `event`/`ping`; the server resolves each message against the session's current render tokens and answers unknown/missing ones with a redirect + close — a stale page from another user's (or a former) session cannot drive the current session's router. a token this session minted but LRU-evicted resolves through the registry's bounded forward chain: the server pushes the live token as an in-place `token` refresh (no reload) and the runtime adopts it for subsequent echoes. `WebUIServer` now provides this itself: it mints a 128-bit `RenderToken` per page render, routes every frame through the session that token names, and — under `WebUIServerConfig.requireRenderToken` — answers an unknown or missing token with an `error` frame and closes the socket. the flag defaults off so a 1.x host is unaffected; the auth example remains the reference for per-identity routers |
+| Login-token exhaustion | `SingleUseTokenStore` budgets outstanding (reserved, unsubmitted) tokens per issuer key (`maxOutstandingPerKey`, default 5), and the auth demo throttles both the mint page (60/min) and submit attempts (20/min per account) — one caller cannot stockpile login tokens and flood the store past capacity. note: `HTTPRequest` carries no transport peer, so the mint bucket is process-wide rather than per-IP (see "what these products do not yet carry") |
+| Cross-session ws replay | pages mint a per-render token (`RuntimeConfig.renderToken`) that the runtime echoes with every `event`/`ping`; the server resolves each message against the render token it names and — under `WebUIServerConfig.requireRenderToken` — answers an unknown or missing token with an `error` frame (`code: "token"`) and closes the socket, so a stale page from another user's (or a former) session cannot drive the current session's router. `RouterTable` additionally keeps a per-session render window with a bounded forward chain, and `AuthenticatedHost.dispatch` reports `needsRefresh` when a token resolved through it; the server's own socket path dispatches through its `EventRouter` and does not consult that table, so no `token` refresh frame reaches a client yet (the gap is named under "what these products do not yet carry"). `requireRenderToken` defaults off so a 1.x host is unaffected; the auth example turns it on |
 | wasm compilation under a strict csp | island-capable pages carry `script-src 'self' 'wasm-unsafe-eval'` (still `'self'`, still no `'unsafe-inline'`); `'wasm-unsafe-eval'` only permits wasm compilation, narrowing the old blanket `'unsafe-eval'` risk. the delivered default carries it on every page today — a page that declares no island capability still gets it; scoping it to declared capabilities is a follow-up (`ClientBoot.defaultCSP`) |
 | transmitted code | server→client updates carry data, never code: `WSOutgoing` has no script-message type, so a compromised or buggy server response cannot become executable in the page. the engine sanitizes every fragment it applies, so the patch path never bypasses the sanitizer either |
 | Large-response truncation | http responses are written through the raw channel and the terminal write's promise is awaited before closing — the async channel writer does not await write promises, so a response larger than the socket send buffer silently lost its tail at close (probe-verified) |

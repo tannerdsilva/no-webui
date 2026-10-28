@@ -440,7 +440,11 @@ Single `webui_sessions` env, one persistent environment, one writer:
 - connection gate at accept time, awaited-write responses, argon2 on a
   dedicated thread pool, a 60-second maintenance sweep
 - session-gated ws upgrade + `Origin` check, per-session connection registry
-  with logout teardown, per-event + ping liveness
+  with logout teardown, per-event + ping liveness. *the hand-rolled listener
+  wrote both of those; stage 2 deleted the listener, and only the dispatch gate
+  moved with it — the upgrade no longer authenticates before the 101 and no
+  longer compares `Origin` (see `ARCHITECTURE.md`, "what these products do not
+  yet carry")*
 - CSP delta: `form-action` on auth pages (`base-uri` on the login page)
 - runtime: token-on-every-message; no queue scrub / reconnect cap
   (superseded — the server-side render-token gate is the replay defense)

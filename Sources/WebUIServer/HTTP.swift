@@ -1,4 +1,5 @@
 import NIOHTTP1
+import WebUI
 import WebUISharedCore
 
 // MARK: - HTTPMethod
@@ -40,6 +41,14 @@ public struct HTTPRequest: Sendable {
 	public var isSecure: Bool
 	/// path parameters, filled by the router (w3.2).
 	public var params: [String: String]
+	/// the session this request belongs to, as the server's
+	/// ``RequestAuthorizer`` resolved it.
+	///
+	/// the server stamps it before routing and never reads it again: identity
+	/// policy is the host's, and this module only carries the answer to the
+	/// responder that asked. `nil` means "no session presented" — either the
+	/// config carries no authorizer, or the one it carries answered `nil`.
+	public var principal: SessionKey?
 
 	public init(
 		method: HTTPMethod = .get,
@@ -50,7 +59,8 @@ public struct HTTPRequest: Sendable {
 		body: RequestBody = .none,
 		renderToken: RenderToken = RenderToken(""),
 		isSecure: Bool = false,
-		params: [String: String] = [:]
+		params: [String: String] = [:],
+		principal: SessionKey? = nil
 	) {
 		self.method = method
 		self.path = path
@@ -61,6 +71,7 @@ public struct HTTPRequest: Sendable {
 		self.renderToken = renderToken
 		self.isSecure = isSecure
 		self.params = params
+		self.principal = principal
 	}
 }
 

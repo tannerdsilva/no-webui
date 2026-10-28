@@ -6,6 +6,7 @@ import WebUI
 import WebUIServer
 import WebUIAuth
 import WebUIHost
+import WebUIState
 
 // MARK: - fixtures
 //
@@ -86,7 +87,10 @@ enum Fixture {
 		handler: @escaping EventHandler = { _ in [] }
 	) -> Page {
 		Page(pattern: pattern, requiresRole: requiresRole) { request in
-			request.render {
+			// the router is named, never invented: a fresh one per render is
+			// fine for a one-shot page (the catalog binds it under the render
+			// token) and wrong for a stateful one, so the API no longer hides it.
+			request.render(on: EventRouter()) {
 				PageBody(
 					heading: heading(request.principal),
 					renderToken: request.renderToken.value,
@@ -170,7 +174,11 @@ struct TestHost: Sendable {
 			revocation: bus,
 			sessions: resolver,
 			loginPath: loginPath,
-			secureCookies: false
+			secureCookies: false,
+			// these fixtures render one-shot pages, so the page layer is a
+			// plain one; a stateful app hands its own, built on the router the
+			// server dispatches through.
+			pages: SessionPages(stores: SessionStores(), events: EventRouter(), routers: table)
 		)
 	}
 

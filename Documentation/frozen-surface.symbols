@@ -10,7 +10,7 @@
 # forced it. `Tests/WebUITests/FrozenSurfaceTests.swift` fails when this
 # file and a fresh extraction diverge, naming every added and removed symbol.
 #
-# re-measured 2026-10-27: 5079 symbols across 11 modules.
+# re-measured 2026-10-28: 5118 symbols across 11 modules.
 
 ## WebUISharedCore
 
@@ -4768,11 +4768,12 @@ HTTPRequest
 HTTPRequest.body
 HTTPRequest.cookies
 HTTPRequest.headers
-HTTPRequest.init(method:path:query:headers:cookies:body:renderToken:isSecure:params:)
+HTTPRequest.init(method:path:query:headers:cookies:body:renderToken:isSecure:params:principal:)
 HTTPRequest.isSecure
 HTTPRequest.method
 HTTPRequest.params
 HTTPRequest.path
+HTTPRequest.principal
 HTTPRequest.query
 HTTPRequest.renderToken
 HTTPStream
@@ -4797,6 +4798,8 @@ RenderToken.mint()
 RenderToken.mint(using:)
 RenderToken.session
 RenderToken.value
+RequestAuthorizer
+RequestAuthorizer.authorize(_:)
 RequestBody
 RequestBody.bytes(_:)
 RequestBody.form(_:)
@@ -4831,6 +4834,9 @@ SSEEvent.event
 SSEEvent.id
 SSEEvent.init(event:data:id:retryMs:)
 SSEEvent.retryMs
+SocketLifecycleObserver
+SocketLifecycleObserver.socketClosed(session:connection:)
+SocketLifecycleObserver.socketOpened(session:connection:close:)
 UploadedFile
 UploadedFile.bytes
 UploadedFile.contentType
@@ -4875,9 +4881,10 @@ WebUIServerAsset.text(_:_:contentType:cacheSeconds:immutable:gzip:)
 WebUIServerConfig
 WebUIServerConfig.assetCacheSeconds
 WebUIServerConfig.assets
+WebUIServerConfig.authorizer
 WebUIServerConfig.handlerFailurePolicy
 WebUIServerConfig.host
-WebUIServerConfig.init(host:port:maxConnections:maxSessions:maxHandlers:readIdleSeconds:assetCacheSeconds:pagePath:themeSheet:assets:requireRenderToken:handlerFailurePolicy:onRenderFailure:maxBodyBytes:maxMultipartParts:)
+WebUIServerConfig.init(host:port:maxConnections:maxSessions:maxHandlers:readIdleSeconds:assetCacheSeconds:pagePath:themeSheet:assets:requireRenderToken:handlerFailurePolicy:onRenderFailure:maxBodyBytes:maxMultipartParts:authorizer:socketObserver:)
 WebUIServerConfig.maxBodyBytes
 WebUIServerConfig.maxConnections
 WebUIServerConfig.maxHandlers
@@ -4888,6 +4895,7 @@ WebUIServerConfig.pagePath
 WebUIServerConfig.port
 WebUIServerConfig.readIdleSeconds
 WebUIServerConfig.requireRenderToken
+WebUIServerConfig.socketObserver
 WebUIServerConfig.themeSheet
 WebUIServerRequest
 WebUIServerRequest.init(path:query:renderToken:)
@@ -4907,31 +4915,18 @@ Mutation.apply
 Mutation.init(_:)
 PagePatch
 PagePatch.changedRegions
+PagePatch.fragments
 PagePatch.html
 PagePatch.isFullPage
 PagePatch.passes
 PagePatch.revision
-PageRender
-PageRender.digest
-PageRender.html
-PageRender.passes
-PageRender.revision
-PageRender.settled
 PageSubscription
 PageSubscription.connect(for:)
 PageSubscription.disconnect(from:)
 PageSubscription.init(to:in:push:)
 PageSubscription.stateDidChange(revision:session:)
-RegionSpan
-RegionSpan.end
-RegionSpan.id
-RegionSpan.init(id:start:end:)
-RegionSpan.range
-RegionSpan.start
 RenderBaseline
 RenderBaseline.digest
-RenderBaseline.init(digest:residue:)
-RenderBaseline.residue
 RenderDiffer
 RenderDiffer.init()
 RenderDiffer.init(previous:)
@@ -4948,12 +4943,8 @@ RenderSnapshot.bytes
 RenderSnapshot.derived(fromMarkup:)
 RenderSnapshot.digest
 RenderSnapshot.html
-RenderSnapshot.init(bytes:spans:root:)
-RenderSnapshot.init(html:spans:root:)
 RenderSnapshot.regionHTML(_:)
-RenderSnapshot.residue
 RenderSnapshot.root
-RenderSnapshot.spans
 SessionStores
 SessionStores.Resolution
 SessionStores.Resolution.evicted
@@ -4985,11 +4976,9 @@ StatefulPage.initialState()
 StatefulPageSession
 StatefulPageSession.init(_:maxRenderPasses:)
 StatefulPageSession.init(_:store:maxRenderPasses:)
-StatefulPageSession.lastRender
 StatefulPageSession.maxRenderPasses
 StatefulPageSession.page
 StatefulPageSession.patch(in:)
-StatefulPageSession.render(in:)
 StatefulPageSession.store
 Store
 Store.apply(_:)
@@ -5006,6 +4995,8 @@ Store.revision
 
 ## WebUIHost
 
+AnyPageActions
+AnyPageActions.revision
 AuthenticatedCatalog
 AuthenticatedCatalog.init(pages:loginPath:table:)
 AuthenticatedCatalog.loginPath
@@ -5018,9 +5009,10 @@ AuthenticatedHost
 AuthenticatedHost.catalog
 AuthenticatedHost.cookieName
 AuthenticatedHost.dispatch(_:session:renderToken:)
-AuthenticatedHost.init(resolver:catalog:routers:revocation:sessions:loginPath:cookieName:secureCookies:)
+AuthenticatedHost.init(resolver:catalog:routers:revocation:sessions:loginPath:cookieName:secureCookies:pages:)
 AuthenticatedHost.loginPath
 AuthenticatedHost.notFound
+AuthenticatedHost.pages
 AuthenticatedHost.resolver
 AuthenticatedHost.respond(to:)
 AuthenticatedHost.revocation
@@ -5030,6 +5022,16 @@ AuthenticatedHost.sessionCookie(token:maxAge:)
 AuthenticatedHost.sessions
 AuthenticatedHost.signOut(_:)
 AuthenticatedHost.signOut(for:)
+AuthenticatedHost.store(for:initial:)
+AuthenticatedHost.stores
+AuthenticatedHostService
+AuthenticatedHostService.config
+AuthenticatedHostService.host
+AuthenticatedHostService.init(host:server:config:shutdownGrace:logger:)
+AuthenticatedHostService.init(resolver:routers:revocation:sessions:stores:loginPath:cookieName:secureCookies:config:shutdownGrace:logger:routes:)
+AuthenticatedHostService.run()
+AuthenticatedHostService.server
+AuthenticatedHostService.shutdownGrace
 ConnectionToken
 ConnectionToken.==(_:_:)
 ConnectionToken.close
@@ -5037,6 +5039,9 @@ ConnectionToken.hash(into:)
 ConnectionToken.id
 ConnectionToken.init(id:close:)
 ConnectionToken.next(close:)
+ContinuousLifecycleClock
+ContinuousLifecycleClock.init()
+ContinuousLifecycleClock.sleep(for:)
 CookieSessionResolver
 CookieSessionResolver.clearingCookie(name:secure:)
 CookieSessionResolver.cookieName
@@ -5057,14 +5062,28 @@ EventDispatch.isRefused
 EventDispatch.outcome
 EventDispatch.refreshedToken
 EventDispatch.tokenRefusalCode
+HostAuthorizer
+HostAuthorizer.authorize(_:)
+HostAuthorizer.init(resolver:)
 IdentityDirectory
 IdentityDirectory.identity(for:)
+IdleSessionReaper
+IdleSessionReaper.init(stores:routers:interval:clock:logger:onReap:)
+IdleSessionReaper.interval
+IdleSessionReaper.run()
+IdleSessionReaper.stores
+LifecycleClock
+LifecycleClock.sleep(for:)
 Page
 Page.admits(_:)
 Page.init(pattern:requiresRole:render:)
 Page.pattern
 Page.render
 Page.requiresRole
+PageActions
+PageActions.handler(_:)
+PageActions.init(revision:commit:patch:)
+PageActions.revision
 PageCatalog
 PageCatalog.responder(for:)
 PageCatalog.responder(for:principal:)
@@ -5076,6 +5095,10 @@ PageRequest.query
 PageRequest.render(on:_:)
 PageRequest.renderSession
 PageRequest.renderToken
+PageScope
+PageScope.$current
+PageScope.actions(of:)
+PageScope.current
 PrincipalResolver
 PrincipalResolver.principal(for:)
 RenderedPage
@@ -5097,6 +5120,21 @@ RouterTable.renderTokens(for:)
 RouterTable.router(for:renderToken:)
 RouterTable.sessionCount
 SessionCookie
+SessionLivenessObserver
+SessionLivenessObserver.init(stores:revocation:)
+SessionLivenessObserver.socketClosed(session:connection:)
+SessionLivenessObserver.socketOpened(session:connection:close:)
+SessionPageError
+SessionPageError.renderBusy
+SessionPageError.stateTypeConflict
+SessionPages
+SessionPages.events
+SessionPages.init(stores:events:routers:)
+SessionPages.page(_:at:title:requiresRole:document:)
+SessionPages.plainDocument(title:)
+SessionPages.render(_:for:document:)
+SessionPages.store(for:initial:)
+SessionPages.stores
 SessionRevocation
 SessionRevocation.endSession(tokenHash:)
 SessionRouterTable
@@ -5110,6 +5148,7 @@ SocketRevocationBus.revoke(session:)
 SocketRevocationBus.track(_:session:)
 SocketRevocationBus.trackedCount
 SocketRevocationBus.untrack(_:)
+StatefulPage.actions
 StaticCatalog
 StaticCatalog.fallback
 StaticCatalog.init(pages:fallback:)

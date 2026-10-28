@@ -27,9 +27,15 @@ func renderShowcasePage(state: ShowcaseState, checkClasses: Bool = true, renderT
             "undefined design-system class on showcase: \(className)"
         )
     }
+    // the page region: `webui-page` is `WebUIServer.pageRegionID` — the element
+    // an in-place `navigate` patches. the constant is server-internal, so the id
+    // is spelled here as the wire contract it is. a re-render the region differ
+    // cannot express (a first render, a change outside every control) ships as
+    // this element's replacement; without it the server has nowhere to put the
+    // bytes and honestly answers a full document load instead.
     let doc = WebUIDocument(
         title: "WebUI Showcase",
-        body: ShowcasePage(state: state).markup,
+        body: Div(id: "webui-page") { Raw(ShowcasePage(state: state).markup) }.markup,
         includeRuntime: true,
         runtimeConfig: renderToken.isEmpty ? nil : RuntimeConfig(renderToken: renderToken),
         checkClasses: checkClasses

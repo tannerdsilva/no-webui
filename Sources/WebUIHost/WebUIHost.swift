@@ -19,8 +19,14 @@
 //   forward chain (`RouterTable`, a lock-guarded final class).
 // - `RevocationBus.swift` — the session → live connections registry
 //   (`SocketRevocationBus`, an actor).
+// - `SessionPages.swift` — the per-session state layer (`SessionStores` +
+//   one render loop per session), and `PageActions`, the door a control uses
+//   to mutate and ship the patch it caused.
 // - `AuthenticatedHost.swift` — the struct façade that composes all four.
+// - `AuthenticatedHostService.swift` — the same composition as a `Service`:
+//   the server, its authorizer and observer, and the idle-session reaper in
+//   one `ServiceGroup`.
 //
-// the target depends on `WebUIState` too, but nothing here imports it: design B
-// owns `SessionStores`, and A6 is where per-session store scope lands. an
-// unused edge is cheaper than a re-cut of `Package.swift`.
+// the target depends on `WebUIState`, and `SessionPages` is what makes that
+// edge real: the manifest declared it from the start, and until the host owned
+// a `SessionStores` no file here imported it.

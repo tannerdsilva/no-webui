@@ -132,6 +132,10 @@ public final class SessionStores: Sendable {
 	}
 
 	/// how many of them belong to open sockets.
+	///
+	/// a lifecycle service reads this to tell "every store is live" from
+	/// "something is idle" without walking the table, which is why it stays
+	/// public beside ``count``.
 	public var liveCount: Int {
 		values.withLock { $0.live.count }
 	}
@@ -150,21 +154,56 @@ public final class SessionStores: Sendable {
 		}
 	}
 
-	/// reap idle stores until the cap holds. returns the evicted keys so the
-	/// caller can end those router sessions too.
+	/// drop every store whose last socket has closed. returns the keys it
+	/// dropped so the caller can end those router sessions too.
+	///
+	/// this is the clock's door, and it is deliberately not cap-gated: an
+	/// abandoned session's store is garbage whether or not the table is at
+	/// ``maxSessions``, and a reaper that only ran under pressure would leave a
+	/// long-lived host leaking one store per abandoned session. the pressure
+	/// reaper on `resolve` keeps its own rule (evict only what the cap demands),
+	/// so the two policies cannot drift into each other.
+	///
+	/// cheap when nothing is idle: the guard is one scan of the live set that
+	/// allocates nothing and touches no recency row, so a tick that finds every
+	/// store live returns before the walk.
 	///
 	/// dropping a store detaches *this* registry's reference only: a control's
 	/// handler registered in the router captured the store's binding, so the
 	/// store lives until that render session ends. ending the session
-	/// (`EventRouter.end`) is the caller's step, and the evicted keys are
+	/// (`EventRouter.end`) is the caller's step, and the dropped keys are
 	/// returned for exactly that — a reaped store whose session still routes is
 	/// a leak the registry cannot see.
 	@discardableResult
 	public func reapIdle() -> [SessionKey] {
-		values.withLock { Self.reapIdle(&$0, cap: maxSessions) }
+		values.withLock { values in
+			let live = values.live
+			guard values.entries.contains(where: { !live.contains($0.key) }) else { return [] }
+			return Self.reapEveryIdle(&values)
+		}
 	}
 
 	// MARK: the reaper
+
+	/// drop every idle store, oldest first, and rebuild the recency list around
+	/// the survivors. one walk; a stale row is skipped because the newer row
+	/// speaks for it, exactly as the pressure reaper below does.
+	private static func reapEveryIdle(_ values: inout Values) -> [SessionKey] {
+		var evicted: [SessionKey] = []
+		var kept: [Row] = []
+		kept.reserveCapacity(values.order.count)
+		for row in values.order {
+			guard let entry = values.entries[row.key], entry.tick == row.tick else { continue }
+			if values.live.contains(row.key) {
+				kept.append(row)
+				continue
+			}
+			values.entries.removeValue(forKey: row.key)
+			evicted.append(row.key)
+		}
+		values.order = kept
+		return evicted
+	}
 
 	/// drop least-recently-used **idle** sessions until the cap holds.
 	///

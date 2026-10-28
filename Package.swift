@@ -337,6 +337,11 @@ let package = Package(
                 "WebUIServer",
                 "WebUIAuth",
                 "WebUIState",
+                // the lifecycle half: the host's services (the idle-session
+                // reaper, and the hosting service beside it) run inside a
+                // `ServiceGroup`, so this target links the framework directly
+                // rather than making every consumer re-export it.
+                .product(name: "ServiceLifecycle", package: "swift-service-lifecycle"),
             ]
         ),
 
@@ -677,6 +682,9 @@ let package = Package(
                 "WebUIHost",
                 "WebUIServer",
                 "WebUIAuth",
+                // the host's page layer is built from these, so a test that
+                // constructs a host names them.
+                "WebUIState",
             ]
         ),
         .testTarget(

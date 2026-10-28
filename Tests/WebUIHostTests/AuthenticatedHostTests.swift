@@ -6,6 +6,7 @@ import WebUI
 import WebUIServer
 import WebUIAuth
 import WebUIHost
+import WebUIState
 
 // MARK: - C5 gate: the facade, end to end
 //
@@ -140,12 +141,20 @@ struct AuthenticatedHostTests {
 
 	@Test("a resolver that cannot answer throws instead of redirecting")
 	func brokenResolverThrows() async throws {
+		// the page layer is required, so a host cannot stand on a router
+		// the server never dispatches through: name it here too.
+		let table = RouterTable()
 		let host = AuthenticatedHost(
 			resolver: BrokenResolver(),
 			catalog: StaticCatalog(pages: [:]),
-			routers: RouterTable(),
+			routers: table,
 			revocation: SocketRevocationBus(),
-			sessions: NoopRevocation()
+			sessions: NoopRevocation(),
+			pages: SessionPages(
+				stores: SessionStores(),
+				events: EventRouter(),
+				routers: table
+			)
 		)
 
 		await #expect(throws: BrokenResolver.Failure.self) {

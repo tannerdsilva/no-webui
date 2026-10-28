@@ -5,6 +5,7 @@ import WebUI
 import WebUIServer
 import WebUIAuth
 import WebUIHost
+import WebUIState
 
 // MARK: - C3 parity: the ten ceremony behaviours
 //
@@ -201,12 +202,14 @@ struct CeremonyParityTests {
 	func refusedRequestNeverRenders() async throws {
 		let page = RecordingResponder("never")
 		let catalog = StaticCatalog(pages: ["/dashboard": page])
+		let table = RouterTable()
 		let host = AuthenticatedHost(
 			resolver: FixedResolver(fixed: nil),
 			catalog: catalog,
-			routers: RouterTable(),
+			routers: table,
 			revocation: SocketRevocationBus(),
-			sessions: NoopRevocation()
+			sessions: NoopRevocation(),
+			pages: SessionPages(stores: SessionStores(), events: EventRouter(), routers: table)
 		)
 
 		// anonymous, static catalog: the page is public, so it IS served — the
@@ -225,7 +228,7 @@ struct CeremonyParityTests {
 		let marker = String(repeating: "x", count: 4096)
 		let fixture = TestHost(pages: [
 			Page(pattern: "/big") { request in
-				request.render { Text(marker) }
+				request.render(on: EventRouter()) { Text(marker) }
 			}
 		])
 		let login = try await fixture.logIn()
