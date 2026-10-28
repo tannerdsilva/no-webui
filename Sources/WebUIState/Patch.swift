@@ -68,6 +68,25 @@ public struct RenderSnapshot: Sendable {
 	/// on. the verdict it produces is what reaches a caller, through
 	/// ``RenderPatch/isFullPage`` and ``PagePatch/fragments``.
 	package let residue: UInt64
+	/// region id → hash of that region's *own* bytes: its range minus every
+	/// tracked descendant's range.
+	///
+	/// this is what finest coverage compares, and it exists for the same
+	/// memory reason the digest does: a parent's own hash moves when the
+	/// parent's markup moves and not when a child inside it moves, so a
+	/// changed child can ship alone without the differ keeping last render's
+	/// bytes to prove it. 8 bytes per region, exactly like ``digest``.
+	///
+	/// an excluded region gets no entry: it can never ship, so its own hash is
+	/// never consulted and is not retained.
+	package let own: [RegionID: UInt64]
+	/// the region ids this snapshot was derived with excluded — subtrees that
+	/// never ship.
+	///
+	/// `package`: the differ reads it to answer "is this span inside an
+	/// excluded subtree"; a consumer states exclusion once, in its
+	/// ``RegionPolicy``.
+	package let excluded: Set<RegionID>
 
 	/// a snapshot of a render whose region spans the caller recorded.
 	///
@@ -76,12 +95,18 @@ public struct RenderSnapshot: Sendable {
 	///
 	/// `package`: constructing a snapshot from caller-recorded spans is how this
 	/// module's own scanner and tests build one. a consumer that has bytes asks
-	/// for ``derived(fromMarkup:)``.
-	package init(html: String, spans: [RegionSpan], root: Range<Int>? = nil) {
-		self.init(bytes: Array(html.utf8), spans: spans, root: root)
+	/// for ``derived(fromMarkup:policy:)``.
+	package init(
+		html: String, spans: [RegionSpan], root: Range<Int>? = nil,
+		excluded: Set<RegionID> = []
+	) {
+		self.init(bytes: Array(html.utf8), spans: spans, root: root, excluded: excluded)
 	}
 
-	package init(bytes: [UInt8], spans: [RegionSpan], root: Range<Int>? = nil) {
+	package init(
+		bytes: [UInt8], spans: [RegionSpan], root: Range<Int>? = nil,
+		excluded: Set<RegionID> = []
+	) {
 		let ordered = spans.sorted { $0.start < $1.start }
 		var regions: [RegionID: UInt64] = [:]
 		regions.reserveCapacity(ordered.count)
@@ -89,11 +114,23 @@ public struct RenderSnapshot: Sendable {
 			regions[span.id] = fnv1a(bytes, span.range)
 		}
 		let scope = root ?? 0..<bytes.count
+		var own: [RegionID: UInt64] = [:]
+		own.reserveCapacity(ordered.count)
+		for span in ordered where !excluded.contains(span.id) {
+			own[span.id] = ownHash(bytes, span: span, spans: ordered)
+		}
 		self.bytes = bytes
 		self.spans = ordered
 		self.digest = RenderDigest(regions: regions)
 		self.root = scope
+		// the span list is passed *whole*: an excluded region keeps its span,
+		// so its bytes stay covered and reach neither the residue nor (through
+		// `own`) an ancestor. dropping an excluded span here is the bug this
+		// line exists to prevent — its bytes would fall into the residue, and
+		// a token write would then force a full page on every render.
 		self.residue = residueHash(bytes, scope: scope, spans: ordered)
+		self.own = own
+		self.excluded = excluded
 	}
 
 	/// the rendered html.
@@ -107,7 +144,9 @@ public struct RenderSnapshot: Sendable {
 	}
 
 	/// what a session stores for the next render: hashes, never html.
-	public var baseline: RenderBaseline { RenderBaseline(digest: digest, residue: residue) }
+	public var baseline: RenderBaseline {
+		RenderBaseline(digest: digest, residue: residue, own: own, excluded: excluded)
+	}
 }
 
 // MARK: - markup-derived regions
@@ -126,14 +165,18 @@ extension RenderSnapshot {
 	/// the whole render otherwise. every region is a descendant of that root and
 	/// carries the same string as its `id`, which is what makes the update
 	/// addressable by the client's `getElementById`.
-	public static func derived(fromMarkup html: String) -> RenderSnapshot {
+	public static func derived(fromMarkup html: String, policy: RegionPolicy = .default) -> RenderSnapshot {
 		let bytes = Array(html.utf8)
 		let scanned = MarkupScan.scan(bytes)
 		let root = scanned.body ?? 0..<bytes.count
 		// a region outside the diff root (a control in the head, which no page
 		// emits) is not addressable by an in-place patch.
 		let spans = scanned.spans.filter { $0.start >= root.lowerBound && $0.end <= root.upperBound }
-		return RenderSnapshot(bytes: bytes, spans: spans, root: root)
+		// `policy.identity` is deliberately not consulted yet: element-`id`
+		// identity is slice A2's contract and the scan still keys on
+		// `data-component-id` for every policy. `policy.excluded` is, because
+		// exclusion changes the hashes this snapshot records.
+		return RenderSnapshot(bytes: bytes, spans: spans, root: root, excluded: policy.excluded)
 	}
 }
 
@@ -350,6 +393,92 @@ static func componentID(in bytes: [UInt8], tag: Range<Int>) -> String? {
 	}
 }
 
+// MARK: - region policy
+
+/// how a render's regions are diffed, once a caller opts out of today's
+/// coarse contract.
+///
+/// `.default` is exactly the behaviour every existing caller already has:
+/// regions are `data-component-id` elements, a changed parent carries its
+/// changed children, an appeared or vanished region is a full page, nothing is
+/// excluded, and an update leaves the client's transition policy alone. a
+/// policy that names `.finest` opts into the finer contract; a caller that
+/// never mentions a policy cannot observe this type at all.
+public struct RegionPolicy: Sendable, Equatable {
+	/// where a region's patch id comes from.
+	///
+	/// `elementID` is slice A2's contract and is *not* implemented here: the
+	/// scanner still reads `data-component-id` for both cases, so a policy
+	/// asking for `elementID` today produces component-attribute regions.
+	/// naming the case now keeps A2 from having to respell the policy.
+	public enum Identity: Sendable, Equatable {
+		case componentAttribute
+		case elementID
+	}
+
+	/// how overlapping changed regions are collapsed.
+	public enum Coverage: Sendable, Equatable {
+		/// a changed region ships whole, children included — today's shape.
+		case coarse
+		/// a region ships only when its *own* bytes moved: its range minus
+		/// every tracked descendant's range. a changed child therefore ships
+		/// the child, not the parent that contains it.
+		case finest
+	}
+
+	/// what a region the previous render did not have escalates to.
+	public enum Escalation: Sendable, Equatable {
+		/// the whole page. an insertion has no wire shape, so a client cannot
+		/// place bytes it has no element for.
+		case fullPage
+		/// the nearest ancestor region both renders have, which does have a
+		/// wire shape (`replace`) and carries the inserted subtree with it.
+		/// a full page only when no ancestor is tracked in both renders.
+		case nearestTrackedAncestor
+	}
+
+	/// where a region's patch id comes from.
+	public var identity: Identity
+	/// how overlapping changed regions are collapsed.
+	public var coverage: Coverage
+	/// what appeared regions escalate to.
+	public var escalation: Escalation
+	/// subtrees that never ship, and whose bytes are invisible to every
+	/// ancestor's own-bytes hash.
+	///
+	/// this is the token-owned region's escape hatch: a region some other
+	/// writer owns (`live-turn-text`, written by `FragmentUpdate.text` on every
+	/// streaming token) must not make its ancestors look changed, or every
+	/// structural render inside the same subtree would ship a parent just to
+	/// carry text the client already has.
+	public var excluded: Set<RegionID>
+	/// the transition flag every update this policy emits carries.
+	///
+	/// `nil` — the default — leaves the client's transition policy in charge,
+	/// which is what today's differ does.
+	public var transition: Bool?
+
+	/// coarse coverage, component-attribute identity, full-page escalation,
+	/// nothing excluded, no transition override — today's behaviour.
+	public static let `default` = RegionPolicy()
+
+	/// explicit: a public memberwise init is internal, so the shape every
+	/// caller builds a policy through is spelled here.
+	public init(
+		identity: Identity = .componentAttribute,
+		coverage: Coverage = .coarse,
+		escalation: Escalation = .fullPage,
+		excluded: Set<RegionID> = [],
+		transition: Bool? = nil
+	) {
+		self.identity = identity
+		self.coverage = coverage
+		self.escalation = escalation
+		self.excluded = excluded
+		self.transition = transition
+	}
+}
+
 // MARK: - baselines, patches, the differ
 
 /// what a session keeps between two renders of one page: region hashes plus the
@@ -362,10 +491,24 @@ public struct RenderBaseline: Sendable {
 	/// a caller's. a baseline is obtained from ``RenderSnapshot/baseline`` and
 	/// handed back to ``RenderDiffer``; nothing outside this module inspects it.
 	package let residue: UInt64
+	/// region id → hash of that region's own bytes, carried from the render
+	/// this baseline was taken of so finest coverage can compare own bytes
+	/// across renders. hashes only — the bytes are sliced out of the render
+	/// that just finished.
+	package let own: [RegionID: UInt64]
+	/// the exclusions the render was derived with, so a differ built from this
+	/// baseline and a policy that disagrees still knows what the previous
+	/// render treated as invisible.
+	package let excluded: Set<RegionID>
 
-	package init(digest: RenderDigest, residue: UInt64) {
+	package init(
+		digest: RenderDigest, residue: UInt64, own: [RegionID: UInt64],
+		excluded: Set<RegionID> = []
+	) {
 		self.digest = digest
 		self.residue = residue
+		self.own = own
+		self.excluded = excluded
 	}
 }
 
@@ -380,7 +523,10 @@ public struct RenderPatch: Sendable {
 	/// its own remove path) and for diagnostics.
 	public let removed: [RegionID]
 	/// true when the caller must send the whole page: a first render, a change
-	/// outside every region, a region that appeared, or one that vanished.
+	/// outside every region, a region that vanished, or a region that appeared
+	/// with no tracked ancestor to carry it. a `.finest` policy with
+	/// ``RegionPolicy/Escalation/nearestTrackedAncestor`` answers an insertion
+	/// with that ancestor's update instead, so this stays `false` there.
 	public let isFullPage: Bool
 
 	public init(changed: [FragmentUpdate], removed: [RegionID], isFullPage: Bool) {
@@ -399,20 +545,29 @@ public struct RenderPatch: Sendable {
 /// holds hashes only, so a session's diff state is O(regions), not O(page).
 /// one instance per page instance: `previous` is the baseline of the render
 /// this differ was built for.
+///
+/// the `policy` decides *which* region answers a change. `.default` is the
+/// coarse contract this type has always had; `.finest` ships the region whose
+/// own bytes moved, so a changed child no longer drags its parent along.
 public struct RenderDiffer: Sendable {
 	private let previous: RenderBaseline?
+	/// how this differ collapses changes: `.default` is the contract every
+	/// caller already has, `.finest` is the opt-in finer one.
+	private let policy: RegionPolicy
 
 	/// a differ for a page that has rendered before.
 	///
 	/// `nil` means "no previous render", which every patch answers as a full
 	/// page rather than as a patch against an empty baseline.
-	public init(previous: RenderBaseline?) {
+	public init(previous: RenderBaseline?, policy: RegionPolicy = .default) {
 		self.previous = previous
+		self.policy = policy
 	}
 
 	/// a differ for a page's first render.
-	public init() {
+	public init(policy: RegionPolicy = .default) {
 		self.previous = nil
+		self.policy = policy
 	}
 
 	/// what moved from the baseline to `next`.
@@ -420,11 +575,24 @@ public struct RenderDiffer: Sendable {
 		guard let previous else {
 			return RenderPatch(changed: [], removed: [], isFullPage: true)
 		}
+		switch policy.coverage {
+		case .coarse:
+			return coarsePatch(next, previous: previous)
+		case .finest:
+			return finestPatch(next, previous: previous)
+		}
+	}
+
+	/// the contract every caller already has: a changed region ships whole, so
+	/// a changed parent carries its changed children and only the outermost
+	/// moved region reaches the wire.
+	private func coarsePatch(_ next: RenderSnapshot, previous: RenderBaseline) -> RenderPatch {
 		let before = previous.digest.regions
 		let after = next.digest.regions
+		let excluded = exclusions(next, previous)
 
 		var removed: [RegionID] = []
-		for id in before.keys where after[id] == nil {
+		for id in before.keys where after[id] == nil && !excluded.contains(id) {
 			removed.append(id)
 		}
 		removed.sort { $0.rawValue < $1.rawValue }
@@ -432,13 +600,16 @@ public struct RenderDiffer: Sendable {
 		// a region the previous render did not have is an insertion, and an
 		// insertion has no wire shape: the client cannot place bytes it has no
 		// element for. so it is a full page too.
-		let appeared = after.keys.contains { before[$0] == nil }
+		let appeared = after.keys.contains { before[$0] == nil && !excluded.contains($0) }
 		if next.residue != previous.residue || appeared || !removed.isEmpty {
 			return RenderPatch(changed: [], removed: removed, isFullPage: true)
 		}
 
 		var moved: [RegionSpan] = []
 		for span in next.spans where before[span.id] != after[span.id] {
+			// an excluded region never ships, and this guard is vacuous for
+			// `.default` (nothing is excluded), so today's shape is unchanged.
+			if excluded.contains(span.id) { continue }
 			// an outer region's bytes already contain its children's, so a
 			// changed child inside a changed parent would ship twice; the parent
 			// carries it.
@@ -448,17 +619,132 @@ public struct RenderDiffer: Sendable {
 			moved.append(span)
 		}
 
+		return RenderPatch(
+			changed: updates(moved, from: next), removed: [], isFullPage: false)
+	}
+
+	/// the opt-in contract: a region ships iff its *own* bytes moved — its
+	/// range minus every tracked descendant's range — so a changed child ships
+	/// the child and not the parent that contains it.
+	private func finestPatch(_ next: RenderSnapshot, previous: RenderBaseline) -> RenderPatch {
+		let excluded = exclusions(next, previous)
+		// the set names regions; what it excludes is the subtree under each,
+		// because a descendant's bytes are inside its ancestor's.
+		let excludedRoots = next.spans.filter { excluded.contains($0.id) }
+		func isExcluded(_ span: RegionSpan) -> Bool {
+			if excluded.contains(span.id) { return true }
+			return excludedRoots.contains { span.start >= $0.start && span.end <= $0.end }
+		}
+
+		// a region the previous render had and this one does not is a removal.
+		// the wire has no remove op, and a baseline keeps hashes only — no
+		// offsets — so there is no ancestor to escalate to: a full page.
+		var vanished: [RegionID] = []
+		for id in previous.digest.regions.keys
+		where next.digest.regions[id] == nil && !excluded.contains(id) {
+			vanished.append(id)
+		}
+		vanished.sort { $0.rawValue < $1.rawValue }
+		if !vanished.isEmpty {
+			return RenderPatch(changed: [], removed: vanished, isFullPage: true)
+		}
+
+		// an insertion has no wire shape either. `.nearestTrackedAncestor`
+		// answers it with an update the client can apply — the whole subtree of
+		// an ancestor both renders have, which now contains the new region.
+		var escalated: [RegionSpan] = []
+		var unresolved = false
+		for span in next.spans where previous.digest.regions[span.id] == nil {
+			if isExcluded(span) { continue }
+			if policy.escalation == .nearestTrackedAncestor,
+				let ancestor = nearestTrackedAncestor(
+					of: span, in: next.spans, tracked: previous.digest.regions, excluded: excluded)
+			{
+				escalated.append(ancestor)
+			} else {
+				unresolved = true
+			}
+		}
+		if unresolved {
+			// bytes no region the client has can carry: only a full page puts
+			// them on screen.
+			return RenderPatch(changed: [], removed: [], isFullPage: true)
+		}
+
+		// the residue is bytes *outside* every tracked span, so no region can
+		// carry a change in it — not even an ancestor, which is why this stays
+		// a full page under either escalation.
+		if next.residue != previous.residue {
+			return RenderPatch(changed: [], removed: [], isFullPage: true)
+		}
+
+		var targets: [RegionID: RegionSpan] = [:]
+		for span in escalated { targets[span.id] = span }
+		for span in next.spans {
+			if isExcluded(span) { continue }
+			// an appeared region is answered by its ancestor above; shipping it
+			// too would duplicate bytes the ancestor's update already carries,
+			// and a client that applied the ancestor first would address an id
+			// it has just re-created.
+			guard previous.digest.regions[span.id] != nil else { continue }
+			// both hashes exist for every region neither render excluded; a
+			// missing one is a policy that moved mid-session, and the safe
+			// direction is to ship the region rather than leave it stale.
+			guard let was = previous.own[span.id], let now = next.own[span.id] else {
+				targets[span.id] = span
+				continue
+			}
+			if was != now { targets[span.id] = span }
+		}
+
+		let moved = targets.values.sorted { $0.start < $1.start }
+		return RenderPatch(
+			changed: updates(moved, from: next), removed: [], isFullPage: false)
+	}
+
+	/// the exclusion set a diff must honour: what this render was derived with,
+	/// plus what the baseline was. a region excluded in either render has no
+	/// comparable own-bytes hash, so it can carry no change.
+	private func exclusions(_ next: RenderSnapshot, _ previous: RenderBaseline) -> Set<RegionID> {
+		next.excluded.union(previous.excluded)
+	}
+
+	/// the nearest region containing `span` that the previous render also had —
+	/// so the client already has the element a `replace` addresses.
+	private func nearestTrackedAncestor(
+		of span: RegionSpan, in spans: [RegionSpan], tracked: [RegionID: UInt64],
+		excluded: Set<RegionID>
+	) -> RegionSpan? {
+		var best: RegionSpan?
+		for candidate in spans {
+			guard candidate.start <= span.start, candidate.end >= span.end else { continue }
+			guard candidate.start < span.start || candidate.end > span.end else { continue }
+			guard tracked[candidate.id] != nil else { continue }
+			guard !excluded.contains(candidate.id) else { continue }
+			if let current = best, current.end - current.start <= candidate.end - candidate.start {
+				continue
+			}
+			best = candidate
+		}
+		return best
+	}
+
+	/// one `.replace` per region, in the order given, carrying the policy's
+	/// transition flag (`nil` for `.default`, which is what today's differ
+	/// emits).
+	private func updates(_ spans: [RegionSpan], from next: RenderSnapshot) -> [FragmentUpdate] {
 		var changed: [FragmentUpdate] = []
-		changed.reserveCapacity(moved.count)
-		for span in moved {
+		changed.reserveCapacity(spans.count)
+		for span in spans {
 			changed.append(
 				FragmentUpdate(
 					id: span.id.rawValue,
-					html: String(decoding: next.bytes[span.start..<span.end], as: UTF8.self)
+					html: String(decoding: next.bytes[span.start..<span.end], as: UTF8.self),
+					transition: policy.transition
 				)
 			)
 		}
-		return RenderPatch(changed: changed, removed: [], isFullPage: false)
+		return changed
 	}
 }
 
@@ -477,10 +763,47 @@ private func fnv1a(_ bytes: [UInt8], _ range: Range<Int>) -> UInt64 {
 	return hash
 }
 
+/// the hash of one region's *own* bytes: its range minus every tracked
+/// descendant's range.
+///
+/// the ranges are disjoint once the descendants are removed, so this walks the
+/// span list in start order and hashes the gaps — the region's opening tag and
+/// whatever markup it holds outside a tracked child. `spans` is the whole
+/// ordered list; a span contained in `span` is a descendant, and a nested one
+/// (a grandchild) is already inside a descendant that advanced the cursor.
+private func ownHash(_ bytes: [UInt8], span: RegionSpan, spans: [RegionSpan]) -> UInt64 {
+	var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+	var cursor = span.start
+	for child in spans {
+		guard child.start >= cursor, child.end <= span.end, child.end > child.start else { continue }
+		guard child.start > span.start || child.end < span.end else { continue }
+		if child.start > cursor {
+			for index in cursor..<child.start {
+				hash ^= UInt64(bytes[index])
+				hash = hash &* 0x0000_0100_0000_01b3
+			}
+		}
+		cursor = max(cursor, child.end)
+	}
+	if cursor < span.end {
+		for index in cursor..<span.end {
+			hash ^= UInt64(bytes[index])
+			hash = hash &* 0x0000_0100_0000_01b3
+		}
+	}
+	return hash
+}
+
 /// the hash of everything in `scope` that no span covers.
 ///
 /// spans are disjoint after merging (a nested region's bytes are also its
 /// parent's, and the parent's span already excludes them from the gaps).
+///
+/// an excluded region is passed here like any other: its span keeps its bytes
+/// *out* of the residue, which is the whole point — a token-owned region whose
+/// text changes on every render must not move the residue, or every structural
+/// render would be forced to a full page. exclusion is subtracted where it
+/// belongs instead, from ``ownHash``.
 private func residueHash(_ bytes: [UInt8], scope: Range<Int>, spans: [RegionSpan]) -> UInt64 {
 	var hash: UInt64 = 0xcbf2_9ce4_8422_2325
 	var cursor = scope.lowerBound

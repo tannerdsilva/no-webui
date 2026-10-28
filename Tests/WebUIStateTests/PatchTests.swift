@@ -296,6 +296,50 @@ struct RenderDifferTests {
 		#expect(patch.changed.map(\.id) == ["cell-1", "cell-7"])
 	}
 
+	// MARK: the policy's finer coverage
+
+	@Test("finest coverage: a changed child ships instead of its parent")
+	func finestChildSuppressesParent() {
+		func outer(_ inner: String) -> String {
+			#"<div id="outer" data-component-id="outer">\#(inner)</div>"#
+		}
+		let before = outer(#"<span data-component-id="a">1</span><span data-component-id="b">2</span>"#)
+		let after  = outer(#"<span data-component-id="a">1</span><span data-component-id="b">CHANGED</span>"#)
+		let p = RegionPolicy(identity: .componentAttribute, coverage: .finest)
+		let pre = RenderSnapshot.derived(fromMarkup: before, policy: p)
+		let patch = RenderDiffer(previous: pre.baseline, policy: p)
+			.patch(RenderSnapshot.derived(fromMarkup: after, policy: p))
+		#expect(!patch.isFullPage)
+		#expect(patch.changed.map(\.id) == ["b"], "the child must ship, not #outer")
+	}
+
+	@Test("an appeared region inside a tracked ancestor ships the ancestor, not the page")
+	func appearedRegionEscalatesToNearestTrackedAncestor() {
+		func page(_ extra: String) -> String {
+			#"<div id="app" data-component-id="app"><div id="panel" data-component-id="panel">\#(extra)</div></div>"#
+		}
+		let p = RegionPolicy(identity: .componentAttribute, coverage: .finest,
+		                     escalation: .nearestTrackedAncestor)
+		let before = RenderSnapshot.derived(fromMarkup: page(""), policy: p)
+		let after = RenderSnapshot.derived(fromMarkup: page(#"<span data-component-id="row">x</span>"#), policy: p)
+		let patch = RenderDiffer(previous: before.baseline, policy: p).patch(after)
+		#expect(!patch.isFullPage)
+		#expect(patch.changed.map(\.id) == ["panel"], "nearest tracked ancestor of #row")
+	}
+
+	@Test("an excluded region is invisible: it ships nothing, and cannot force the page")
+	func excludedRegionShipsNothing() {
+		func page(_ token: String) -> String {
+			#"<div id="app" data-component-id="app"><span data-component-id="live">\#(token)</span><span data-component-id="static">ok</span></div>"#
+		}
+		let p = RegionPolicy(identity: .componentAttribute, coverage: .finest, excluded: ["live"])
+		let before = RenderSnapshot.derived(fromMarkup: page("a"), policy: p)
+		let after = RenderSnapshot.derived(fromMarkup: page("b"), policy: p)
+		let patch = RenderDiffer(previous: before.baseline, policy: p).patch(after)
+		#expect(!patch.isFullPage, "an excluded region's bytes must not reach the residue")
+		#expect(patch.changed.isEmpty, "token-owned text is written by op:text, not by the diff")
+	}
+
 	// MARK: the scanner's edges
 
 	@Test("a nested control is a region inside a region, and the outer one carries both")

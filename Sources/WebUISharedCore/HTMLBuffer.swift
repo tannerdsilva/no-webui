@@ -19,12 +19,18 @@
 /// a region is declared by the view that renders it (`beginRegion` /
 /// `endRegion` around the subtree); the buffer records only its hash, never its
 /// bytes, so a session's diff state is 8 bytes per region rather than a page.
-public struct RegionID: Hashable, Sendable {
+public struct RegionID: Hashable, Sendable, ExpressibleByStringLiteral {
 	/// the id the page knows the region by.
 	public let rawValue: String
 
 	public init(rawValue: String) {
 		self.rawValue = rawValue
+	}
+
+	/// a literal id, so a policy or a test can name a region directly:
+	/// `excluded: ["live-turn-text"]`.
+	public init(stringLiteral: String) {
+		self.rawValue = stringLiteral
 	}
 }
 
