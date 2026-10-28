@@ -397,6 +397,50 @@ struct RenderDifferTests {
 
 		#expect(derived.digest.regions[RegionID(rawValue: "c")] == buffer.renderDigest.regions[RegionID(rawValue: "c")])
 	}
+
+	@Test("element-id identity patches a control whose routing id differs")
+	func elementIDIdentity() {
+		let html = #"<button id="sk-delete" data-component-id="skill-delete">x</button>"#
+		let p = RegionPolicy(identity: .elementID, coverage: .finest)
+		let snap = RenderSnapshot.derived(fromMarkup: html, policy: p)
+		#expect(snap.spans.map(\.id.rawValue) == ["sk-delete"])
+	}
+
+	@Test("element-id identity ignores the id= inside data-component-id")
+	func elementIDIsAnchoredToTheAttributeBoundary() {
+		let html = #"<button data-component-id="skill-delete" id="sk-delete">x</button>"#
+		let p = RegionPolicy(identity: .elementID)
+		let snap = RenderSnapshot.derived(fromMarkup: html, policy: p)
+		#expect(snap.spans.map(\.id.rawValue) == ["sk-delete"], "the component attribute must not win")
+	}
+
+	@Test("an element with no id falls back to its component attribute")
+	func elementIDFallsBackToComponentAttribute() {
+		let html = #"<span data-component-id="row">x</span>"#
+		let p = RegionPolicy(identity: .elementID)
+		#expect(RenderSnapshot.derived(fromMarkup: html, policy: p).spans.map(\.id.rawValue) == ["row"])
+	}
+
+	@Test("a changed control ships under its element id")
+	func patchAddressesTheElementID() {
+		func page(_ text: String) -> String {
+			#"<div id="panel" data-component-id="panel"><button data-component-id="skill-delete" id="sk-delete">\#(text)</button></div>"#
+		}
+		let p = RegionPolicy(identity: .elementID, coverage: .finest)
+		let before = RenderSnapshot.derived(fromMarkup: page("a"), policy: p)
+		let patch = RenderDiffer(previous: before.baseline, policy: p)
+			.patch(RenderSnapshot.derived(fromMarkup: page("b"), policy: p))
+		#expect(!patch.isFullPage)
+		#expect(patch.changed.map(\.id) == ["sk-delete"], "the DOM id is what getElementById resolves")
+	}
+
+	@Test("the component-attribute identity is unchanged: an element id is not a region")
+	func componentAttributeIdentityIgnoresTheElementID() {
+		let html = #"<div id="sk-delete"><button data-component-id="skill-delete">x</button></div>"#
+		#expect(
+			RenderSnapshot.derived(fromMarkup: html).spans.map(\.id.rawValue) == ["skill-delete"],
+			"`.default` must keep keying on data-component-id")
+	}
 }
 
 // MARK: - the property gate (N25)

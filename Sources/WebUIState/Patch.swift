@@ -152,8 +152,9 @@ public struct RenderSnapshot: Sendable {
 // MARK: - markup-derived regions
 
 extension RenderSnapshot {
-	/// the snapshot of a finished page: every element carrying
-	/// `data-component-id` is a region, exactly as design E specifies for
+	/// the snapshot of a finished page: every element the policy's identity
+	/// names is a region — `data-component-id` for the default, the element's
+	/// DOM `id` for `.elementID`, exactly as design E specifies for
 	/// `controlAttributes` controls.
 	///
 	/// this is the door the server has. a render through `HTMLBuffer` records
@@ -167,15 +168,16 @@ extension RenderSnapshot {
 	/// addressable by the client's `getElementById`.
 	public static func derived(fromMarkup html: String, policy: RegionPolicy = .default) -> RenderSnapshot {
 		let bytes = Array(html.utf8)
-		let scanned = MarkupScan.scan(bytes)
+		// the identity is a scan input, not a post-processing step: spans are
+		// what the digest, the own-bytes hashes and the patch ids are all keyed
+		// by, so resolving it here carries to every consumer at once.
+		let scanned = MarkupScan.scan(bytes, identity: policy.identity)
 		let root = scanned.body ?? 0..<bytes.count
 		// a region outside the diff root (a control in the head, which no page
 		// emits) is not addressable by an in-place patch.
 		let spans = scanned.spans.filter { $0.start >= root.lowerBound && $0.end <= root.upperBound }
-		// `policy.identity` is deliberately not consulted yet: element-`id`
-		// identity is slice A2's contract and the scan still keys on
-		// `data-component-id` for every policy. `policy.excluded` is, because
-		// exclusion changes the hashes this snapshot records.
+		// `policy.excluded` reaches the snapshot because exclusion changes the
+		// hashes it records.
 		return RenderSnapshot(bytes: bytes, spans: spans, root: root, excluded: policy.excluded)
 	}
 }
@@ -187,6 +189,9 @@ extension RenderSnapshot {
 /// by every framework emitter, so a raw `<` inside one cannot forge a tag start.
 private enum MarkupScan {
 	static let componentIDPrefix: [UInt8] = Array("data-component-id=\"".utf8)
+	/// the element `id` attribute's name and quote. searched only with an
+	/// attribute-name boundary in front of it — see ``elementID(in:tag:)``.
+	static let elementIDPrefix: [UInt8] = Array("id=\"".utf8)
 	static let bodyTag: [UInt8] = Array("body".utf8)
 	/// elements that never have a closing tag.
 	static let voidTags: [[UInt8]] = [
@@ -195,13 +200,15 @@ private enum MarkupScan {
 	].map { Array($0.utf8) }
 
 	/// one tag walk: the document's `<body>` span (when there is one) and every
-	/// element carrying a `data-component-id`.
+	/// element the policy's identity makes a region.
 	///
 	/// a single pass with an open-element stack, so the cost is O(bytes) once —
 	/// not one rescan per region, which is what a real page (38 controls over
 	/// 168 KB) makes unaffordable. no node is built and no tag name is
 	/// materialized: the stack holds byte ranges into the render.
-	static func scan(_ bytes: [UInt8]) -> (body: Range<Int>?, spans: [RegionSpan]) {
+	static func scan(
+		_ bytes: [UInt8], identity: RegionPolicy.Identity
+	) -> (body: Range<Int>?, spans: [RegionSpan]) {
 		struct Open {
 			let name: Range<Int>
 			let start: Int
@@ -262,7 +269,7 @@ private enum MarkupScan {
 			} else {
 				let selfClosing = tagClose > index && bytes[tagClose - 1] == slash
 				let isVoid = voidTags.contains { equalsTag(bytes, name, $0) }
-				let id = componentID(in: bytes, tag: index..<tagClose)
+				let id = regionID(in: bytes, tag: index..<tagClose, identity: identity)
 				if selfClosing || isVoid {
 					if let id {
 						spans.append(RegionSpan(id: RegionID(rawValue: id), start: index, end: tagClose + 1))
@@ -295,13 +302,63 @@ private enum MarkupScan {
 
 	/// the value of the element's `data-component-id`, when its opening tag
 	/// carries one.
-static func componentID(in bytes: [UInt8], tag: Range<Int>) -> String? {
+	static func componentID(in bytes: [UInt8], tag: Range<Int>) -> String? {
 		guard let hit = find(componentIDPrefix, in: bytes, from: tag.lowerBound, limit: tag.upperBound)
 		else { return nil }
 		let valueStart = hit + componentIDPrefix.count
 		guard let valueEnd = findByte(quote, in: bytes, from: valueStart) else { return nil }
 		guard valueEnd <= tag.upperBound, valueEnd > valueStart else { return nil }
 		return String(decoding: bytes[valueStart..<valueEnd], as: UTF8.self)
+	}
+
+	/// the id a region is keyed by, per the policy's identity.
+	///
+	/// `.componentAttribute` — the default — is the routing id a control
+	/// declares, and that path is byte-for-byte the read it has always been.
+	/// `.elementID` is the DOM `id` the engine resolves with
+	/// `getElementById`, which is what a `replace` addresses; the component
+	/// attribute only stands in when the element carries no `id` at all, so a
+	/// page that never emits one keeps working.
+	static func regionID(
+		in bytes: [UInt8], tag: Range<Int>, identity: RegionPolicy.Identity
+	) -> String? {
+		switch identity {
+		case .componentAttribute:
+			return componentID(in: bytes, tag: tag)
+		case .elementID:
+			return elementID(in: bytes, tag: tag) ?? componentID(in: bytes, tag: tag)
+		}
+	}
+
+	/// the value of the element's `id` attribute, when its opening tag carries
+	/// one.
+	///
+	/// the match is anchored to an attribute-name boundary: the byte before
+	/// `id=` must be ascii whitespace. that anchor is the whole correctness of
+	/// this read — `data-component-id="` *ends* with `id="`, so an unanchored
+	/// search resolves such an element to its component id while looking
+	/// perfectly healthy, and the two differ for exactly the controls this
+	/// identity exists for. `<` is never whitespace, so `id=` can neither open
+	/// the tag nor follow the tag name.
+	///
+	/// only a double-quoted value is read, exactly as `componentID` does: every
+	/// framework emitter escapes `"` inside an attribute value, so a
+	/// single-quoted or entity-encoded `id` is not a shape this scanner has to
+	/// survive.
+	static func elementID(in bytes: [UInt8], tag: Range<Int>) -> String? {
+		var from = tag.lowerBound
+		while let hit = find(elementIDPrefix, in: bytes, from: from, limit: tag.upperBound) {
+			if hit > tag.lowerBound, isSpace(bytes[hit - 1]) {
+				let valueStart = hit + elementIDPrefix.count
+				guard let valueEnd = findByte(quote, in: bytes, from: valueStart) else { return nil }
+				guard valueEnd <= tag.upperBound, valueEnd > valueStart else { return nil }
+				return String(decoding: bytes[valueStart..<valueEnd], as: UTF8.self)
+			}
+			// this `id=` is the tail of another attribute's name (`data-id=`,
+			// `data-component-id=`): keep looking.
+			from = hit + 1
+		}
+		return nil
 	}
 
 	/// the first index of `needle` at or after `from`, before `limit`.
@@ -407,10 +464,11 @@ static func componentID(in bytes: [UInt8], tag: Range<Int>) -> String? {
 public struct RegionPolicy: Sendable, Equatable {
 	/// where a region's patch id comes from.
 	///
-	/// `elementID` is slice A2's contract and is *not* implemented here: the
-	/// scanner still reads `data-component-id` for both cases, so a policy
-	/// asking for `elementID` today produces component-attribute regions.
-	/// naming the case now keeps A2 from having to respell the policy.
+	/// `componentAttribute` is the routing id a control declares; `elementID`
+	/// is the DOM `id` the engine resolves with `getElementById`, falling back
+	/// to `data-component-id` only when the element carries no `id`. the id a
+	/// region is keyed by is resolved during the scan, so the digest, the
+	/// own-bytes hashes and the ids a patch carries all agree.
 	public enum Identity: Sendable, Equatable {
 		case componentAttribute
 		case elementID
