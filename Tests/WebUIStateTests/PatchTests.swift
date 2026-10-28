@@ -414,11 +414,23 @@ struct RenderDifferTests {
 		#expect(snap.spans.map(\.id.rawValue) == ["sk-delete"], "the component attribute must not win")
 	}
 
-	@Test("an element with no id falls back to its component attribute")
-	func elementIDFallsBackToComponentAttribute() {
-		let html = #"<span data-component-id="row">x</span>"#
+	@Test("under element-id identity an element with no id is not a region")
+	func elementIDYieldsNoRegionWithoutAnID() {
+		let html = #"<div id="panel"><span data-component-id="row">x</span></div>"#
 		let p = RegionPolicy(identity: .elementID)
-		#expect(RenderSnapshot.derived(fromMarkup: html, policy: p).spans.map(\.id.rawValue) == ["row"])
+		#expect(
+			RenderSnapshot.derived(fromMarkup: html, policy: p).spans.map(\.id.rawValue) == ["panel"],
+			"a routing key is not an address: keying the span by it would ship a frame no client can apply"
+		)
+	}
+
+	@Test("element-id identity tracks an element that carries only an id")
+	func elementIDTracksIDOnlyElements() {
+		// the shape a page's region roots actually have: `#panel`, `#main`,
+		// `#chat-inner` carry an id and no component attribute.
+		let html = #"<div id="panel"><p id="body">x</p></div>"#
+		let p = RegionPolicy(identity: .elementID)
+		#expect(RenderSnapshot.derived(fromMarkup: html, policy: p).spans.map(\.id.rawValue) == ["panel", "body"])
 	}
 
 	@Test("a changed control ships under its element id")

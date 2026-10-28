@@ -326,7 +326,10 @@ private enum MarkupScan {
 		case .componentAttribute:
 			return componentID(in: bytes, tag: tag)
 		case .elementID:
-			return elementID(in: bytes, tag: tag) ?? componentID(in: bytes, tag: tag)
+			// no fallback to the component attribute: it is a routing key, not an
+			// address. patching by it would name an id the document never
+			// contains, which is a silently dropped frame.
+			return elementID(in: bytes, tag: tag)
 		}
 	}
 
@@ -470,7 +473,18 @@ public struct RegionPolicy: Sendable, Equatable {
 	/// region is keyed by is resolved during the scan, so the digest, the
 	/// own-bytes hashes and the ids a patch carries all agree.
 	public enum Identity: Sendable, Equatable {
+		/// the element's `data-component-id` — the event-routing key, which is
+		/// not always the DOM id a patch addresses.
 		case componentAttribute
+		/// the element's DOM `id` — exactly what the engine resolves with
+		/// `getElementById`, so a frame keyed this way always lands on the
+		/// element it names, and an element carrying only an `id` is a region
+		/// too (a page's region roots routinely have no component attribute).
+		///
+		/// an element with no `id` is **not** a region: it is not addressable,
+		/// and keying it by its component attribute would emit a frame no
+		/// client can apply. its bytes roll into the nearest tracked ancestor,
+		/// which does ship.
 		case elementID
 	}
 
