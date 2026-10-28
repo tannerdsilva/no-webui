@@ -10,7 +10,7 @@
 # forced it. `Tests/WebUITests/FrozenSurfaceTests.swift` fails when this
 # file and a fresh extraction diverge, naming every added and removed symbol.
 #
-# re-measured 2026-10-28: 5118 symbols across 11 modules.
+# re-measured 2026-10-28: 5141 symbols across 11 modules.
 
 ## WebUISharedCore
 
@@ -123,6 +123,7 @@ JSONValue.serialize()
 JSONValue.string(_:)
 RegionID
 RegionID.init(rawValue:)
+RegionID.init(stringLiteral:)
 RegionID.rawValue
 RenderDigest
 RenderDigest.init(regions:)
@@ -4913,6 +4914,11 @@ WebUIServerService.server
 Mutation
 Mutation.apply
 Mutation.init(_:)
+PageDiffer
+PageDiffer.init(policy:)
+PageDiffer.messages(forMarkup:root:)
+PageDiffer.reset()
+PageDiffer.seed(withMarkup:)
 PagePatch
 PagePatch.changedRegions
 PagePatch.fragments
@@ -4925,11 +4931,28 @@ PageSubscription.connect(for:)
 PageSubscription.disconnect(from:)
 PageSubscription.init(to:in:push:)
 PageSubscription.stateDidChange(revision:session:)
+RegionPolicy
+RegionPolicy.Coverage
+RegionPolicy.Coverage.coarse
+RegionPolicy.Coverage.finest
+RegionPolicy.Escalation
+RegionPolicy.Escalation.fullPage
+RegionPolicy.Escalation.nearestTrackedAncestor
+RegionPolicy.Identity
+RegionPolicy.Identity.componentAttribute
+RegionPolicy.Identity.elementID
+RegionPolicy.coverage
+RegionPolicy.default
+RegionPolicy.escalation
+RegionPolicy.excluded
+RegionPolicy.identity
+RegionPolicy.init(identity:coverage:escalation:excluded:transition:)
+RegionPolicy.transition
 RenderBaseline
 RenderBaseline.digest
 RenderDiffer
-RenderDiffer.init()
-RenderDiffer.init(previous:)
+RenderDiffer.init(policy:)
+RenderDiffer.init(previous:policy:)
 RenderDiffer.patch(_:)
 RenderPatch
 RenderPatch.changed
@@ -4940,7 +4963,7 @@ RenderPatch.removed
 RenderSnapshot
 RenderSnapshot.baseline
 RenderSnapshot.bytes
-RenderSnapshot.derived(fromMarkup:)
+RenderSnapshot.derived(fromMarkup:policy:)
 RenderSnapshot.digest
 RenderSnapshot.html
 RenderSnapshot.regionHTML(_:)
