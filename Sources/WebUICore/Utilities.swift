@@ -283,16 +283,25 @@ private let urlForbiddenControlScalars: Set<UnicodeScalar> = {
     if let del = UnicodeScalar(0x7F) { set.insert(del) }
     return set
 }()
-private let urlWhitespaceScalars: Set<UnicodeScalar> = ["\t", "\n", "\u{0B}", "\u{0C}", "\r", " "]
 
 // the browser strips ASCII whitespace and C0 control characters from a URL
 // before parsing the scheme, so " javascript:" and "java\tscript:" both
 // execute as javascript. strip the same set here so the scheme check sees
 // what the browser would see.
+//
+// spaces are the exception: the browser *trims* them at the ends and keeps
+// them in the middle, where they are ordinary url content that the parser
+// percent-encodes later. stripping them everywhere turned `?q=hello world`
+// into `?q=helloworld` — a silently wrong destination — so trimming is a
+// separate step from the control-character filter.
 private func normalizedURLString(_ url: String) -> String {
-    let forbidden = urlForbiddenControlScalars.union(urlWhitespaceScalars)
-    let filtered = url.unicodeScalars.filter { !forbidden.contains($0) }
-    return String(String.UnicodeScalarView(filtered))
+    let filtered = String(String.UnicodeScalarView(
+        url.unicodeScalars.filter { !urlForbiddenControlScalars.contains($0) }
+    ))
+    var trimmed = Substring(filtered)
+    while trimmed.first == " " { trimmed = trimmed.dropFirst() }
+    while trimmed.last == " " { trimmed = trimmed.dropLast() }
+    return String(trimmed)
 }
 
 public func sanitizeURL(_ url: String) -> String? {

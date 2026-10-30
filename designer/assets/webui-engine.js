@@ -1264,7 +1264,7 @@ window.WebUIEngine = (function () {
   var UNSAFE_PROTOCOLS = /^(javascript|data|vbscript):/i;
 
   function stripUrlControlChars(url) {
-    return String(url).replace(/[\u0000-\u0020\u007F]/g, '');
+    return String(url).replace(/[\u0000-\u001F\u007F]/g, '').replace(/^ +| +$/g, '');
   }
 
   function isSafeUrl(url) {

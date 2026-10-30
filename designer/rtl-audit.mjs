@@ -30,12 +30,30 @@ let pass = 0, fail = 0;
 const ok = (m) => { pass++; console.log("  PASS " + m); };
 const bad = (m) => { fail++; console.log("  FAIL " + m); };
 
-async function waitFor(url) {
+async function waitFor(url, child) {
   for (let i = 0; i < 40; i++) {
+    // a child that already exited can never serve this url — fail fast instead
+    // of connecting to whatever else happens to hold the port.
+    if (child && child.exitCode !== null) { return false; }
     try { const r = await fetch(url); if (r.ok) { return true; } } catch {}
     await new Promise((r) => setTimeout(r, 250));
   }
   return false;
+}
+
+// the port is shared across iterations, so the previous server must be fully
+// gone before the next one binds it. a fixed `sleep 250ms` is a guess: under
+// load the old listener outlives it, the next bind fails with EADDRINUSE, and
+// the readiness probe answers from the OLD server — which then audits the
+// previous block, or the previous direction, under the new label. that is both
+// a false failure and a false pass. wait for the process to actually exit.
+function waitForExit(child) {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
+  return new Promise((resolve) => {
+    const done = () => resolve();
+    child.once("exit", done);
+    child.once("close", done);
+  });
 }
 
 const browser = await chromium.launch();
@@ -48,9 +66,10 @@ for (const block of BLOCKS) {
     let log = "";
     server.stdout.on("data", (d) => (log += d));
     server.stderr.on("data", (d) => (log += d));
-    if (!(await waitFor("http://127.0.0.1:" + PORT + "/"))) {
+    if (!(await waitFor("http://127.0.0.1:" + PORT + "/", server))) {
       bad(block + "/" + dir + ": server did not come up (" + log.slice(-140) + ")");
       server.kill("SIGTERM");
+      await waitForExit(server);
       continue;
     }
     // precondition: is this the page and the direction we asked for?
@@ -60,6 +79,7 @@ for (const block of BLOCKS) {
     if (!probe.includes(wanted)) {
       bad(block + "/" + dir + ": served html does not carry " + wanted);
       server.kill("SIGTERM");
+      await waitForExit(server);
       continue;
     }
     ok(block + "/" + dir + ": served html declares its direction");
@@ -106,7 +126,7 @@ for (const block of BLOCKS) {
     }
     await context.close();
     server.kill("SIGTERM");
-    await new Promise((r) => setTimeout(r, 250));
+    await waitForExit(server);
   }
 }
 

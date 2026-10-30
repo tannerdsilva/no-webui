@@ -57,9 +57,65 @@ all notable changes to this project are documented here.
   of a redirect, a refused first frame instead of a `403` handshake, a refused
   *next* frame instead of a synchronous logout close, a `503` capacity answer
   instead of a silent accept-time close — and names each at its assertion.
-- `swift test`: **1,774 tests in 9 runs** (was 1,702 in this entry, 1,571 in
-  `AGENTS.md`); frozen surface re-measured at **5,118 symbols across 11
-  modules**. the showcase byte pin is unchanged at 168,671 bytes.
+- `swift test`: **1,795 tests in 9 runs** (was 1,774 in this entry, 1,702 the
+  entry before it, 1,571 in `AGENTS.md`); frozen surface re-measured at **5,118
+  symbols across 11 modules**. the showcase byte pin is unchanged at 168,671
+  bytes.
+
+### fixed
+
+- **a connected page no longer keeps the server alive past shutdown.** `stop()`
+  closed the listener and returned, but the accept loop's task group still
+  awaited its connection handlers — and a handler parked on an idle websocket has
+  no reason to leave. the process therefore lived on until the browser
+  disconnected: `swift package serve` outlived Ctrl-C, and every gate that spawns
+  a server per block leaked an orphan holding its port, which is what made
+  `rtl-audit` blame a different block on each run. `stop()` now fires a
+  one-shot `ShutdownSignal` that the accept loop races: on the signal the loop is
+  cancelled, cancellation propagates to the connection handlers, and the group
+  drains. `sinks.closeAll()` also ends live sockets instead of leaving them for
+  the event loop to reap. the signal's `wait()` is cancellation-aware as well: a
+  `CheckedContinuation` cancelled while suspended would never resume, and a task
+  group cannot leave its scope while a child hangs, so a cancellation counts as a
+  shutdown request. measured with `designer/shutdown-gate.mjs`: a server with an
+  open websocket now exits ~2 ms after SIGTERM, where before it never exited at
+  all.
+- **`sanitizeURL` no longer deletes spaces from the middle of a url.** the
+  sanitizer stripped every ASCII space before testing the scheme, so an ordinary
+  link lost its content: `/search?q=hello world` was served as
+  `/search?q=helloworld` — a silently wrong destination. a space is url content
+  the browser percent-encodes; only the ends are trimmed now. the
+  control-character filter still drops tabs, newlines and C0 controls anywhere in
+  the string, so a whitespace-split or whitespace-padded `javascript:` scheme is
+  still refused. the js mirror in `webui-engine.js` (pinned verbatim against the
+  swift authority by `URLPolicyFixtureTests`) carried the same defect, and the
+  shared `designer/url-payloads.json` grew an optional `resolved` field so the
+  fixture pins the value the sanitizer returns, not just the accept/reject bit.
+- **`designer/rtl-audit.mjs` and `designer/blocks-sweep.mjs` no longer race on
+  their own port.** both spawn a server per block on one fixed port, kill it, and
+  sleep a fixed 250 ms before binding the same port again. under load the old
+  listener outlived that sleep, the next bind failed with `EADDRINUSE`, and the
+  readiness probe answered from the *previous* server — auditing the wrong block
+  or direction under the new label. that surfaced as `served html does not carry
+  <html lang="en" dir="ltr">` on a different block each run, and could equally
+  have passed on a page it never loaded. both now wait for the child process to
+  actually exit, and fail fast when it dies instead of probing the port.
+  `blocks-sweep`'s identity precondition was also too weak to catch it on its
+  own: it accepted any title starting `<title>WebUI block`, which every
+  non-index block satisfies, so it now requires that block's exact document
+  title (`Block.title`).
+- **`designer/browser-smoke.mjs` stopped reporting the documented degrade path as
+  a resize bug.** the non-flagged-region probe required
+  `data-webui-island-state="mounted"` and announced "resize loop touched a
+  non-flagged region" whenever the region was merely `unmapped` because its wasm
+  artifact was absent — while the same reading's `sameNode: true` proved the node
+  had not been touched, and every neighbouring probe already tolerated that
+  state. the assertion now separates "the node was replaced" (the bug it exists
+  to catch) from "the artifact is absent" (the documented degrade).
+- **`AGENTS.md` names the files that exist.** the prose-guard payload list and the
+  plugin-failure checklist still required `webui-runtime.js`, which went away
+  with the engine retirement; both now name `webui-engine.js`. the test count is
+  re-measured rather than carried: `1,795`.
 
 ## [2.0.0] — the typed web (2026-10-10)
 

@@ -39,8 +39,8 @@ are fine anywhere a comment helps — libraries, executables, plugins, tests.
 
 the one place comments stay forbidden is the bytes a client receives: the served
 html, css, and js. `WebUIAssetTool` enforces it — `WebUICore.ProseGuard` scans
-the payloads it embeds (`webui-runtime.js`, `webui-engine.js`, `webui-shell.js`,
-and the minified sheet) on every build and fails naming file, line and text. the
+the payloads it embeds (`webui-engine.js`, `webui-shell.js`, and the minified
+sheet) on every build and fails naming file, line and text. the
 css working file is the one place prose may *live*: `design-system.css` carries
 the designer's notes and the build minifies them away, so the file the designer
 edits and the bytes the client receives differ by exactly that one transform —
@@ -53,7 +53,7 @@ inline comments explain code, markdown files explain architecture and APIs.
 
 ```bash
 swift build             # includes the WebUIAssetPlugin + WebUIIconPlugin (auto-generates Assets+Generated.swift + DesignTokens+Generated.swift + IconLibrary.swift; WebUIEmbedPlugin for a target shipping its own Assets/webui-assets.json)
-swift test              # 1571 tests — re-count rather than trust: grep -rc '@Test' Tests/ | awk -F: '{s+=$2} END {print s}'
+swift test              # 1795 tests — re-count rather than trust: grep -rc '@Test' Tests/ | awk -F: '{s+=$2} END {print s}'
 swift run WebUIExample  # example server on :9090
 ```
 
@@ -391,7 +391,7 @@ see `Documentation/ICONS.md` for the full guide.
 
 ```bash
 swift build
-swift test                                  # 1571 tests, 0 issues
+swift test                                  # 1795 tests, 0 issues
 swift package plugin budget                 # shipped-surface ceilings: engine/sheet/shell/island
 swift package --disable-sandbox plugin smoke
 swift package --disable-sandbox plugin fullstack-smoke
@@ -404,6 +404,7 @@ node designer/showcase-ws-smoke.mjs         # stable-id dispatch gate (raw clien
 node designer/blocks-sweep.mjs              # every block at 320/768/1440, both themes, no overflow
 node designer/chart-mobile-audit.mjs        # chart text >= 11px, six viewports x both themes
 node designer/rtl-audit.mjs                 # both directions x both themes x three widths
+node designer/shutdown-gate.mjs             # a server with a page connected exits on SIGTERM (no orphans)
 node designer/acceptance-demo.mjs           # dashboard + click round-trip + form POST + file upload
 node designer/event-deck-probe.mjs          # every deck event, real browser + own socket
 node designer/a11y-audit.mjs                # the six-rule accessibility gate (raw http)
@@ -462,7 +463,7 @@ are measuring, and make every probe assert its own preconditions.
   none is hand-edited.
 - **Plugin failures** — if `swift build` fails with a plugin error, check that
   `designer/assets/` exists and contains both `design-system.css`
-  and `webui-runtime.js`. if those files are deleted/renamed the build still
+  and `webui-engine.js`. if those files are deleted/renamed the build still
   succeeds (the plugin warns and returns no commands) — the server then embeds
   empty assets.
 - **bind() is sandbox-denied** — `serve`/`smoke`/`fullstack-smoke` must run with

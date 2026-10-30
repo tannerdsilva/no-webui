@@ -17,6 +17,22 @@ const ROOT = join(dirname(fileURLToPath(import.meta.url)), "..");
 const PORT = 9093;
 const BLOCKS = ["index", "dashboard", "login", "signup",
                 "sidebar-default", "sidebar-collapsible", "sidebar-rail", "sidebar-inset", "patterns"];
+
+// the document title each block must serve. a prefix check (`<title>WebUI
+// block`) matches EVERY non-index block, so it could not tell a stale server's
+// page from the one just spawned — the exact title can. the names mirror
+// `Block.title` in Sources/WebUIBlocks/Blocks.swift.
+const TITLES = {
+  "index": "WebUI blocks",
+  "dashboard": "WebUI block - Dashboard",
+  "login": "WebUI block - Login",
+  "signup": "WebUI block - Sign up",
+  "sidebar-default": "WebUI block - Sidebar: default",
+  "sidebar-collapsible": "WebUI block - Sidebar: collapsible",
+  "sidebar-rail": "WebUI block - Sidebar: rail",
+  "sidebar-inset": "WebUI block - Sidebar: inset",
+  "patterns": "WebUI block - Patterns",
+};
 const VIEWPORTS = [{ w: 320, h: 900 }, { w: 768, h: 900 }, { w: 1440, h: 900 }];
 const THEMES = ["light", "dark"];
 const expect = {
@@ -58,12 +74,28 @@ let pass = 0, fail = 0;
 const ok = (m) => { pass++; console.log("  PASS " + m); };
 const bad = (m) => { fail++; console.log("  FAIL " + m); };
 
-async function waitFor(url) {
+async function waitFor(url, child) {
   for (let i = 0; i < 40; i++) {
+    // a child that already exited (e.g. EADDRINUSE) can never serve this url;
+    // fail fast rather than connecting to whatever else holds the port.
+    if (child && child.exitCode !== null) { return false; }
     try { const r = await fetch(url); if (r.ok) { return true; } } catch {}
     await new Promise((r) => setTimeout(r, 250));
   }
   return false;
+}
+
+// the port is reused across blocks, so the previous server must be fully gone
+// before the next binds. a fixed sleep is a guess: if the old listener outlives
+// it the next bind fails and the readiness probe answers from the OLD server,
+// which then audits the previous block under the new name.
+function waitForExit(child) {
+  if (child.exitCode !== null || child.signalCode !== null) return Promise.resolve();
+  return new Promise((resolve) => {
+    const done = () => resolve();
+    child.once("exit", done);
+    child.once("close", done);
+  });
 }
 
 const browser = await chromium.launch();
@@ -76,9 +108,10 @@ for (const name of BLOCKS) {
   server.stdout.on("data", (d) => (log += d));
   server.stderr.on("data", (d) => (log += d));
 
-  if (!(await waitFor("http://127.0.0.1:" + PORT + "/"))) {
+  if (!(await waitFor("http://127.0.0.1:" + PORT + "/", server))) {
     bad(name + ": server did not come up (" + log.slice(-200) + ")");
     server.kill("SIGTERM");
+    await waitForExit(server);
     continue;
   }
 
@@ -87,10 +120,17 @@ for (const name of BLOCKS) {
   // same page - the failure mode that read as "the fix broke three pages".
   {
     const probe = await (await fetch("http://127.0.0.1:" + PORT + "/")).text();
-    const want = name === "index" ? "WebUI blocks" : "WebUI block";
-    if (!probe.includes("<title>" + want)) {
-      bad(name + ": port " + PORT + " is serving a different page; kill the stray server and retry");
+    const want = TITLES[name] ? "<title>" + TITLES[name] + "</title>" : null;
+    if (!want) {
+      bad(name + ": no expected title pinned for this block — the identity check cannot run");
       server.kill("SIGTERM");
+      await waitForExit(server);
+      continue;
+    }
+    if (!probe.includes(want)) {
+      bad(name + ": port " + PORT + " is serving a different page (wanted " + want + "); kill the stray server and retry");
+      server.kill("SIGTERM");
+      await waitForExit(server);
       continue;
     }
     ok(name + ": served page is this block");
@@ -192,7 +232,7 @@ for (const name of BLOCKS) {
 
   await context.close();
   server.kill("SIGTERM");
-  await new Promise((r) => setTimeout(r, 250));
+  await waitForExit(server);
 }
 
 await browser.close();

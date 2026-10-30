@@ -6,6 +6,7 @@ import FoundationNetworking
 #endif
 import Logging
 import ServiceLifecycle
+import Synchronization
 import Testing
 import WebUI
 import WebUIDesignSystem
@@ -389,4 +390,62 @@ struct WebUIServerSeamsTests {
 			#expect(String(decoding: body, as: UTF8.self) == probePlain)
 		}
 	}
+}
+
+// MARK: - shutdown signal
+
+// the accept loop races this signal so a connected page cannot hold the process
+// open (`stop()` closes the listener, but the loop's task group still awaits its
+// connection handlers, and an idle websocket never leaves on its own).
+@Suite("shutdown signal")
+struct ShutdownSignalTests {
+
+	@Test("a waiter is released by fire()")
+	func waiterReleased() async {
+		let signal = ShutdownSignal()
+		let released = Locked(false)
+		let waiter = Task {
+			await signal.wait()
+			released.set(true)
+		}
+		// give the waiter a moment to suspend on the continuation first
+		try? await Task.sleep(for: .milliseconds(50))
+		signal.fire()
+		await waiter.value
+		#expect(released.get())
+	}
+
+	@Test("a waiter that arrives after the signal returns immediately")
+	func lateWaiterReturns() async {
+		let signal = ShutdownSignal()
+		signal.fire()
+		// must not suspend at all: fire() already happened.
+		await signal.wait()
+	}
+
+	@Test("fire() is idempotent and releases every waiter")
+	func fireIsIdempotent() async {
+		let signal = ShutdownSignal()
+		let count = Locked(0)
+		let waiters = (0..<3).map { _ in
+			Task {
+				await signal.wait()
+				count.update { $0 + 1 }
+			}
+		}
+		try? await Task.sleep(for: .milliseconds(50))
+		signal.fire()
+		signal.fire()
+		for waiter in waiters { await waiter.value }
+		#expect(count.get() == 3)
+	}
+}
+
+/// a tiny mutex box for the async assertions above.
+final class Locked<Value: Sendable>: Sendable {
+	private let lock: Mutex<Value>
+	init(_ value: Value) { lock = Mutex(value) }
+	func get() -> Value { lock.withLock { $0 } }
+	func set(_ value: Value) { lock.withLock { $0 = value } }
+	func update(_ body: (Value) -> Value) { lock.withLock { $0 = body($0) } }
 }

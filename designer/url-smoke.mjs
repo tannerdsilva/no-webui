@@ -13,7 +13,7 @@ const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 var UNSAFE_PROTOCOLS = /^(javascript|data|vbscript):/i;
 
 function stripUrlControlChars(url) {
-  return String(url).replace(/[\u0000-\u0020\u007F]/g, '');
+  return String(url).replace(/[\u0000-\u001F\u007F]/g, '').replace(/^ +| +$/g, '');
 }
 
 function isSafeUrl(url) {
@@ -27,6 +27,16 @@ for (const entry of fixture) {
   if (actual !== entry.safe) {
     failures += 1;
     console.log(`FAIL ${JSON.stringify(entry.payload)}: expected safe=${entry.safe}, got ${actual}`);
+  }
+  // an optional `resolved` pins the value the sanitizer RETURNS, not just its
+  // verdict — a sanitizer that accepts a url and then corrupts it is a bug the
+  // safe/unsafe bit cannot see.
+  if (typeof entry.resolved === 'string') {
+    const got = stripUrlControlChars(entry.payload);
+    if (got !== entry.resolved) {
+      failures += 1;
+      console.log(`FAIL ${JSON.stringify(entry.payload)}: expected ${JSON.stringify(entry.resolved)}, got ${JSON.stringify(got)}`);
+    }
   }
 }
 if (failures > 0) {

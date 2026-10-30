@@ -27,6 +27,13 @@ struct URLPolicyFixtureTests {
 			}
 			let accepted = sanitizeURL(payload) != nil
 			#expect(accepted == expectedSafe, "payload \(payload.debugDescription)")
+			// an optional `resolved` pins the value the sanitizer returns — the
+			// safe/unsafe bit alone cannot see a sanitizer that accepts a url and
+			// then corrupts it.
+			if case .string(let resolved)? = dict["resolved"], expectedSafe {
+				#expect(sanitizeURL(payload) == resolved,
+					"payload \(payload.debugDescription) resolved to \(String(describing: sanitizeURL(payload)).debugDescription), expected \(resolved.debugDescription)")
+			}
 		}
 	}
 

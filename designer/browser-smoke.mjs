@@ -413,10 +413,21 @@ if (probeInitial && probeResized && probeResized.state === "mounted" &&
 } else {
   bad(`resizable island did not follow the resize: ${JSON.stringify({ before: probeInitial, after: probeResized })}`);
 }
-if (nonFlaggedAfterResize && nonFlaggedAfterResize.sameNode && nonFlaggedAfterResize.state === "mounted") {
+// the assertion separates "the node was replaced" (the actual bug this probe
+// exists to catch) from "the region is unmapped", which is the documented
+// degrade path when the validate artifact is absent — the neighbouring probes
+// all tolerate it, and reporting it as "touched" sent the reader hunting a
+// resize-loop bug that did not exist.
+if (!nonFlaggedAfterResize) {
+  bad("resize probe lost the non-flagged region entirely");
+} else if (!nonFlaggedAfterResize.sameNode) {
+  bad(`resize loop re-rendered a non-flagged region (node replaced): ${JSON.stringify(nonFlaggedAfterResize)}`);
+} else if (nonFlaggedAfterResize.state === "mounted") {
   ok("non-resizable island region untouched by the resize loop (same node, still mounted)");
+} else if (validateFetchDegrade && nonFlaggedAfterResize.state === "unmapped") {
+  ok("non-resizable island region untouched by the resize loop (same node; unmapped — validate artifact absent)");
 } else {
-  bad(`resize loop touched a non-flagged region: ${JSON.stringify(nonFlaggedAfterResize)}`);
+  bad(`non-flagged region left in an unexpected state: ${JSON.stringify(nonFlaggedAfterResize)}`);
 }
 await page.setViewportSize({ width: 1280, height: 900 });
 await page.waitForTimeout(500);

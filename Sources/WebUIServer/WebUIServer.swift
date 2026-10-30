@@ -336,6 +336,9 @@ public actor WebUIServer {
 	/// the connected pages a push reaches. created at init, so a broadcast
 	/// issued before `start()` is a no-op rather than a crash.
 	private let sinks = ConnectionSinks()
+	/// fired by `stop()`; the accept loop races it so a connected page cannot
+	/// hold the process open.
+	private let shutdown = ShutdownSignal()
 
 	/// bind and serve until `stop()` or process exit.
 	public func start() async throws {
@@ -434,15 +437,32 @@ public actor WebUIServer {
 		// is still running — swift-nio answers that with "Cannot schedule
 		// tasks on an EventLoop that has already shut down", and upgrades the
 		// race to a forced crash in a later release.
+		//
+		// the shutdown signal is raced against the accept loop because closing
+		// the listener is not enough: the group scope waits for the connection
+		// handlers, and a handler parked on an idle websocket has no reason to
+		// leave on its own. cancelling the accept loop propagates to those
+		// children, which is what lets a server with a connected page exit.
 		do {
-			try await withThrowingDiscardingTaskGroup { group in
-				try await channel.executeThenClose { inbound in
-					for try await negotiationFuture in inbound {
-						group.addTask {
-							await runner.handle(negotiationFuture)
+			try await withThrowingTaskGroup(of: Void.self) { group in
+				group.addTask {
+					try await withThrowingDiscardingTaskGroup { children in
+						try await channel.executeThenClose { inbound in
+							for try await negotiationFuture in inbound {
+								children.addTask {
+									await runner.handle(negotiationFuture)
+								}
+							}
 						}
 					}
 				}
+				group.addTask {
+					await self.shutdown.wait()
+				}
+				// whichever finishes first wins; the other is cancelled so the
+				// scope can exit.
+				_ = try await group.next()
+				group.cancelAll()
 			}
 			try await group.shutdownGracefully()
 		} catch {
@@ -451,12 +471,21 @@ public actor WebUIServer {
 		}
 	}
 
-	/// close the listener. the accept loop drains the connections already
-	/// accepted and shuts the event loop group down itself, so a handler never
-	/// schedules work on a loop that has already stopped.
+	/// close the listener and every live socket. the accept loop drains the
+	/// connections already accepted and shuts the event loop group down itself,
+	/// so a handler never schedules work on a loop that has already stopped.
+	///
+	/// sockets are closed first, deliberately: `shutdownGracefully` waits for
+	/// every channel, and a connected page holds its websocket open indefinitely,
+	/// so closing only the listener left the group waiting on a client that had
+	/// no reason to leave. an idle socket is not in-flight work to drain.
 	public func stop() async {
 		guard let lifecycle else { return }
 		self.lifecycle = nil
+		// fire first: the accept loop is racing this, and the connection
+		// handlers only unwind once it is cancelled.
+		shutdown.fire()
+		sinks.closeAll()
 		try? await lifecycle.channel.channel.close().get()
 	}
 
@@ -557,6 +586,48 @@ enum ServerGateError: Error {
 	case atCapacity
 }
 
+// MARK: - shutdown signal
+
+/// a one-shot signal. `fire()` releases every waiter, and a waiter that arrives
+/// after the signal returns immediately — so a `stop()` that lands before
+/// `start()` still stops the server, and a second `stop()` is harmless.
+final class ShutdownSignal: Sendable {
+	private struct State {
+		var fired = false
+		var waiters: [CheckedContinuation<Void, Never>] = []
+	}
+	private let state = Mutex<State>(State())
+
+	func wait() async {
+		// `CheckedContinuation` is not cancellation-aware: a waiter that is
+		// cancelled while suspended would never resume, and a task group cannot
+		// leave its scope while a child is still suspended. cancelling the wait
+		// is a shutdown request, so the cancellation handler fires the signal.
+		await withTaskCancellationHandler {
+			await withCheckedContinuation { (continuation: CheckedContinuation<Void, Never>) in
+				let alreadyFired = state.withLock { s -> Bool in
+					guard !s.fired else { return true }
+					s.waiters.append(continuation)
+					return false
+				}
+				if alreadyFired { continuation.resume() }
+			}
+		} onCancel: {
+			fire()
+		}
+	}
+
+	func fire() {
+		let pending = state.withLock { s -> [CheckedContinuation<Void, Never>] in
+			s.fired = true
+			let all = s.waiters
+			s.waiters.removeAll()
+			return all
+		}
+		for continuation in pending { continuation.resume() }
+	}
+}
+
 // MARK: - connected pages
 
 /// the live websocket outbound writers, keyed by connection id — the targets a
@@ -567,16 +638,27 @@ enum ServerGateError: Error {
 /// push can never reach a stale page from a former session: the render-binding
 /// invariant is enforced when the connection is admitted, not per message.
 final class ConnectionSinks: Sendable {
-	private let state = Mutex<[Int: NIOAsyncChannelOutboundWriter<WebSocketFrame>]>([:])
+	/// one live socket: the writer a push targets, and the way to close it.
+	/// the close closure is held so shutdown can end idle connections — an
+	/// idle websocket is not in-flight work, but it does hold its channel
+	/// open, and `shutdownGracefully` waits on every channel.
+	private struct Target: Sendable {
+		let outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>
+		let close: @Sendable () -> Void
+	}
+	private let state = Mutex<[Int: Target]>([:])
 	private let counter = Mutex<Int>(0)
 
 	/// register a connection and return its id.
-	func register(_ outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>) -> Int {
+	func register(
+		_ outbound: NIOAsyncChannelOutboundWriter<WebSocketFrame>,
+		close: @escaping @Sendable () -> Void
+	) -> Int {
 		let id = counter.withLock { value -> Int in
 			value += 1
 			return value
 		}
-		state.withLock { $0[id] = outbound }
+		state.withLock { $0[id] = Target(outbound: outbound, close: close) }
 		return id
 	}
 
@@ -599,15 +681,31 @@ final class ConnectionSinks: Sendable {
 	func broadcast(_ bytes: [UInt8]) async {
 		let targets = state.withLock { Array($0) }
 		guard !targets.isEmpty else { return }
-		for (id, outbound) in targets {
+		for (id, target) in targets {
 			var buffer = ByteBufferAllocator().buffer(capacity: bytes.count)
 			buffer.writeBytes(bytes)
 			let frame = WebSocketFrame(fin: true, opcode: .text, data: buffer)
 			do {
-				try await outbound.write(frame)
+				try await target.outbound.write(frame)
 			} catch {
 				_ = state.withLock { $0.removeValue(forKey: id) }
 			}
+		}
+	}
+
+	/// close every live socket.
+	///
+	/// called on shutdown. a listener close alone does not end the process
+	/// while a client is still connected: `shutdownGracefully` waits for every
+	/// open channel, and an idle websocket never closes itself, so `stop()`
+	/// returned but the event loop group never finished — the process stayed
+	/// alive past SIGTERM until the browser went away. closing the channels is
+	/// what lets the group drain.
+	func closeAll() {
+		let targets = state.withLock { Array($0.values) }
+		for target in targets {
+			target.outbound.finish()
+			target.close()
 		}
 	}
 }
@@ -845,7 +943,7 @@ final class Runner: Sendable {
 		let observer = config.socketObserver
 		try await channel.executeThenClose { inbound, outbound in
 			// a connected page is a push target for the life of the socket.
-			let connectionID = sinks.register(outbound)
+			let connectionID = sinks.register(outbound, close: { channel.channel.close(promise: nil) })
 			defer {
 				sinks.unregister(connectionID)
 				releaseConnection(connectionID)

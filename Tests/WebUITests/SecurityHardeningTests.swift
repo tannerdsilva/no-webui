@@ -41,6 +41,31 @@ struct URLSanitizationHardeningTests {
 		#expect(sanitizeURL("  https://example.com  ") == "https://example.com")
 	}
 
+	// a space inside a url is ordinary content the browser later percent-encodes;
+	// only the ends are trimmed. stripping every space turned `?q=hello world`
+	// into `?q=helloworld`, silently sending the reader somewhere else.
+	@Test("sanitizeURL preserves interior spaces but still trims the ends")
+	func preservesInteriorSpaces() {
+		#expect(sanitizeURL("/search?q=hello world") == "/search?q=hello world")
+		#expect(sanitizeURL("https://example.com/s?q=a b") == "https://example.com/s?q=a b")
+		#expect(sanitizeURL("mailto:a@example.com?subject=Hello World")
+			== "mailto:a@example.com?subject=Hello World")
+		// the ends still trim, and tabs/newlines still vanish anywhere
+		#expect(sanitizeURL("  /p?q=a b  ") == "/p?q=a b")
+		#expect(sanitizeURL("/p?q=a\tb") == "/p?q=ab")
+		#expect(sanitizeURL("/p?q=a\nb") == "/p?q=ab")
+	}
+
+	// the obfuscation the control-character filter exists for must survive the
+	// interior-space rule: a padded or tab-split scheme is still refused.
+	@Test("preserving interior spaces does not reopen the scheme bypass")
+	func interiorSpaceRuleKeepsBypassClosed() {
+		#expect(sanitizeURL("java script:alert(1)") != nil)  // not a scheme at all
+		#expect(sanitizeURL("  javascript:alert(1)  ") == nil)
+		#expect(sanitizeURL("java\tscript:alert(1)") == nil)
+		#expect(sanitizeURL("\u{0}javascript:alert(1)") == nil)
+	}
+
 	@Test("Link with a padded javascript: href renders text-only")
 	func linkDropsUnsafeHref() {
 		let html = Link("click", href: " \tjava\nscript:alert(1)").markup.html
