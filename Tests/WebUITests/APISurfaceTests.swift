@@ -117,7 +117,7 @@ func primitiveSurfacePins() {
 func layoutSurfacePins() {
 	let v = rendered(VStack(alignment: .center, spacing: 4) { Text("a") })
 	#expect(v.contains("vstack"))
-	#expect(v.contains("spacing-4"))
+	#expect(v.contains("gap:4px"))
 	#expect(v.contains("align-center"))
 	let h = rendered(HStack(alignment: .top, spacing: 8) { Text("b") })
 	#expect(h.contains("hstack"))

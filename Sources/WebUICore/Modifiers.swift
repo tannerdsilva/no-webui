@@ -35,6 +35,37 @@ public enum TextAlignment: String, Sendable {
     case justify = "justify"
 }
 
+// MARK: - Box Model Sides
+
+/// one side of the box model.
+///
+/// top-level, not nested in `View`: these are value arguments, so a call site
+/// spells `margin(.top, .three)` and never `View.Edge.top`.
+public enum Edge: Sendable, Hashable, CaseIterable { case top, right, bottom, left }
+
+/// one axis of the box model.
+///
+/// not named `Axis`: `WebUIDesignSystemCore` already declares a public `Axis`
+/// with exactly these two cases, and every consumer that imports both `WebUI`
+/// and `WebUIDesignSystem` would then have to qualify every bare `Axis` — the
+/// repo's own `StateFamilyTests`/`DeprecatedVocabularyTests` are such files and
+/// failed to compile with "ambiguous use of 'Axis'". a second spelling of the
+/// same concept is the defect this vocabulary is meant to remove, so the
+/// framework's box-model axis carries its own name.
+public enum SpacingAxis: Sendable, Hashable, CaseIterable { case horizontal, vertical }
+
+private extension Edge {
+    /// the css property suffix for this side: `margin-top`, `padding-left`.
+    var cssName: String {
+        switch self {
+        case .top:    return "top"
+        case .right:  return "right"
+        case .bottom: return "bottom"
+        case .left:   return "left"
+        }
+    }
+}
+
 // MARK: - View Modifier Methods
 
 extension View {
@@ -84,6 +115,73 @@ extension View {
     }
     public func margin(_ all: Int) -> ModifiedView<Self, InlineStyle> {
         ModifiedView(content: self, modifier: InlineStyle(.margin, "\(all)px"))
+    }
+
+    // MARK: - Edge Spacing
+    /// one token all round: `margin: var(--space-N);`.
+    public func margin(_ space: SpaceToken) -> ModifiedView<Self, InlineStyle> {
+        ModifiedView(content: self, modifier: InlineStyle(.margin, "var(\(space.cssVariable))"))
+    }
+    /// one token on one side: `margin-top: var(--space-N);`.
+    public func margin(_ edge: Edge, _ space: SpaceToken) -> ModifiedView<Self, InlineStyle> {
+        ModifiedView(
+            content: self,
+            modifier: InlineStyle(.custom("margin-\(edge.cssName)"), "var(\(space.cssVariable))")
+        )
+    }
+    /// one token on one side: `padding-left: var(--space-N);`.
+    public func padding(_ edge: Edge, _ space: SpaceToken) -> ModifiedView<Self, InlineStyle> {
+        ModifiedView(
+            content: self,
+            modifier: InlineStyle(.custom("padding-\(edge.cssName)"), "var(\(space.cssVariable))")
+        )
+    }
+    /// the two-value shorthand: one declaration, `margin: <vertical> <horizontal>;`
+    /// — css reads the first value as vertical, so the order here is deliberate.
+    ///
+    /// no `= .zero` defaults: a leading-dot default would need a zero token, and
+    /// `SpaceToken.zero` collides with `Int.zero` at every call site that has
+    /// both `margin(_ all: Int)` and `margin(_ space: SpaceToken)` in scope
+    /// (`margin(.zero)` reports "ambiguous use of 'zero'"). both sides are
+    /// required, so no call needs the token that cannot be spelled.
+    public func margin(
+        horizontal: SpaceToken,
+        vertical: SpaceToken
+    ) -> ModifiedView<Self, InlineStyle> {
+        ModifiedView(
+            content: self,
+            modifier: InlineStyle(
+                .margin,
+                "var(\(vertical.cssVariable)) var(\(horizontal.cssVariable))"
+            )
+        )
+    }
+    /// one token on both sides of an axis: two declarations, composed.
+    ///
+    /// `ComposedModifier`, never `AnyViewModifier`: the eraser renders its
+    /// content to a string and appends it, so the second declaration would be
+    /// stranded instead of folded onto the element with the first.
+    public func margin(
+        _ axis: SpacingAxis,
+        _ space: SpaceToken
+    ) -> ModifiedView<Self, ComposedModifier<InlineStyle, InlineStyle>> {
+        let first: Edge
+        let second: Edge
+        switch axis {
+        case .horizontal:
+            first = .left
+            second = .right
+        case .vertical:
+            first = .top
+            second = .bottom
+        }
+        return ModifiedView(
+            content: self,
+            modifier: ComposedModifier(
+                first: InlineStyle(.custom("margin-\(first.cssName)"), "var(\(space.cssVariable))"),
+                second: InlineStyle(.custom("margin-\(second.cssName)"), "var(\(space.cssVariable))")
+            )
+        )
     }
 
     // MARK: - Dimensions
@@ -361,6 +459,24 @@ extension View {
 
 // MARK: - Class Names
 
+/// one class token a stylesheet declares. conformance IS the declaration: an
+/// app names its own vocabulary once, and the element layer accepts only that.
+///
+/// the framework cannot ship the words — a measured 539 of the 562 class tokens
+/// one consumer spells are declared by the consumer's own sheet, and none is
+/// declared only by the framework's. what the framework can ship is the contract
+/// and the ergonomics: this protocol, and the `ClassName` initializers below.
+///
+/// `RawRepresentable` conformance is enough; a `String` raw value becomes the
+/// token with no extra code.
+public protocol CSSClass: Sendable, Hashable {
+    var token: String { get }
+}
+
+extension CSSClass where Self: RawRepresentable, Self.RawValue == String {
+    public var token: String { rawValue }
+}
+
 /// a class name, as distinct from any other string that can appear in a view
 /// expression.
 ///
@@ -372,6 +488,25 @@ public struct ClassName: Sendable, ExpressibleByStringLiteral, Hashable {
     public let value: String
     public init(_ value: String) { self.value = value }
     public init(stringLiteral value: String) { self.value = value }
+
+    /// the declared form: a token from a vocabulary the app owns.
+    public init(_ css: some CSSClass) { self.value = css.token }
+
+    /// several declared tokens, in order — the engine a variadic class
+    /// initializer on an element needs.
+    public init(_ css: [any CSSClass]) {
+        self.value = css.map(\.token).joined(separator: " ")
+    }
+}
+
+extension ClassName {
+    /// the declared form as a value a call site can pass where a `ClassName`
+    /// is expected, e.g. `Div(...).addClass(.init(ArcClass.setRow))`.
+    ///
+    /// the literal and `String` initializers above stay for the migration
+    /// window; they are what a deprecation pass removes, and until then this
+    /// type is a carrier, not a guarantee.
+    public static func declared(_ css: some CSSClass) -> ClassName { ClassName(css) }
 }
 
 extension View {

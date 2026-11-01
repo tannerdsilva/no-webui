@@ -449,7 +449,8 @@ func declaredStackAlignmentPlacesCappedChildren() {
 	]
 	for (alignment, klass) in emit {
 		let html = VStack(alignment: alignment, spacing: 8) { Text("x") }.markup.html
-		#expect(html.contains("vstack spacing-8 \(klass)"), "\(alignment) should emit \(klass): \(html.prefix(90))")
+		#expect(html.contains("vstack \(klass)"), "\(alignment) should emit \(klass): \(html.prefix(90))")
+		#expect(html.contains("style=\"gap:8px;\""), "the gap must ride the element inline: \(html.prefix(90))")
 	}
 }
 

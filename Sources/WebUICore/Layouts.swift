@@ -15,7 +15,10 @@ public struct VStack<Content: View>: View {
 
     public func render(into buffer: inout HTMLBuffer) {
         let alignClass = "align-\(alignment.cssValue)"
-        buffer.beginElement("div", " class=\"vstack spacing-\(spacing) \(alignClass)\"")
+        // the gap rides the element inline, the shape `Grid` already uses. a
+        // `.spacing-N` class would need a generated rule per value, and any
+        // value outside that generated set would render a class nothing styles.
+        buffer.beginElement("div", " class=\"vstack \(alignClass)\" style=\"gap:\(spacing)px;\"")
         buffer.endOpenTag()
         buffer.append("\n")
         content.render(into: &buffer)
@@ -41,7 +44,7 @@ public struct HStack<Content: View>: View {
 
     public func render(into buffer: inout HTMLBuffer) {
         let alignClass = "align-\(alignment.cssValue)"
-        buffer.beginElement("div", " class=\"hstack spacing-\(spacing) \(alignClass)\"")
+        buffer.beginElement("div", " class=\"hstack \(alignClass)\" style=\"gap:\(spacing)px;\"")
         buffer.endOpenTag()
         buffer.append("\n")
         content.render(into: &buffer)

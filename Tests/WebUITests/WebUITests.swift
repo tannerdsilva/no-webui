@@ -173,7 +173,7 @@ func vstackRendersWithClasses() {
         Text("B")
     }
     let html = view.markup.html
-    #expect(html.contains("class=\"vstack spacing-16 align-center\""))
+    #expect(html.contains("class=\"vstack align-center\" style=\"gap:16px;\""))
 }
 
 @Test("HStack renders with flexbox classes")
@@ -183,7 +183,7 @@ func hstackRendersWithClasses() {
         Text("Right")
     }
     let html = view.markup.html
-    #expect(html.contains("class=\"hstack spacing-12 align-flex-start\""))
+    #expect(html.contains("class=\"hstack align-flex-start\" style=\"gap:12px;\""))
 }
 
 @Test("ZStack renders with grid overlay")

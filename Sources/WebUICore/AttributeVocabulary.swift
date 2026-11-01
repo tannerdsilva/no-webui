@@ -192,6 +192,16 @@ extension View {
 	public func wire(_ component: ComponentID, on event: HTMLEvent = .click) -> some View {
 		wire(Wire(component, on: event))
 	}
+
+	/// emit this element's wire identity for `action` on `event`.
+	///
+	/// pure, like every render: this registers nothing. the identity carries its
+	/// own payload — `family~verb~payload` — so one attribute is the routing
+	/// attribute and the row identity at once, and the family registration
+	/// (`EventRouter.on(_:_:)`) is what routes.
+	public func action(_ action: some Action, on event: HTMLEvent = .click) -> some View {
+		wire(Wire(ComponentID(action.key.wireID), on: event))
+	}
 }
 
 extension View where Self: Identified {

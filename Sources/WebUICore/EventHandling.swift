@@ -893,13 +893,47 @@ public final class EventRouter: Sendable {
     public func dispatch(_ event: EventData, in session: RenderSessionID) async -> HandlerOutcome {
         logger.emit(ObservableEvent.eventReceived(component: event.component.value, event: event.event), observers: observers)
 
-        guard let handler = state.handler(for: event.component, in: session) else {
-            // route through `logger.emit` so the observer fan-out stays on the
-            // single funnel every other emission uses (log line + notify).
-            logger.emit(ObservableEvent.debug(message: "no handler registered for component '\(event.component.value)'"), observers: observers)
-            return .fragments([])
+        if let handler = state.handler(for: event.component, in: session) {
+            return await run(handler, for: event, in: session)
         }
 
+        // no exact id: the component id may be an action wire id. the family is
+        // the text before the first separator — an exact split, not a prefix
+        // scan — and a malformed frame still names one here so the drop can say
+        // which component it dropped.
+        let segments = event.component.value.split(
+            separator: ActionKey.separator,
+            maxSplits: 1,
+            omittingEmptySubsequences: false
+        )
+        if let family = segments.first, !family.isEmpty,
+           let familyHandler = state.handler(for: Self.familyKey(String(family)), in: session) {
+            guard ActionKey(wireID: event.component.value) != nil else {
+                // the family is registered but the slots do not split: a frame
+                // this server could not have minted (a stale page, a tampered
+                // attribute). dropped, never handed to a handler undecoded.
+                logger.emit(ObservableEvent.debug(message: "action payload for component '\(event.component.value)' does not decode"), observers: observers)
+                return .fragments([])
+            }
+            return await run(familyHandler, for: event, in: session)
+        }
+
+        // route through `logger.emit` so the observer fan-out stays on the
+        // single funnel every other emission uses (log line + notify).
+        logger.emit(ObservableEvent.debug(message: "no handler registered for component '\(event.component.value)'"), observers: observers)
+        return .fragments([])
+    }
+
+    /// call `handler`, turning a throw into an answer: observers hear the
+    /// failure, and the page gets the component's fallback fragments.
+    ///
+    /// one body for both dispatch paths, so an exact-id route and a family
+    /// route cannot drift in what a throw, a fallback or an emission means.
+    private func run(
+        _ handler: OutcomeHandler,
+        for event: EventData,
+        in session: RenderSessionID
+    ) async -> HandlerOutcome {
         let outcome: HandlerOutcome
         do {
             outcome = try await handler(event)
@@ -926,6 +960,50 @@ public final class EventRouter: Sendable {
     /// route within the shared default session.
     public func dispatch(_ event: EventData) async -> HandlerOutcome {
         await dispatch(event, in: .default)
+    }
+
+    // MARK: - typed action registration
+
+    /// the session key an action family's one registration lands under.
+    ///
+    /// `U+0001` cannot appear in a `data-component-id` a page spells, so no
+    /// emitted control can reach this entry by exact id — the only way in is
+    /// ``dispatch(_:in:)``'s family path.
+    private static func familyKey(_ family: String) -> ComponentID {
+        ComponentID("\u{1}action:" + family)
+    }
+
+    /// register one typed handler for the whole `A` family, in `session`.
+    ///
+    /// the registration lands in the session's ordinary handler table under a
+    /// reserved key — a `U+0001`-bearing id a page cannot produce — so it
+    /// inherits `maxHandlers`, the `FailurePolicy` behaviour and session
+    /// eviction for free rather than growing a second table beside them.
+    ///
+    /// the decode runs before the handler: a frame that does not split, names
+    /// another family, or that `A` declines never reaches `handler`.
+    public func on<A: Action>(
+        _ type: A.Type,
+        in session: RenderSessionID,
+        _ handler: @escaping @Sendable (A, EventData) async -> [FragmentUpdate]
+    ) {
+        let outcome: OutcomeHandler = { event in
+            guard let key = ActionKey(wireID: event.component.value),
+                  key.family == A.family,
+                  let action = A(key: key, event: event)
+            else { return .fragments([]) }
+            return .fragments(await handler(action, event))
+        }
+        register(outcome: outcome, for: Self.familyKey(A.family), in: session)
+    }
+
+    /// register one typed handler for the whole `A` family, in the shared
+    /// default session.
+    public func on<A: Action>(
+        _ type: A.Type,
+        _ handler: @escaping @Sendable (A, EventData) async -> [FragmentUpdate]
+    ) {
+        on(type, in: .default, handler)
     }
 
     /// route `event` within `session`, returning its fragments.

@@ -961,7 +961,7 @@ struct LayoutTests {
             Text("A")
             Text("B")
         }.markup.html
-        #expect(html.contains("<div class=\"vstack spacing-12 align-center\">"))
+        #expect(html.contains("<div class=\"vstack align-center\" style=\"gap:12px;\">"))
         #expect(html.contains("A"))
         #expect(html.contains("B"))
         #expect(html.hasSuffix("</div>"))
@@ -975,7 +975,7 @@ struct LayoutTests {
             Spacer()
             Text("Right")
         }.markup.html
-        #expect(html.contains("<div class=\"hstack spacing-8 align-flex-start\">"))
+        #expect(html.contains("<div class=\"hstack align-flex-start\" style=\"gap:8px;\">"))
         #expect(html.contains("class=\"spacer\""))
         #expect(validateTagBalance(html))
     }

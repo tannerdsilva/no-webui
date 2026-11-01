@@ -720,3 +720,15 @@ view-toggle__item
 weekday-toggle
 weekday-toggle__btn
 wizard__text
+
+# the stack primitives emit gap inline now (Layouts.swift), so these
+# utility classes have no framework emitter; they stay shipped for hand-written
+# markup, which is why they are recorded here rather than deleted.
+spacing-0
+spacing-2
+spacing-4
+spacing-8
+spacing-12
+spacing-16
+spacing-24
+spacing-32

@@ -10,7 +10,7 @@
 # forced it. `Tests/WebUITests/FrozenSurfaceTests.swift` fails when this
 # file and a fresh extraction diverge, naming every added and removed symbol.
 #
-# re-measured 2026-10-28: 5135 symbols across 11 modules.
+# re-measured 2026-10-29: 5170 symbols across 11 modules.
 
 ## WebUISharedCore
 
@@ -148,6 +148,24 @@ A11yFinding.element
 A11yFinding.init(rule:element:message:)
 A11yFinding.message
 A11yFinding.rule
+Action
+Action.family
+Action.init(key:event:)
+Action.key
+Action.parts
+ActionKey
+ActionKey.description
+ActionKey.family
+ActionKey.init(_:_:)
+ActionKey.init(wireID:)
+ActionKey.parts
+ActionKey.separator
+ActionKey.wireID
+ActionPart
+ActionPart.decoded
+ActionPart.description
+ActionPart.encoded
+ActionPart.init(_:)
 AnimationPayload
 AnimationPayload.animationName
 AnimationPayload.init(animationName:)
@@ -328,6 +346,8 @@ Button.label
 Button.name
 Button.render(into:)
 Button.type
+CSSClass
+CSSClass.token
 CSSDeclaration
 CSSDeclaration.init(_:_:)
 CSSDeclaration.init(from:)
@@ -416,6 +436,7 @@ CascadeLayer.orderStatement
 CascadeLayer.utilities
 CascadeLayer.webui
 ClassName
+ClassName.declared(_:)
 ClassName.init(_:)
 ClassName.init(stringLiteral:)
 ClassName.value
@@ -488,6 +509,11 @@ DroppedFile.init(name:size:type:)
 DroppedFile.name
 DroppedFile.size
 DroppedFile.type
+Edge
+Edge.bottom
+Edge.left
+Edge.right
+Edge.top
 EitherView
 EitherView.elements
 EitherView.first(_:)
@@ -586,6 +612,8 @@ EventRouter.nextComponentID(in:)
 EventRouter.nextElementID()
 EventRouter.nextElementID(in:)
 EventRouter.observers
+EventRouter.on(_:_:)
+EventRouter.on(_:in:_:)
 EventRouter.pendingFailure(in:)
 EventRouter.policy
 EventRouter.raisePendingFailure(in:)
@@ -1843,6 +1871,9 @@ Spacer
 Spacer.init(minSize:)
 Spacer.minSize
 Spacer.render(into:)
+SpacingAxis
+SpacingAxis.horizontal
+SpacingAxis.vertical
 Span
 Span.class
 Span.content
@@ -2022,6 +2053,7 @@ Video.src
 Video.tracks
 View
 View.a11yAudit()
+View.action(_:on:)
 View.addClass(_:)
 View.aria(_:)
 View.aria(_:when:)
@@ -2048,6 +2080,8 @@ View.height(_:)
 View.iconSize(_:)
 View.id(_:)
 View.margin(_:)
+View.margin(_:_:)
+View.margin(horizontal:vertical:)
 View.maxWidth(_:)
 View.minHeight(_:)
 View.minWidth(_:)
@@ -2106,6 +2140,7 @@ View.onTouchStart(perform:)
 View.onTransitionEnd(perform:)
 View.onWheel(perform:)
 View.padding(_:)
+View.padding(_:_:)
 View.padding(horizontal:vertical:)
 View.render()
 View.role(_:)

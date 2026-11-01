@@ -122,9 +122,9 @@ struct RenderIntoBufferTests {
 	@Test("the stacks keep the literal newlines the string path emitted")
 	func stackNewlines() {
 		#expect(VStack { Text("a"); Text("b") }.markup.html
-			== "<div class=\"vstack spacing-8 align-flex-start\">\nab\n</div>")
+			== "<div class=\"vstack align-flex-start\" style=\"gap:8px;\">\nab\n</div>")
 		#expect(HStack { Text("a") }.markup.html
-			== "<div class=\"hstack spacing-8 align-center\">\na\n</div>")
+			== "<div class=\"hstack align-center\" style=\"gap:8px;\">\na\n</div>")
 		#expect(ZStack { Text("z") }.markup.html
 			== "<div class=\"zstack\" style=\"display:grid;place-items:center center;\">\nz\n</div>")
 		#expect(Grid { Text("g") }.markup.html
@@ -133,14 +133,14 @@ struct RenderIntoBufferTests {
 
 	@Test("an empty stack keeps its literal newlines")
 	func emptyStack() {
-		#expect(VStack { }.markup.html == "<div class=\"vstack spacing-8 align-flex-start\">\n\n</div>")
+		#expect(VStack { }.markup.html == "<div class=\"vstack align-flex-start\" style=\"gap:8px;\">\n\n</div>")
 	}
 
 	@Test("nested containers share one buffer and keep their bytes")
 	func nestedContainers() {
 		let view = VStack { Div { Text("x") }; Span { Text("y") } }
 		#expect(view.markup.html
-			== "<div class=\"vstack spacing-8 align-flex-start\">\n<div>x</div><span>y</span>\n</div>")
+			== "<div class=\"vstack align-flex-start\" style=\"gap:8px;\">\n<div>x</div><span>y</span>\n</div>")
 	}
 
 	@Test("a migrated view renders the same bytes on every call")
@@ -162,7 +162,7 @@ struct RenderIntoBufferTests {
 	func containerDispatchesToChildren() {
 		#expect(Div { BufferOverride() }.markup.html == "<div>from buffer</div>")
 		#expect(VStack { BufferOverride() }.markup.html
-			== "<div class=\"vstack spacing-8 align-flex-start\">\nfrom buffer\n</div>")
+			== "<div class=\"vstack align-flex-start\" style=\"gap:8px;\">\nfrom buffer\n</div>")
 	}
 
 	@Test("an element with no contribution keeps its own attribute text byte-for-byte")

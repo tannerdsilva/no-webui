@@ -11,7 +11,7 @@ import WebUIShowcaseContent
 // hash of the raw bytes: `JSONValue.serialize()` emits object keys by direct
 // dictionary iteration and swift dictionary order is per-process randomized,
 // so the raw bytes are not stable run-to-run — only their count is.
-private let showcaseBytePin = 168671
+private let showcaseBytePin = 169558
 
 // pins the showcase's live interactive surface. if a wiring migration (like
 // the WebUIButton onTap flip, or a component dropping its typed handler)
