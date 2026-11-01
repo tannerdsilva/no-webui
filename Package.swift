@@ -221,6 +221,14 @@ let package = Package(
             ]
         ),
         .executableTarget(
+            name: "WebUIProbeStyled",
+            dependencies: [
+                "WebUI",
+                "WebUIDesignSystem",
+            ]
+        ),
+
+        .executableTarget(
             name: "WebUIValidateIsland",
             dependencies: [
                 "WebUIIslandRuntime",

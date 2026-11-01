@@ -8,5 +8,7 @@ struct WebUIDesignSystemMacroPlugin: CompilerPlugin {
         WiredMacro.self,
         WireGroupMacro.self,
         ComponentMacro.self,
+        StyledElementMacro.self,
+        AxisMacro.self,
     ]
 }
