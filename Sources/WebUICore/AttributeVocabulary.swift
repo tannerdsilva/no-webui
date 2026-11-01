@@ -382,9 +382,14 @@ public enum Tag: String, Sendable {
 /// hand-built attribute text — enough boilerplate that repeating a string is
 /// cheaper than factoring it, which is why a page accumulates one-off markup.
 /// this is the cheap path.
+///
+/// `class:` is a `ClassName`, the same type the primitives take, so a call site
+/// names a declared token (`Element(.h2, class: .todoTitle)`) instead of a raw
+/// string. `ClassName` is `ExpressibleByStringLiteral`, so an undeclared token can
+/// still be written as a literal where nothing else will do.
 public struct Element<Content: View>: View {
 	public let tag: Tag
-	public let className: String?
+	public let className: ClassName?
 	public let id: String?
 	/// children as one typed `Content`, the shape ``Group`` uses: an
 	/// `@ElementBuilder` block builds a tuple of concrete views, so no array
@@ -393,7 +398,7 @@ public struct Element<Content: View>: View {
 
 	public init(
 		_ tag: Tag,
-		class className: String? = nil,
+		class className: ClassName? = nil,
 		id: String? = nil,
 		@ElementBuilder content: () -> Content
 	) {
@@ -406,7 +411,7 @@ public struct Element<Content: View>: View {
 	public func render(into buffer: inout HTMLBuffer) {
 		var attributes = ""
 		if let id { attributes += " id=\"\(htmlEscape(id))\"" }
-		if let className { attributes += " class=\"\(htmlEscape(className))\"" }
+		if let className { attributes += " class=\"\(htmlEscape(className.value))\"" }
 		buffer.beginElement(tag.rawValue, attributes)
 		buffer.endOpenTag()
 		content.render(into: &buffer)
