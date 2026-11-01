@@ -132,7 +132,7 @@ extension TextArea {
 		placeholder: String = "",
 		value: String = "",
 		rows: Int = 3,
-		class: String? = nil
+		class: ClassName? = nil
 	) {
 		self.init(
 			id: field.rawValue,
@@ -151,7 +151,7 @@ extension Select {
 		field: FieldID,
 		options: [SelectOption],
 		selected: String? = nil,
-		class: String? = nil
+		class: ClassName? = nil
 	) {
 		self.init(
 			id: field.rawValue,
@@ -165,7 +165,7 @@ extension Select {
 
 extension Label {
 	/// a label bound to a field, so `for=` cannot point somewhere else.
-	public init(_ text: String, for field: FieldID, class: String? = nil) {
+	public init(_ text: String, for field: FieldID, class: ClassName? = nil) {
 		self.init(text, for: field.rawValue, class: `class`)
 	}
 }

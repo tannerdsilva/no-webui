@@ -166,12 +166,12 @@ public struct Grid<Content: View>: View {
 // MARK: - Section
 public struct Section<Content: View>: View {
     public let id: String?
-    public let `class`: String?
+    public let `class`: ClassName?
     public let content: Content
 
     public init(
         id: String? = nil,
-        class: String? = nil,
+        class: ClassName? = nil,
         @ElementBuilder content: () -> Content
     ) {
         self.id = id
@@ -182,7 +182,7 @@ public struct Section<Content: View>: View {
     public func render(into buffer: inout HTMLBuffer) {
         var attributes = ""
         if let id { attributes += " id=\"\(htmlEscape(id))\"" }
-        if let `class` { attributes += " class=\"\(htmlEscape(`class`))\"" }
+        if let `class` { attributes += " class=\"\(htmlEscape(`class`.value))\"" }
         buffer.beginElement("section", attributes)
         buffer.endOpenTag()
         content.render(into: &buffer)
@@ -192,11 +192,11 @@ public struct Section<Content: View>: View {
 
 // MARK: - Navigation
 public struct Navigation<Content: View>: View {
-    public let `class`: String?
+    public let `class`: ClassName?
     public let content: Content
 
     public init(
-        class: String? = nil,
+        class: ClassName? = nil,
         @ElementBuilder content: () -> Content
     ) {
         self.class = `class`
@@ -205,7 +205,7 @@ public struct Navigation<Content: View>: View {
 
     public func render(into buffer: inout HTMLBuffer) {
         var attributeText = ""
-        if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
+        if let `class` { attributeText += " class=\"\(htmlEscape(`class`.value))\"" }
         buffer.beginElement("nav", attributeText)
         buffer.endOpenTag()
         content.render(into: &buffer)
@@ -215,11 +215,11 @@ public struct Navigation<Content: View>: View {
 
 // MARK: - Header
 public struct Header<Content: View>: View {
-    public let `class`: String?
+    public let `class`: ClassName?
     public let content: Content
 
     public init(
-        class: String? = nil,
+        class: ClassName? = nil,
         @ElementBuilder content: () -> Content
     ) {
         self.class = `class`
@@ -228,7 +228,7 @@ public struct Header<Content: View>: View {
 
     public func render(into buffer: inout HTMLBuffer) {
         var attributeText = ""
-        if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
+        if let `class` { attributeText += " class=\"\(htmlEscape(`class`.value))\"" }
         buffer.beginElement("header", attributeText)
         buffer.endOpenTag()
         content.render(into: &buffer)
@@ -238,11 +238,11 @@ public struct Header<Content: View>: View {
 
 // MARK: - Footer
 public struct Footer<Content: View>: View {
-    public let `class`: String?
+    public let `class`: ClassName?
     public let content: Content
 
     public init(
-        class: String? = nil,
+        class: ClassName? = nil,
         @ElementBuilder content: () -> Content
     ) {
         self.class = `class`
@@ -251,7 +251,7 @@ public struct Footer<Content: View>: View {
 
     public func render(into buffer: inout HTMLBuffer) {
         var attributeText = ""
-        if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
+        if let `class` { attributeText += " class=\"\(htmlEscape(`class`.value))\"" }
         buffer.beginElement("footer", attributeText)
         buffer.endOpenTag()
         content.render(into: &buffer)
@@ -261,11 +261,11 @@ public struct Footer<Content: View>: View {
 
 // MARK: - Main
 public struct Main<Content: View>: View {
-    public let `class`: String?
+    public let `class`: ClassName?
     public let content: Content
 
     public init(
-        class: String? = nil,
+        class: ClassName? = nil,
         @ElementBuilder content: () -> Content
     ) {
         self.class = `class`
@@ -274,7 +274,7 @@ public struct Main<Content: View>: View {
 
     public func render(into buffer: inout HTMLBuffer) {
         var attributeText = ""
-        if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
+        if let `class` { attributeText += " class=\"\(htmlEscape(`class`.value))\"" }
         buffer.beginElement("main", attributeText)
         buffer.endOpenTag()
         content.render(into: &buffer)
@@ -284,11 +284,11 @@ public struct Main<Content: View>: View {
 
 // MARK: - Aside
 public struct Aside<Content: View>: View {
-    public let `class`: String?
+    public let `class`: ClassName?
     public let content: Content
 
     public init(
-        class: String? = nil,
+        class: ClassName? = nil,
         @ElementBuilder content: () -> Content
     ) {
         self.class = `class`
@@ -297,7 +297,7 @@ public struct Aside<Content: View>: View {
 
     public func render(into buffer: inout HTMLBuffer) {
         var attributeText = ""
-        if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
+        if let `class` { attributeText += " class=\"\(htmlEscape(`class`.value))\"" }
         buffer.beginElement("aside", attributeText)
         buffer.endOpenTag()
         content.render(into: &buffer)

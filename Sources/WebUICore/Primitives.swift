@@ -43,11 +43,11 @@ public struct Text: View {
 // MARK: - Div
 public struct Div<Content: View>: View {
     public let id: String?
-    public let `class`: String?
+    public let `class`: ClassName?
     public let content: Content
     public init(
         id: String? = nil,
-        class: String? = nil,
+        class: ClassName? = nil,
         @ElementBuilder content: () -> Content
     ) {
         self.id = id
@@ -62,7 +62,7 @@ public struct Div<Content: View>: View {
         // order the concatenated base string used to produce, with no string
         // built per element.
         buffer.beginElement("div")
-        if let `class` { buffer.addAttributeValue("class", `class`) }
+        if let `class` { buffer.addAttributeValue("class", `class`.value) }
         if let id { buffer.addAttributeValue("id", id) }
         buffer.endOpenTag()
         content.render(into: &buffer)
@@ -73,11 +73,11 @@ public struct Div<Content: View>: View {
 // MARK: - Span
 public struct Span<Content: View>: View {
     public let id: String?
-    public let `class`: String?
+    public let `class`: ClassName?
     public let content: Content
     public init(
         id: String? = nil,
-        class: String? = nil,
+        class: ClassName? = nil,
         @ElementBuilder content: () -> Content
     ) {
         self.id = id
@@ -87,7 +87,7 @@ public struct Span<Content: View>: View {
 
     public func render(into buffer: inout HTMLBuffer) {
         buffer.beginElement("span")
-        if let `class` { buffer.addAttributeValue("class", `class`) }
+        if let `class` { buffer.addAttributeValue("class", `class`.value) }
         if let id { buffer.addAttributeValue("id", id) }
         buffer.endOpenTag()
         content.render(into: &buffer)
@@ -99,7 +99,7 @@ public struct Span<Content: View>: View {
 public struct Button: View {
     public let label: String
     public let id: String?
-    public let `class`: String?
+    public let `class`: ClassName?
     public let type: ButtonType
     public let disabled: Bool
     public let name: String?
@@ -111,7 +111,7 @@ public struct Button: View {
     public init(
         _ label: String,
         id: String? = nil,
-        class: String? = nil,
+        class: ClassName? = nil,
         type: ButtonType = .submit,
         disabled: Bool = false,
         name: String? = nil
@@ -132,7 +132,7 @@ public struct Button: View {
         if disabled { buffer.addAttribute("disabled") }
         buffer.addAttributeValue("type", type.rawValue)
         if let name { buffer.addAttributeValue("name", name) }
-        if let `class` { buffer.addAttributeValue("class", `class`) }
+        if let `class` { buffer.addAttributeValue("class", `class`.value) }
         if let id { buffer.addAttributeValue("id", id) }
         buffer.endOpenTag()
         buffer.appendEscaped(label)
@@ -228,7 +228,7 @@ public struct Input: View {
 public struct Image: View {
     public let src: String
     public let alt: String
-    public let `class`: String?
+    public let `class`: ClassName?
     public let loading: ImageLoading?
     public let decoding: ImageDecoding?
     public enum ImageLoading: String, Sendable {
@@ -243,7 +243,7 @@ public struct Image: View {
     public init(
         src: String,
         alt: String,
-        class: String? = nil,
+        class: ClassName? = nil,
         loading: ImageLoading? = nil,
         decoding: ImageDecoding? = nil
     ) {
@@ -260,7 +260,7 @@ public struct Image: View {
             return
         }
         var attributeText = " src=\"\(htmlEscape(safeSrc))\" alt=\"\(htmlEscape(alt))\""
-        if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
+        if let `class` { attributeText += " class=\"\(htmlEscape(`class`.value))\"" }
         if let loading { attributeText += " loading=\"\(loading.rawValue)\"" }
         if let decoding { attributeText += " decoding=\"\(decoding.rawValue)\"" }
         buffer.voidElement("img", attributeText)
@@ -311,13 +311,13 @@ public struct LinkRel: OptionSet, Sendable {
 public struct Link: View {
     public let text: String
     public let href: String
-    public let `class`: String?
+    public let `class`: ClassName?
     public let target: LinkTarget?
     public let rel: LinkRel?
     public init(
         _ text: String,
         href: String,
-        class: String? = nil,
+        class: ClassName? = nil,
         target: LinkTarget? = nil,
         rel: LinkRel? = nil
     ) {
@@ -334,7 +334,7 @@ public struct Link: View {
             return
         }
         var attributeText = " href=\"\(htmlEscape(safeHref))\""
-        if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
+        if let `class` { attributeText += " class=\"\(htmlEscape(`class`.value))\"" }
         if let target { attributeText += " target=\"\(target.rawValue)\"" }
         if let rel { attributeText += " rel=\"\(rel.htmlValue)\"" }
         buffer.beginElement("a", attributeText)
@@ -353,9 +353,9 @@ public enum HeadingLevel: Int, Sendable {
 public struct Heading: View {
     public let level: HeadingLevel
     public let text: String
-    public let `class`: String?
+    public let `class`: ClassName?
 
-    public init(_ text: String, level: HeadingLevel = .h1, class: String? = nil) {
+    public init(_ text: String, level: HeadingLevel = .h1, class: ClassName? = nil) {
         self.text = text
         self.level = level
         self.class = `class`
@@ -364,7 +364,7 @@ public struct Heading: View {
     public func render(into buffer: inout HTMLBuffer) {
         let lvl = level.rawValue
         var attributeText = ""
-        if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
+        if let `class` { attributeText += " class=\"\(htmlEscape(`class`.value))\"" }
         buffer.beginElement("h\(lvl)", attributeText)
         buffer.endOpenTag()
         buffer.appendEscaped(text)
@@ -373,16 +373,16 @@ public struct Heading: View {
 }
 public struct Paragraph: View {
     public let text: String
-    public let `class`: String?
+    public let `class`: ClassName?
 
-    public init(_ text: String, class: String? = nil) {
+    public init(_ text: String, class: ClassName? = nil) {
         self.text = text
         self.class = `class`
     }
 
     public func render(into buffer: inout HTMLBuffer) {
         var attributeText = ""
-        if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
+        if let `class` { attributeText += " class=\"\(htmlEscape(`class`.value))\"" }
         buffer.beginElement("p", attributeText)
         buffer.endOpenTag()
         buffer.appendEscaped(text)
@@ -420,16 +420,16 @@ private func renderListItems<Content: View>(_ content: Content, into buffer: ino
 
 public struct UnorderedList<Content: View>: View {
     public let content: Content
-    public let `class`: String?
+    public let `class`: ClassName?
 
-    public init(class: String? = nil, @ElementBuilder items: () -> Content) {
+    public init(class: ClassName? = nil, @ElementBuilder items: () -> Content) {
         self.class = `class`
         self.content = items()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
         var attributes = ""
-        if let `class` { attributes += " class=\"\(htmlEscape(`class`))\"" }
+        if let `class` { attributes += " class=\"\(htmlEscape(`class`.value))\"" }
         buffer.beginElement("ul", attributes)
         buffer.endOpenTag()
         renderListItems(content, into: &buffer)
@@ -438,16 +438,16 @@ public struct UnorderedList<Content: View>: View {
 }
 public struct OrderedList<Content: View>: View {
     public let content: Content
-    public let `class`: String?
+    public let `class`: ClassName?
 
-    public init(class: String? = nil, @ElementBuilder items: () -> Content) {
+    public init(class: ClassName? = nil, @ElementBuilder items: () -> Content) {
         self.class = `class`
         self.content = items()
     }
 
     public func render(into buffer: inout HTMLBuffer) {
         var attributes = ""
-        if let `class` { attributes += " class=\"\(htmlEscape(`class`))\"" }
+        if let `class` { attributes += " class=\"\(htmlEscape(`class`.value))\"" }
         buffer.beginElement("ol", attributes)
         buffer.endOpenTag()
         renderListItems(content, into: &buffer)
@@ -459,8 +459,8 @@ public struct OrderedList<Content: View>: View {
 public struct Table: View {
     public let headers: [String]
     public let rows: [[any View]]
-    public let `class`: String?
-    public init(headers: [String], rows: [[any View]], class: String? = nil) {
+    public let `class`: ClassName?
+    public init(headers: [String], rows: [[any View]], class: ClassName? = nil) {
         self.headers = headers
         self.rows = rows
         self.class = `class`
@@ -468,7 +468,7 @@ public struct Table: View {
 
     public func render(into buffer: inout HTMLBuffer) {
         var attributeText = ""
-        if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
+        if let `class` { attributeText += " class=\"\(htmlEscape(`class`.value))\"" }
         buffer.beginElement("table", attributeText)
         buffer.endOpenTag()
 
@@ -519,9 +519,9 @@ public struct SelectOption: Sendable {
 public struct Label: View {
     public let text: String
     public let `for`: String?
-    public let `class`: String?
+    public let `class`: ClassName?
 
-    public init(_ text: String, for: String? = nil, class: String? = nil) {
+    public init(_ text: String, for: String? = nil, class: ClassName? = nil) {
         self.text = text
         self.for = `for`
         self.class = `class`
@@ -530,7 +530,7 @@ public struct Label: View {
     public func render(into buffer: inout HTMLBuffer) {
         var attributeText = ""
         if let forVal = `for` { attributeText += " for=\"\(htmlEscape(forVal))\"" }
-        if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
+        if let `class` { attributeText += " class=\"\(htmlEscape(`class`.value))\"" }
         buffer.beginElement("label", attributeText)
         buffer.endOpenTag()
         buffer.appendEscaped(text)
@@ -543,7 +543,7 @@ public struct TextArea: View {
     public let placeholder: String
     public let value: String
     public let rows: Int
-    public let `class`: String?
+    public let `class`: ClassName?
 
     public init(
         id: String? = nil,
@@ -551,7 +551,7 @@ public struct TextArea: View {
         placeholder: String = "",
         value: String = "",
         rows: Int = 3,
-        class: String? = nil
+        class: ClassName? = nil
     ) {
         self.id = id
         self.name = name
@@ -567,7 +567,7 @@ public struct TextArea: View {
         if let name { attributeText += " name=\"\(htmlEscape(name))\"" }
         attributeText += " rows=\"\(rows)\""
         if !placeholder.isEmpty { attributeText += " placeholder=\"\(htmlEscape(placeholder))\"" }
-        if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
+        if let `class` { attributeText += " class=\"\(htmlEscape(`class`.value))\"" }
         buffer.beginElement("textarea", attributeText)
         buffer.endOpenTag()
         buffer.appendEscaped(value)
@@ -579,14 +579,14 @@ public struct Select: View {
     public let name: String?
     public let options: [SelectOption]
     public let selected: String?
-    public let `class`: String?
+    public let `class`: ClassName?
 
     public init(
         id: String? = nil,
         name: String? = nil,
         options: [SelectOption],
         selected: String? = nil,
-        class: String? = nil
+        class: ClassName? = nil
     ) {
         self.id = id
         self.name = name
@@ -599,7 +599,7 @@ public struct Select: View {
         var attributeText = ""
         if let id { attributeText += " id=\"\(htmlEscape(id))\"" }
         if let name { attributeText += " name=\"\(htmlEscape(name))\"" }
-        if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
+        if let `class` { attributeText += " class=\"\(htmlEscape(`class`.value))\"" }
         buffer.beginElement("select", attributeText)
         buffer.endOpenTag()
         for option in options {
@@ -694,7 +694,7 @@ public struct Form<Content: View>: View {
     /// sends a multipart body the server can parse (plan w3.3).
     public let enctype: String
     public let id: String?
-    public let `class`: String?
+    public let `class`: ClassName?
     public let csrfToken: String?
     public let content: Content
     /// the verbatim attribute text when the caller passed a raw string.
@@ -710,7 +710,7 @@ public struct Form<Content: View>: View {
         method: FormMethod? = .post,
         enctype: String = "",
         id: String? = nil,
-        class: String? = nil,
+        class: ClassName? = nil,
         csrfToken: String? = nil,
         @ElementBuilder content: () -> Content
     ) {
@@ -731,7 +731,7 @@ public struct Form<Content: View>: View {
         method: String,
         enctype: String = "",
         id: String? = nil,
-        class: String? = nil,
+        class: ClassName? = nil,
         csrfToken: String? = nil,
         @ElementBuilder content: () -> Content
     ) {
@@ -768,7 +768,7 @@ public struct Form<Content: View>: View {
         }
         var attributeText = ""
         if let id { attributeText += " id=\"\(htmlEscape(id))\"" }
-        if let `class` { attributeText += " class=\"\(htmlEscape(`class`))\"" }
+        if let `class` { attributeText += " class=\"\(htmlEscape(`class`.value))\"" }
         let safeAction = sanitizeURL(action) ?? ""
         if !safeAction.isEmpty {
             attributeText += " action=\"\(htmlEscape(safeAction))\""

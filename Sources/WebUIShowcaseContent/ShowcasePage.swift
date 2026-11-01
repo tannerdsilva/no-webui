@@ -1481,14 +1481,14 @@ public struct ShowcasePage: Sendable, BufferRendering {
     }
 
     @Sendable func div(_ text: String, _ className: String) -> some View {
-        Div(class: className) { Text(text) }
+        Div(class: ClassName(className)) { Text(text) }
     }
 
     func colorSwatch(_ name: String, _ token: String, _ value: String) -> some View {
         // single class string: a chained .class() on a tag that already
         // carries a class attribute is skipped by attribute injection.
         HStack(alignment: .center, spacing: 12) {
-            Div(class: "swatch swatch-\(name.lowercased())") { Text("") }.width("40px").height("40px")
+            Div(class: ClassName("swatch swatch-\(name.lowercased())")) { Text("") }.width("40px").height("40px")
             VStack(spacing: 2) {
                 Text(name).font(size: 14, weight: "600")
                 Text(token).font(size: 12)
