@@ -369,6 +369,9 @@ public enum ClassNameAudit {
 public enum Tag: String, Sendable {
 	case div, span, section, article, header, footer, nav, main, aside
 	case p, ul, ol, li, dl, dt, dd, pre, figure, figcaption
+	/// the inline hint wrapper — `<small>` has no dedicated type, so a declared
+	/// part or an `Element` is the only way to write it.
+	case small
 	case table, thead, tbody, tr, td, th
 	case h1, h2, h3, h4, h5, h6
 }

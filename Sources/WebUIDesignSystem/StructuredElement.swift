@@ -97,11 +97,20 @@ public struct AttributeTokens: Sendable {
 ///
 /// the three data requirements have defaults: a component with no children, no
 /// id, no extra classes and no axes writes only `tag`, `base` and `content`.
+///
+/// the child model is declared, not rendered: a `@Part` property is emitted by
+/// the shared renderer before `content`, in declaration order, so a component
+/// that assembles a small subtree writes no `render(into:)` at all.
 public protocol StyledElement: View {
     associatedtype Content: View
 
-    /// the root element to emit.
-    static var tag: Tag { get }
+    /// the root element to emit, or nil for an element-free component.
+    ///
+    /// an element-free component frames nothing of its own: it emits its
+    /// declared parts and then `content`, and carries no class, no id and no
+    /// contributed attribute — there is no element to put them on.
+    /// `@StyledElement(nil)` spells it.
+    static var tag: Tag? { get }
 
     /// the classes every instance carries. `ClassName("")` means none.
     static var base: ClassName { get }
@@ -120,6 +129,15 @@ public protocol StyledElement: View {
 
     /// add this element's non-class attributes, in emission order.
     func contributeAttributes(to attributes: inout AttributeTokens)
+
+    /// render this element's declared parts, in declaration order, before
+    /// `content`.
+    ///
+    /// a part is a *prefix* of the child sequence, never a second `content`:
+    /// that is what keeps the body's single inference slot and the renderer's
+    /// single body. a component that declares no part inherits the empty
+    /// default below.
+    func renderParts(into buffer: inout HTMLBuffer)
 }
 
 extension StyledElement {
@@ -127,8 +145,44 @@ extension StyledElement {
     public var extra: ClassName? { nil }
     public func contribute(to tokens: inout ClassTokens) {}
     public func contributeAttributes(to attributes: inout AttributeTokens) {}
+    public func renderParts(into buffer: inout HTMLBuffer) {}
+
+    /// emit one declared part: its element, its class, and its value as escaped
+    /// text.
+    ///
+    /// a part whose value is nil or empty is omitted **entirely** — not emitted
+    /// as an empty element, because the sheet gives these tokens their own
+    /// margins and an empty node renders as a visible gap. the rule lives here,
+    /// once, so every part of every component omits identically.
+    public func renderPart(
+        _ value: String?,
+        tag: Tag,
+        class name: ClassName?,
+        into buffer: inout HTMLBuffer
+    ) {
+        guard let value, !value.isEmpty else {
+            return
+        }
+        buffer.beginElement(tag.rawValue)
+        if let name, !name.value.isEmpty {
+            buffer.addAttributeValue("class", name.value)
+        }
+        buffer.endOpenTag()
+        buffer.appendEscaped(value)
+        buffer.endElement()
+    }
 
     public func render(into buffer: inout HTMLBuffer) {
+        // element-free: the declared parts and the content, with no framing of
+        // our own. there is no element to carry a class, an id or a contributed
+        // attribute, so none is emitted — and nothing reaches the buffer's
+        // pending slot to leak onto the first element the content opens.
+        guard let tag = Self.tag else {
+            renderParts(into: &buffer)
+            content.render(into: &buffer)
+            return
+        }
+
         var tokens = ClassTokens(Self.base)
         contribute(to: &tokens)
         tokens.add(extra)
@@ -138,7 +192,7 @@ extension StyledElement {
 
         // the buffer prepends every contribution, so the calls run in reverse
         // and the emitted order is: id, class, then the contributed attributes.
-        buffer.beginElement(Self.tag.rawValue)
+        buffer.beginElement(tag.rawValue)
         for entry in attributes.entries.reversed() {
             buffer.addAttribute(entry)
         }
@@ -149,6 +203,7 @@ extension StyledElement {
             buffer.addAttributeValue("id", id)
         }
         buffer.endOpenTag()
+        renderParts(into: &buffer)
         content.render(into: &buffer)
         buffer.endElement()
     }
@@ -190,6 +245,36 @@ public protocol ClassAxis: CSSClass {}
 @attached(peer, names: arbitrary)
 public macro Axis() = #externalMacro(module: "WebUIDesignSystemMacros", type: "AxisMacro")
 
+// MARK: - @Part
+
+/// marks one stored property as a **declared child part** of a
+/// `@StyledElement` host.
+///
+/// ```swift
+/// @StyledElement(.div, class: .detailCard)
+/// struct DetailCard<Content: View> {
+///     @Part(.h1, class: .detailTitle) var title: String = ""
+///     @Part(.div, class: .detailSub) var sub: String = ""
+/// }
+/// ```
+///
+/// the host's renderer emits its parts in **declaration order**, after the
+/// host's open tag and before `content`, each inside its own element with the
+/// property's value as escaped text. a part whose value is nil or empty is
+/// omitted entirely — no empty element.
+///
+/// peer role, empty expansion: the marker contributes nothing to the host. the
+/// enclosing `@StyledElement` reads it off the property, the same rawdog shape
+/// `@Axis` uses, because a macro cannot ask the type checker what a property's
+/// value is for.
+///
+/// - Parameters:
+///   - tag: the element the part frames, e.g. `.h1`, `.div`.
+///   - class: the class the part carries; absent, the part carries none.
+@attached(peer, names: arbitrary)
+public macro Part(_ tag: Tag, class: ClassName? = nil) =
+    #externalMacro(module: "WebUIDesignSystemMacros", type: "PartMacro")
+
 // MARK: - @StyledElement
 
 /// one line at the type: the element's tag and its base classes are stated
@@ -211,9 +296,10 @@ public macro Axis() = #externalMacro(module: "WebUIDesignSystemMacros", type: "A
 /// cannot widen the host's generic parameter list.
 ///
 /// - Parameters:
-///   - tag: the element to emit, e.g. `.div`, `.span`, `.h1`.
+///   - tag: the element to emit, e.g. `.div`, `.span`, `.h1`; nil for an
+///     element-free component, which emits its parts and content alone.
 ///   - class: the base classes; written once, here, and never at a call site.
 @attached(extension, conformances: StyledElement)
 @attached(member, names: arbitrary)
-public macro StyledElement(_ tag: Tag, class: ClassName? = nil) =
+public macro StyledElement(_ tag: Tag?, class: ClassName? = nil) =
     #externalMacro(module: "WebUIDesignSystemMacros", type: "StyledElementMacro")

@@ -10,5 +10,6 @@ struct WebUIDesignSystemMacroPlugin: CompilerPlugin {
         ComponentMacro.self,
         StyledElementMacro.self,
         AxisMacro.self,
+        PartMacro.self,
     ]
 }

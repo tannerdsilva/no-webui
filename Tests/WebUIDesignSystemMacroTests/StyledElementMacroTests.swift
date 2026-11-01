@@ -17,6 +17,7 @@ import Testing
 private let styledMacros: [String: Macro.Type] = [
     "StyledElement": StyledElementMacro.self,
     "Axis": AxisMacro.self,
+    "Part": PartMacro.self,
 ]
 
 private func assertStyledExpansion(
@@ -42,7 +43,7 @@ private func emittedDiagnostics(_ source: String) -> [String] {
         macros: styledMacros,
         contextGenerator: { _ in context }
     )
-    return context.diagnostics.map(\.message)
+    return context.diagnostics.map { $0.message }
 }
 
 // MARK: - expansion fixtures
@@ -93,7 +94,7 @@ struct StyledElementMacroExpansionTests {
                     }
                 }
 
-                public static var tag: Tag {
+                public static var tag: WebUICore.Tag? {
                     .div
                 }
 
@@ -193,7 +194,7 @@ struct StyledElementMacroExpansionTests {
                     }
                 }
 
-                static var tag: Tag {
+                static var tag: WebUICore.Tag? {
                     .div
                 }
 
@@ -209,6 +210,144 @@ struct StyledElementMacroExpansionTests {
             }
 
             extension SetRow: StyledElement {
+            }
+            """
+        )
+    }
+
+    /// `@Part` splits a declared child out of the payload's rendering: the
+    /// property is still offered by the initializer (declaration order), and it
+    /// is emitted by `renderParts` — which is written only when a host declares
+    /// a part. the marker itself leaves nothing behind.
+    @Test("a @Part property renders before content, in declaration order")
+    func partSplitsADeclaredChild() {
+        assertStyledExpansion(
+            """
+            @StyledElement(.div, class: .detailCard)
+            struct DetailCard<Content: View> {
+                @Part(.h1, class: .detailTitle) var title: String = ""
+                @Part(.div, class: .detailSub) var sub: String? = nil
+                let body: String
+            }
+            """,
+            expanded: """
+            struct DetailCard<Content: View> {
+                var title: String = ""
+                var sub: String? = nil
+                let body: String
+
+                let content: Content
+
+                let id: String?
+
+                let extra: ClassName?
+
+                init(
+                    title: String = "",
+                    sub: String? = nil,
+                    body: String,
+                    id: String? = nil,
+                    class extra: ClassName? = nil,
+                    @ElementBuilder content: () -> Content
+                ) {
+                    self.title = title
+                    self.sub = sub
+                    self.body = body
+                    self.id = id
+                    self.extra = extra
+                    self.content = content()
+                }
+
+                init(
+                    title: String = "",
+                    sub: String? = nil,
+                    body: String,
+                    id: String? = nil,
+                    class extra: ClassName? = nil
+                ) where Content == EmptyView {
+                    self.init(
+                        title: title,
+                        sub: sub,
+                        body: body,
+                        id: id,
+                        class: extra
+                    ) {
+                        EmptyView()
+                    }
+                }
+
+                static var tag: WebUICore.Tag? {
+                    .div
+                }
+
+                static var base: ClassName {
+                    .detailCard
+                }
+
+                func renderParts(into buffer: inout HTMLBuffer) {
+                    renderPart(title, tag: .h1, class: .detailTitle, into: &buffer)
+                    renderPart(sub, tag: .div, class: .detailSub, into: &buffer)
+                }
+            }
+
+            extension DetailCard: StyledElement {
+            }
+            """
+        )
+    }
+
+    /// `tag: nil` is an element-free component: the static is optional, and the
+    /// shared renderer emits parts and content with no wrapper.
+    @Test("a nil tag is emitted as Tag? for an element-free component")
+    func nilTagIsEmittedAsOptional() {
+        assertStyledExpansion(
+            """
+            @StyledElement(nil)
+            struct PlainStack<Content: View> {
+            }
+            """,
+            expanded: """
+            struct PlainStack<Content: View> {
+
+                let content: Content
+
+                let id: String?
+
+                let extra: ClassName?
+
+                init(
+                    id: String? = nil,
+                    class extra: ClassName? = nil,
+                    @ElementBuilder content: () -> Content
+                ) {
+
+                    self.id = id
+                    self.extra = extra
+                    self.content = content()
+                }
+
+                init(
+                    id: String? = nil,
+                    class extra: ClassName? = nil
+                ) where Content == EmptyView {
+                    self.init(
+                        id: id,
+                        class: extra
+                    ) {
+                        EmptyView()
+                    }
+                }
+
+                static var tag: WebUICore.Tag? {
+                    nil
+                }
+
+                static var base: ClassName {
+                    .init("plain-stack")
+                }
+            }
+
+            extension PlainStack: StyledElement {
             }
             """
         )
@@ -258,7 +397,7 @@ struct StyledElementMacroExpansionTests {
                     }
                 }
 
-                static var tag: Tag {
+                static var tag: WebUICore.Tag? {
                     .div
                 }
 
@@ -319,6 +458,128 @@ struct StyledElementMacroDiagnosticTests {
         )
         #expect(
             messages.contains("@StyledElement requires a tag: `@StyledElement(.div, class: .setRow)`"),
+            "got \(messages)"
+        )
+    }
+}
+
+// MARK: - @Part refuses what it cannot render, with a diagnostic
+
+@Suite("Part macro diagnostics")
+struct PartMacroDiagnosticTests {
+
+    @Test("@Part outside a @StyledElement host is diagnosed")
+    func partOutsideAHostDiagnosed() throws {
+        // the host is not a `@StyledElement`, and the expansion context carries
+        // the lexical scope the macro reads — the same way the compiler's
+        // plugin host supplies it. `file.expand` would carry no lexical context
+        // and no parent chain here, which is the "cannot be read" case the
+        // macro skips rather than guesses.
+        let source = """
+            struct NotAHost<Content: View> {
+                @Part(.h1, class: .detailTitle) var title: String = ""
+            }
+            """
+        let file = Parser.parse(source: source)
+        let structDecl = try #require(file.statements.first?.item.as(StructDeclSyntax.self))
+        let variable = try #require(
+            structDecl.memberBlock.members.first?.decl.as(VariableDeclSyntax.self)
+        )
+        let attribute = try #require(variable.attributes.first?.as(AttributeSyntax.self))
+
+        let context = BasicMacroExpansionContext(lexicalContext: [Syntax(structDecl)])
+        _ = try PartMacro.expansion(of: attribute, providingPeersOf: variable, in: context)
+
+        #expect(
+            context.diagnostics.map { $0.message }.contains(
+                "@Part must be declared inside a `@StyledElement` host: nothing else reads the marker"
+            ),
+            "got \(context.diagnostics.map { $0.message })"
+        )
+    }
+
+    @Test("@Part inside a @StyledElement host is not diagnosed")
+    func partInsideAHostIsAccepted() throws {
+        let source = """
+            @StyledElement(.div)
+            struct Card<Content: View> {
+                @Part(.h1) var title: String = ""
+            }
+            """
+        let file = Parser.parse(source: source)
+        let structDecl = try #require(file.statements.first?.item.as(StructDeclSyntax.self))
+        let variable = try #require(
+            structDecl.memberBlock.members.first?.decl.as(VariableDeclSyntax.self)
+        )
+        let attribute = try #require(variable.attributes.first?.as(AttributeSyntax.self))
+
+        let context = BasicMacroExpansionContext(lexicalContext: [Syntax(structDecl)])
+        let peers = try PartMacro.expansion(of: attribute, providingPeersOf: variable, in: context)
+
+        #expect(peers.isEmpty)
+        #expect(context.diagnostics.isEmpty, "got \(context.diagnostics.map { $0.message })")
+    }
+
+    @Test("@Part on a let is diagnosed")
+    func partOnALetDiagnosed() {
+        let messages = emittedDiagnostics(
+            """
+            @StyledElement(.div)
+            struct Card<Content: View> {
+                @Part(.h1) let title: String
+            }
+            """
+        )
+        #expect(
+            messages.contains("@Part marks a stored `var`: a `let` is not offered to a call site"),
+            "got \(messages)"
+        )
+    }
+
+    @Test("@Part on a computed property is diagnosed")
+    func partOnAComputedPropertyDiagnosed() {
+        let messages = emittedDiagnostics(
+            """
+            @StyledElement(.div)
+            struct Card<Content: View> {
+                @Part(.h1) var title: String { "constant" }
+            }
+            """
+        )
+        #expect(
+            messages.contains("@Part marks a stored property: `title` is computed, so a call site has no value to set"),
+            "got \(messages)"
+        )
+    }
+
+    @Test("@Part on a non-String property is diagnosed")
+    func partOnANonStringPropertyDiagnosed() {
+        let messages = emittedDiagnostics(
+            """
+            @StyledElement(.div)
+            struct Card<Content: View> {
+                @Part(.h1) var level: Int = 1
+            }
+            """
+        )
+        #expect(
+            messages.contains("@Part renders its value as text: `level` is `Int`, not `String` or `String?`"),
+            "got \(messages)"
+        )
+    }
+
+    @Test("@Part on a function is diagnosed")
+    func partOnAFunctionDiagnosed() {
+        let messages = emittedDiagnostics(
+            """
+            @StyledElement(.div)
+            struct Card<Content: View> {
+                @Part(.h1) func title() -> String { "constant" }
+            }
+            """
+        )
+        #expect(
+            messages.contains("@Part can only be applied to a stored property"),
             "got \(messages)"
         )
     }

@@ -6,12 +6,14 @@ import SwiftSyntaxMacros
 
 /// `@StyledElement(.div, class: .setRow)` — the element and its base classes are
 /// stated once, at the type. a stored property marked `@Axis` is a class axis,
-/// and its enum is the only set of classes that component will accept; an
+/// and its enum is the only set of classes that component will accept; a stored
+/// property marked `@Part` is a declared child, rendered before `content`; an
 /// unmarked stored property is payload the initializer requires.
 ///
 /// two roles: **member** emits the content storage, both initializers (one
-/// pinned to `EmptyView` so `Dot(severity: .err)` resolves), and the `tag` /
-/// `base` statics the shared renderer reads; **extension** attaches the
+/// pinned to `EmptyView` so `Dot(severity: .err)` resolves), the `tag` /
+/// `base` statics the shared renderer reads, and — only when the host declares
+/// parts — `renderParts(into:)`; **extension** attaches the
 /// `StyledElement` conformance, whose protocol extension supplies the one
 /// `render(into:)` every element shares — the host writes neither.
 ///
@@ -98,8 +100,14 @@ public struct StyledElementMacro: MemberMacro, ExtensionMacro {
         let access = accessPrefix(structDecl)
         let contentName = contentParam.name.text
         let stored = scanStored(structDecl)
+        let parts = stored.filter { $0.part != nil }
         let axes = stored.filter { $0.isAxis }
-        let payload = stored.filter { !$0.isAxis }
+        // a part is stored data too: the initializer offers it among the
+        // payload, in declaration order, and `renderParts` renders it. a
+        // computed property has no storage, so the initializer neither offers
+        // nor assigns it.
+        let payload = stored.filter { !$0.isAxis && $0.isStored }
+        let offeredAxes = axes.filter(\.isStored)
 
         // one parameter per axis, in declaration order, then id, then the call
         // site's extra classes. the axis defaults come from the host verbatim.
@@ -108,10 +116,10 @@ public struct StyledElementMacro: MemberMacro, ExtensionMacro {
             prop.defaultText.map { "    \(prop.name): \(prop.type) = \($0)" }
                 ?? "    \(prop.name): \(prop.type)"
         }
-            + axes.map { "    \($0.name): \($0.type) = \($0.defaultText ?? "nil")" }
+            + offeredAxes.map { "    \($0.name): \($0.type) = \($0.defaultText ?? "nil")" }
             + ["    id: String? = nil", "    class extra: ClassName? = nil"])
             .joined(separator: ",\n")
-        let ordered = payload.map(\.name) + axes.map(\.name)
+        let ordered = payload.map(\.name) + offeredAxes.map(\.name)
         let delegate = (ordered.map { "        \($0): \($0)" }
             + ["        id: id", "        class: extra"])
             .joined(separator: ",\n")
@@ -157,14 +165,32 @@ public struct StyledElementMacro: MemberMacro, ExtensionMacro {
             }
             """),
 
+            // qualified on purpose: `Tag` is written into the *host's* file
+            // scope, where another module's `Tag` (Testing vends one) can
+            // shadow it. the host already has WebUI in scope to declare
+            // `Content: View`, and WebUI re-exports WebUICore.
             DeclSyntax("""
-            \(raw: access)static var tag: Tag { \(raw: spec.tag) }
+            \(raw: access)static var tag: WebUICore.Tag? { \(raw: spec.tag) }
             """),
 
             DeclSyntax("""
             \(raw: access)static var base: ClassName { \(raw: spec.base ?? ".init(\"\(kebab(structDecl.name.text))\")") }
             """),
         ]
+
+        // only a component that declares parts writes this; the protocol
+        // extension already supplies the empty prefix. the calls run in
+        // declaration order, which is the order the parts render in.
+        if !parts.isEmpty {
+            let calls = parts.map { part in
+                "    renderPart(\(part.name), tag: \(part.partTag), class: \(part.classText ?? "nil"), into: &buffer)"
+            }.joined(separator: "\n")
+            members.append(DeclSyntax("""
+            \(raw: access)func renderParts(into buffer: inout HTMLBuffer) {
+            \(raw: calls)
+            }
+            """))
+        }
 
         // only a component that declares axes writes this; the protocol
         // extension already supplies the empty contribution.
@@ -179,7 +205,7 @@ public struct StyledElementMacro: MemberMacro, ExtensionMacro {
         return members
     }
 
-    // MARK: - the host's axes
+    // MARK: - the host's stored properties
 
     private struct StoredProperty {
         let name: String
@@ -190,18 +216,34 @@ public struct StyledElementMacro: MemberMacro, ExtensionMacro {
         let defaultText: String?
         /// true when the property carries `@Axis` — a class axis, not data.
         let isAxis: Bool
+        /// the declared part, when the property carries `@Part`.
+        let part: PartSpec?
+        /// false for a computed property: rendered, but never initialized.
+        let isStored: Bool
         var isOptional: Bool { type.hasSuffix("?") }
+        /// `@Part`'s tag expression, verbatim.
+        var partTag: String { part?.tag ?? "" }
+        /// `@Part`'s class expression, verbatim; nil when the part names none.
+        var classText: String? { part?.className }
     }
 
-    /// split the host's stored properties into **axes** and **payload**.
+    /// the tag and class of one `@Part(.h1, class: .detailTitle)`.
+    struct PartSpec {
+        let tag: String
+        let className: String?
+    }
+
+    /// split the host's stored properties into **parts**, **axes** and
+    /// **payload**.
     ///
-    /// `@Axis` is the discriminator, and it lives in the body beside the
-    /// property it marks — the same shape rawdog uses, where a member macro is
-    /// woven into the body of an enclosing attached macro. a macro cannot ask
-    /// the type checker whether a property's type conforms to `ClassAxis`, so
-    /// the marker is the honest way to say which is which.
+    /// `@Part` and `@Axis` are the discriminators, and they live in the body
+    /// beside the property they mark — the same shape rawdog uses, where a
+    /// member macro is woven into the body of an enclosing attached macro. a
+    /// macro cannot ask the type checker whether a property's type conforms to
+    /// `ClassAxis`, so the marker is the honest way to say which is which.
     ///
-    /// a computed property is skipped: it is not stored, so it is neither.
+    /// a computed property is skipped by the initializer (`isStored` is false):
+    /// it is not storage, so nothing can assign it.
     private static func scanStored(_ structDecl: StructDeclSyntax) -> [StoredProperty] {
         var out: [StoredProperty] = []
         for member in structDecl.memberBlock.members {
@@ -212,12 +254,22 @@ public struct StyledElementMacro: MemberMacro, ExtensionMacro {
                 continue
             }
 
-            let isAxis = variable.attributes.contains { attribute in
+            let axisAttribute = variable.attributes.first { attribute in
                 guard let attr = attribute.as(AttributeSyntax.self) else {
                     return false
                 }
                 return attr.attributeName.trimmedDescription == "Axis"
             }
+            let partAttribute = variable.attributes.first { attribute in
+                guard let attr = attribute.as(AttributeSyntax.self) else {
+                    return false
+                }
+                return attr.attributeName.trimmedDescription == "Part"
+            }
+            let part = (partAttribute?.as(AttributeSyntax.self)).flatMap { parsePart($0) }
+            // a property carrying both markers is a part: the part is rendered
+            // from its own value, which a class axis never is.
+            let isAxis = axisAttribute != nil && part == nil
 
             for binding in variable.bindings {
                 guard let pattern = binding.pattern.as(IdentifierPatternSyntax.self),
@@ -229,7 +281,9 @@ public struct StyledElementMacro: MemberMacro, ExtensionMacro {
                         name: pattern.identifier.text,
                         type: typeAnnotation.type.trimmedDescription,
                         defaultText: binding.initializer?.value.trimmedDescription,
-                        isAxis: isAxis
+                        isAxis: isAxis,
+                        part: part,
+                        isStored: binding.accessorBlock == nil
                     )
                 )
             }
@@ -237,11 +291,28 @@ public struct StyledElementMacro: MemberMacro, ExtensionMacro {
         return out
     }
 
+    /// `@Part(.h1, class: .detailTitle)` -> tag `.h1`, class `.detailTitle`.
+    ///
+    /// both expressions are kept verbatim, so the generated call resolves its
+    /// leading dots against `renderPart`'s own parameter types — the same
+    /// mechanism `@StyledElement`'s tag uses.
+    private static func parsePart(_ node: AttributeSyntax) -> PartSpec? {
+        guard let arguments = node.arguments?.as(LabeledExprListSyntax.self),
+              let tagArgument = arguments.first(where: { $0.label == nil })
+        else {
+            return nil
+        }
+        let className = arguments
+            .first(where: { $0.label?.text == "class" })?
+            .expression.trimmedDescription
+        return PartSpec(tag: tagArgument.expression.trimmedDescription, className: className)
+    }
+
     // MARK: - parsing
 
     private struct Spec {
         /// the tag expression, verbatim, so `.div` keeps its leading dot and
-        /// resolves against the emitted `let tag: Tag`.
+        /// resolves against the emitted `static var tag: Tag?`.
         let tag: String
         /// the base class expression, verbatim, resolved against the emitted
         /// `let base: ClassName?`. nil when the attribute names none.
@@ -317,3 +388,159 @@ public struct AxisMacro: PeerMacro {
         in context: some MacroExpansionContext
     ) throws -> [DeclSyntax] { [] }
 }
+
+// MARK: - PartMacro
+
+/// `@Part(.h1, class: .detailTitle)` — marks a stored property as a **declared
+/// child part** rather than payload.
+///
+/// peer role, empty expansion: the marker contributes nothing to the host. the
+/// enclosing `@StyledElement` reads the marker — and its tag/class arguments —
+/// off the property and emits that property's rendering into
+/// `renderParts(into:)`, so the part is emitted after the host's open tag and
+/// before `content`, in declaration order, with no renderer written anywhere.
+///
+/// the empty expansion is the whole job. the diagnostics below are the other
+/// half: a marker that cannot be rendered is named, and the compiler plugin
+/// stays alive — a trap here would take every macro expansion in the build
+/// down with it.
+///
+/// ```swift
+/// @StyledElement(.div, class: .detailCard)
+/// struct DetailCard<Content: View> {
+///     @Part(.h1, class: .detailTitle) var title: String = ""
+///     @Part(.div, class: .detailSub) var sub: String = ""
+/// }
+/// ```
+public struct PartMacro: PeerMacro {
+    public static func expansion(
+        of node: AttributeSyntax,
+        providingPeersOf declaration: some DeclSyntaxProtocol,
+        in context: some MacroExpansionContext
+    ) throws -> [DeclSyntax] {
+        guard let variable = declaration.as(VariableDeclSyntax.self) else {
+            context.diagnose(
+                Diagnostic(
+                    node: declaration,
+                    message: MacroExpansionErrorMessage("@Part can only be applied to a stored property")
+                )
+            )
+            return []
+        }
+
+        // a part is rendered from its own value, and a call site may set it, so
+        // it must be a `var` — the same reason `@Axis` marks a `var`.
+        guard variable.bindingSpecifier.text == "var" else {
+            context.diagnose(
+                Diagnostic(
+                    node: variable.bindingSpecifier,
+                    message: MacroExpansionErrorMessage("@Part marks a stored `var`: a `let` is not offered to a call site")
+                )
+            )
+            return []
+        }
+
+        guard variable.bindings.count == 1,
+              let binding = variable.bindings.first,
+              let pattern = binding.pattern.as(IdentifierPatternSyntax.self),
+              let typeAnnotation = binding.typeAnnotation
+        else {
+            context.diagnose(
+                Diagnostic(
+                    node: variable,
+                    message: MacroExpansionErrorMessage(
+                        "@Part needs one named property with a declared type, e.g. `@Part(.h1, class: .detailTitle) var title: String = \"\"`"
+                    )
+                )
+            )
+            return []
+        }
+
+        // a computed property has no storage for a call site to set, and the
+        // host macro does not offer one. diagnose it here rather than emit a
+        // renderer that reads a value nobody can pass.
+        guard binding.accessorBlock == nil else {
+            context.diagnose(
+                Diagnostic(
+                    node: variable,
+                    message: MacroExpansionErrorMessage(
+                        "@Part marks a stored property: `\(pattern.identifier.text)` is computed, so a call site has no value to set"
+                    )
+                )
+            )
+            return []
+        }
+
+        let typeText = typeAnnotation.type.trimmedDescription
+        guard typeText == "String" || typeText == "String?" else {
+            context.diagnose(
+                Diagnostic(
+                    node: typeAnnotation.type,
+                    message: MacroExpansionErrorMessage(
+                        "@Part renders its value as text: `\(pattern.identifier.text)` is `\(typeText)`, not `String` or `String?`"
+                    )
+                )
+            )
+            return []
+        }
+
+        guard isInsideStyledElementHost(variable, in: context) else {
+            context.diagnose(
+                Diagnostic(
+                    node: node,
+                    message: MacroExpansionErrorMessage(
+                        "@Part must be declared inside a `@StyledElement` host: nothing else reads the marker"
+                    )
+                )
+            )
+            return []
+        }
+
+        return []
+    }
+
+    /// true unless the enclosing declaration is known to be a struct *without*
+    /// `@StyledElement`.
+    ///
+    /// a peer macro sees only the property it is attached to, so the host is
+    /// found two ways: `lexicalContext` — the enclosing declarations the
+    /// expansion context carries — and, failing that, the syntax tree's parent
+    /// chain. when neither can see an enclosing type (a hand-built tree, or a
+    /// context that carries no lexical scope), the check is skipped rather than
+    /// guessed: no diagnostic is emitted on a context that cannot be read.
+    private static func isInsideStyledElementHost(
+        _ declaration: some SyntaxProtocol,
+        in context: some MacroExpansionContext
+    ) -> Bool {
+        for enclosing in context.lexicalContext {
+            if let structDecl = enclosing.as(StructDeclSyntax.self) {
+                return carriesStyledElement(structDecl)
+            }
+        }
+
+        guard var node = declaration.parent else {
+            return true
+        }
+        while true {
+            if let structDecl = node.as(StructDeclSyntax.self) {
+                return carriesStyledElement(structDecl)
+            }
+            guard let parent = node.parent else {
+                // the chain ended without an enclosing type — file scope, a
+                // function body, or a type that is not a struct.
+                return false
+            }
+            node = parent
+        }
+    }
+
+    private static func carriesStyledElement(_ structDecl: StructDeclSyntax) -> Bool {
+        structDecl.attributes.contains { attribute in
+            guard let attr = attribute.as(AttributeSyntax.self) else {
+                return false
+            }
+            return attr.attributeName.trimmedDescription == "StyledElement"
+        }
+    }
+}
+
