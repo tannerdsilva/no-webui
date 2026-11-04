@@ -71,6 +71,23 @@ public struct WebUIServerConfig: Sendable {
 	/// names the limit. default 64.
 	public var maxMultipartParts: Int
 
+	/// the largest websocket frame the server's decoder accepts, in bytes.
+	/// default 256 KiB.
+	///
+	/// a frame carries the control plane — events, pings, navigations — and
+	/// never a file: bytes travel over the upload route, chunked, so the frame
+	/// budget bounds one *message*, not what a page may send in total. before
+	/// this knob the server inherited nio's 16 KiB default, which a form
+	/// payload can exceed.
+	///
+	/// the same number is what a page publishes to the engine as
+	/// ``RuntimeConfig/maxFrameBytes``: the engine refuses an over-budget frame
+	/// locally instead of letting the server answer it with a 1009 close. a
+	/// frame that is over budget anyway (a client that never read the budget)
+	/// is refused by the decoder, counted in ``WebUIServer/refusedFrameCount``
+	/// and logged once per refusal.
+	public var maxFrameSize: Int
+
 	/// decides which session a request belongs to (see ``RequestAuthorizer``).
 	///
 	/// `nil` — the default — is "no authorizer": the server mints a render
@@ -107,9 +124,15 @@ public struct WebUIServerConfig: Sendable {
 		onRenderFailure: (@Sendable (any Error) -> String)? = nil,
 		maxBodyBytes: Int = 1 << 20,
 		maxMultipartParts: Int = 64,
+		maxFrameSize: Int = 256 * 1024,
 		authorizer: (any RequestAuthorizer)? = nil,
 		socketObserver: (any SocketLifecycleObserver)? = nil
 	) {
+		// the decoder's own bound, refused here the way nio refuses it there
+		// (a `precondition`, not a clamp): a frame length above `UInt32.max` is
+		// not a budget any client could honour, and silently accepting it would
+		// mean the number the page is told and the number enforced differ.
+		precondition(maxFrameSize <= UInt32.max, "invalid overlarge max frame size")
 		self.host = host
 		self.port = port
 		self.maxConnections = maxConnections
@@ -125,6 +148,7 @@ public struct WebUIServerConfig: Sendable {
 		self.onRenderFailure = onRenderFailure
 		self.maxBodyBytes = maxBodyBytes
 		self.maxMultipartParts = maxMultipartParts
+		self.maxFrameSize = maxFrameSize
 		self.authorizer = authorizer
 		self.socketObserver = socketObserver
 	}

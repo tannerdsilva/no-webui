@@ -10,7 +10,7 @@
 # forced it. `Tests/WebUITests/FrozenSurfaceTests.swift` fails when this
 # file and a fresh extraction diverge, naming every added and removed symbol.
 #
-# re-measured 2026-11-03: 5212 symbols across 11 modules.
+# re-measured 2026-11-04: 5215 symbols across 11 modules.
 
 ## WebUISharedCore
 
@@ -1798,9 +1798,10 @@ RuntimeConfig.capabilities
 RuntimeConfig.debounceInputMs
 RuntimeConfig.debounceMaxWaitMs
 RuntimeConfig.encodedJSON()
-RuntimeConfig.init(wsUrl:wsReconnect:wsMaxReconnectDelayMs:wsPingIntervalMs:wsPongTimeoutMs:maxQueueSize:debounceInputMs:debounceMaxWaitMs:optimisticSettleMs:logLevel:renderToken:capabilities:persistence:)
+RuntimeConfig.init(wsUrl:wsReconnect:wsMaxReconnectDelayMs:wsPingIntervalMs:wsPongTimeoutMs:maxQueueSize:debounceInputMs:debounceMaxWaitMs:optimisticSettleMs:logLevel:renderToken:capabilities:persistence:maxFrameBytes:)
 RuntimeConfig.isEmpty
 RuntimeConfig.logLevel
+RuntimeConfig.maxFrameBytes
 RuntimeConfig.maxQueueSize
 RuntimeConfig.optimisticSettleMs
 RuntimeConfig.persistence
@@ -4935,6 +4936,7 @@ WebUIServer.init(render:router:config:logger:)
 WebUIServer.init(requestRender:router:config:logger:)
 WebUIServer.init(router:config:logger:)
 WebUIServer.init(router:eventRouter:config:logger:)
+WebUIServer.refusedFrameCount
 WebUIServer.start()
 WebUIServer.stop()
 WebUIServerAsset
@@ -4956,9 +4958,10 @@ WebUIServerConfig.assets
 WebUIServerConfig.authorizer
 WebUIServerConfig.handlerFailurePolicy
 WebUIServerConfig.host
-WebUIServerConfig.init(host:port:maxConnections:maxSessions:maxHandlers:readIdleSeconds:assetCacheSeconds:pagePath:themeSheet:assets:requireRenderToken:handlerFailurePolicy:onRenderFailure:maxBodyBytes:maxMultipartParts:authorizer:socketObserver:)
+WebUIServerConfig.init(host:port:maxConnections:maxSessions:maxHandlers:readIdleSeconds:assetCacheSeconds:pagePath:themeSheet:assets:requireRenderToken:handlerFailurePolicy:onRenderFailure:maxBodyBytes:maxMultipartParts:maxFrameSize:authorizer:socketObserver:)
 WebUIServerConfig.maxBodyBytes
 WebUIServerConfig.maxConnections
+WebUIServerConfig.maxFrameSize
 WebUIServerConfig.maxHandlers
 WebUIServerConfig.maxMultipartParts
 WebUIServerConfig.maxSessions

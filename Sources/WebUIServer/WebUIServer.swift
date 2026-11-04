@@ -251,6 +251,15 @@ public actor WebUIServer {
 	private let config: WebUIServerConfig
 	private let logger: Logger
 	private var lifecycle: Lifecycle?
+	/// how many websocket frames the decoder refused as over budget since this
+	/// server started.
+	///
+	/// a refusal is answered before the frame reaches the router: nio's decoder
+	/// throws on the length word, the protocol error handler writes a 1009
+	/// (`messageTooLarge`) close and drops the connection. this counts those, so
+	/// "the budget is enforced" is a number a test can read rather than a claim
+	/// about a client's own behaviour. it counts refusals, not clean closes.
+	public private(set) var refusedFrameCount = 0
 	/// the typed route table that answers the page path (and, at the
 	/// deprecated inits, nothing else). the framework's own asset routes are
 	/// matched before it, so a route can neither shadow nor disable them.
@@ -380,6 +389,10 @@ public actor WebUIServer {
 				// sees either.
 				let upgradeRequest = Mutex<HTTPRequest?>(nil)
 				let upgrader = NIOTypedWebSocketServerUpgrader<ServerUpgradeResult>(
+					// the frame budget the server declares and the page is told
+					// about: a control-plane message, never a file. nio's own
+					// default is 16 KiB, which a form payload can exceed.
+					maxFrameSize: cfg.maxFrameSize,
 					shouldUpgrade: { channel, head in
 						guard head.method == .GET, head.uri == "/ws" else {
 							return channel.eventLoop.makeSucceededFuture(nil)
@@ -394,6 +407,17 @@ public actor WebUIServer {
 					},
 					upgradePipelineHandler: { channel, _ in
 						channel.eventLoop.makeCompletedFuture {
+							// the budget is observed where nio raises it: the
+							// decoder throws on the frame's length word and the
+							// protocol error handler answers 1009. that error is
+							// not reliably visible from the read loop — the
+							// handler closes the channel, and a close that lands
+							// first ends the async stream cleanly — but it is
+							// always forwarded through the pipeline, so this
+							// handler sees every refusal exactly once.
+							try channel.pipeline.syncOperations.addHandler(
+								FrameBudgetObserver(refused: { Task { await self.recordRefusedFrame() } })
+							)
 							let ws = try NIOAsyncChannel<WebSocketFrame, WebSocketFrame>(
 								wrappingChannelSynchronously: channel
 							)
@@ -507,6 +531,22 @@ public actor WebUIServer {
 		sinks.count
 	}
 
+	// MARK: - frame budget
+
+	/// record one frame the websocket decoder refused as over budget: one
+	/// count, one warning.
+	///
+	/// called from a socket's pipeline, which is why the counter is actor state
+	/// and not a lock: the increment and the log line are one isolated step, so
+	/// a test that reads `refusedFrameCount == 1` has also observed the warning
+	/// that belongs to it.
+	func recordRefusedFrame() {
+		refusedFrameCount += 1
+		logger.warning(
+			"WebUIServer: refused a websocket frame over the \(config.maxFrameSize)-byte budget — closed with 1009 (message too large)"
+		)
+	}
+
 	/// the router this server dispatches through: the one it built from
 	/// `config.maxSessions`/`maxHandlers`, or the `EventRouter` its host passed
 	/// in. package-visible so a test can assert the config caps reached the
@@ -584,6 +624,37 @@ enum ServerUpgradeResult: Sendable {
 
 enum ServerGateError: Error {
 	case atCapacity
+}
+
+// MARK: - frame budget observation
+
+/// sees an over-budget frame where nio raises it, once per refusal.
+///
+/// the decoder throws `NIOWebSocketError.invalidFrameLength` on the frame's
+/// length word and nio's protocol error handler answers it with a 1009 close
+/// and drops the connection. that close races the error for the socket's async
+/// stream — a close that completes synchronously finishes the stream cleanly,
+/// and the error then has no reader — so a `catch` around the read loop sees a
+/// refusal only sometimes. errors are always forwarded toward the tail of the
+/// pipeline, so this handler sees all of them, and is the server's one place
+/// that counts one.
+final class FrameBudgetObserver: ChannelInboundHandler, @unchecked Sendable {
+	typealias InboundIn = WebSocketFrame
+
+	private let refused: @Sendable () -> Void
+
+	init(refused: @escaping @Sendable () -> Void) {
+		self.refused = refused
+	}
+
+	func errorCaught(context: ChannelHandlerContext, error: Error) {
+		if let webSocketError = error as? NIOWebSocketError,
+			case .invalidFrameLength = webSocketError
+		{
+			refused()
+		}
+		context.fireErrorCaught(error)
+	}
 }
 
 // MARK: - shutdown signal

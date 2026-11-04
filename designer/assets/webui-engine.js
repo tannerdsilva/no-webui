@@ -16,6 +16,7 @@ window.WebUIEngine = (function () {
     renderToken: null,
     capabilities: null,
     persistence: null,
+    maxFrameBytes: null,
   };
 
   var LOG_LEVELS = { debug: 0, info: 1, warn: 2, error: 3, silent: 4 };
@@ -215,15 +216,37 @@ window.WebUIEngine = (function () {
       }, delay);
     }
 
+    function frameSize(text) {
+      var bytes = 0;
+      for (var i = 0; i < text.length; i++) {
+        var code = text.charCodeAt(i);
+        if (code < 0x80) { bytes += 1; }
+        else if (code < 0x800) { bytes += 2; }
+        else if (code >= 0xd800 && code <= 0xdbff) { bytes += 4; i++; }
+        else { bytes += 3; }
+      }
+      return bytes;
+    }
+
+    function fitsBudget(frame) {
+      if (!config.maxFrameBytes || config.maxFrameBytes <= 0) return true;
+      var size = frameSize(frame);
+      if (size <= config.maxFrameBytes) return true;
+      log.error('webui:frame-too-large — a ' + size + '-byte frame exceeds the ' + config.maxFrameBytes + '-byte budget; not sent');
+      return false;
+    }
+
     function send(data) {
       if (destroyed) return;
+      var frame = JSON.stringify(data);
+      if (!fitsBudget(frame)) return;
       if (ws && ws.readyState === WebSocket.OPEN) {
-        ws.send(JSON.stringify(data));
+        ws.send(frame);
       } else {
         if (messageQueue.length >= config.maxQueueSize) {
           messageQueue.shift();
         }
-        messageQueue.push(data);
+        messageQueue.push(frame);
         if (!reconnectTimer) connect();
       }
     }
@@ -232,7 +255,7 @@ window.WebUIEngine = (function () {
       while (messageQueue.length > 0) {
         var item = messageQueue.shift();
         if (ws && ws.readyState === WebSocket.OPEN) {
-          ws.send(JSON.stringify(item));
+          ws.send(item);
         } else {
           messageQueue.unshift(item);
           break;

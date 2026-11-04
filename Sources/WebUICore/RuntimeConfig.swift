@@ -26,6 +26,16 @@ public struct RuntimeConfig: Sendable, Encodable {
 	/// writes). the chamber picks the backing; the module-side store contract
 	/// is unchanged.
 	public var persistence: String?
+	/// the largest websocket frame the server accepts, in bytes — the number
+	/// `WebUIServerConfig.maxFrameSize` enforces, published so the engine can
+	/// refuse an over-budget frame locally: refusing it before `ws.send` keeps
+	/// the socket open, where the server's answer to an over-budget frame is a
+	/// 1009 close.
+	///
+	/// `nil` — the default, and every page a host that does not set it renders
+	/// — leaves the engine's check off, so an older page's bytes are unchanged
+	/// and it behaves exactly as it did before the budget existed.
+	public var maxFrameBytes: Int?
 
 	public init(
 		wsUrl: String? = nil,
@@ -40,7 +50,8 @@ public struct RuntimeConfig: Sendable, Encodable {
 		logLevel: String? = nil,
 		renderToken: String? = nil,
 		capabilities: [String]? = nil,
-		persistence: String? = nil
+		persistence: String? = nil,
+		maxFrameBytes: Int? = nil
 	) {
 		self.wsUrl = wsUrl
 		self.wsReconnect = wsReconnect
@@ -55,6 +66,7 @@ public struct RuntimeConfig: Sendable, Encodable {
 		self.renderToken = renderToken
 		self.capabilities = capabilities
 		self.persistence = persistence
+		self.maxFrameBytes = maxFrameBytes
 	}
 
 	/// a copy of this config with `names` folded into ``capabilities``
@@ -77,7 +89,7 @@ public struct RuntimeConfig: Sendable, Encodable {
 			&& wsPingIntervalMs == nil && wsPongTimeoutMs == nil && maxQueueSize == nil
 			&& debounceInputMs == nil && debounceMaxWaitMs == nil
 			&& optimisticSettleMs == nil && logLevel == nil && renderToken == nil
-			&& capabilities == nil && persistence == nil
+			&& capabilities == nil && persistence == nil && maxFrameBytes == nil
 	}
 
 	public func encodedJSON() -> String {
@@ -98,6 +110,9 @@ public struct RuntimeConfig: Sendable, Encodable {
 			entries.append("\"capabilities\":[\(escaped)]")
 		}
 		if let v = persistence { entries.append("\"persistence\":\(jsonStringLiteral(v))") }
+		// after `persistence`, so a config that sets both keeps its byte order
+		// and a config that sets neither emits the same bytes it always did.
+		if let v = maxFrameBytes { entries.append("\"maxFrameBytes\":\(v)") }
 		return "{\(entries.joined(separator: ","))}"
 	}
 
