@@ -745,19 +745,33 @@ final class InboundParts: UploadChunkSource {
 	/// ends at nio's `.end`; a head can only mean the body ended early — or
 	/// that a pipelined request is already waiting — so it goes back to the
 	/// loop untouched.
+	///
+	/// every other way the inbound stream can end is the peer leaving
+	/// mid-body: nio finishes the stream when the channel goes away, and on
+	/// some paths reports that as an error ("stream ended at an unexpected
+	/// time") rather than a finish. a `nil` from the iterator is
+	/// indistinguishable from a completed body — the defect a host cannot
+	/// recover from, because it would seal a truncated file as a finished one —
+	/// so both paths become one error here. the handler can then tell "the
+	/// body ended" from "the body was cut off" the same way on every platform,
+	/// and delete what it wrote.
 	func nextChunk() async throws -> [UInt8]? {
-		while let part = try await next() {
-			switch part {
-			case .body(let buffer):
-				return Array(buffer.readableBytesView)
-			case .end:
-				return nil
-			case .head(let head):
-				putBack(.head(head))
-				return nil
+		do {
+			while let part = try await next() {
+				switch part {
+				case .body(let buffer):
+					return Array(buffer.readableBytesView)
+				case .end:
+					return nil
+				case .head(let head):
+					putBack(.head(head))
+					return nil
+				}
 			}
+		} catch {
+			throw UploadStreamError.cancelled(reason: "\(error)")
 		}
-		return nil
+		throw UploadStreamError.cancelled(reason: "the stream ended before the body's end")
 	}
 }
 
@@ -1330,6 +1344,26 @@ final class Runner: Sendable {
 								body: UploadBody(source: parts)
 							)
 							streaming = try await respond(channel: channel.channel, response: response)
+						} catch let failure as UploadStreamError {
+							// the route's own refusal, not a handler bug: an
+							// overrun is the one 413 the client can act on, and
+							// a client that left mid-body has nobody left to
+							// answer. neither belongs in the 500 below.
+							switch failure {
+							case .overLimit(let limit, let received):
+								try await respond(
+									channel: channel.channel,
+									body: "413 — request body too large: Route.upload(limit:) is \(limit) bytes; received \(received)",
+									contentType: "text/plain; charset=utf-8",
+									status: .payloadTooLarge
+								)
+							case .cancelled(let reason):
+								// the handler has already seen the body fail, and
+								// the peer is gone: there is no one to answer.
+								logger.debug(
+									"WebUIServer: client left mid-upload for \(path): \(reason)"
+								)
+							}
 						} catch {
 							// the handler may have read part of the body: the
 							// connection still owes the client an answer, so the

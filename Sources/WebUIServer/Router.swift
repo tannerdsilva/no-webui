@@ -205,8 +205,10 @@ public struct Route: Sendable {
 	/// - parameters:
 	///   - pattern: the path to answer.
 	///   - limit: the byte budget for this upload, kept with the route so the
-	///     counted enforcement has one number to apply. this slice streams the
-	///     body; refusing an overrun arrives with the counting.
+	///     counted enforcement reads one number. a head that declares more than
+	///     this is refused before a body byte is read, and a body that crosses it
+	///     is cut at the limit — counted from the bytes the handler was handed,
+	///     never from `Content-Length`.
 	///   - handler: consumes the head and the body, and answers the request.
 	public static func upload(
 		_ pattern: PathPattern,
@@ -342,6 +344,76 @@ protocol UploadChunkSource: AnyObject {
 	func nextChunk() async throws -> [UInt8]?
 }
 
+/// why a streamed body stopped before its consumer was done.
+///
+/// the two failures a body can raise, kept apart because they want different
+/// answers: an overrun is refused with a status the client can act on, while
+/// a disconnect has nobody left to answer. both reach the handler as a throw
+/// out of its iteration, so a host can delete whatever it had written.
+enum UploadStreamError: Error, CustomStringConvertible {
+	/// the route's `limit` was crossed. `received` is what the route had
+	/// handed out when it refused — the declared length for a head refused
+	/// before the read, the limit itself for a body cut mid-stream.
+	case overLimit(limit: Int, received: Int)
+	/// the connection ended before the body did. the reason is the transport's
+	/// own account, for the log.
+	case cancelled(reason: String)
+
+	var description: String {
+		switch self {
+		case .overLimit(let limit, let received):
+			return "upload over limit: \(limit) bytes allowed, \(received) received"
+		case .cancelled(let reason):
+			return "upload cancelled: the client disconnected before the body ended (\(reason))"
+		}
+	}
+}
+
+/// the route's byte budget, applied to a body as it is pulled.
+///
+/// the count is what the handler was handed, never what the head declared: a
+/// `Content-Length` is the client's claim, and a body that carries more than
+/// the claim says — chunked, or simply longer than it promised — is cut by
+/// this counter. the chunk that crosses the limit is handed out up to the
+/// last byte the budget allows, and the pull after it refuses, so the handler
+/// sees exactly `limit` bytes and then a failure it can act on.
+final class LimitedUploadSource: UploadChunkSource {
+	private let upstream: any UploadChunkSource
+	private let limit: Int
+	/// body bytes handed to the handler so far.
+	private var consumed = 0
+	/// the refusal this body owes once the budget is spent and the wire had
+	/// more. kept so the route can still refuse a handler that swallowed the
+	/// cut instead of turning a truncated body into a success.
+	private(set) var refusal: UploadStreamError?
+
+	init(upstream: any UploadChunkSource, limit: Int) {
+		self.upstream = upstream
+		// a negative budget is not a limit; zero is the strictest one that is.
+		self.limit = max(0, limit)
+	}
+
+	func nextChunk() async throws -> [UInt8]? {
+		if let refusal { throw refusal }
+		guard let chunk = try await upstream.nextChunk() else { return nil }
+		let room = limit - consumed
+		guard chunk.count > room else {
+			consumed += chunk.count
+			return chunk
+		}
+		consumed = limit
+		let overrun = UploadStreamError.overLimit(limit: limit, received: consumed)
+		refusal = overrun
+		guard room > 0 else { throw overrun }
+		return Array(chunk.prefix(room))
+	}
+
+	/// throw the refusal this body already owes, if any.
+	func throwIfOverrun() throws {
+		if let refusal { throw refusal }
+	}
+}
+
 /// the streaming arm of a ``Route``: the handler and the byte budget the route
 /// is held to.
 struct UploadRoute: Sendable {
@@ -351,7 +423,20 @@ struct UploadRoute: Sendable {
 	let handler: @Sendable (UploadHead, consuming UploadBody) async throws -> HTTPResponse
 
 	func respond(_ head: UploadHead, body: consuming UploadBody) async throws -> HTTPResponse {
-		try await handler(head, consume body)
+		// a head that declares more than the route allows is refused before
+		// the body is touched: nothing is pulled off the wire and the handler
+		// never runs, so the refusal costs the head it already read.
+		if let declared = head.contentLength, declared > limit {
+			throw UploadStreamError.overLimit(limit: limit, received: declared)
+		}
+		// the counted cap, applied where the bytes are handed out.
+		let bounded = LimitedUploadSource(upstream: body.source, limit: limit)
+		let response = try await handler(head, UploadBody(source: bounded))
+		// the budget is the route's, not the handler's: a handler that caught
+		// the cut and answered anyway must not turn a truncated body into a
+		// 200 — a host that writes a file would then seal it.
+		try bounded.throwIfOverrun()
+		return response
 	}
 }
 
