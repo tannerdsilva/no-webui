@@ -1,3 +1,4 @@
+import NIOHTTP1
 import WebUI
 
 // MARK: - Responder
@@ -151,12 +152,28 @@ public struct PathPattern: Sendable, ExpressibleByStringLiteral {
 public struct Route: Sendable {
 	public let method: HTTPMethod
 	public let pattern: PathPattern
-	let responder: any Responder
+
+	/// what answers the route: an ordinary responder, or a streaming upload.
+	/// an upload route is never answered from a finished ``HTTPRequest`` — its
+	/// body is the connection's own stream — so the arms are exclusive by
+	/// construction.
+	enum Action: Sendable {
+		case respond(any Responder)
+		case upload(UploadRoute)
+	}
+
+	let action: Action
 
 	public init(method: HTTPMethod, pattern: PathPattern, responder: any Responder) {
 		self.method = method
 		self.pattern = pattern
-		self.responder = responder
+		self.action = .respond(responder)
+	}
+
+	private init(method: HTTPMethod, pattern: PathPattern, action: Action) {
+		self.method = method
+		self.pattern = pattern
+		self.action = action
 	}
 
 	/// a GET route answered by a closure.
@@ -173,6 +190,34 @@ public struct Route: Sendable {
 		_ r: @escaping @Sendable (HTTPRequest) async -> HTTPResponse
 	) -> Route {
 		Route(method: .post, pattern: pattern, responder: ClosureResponder(r))
+	}
+
+	/// a POST route whose body is handed to the handler as it arrives.
+	///
+	/// the third constructor beside ``get``/``post``: those receive a finished
+	/// ``HTTPRequest``, whose body the server buffered under
+	/// `WebUIServerConfig.maxBodyBytes`. this one receives the connection's
+	/// body directly — an ``UploadBody`` yields at most one read's worth of
+	/// bytes per step — so the route's window is one chunk, not the request.
+	/// the server matches upload routes before it reads a body, which is why
+	/// this route never sees a ``RequestBody`` and never pays the buffer.
+	///
+	/// - parameters:
+	///   - pattern: the path to answer.
+	///   - limit: the byte budget for this upload, kept with the route so the
+	///     counted enforcement has one number to apply. this slice streams the
+	///     body; refusing an overrun arrives with the counting.
+	///   - handler: consumes the head and the body, and answers the request.
+	public static func upload(
+		_ pattern: PathPattern,
+		limit: Int,
+		handler: @escaping @Sendable (UploadHead, consuming UploadBody) async throws -> HTTPResponse
+	) -> Route {
+		Route(
+			method: .post,
+			pattern: pattern,
+			action: .upload(UploadRoute(limit: limit, handler: handler))
+		)
 	}
 
 	/// a page route: the builder's value renders as a whole document, inside
@@ -237,6 +282,79 @@ private struct AsyncPageResponder<D: BufferRendering>: Responder {
 	}
 }
 
+// MARK: - Upload
+
+/// the head of a streamed upload: what a route knows before it reads a byte.
+///
+/// the body is deliberately absent — it arrives as an ``UploadBody`` and is
+/// consumed as it comes off the wire, so a multi-gigabyte request costs the
+/// route one chunk of memory rather than one buffer of the whole file.
+public struct UploadHead: Sendable {
+	/// the request path, query already stripped.
+	public let path: String
+	/// the request headers, as they arrived.
+	public let headers: HTTPHeaders
+	/// the declared `Content-Length`, or nil for a chunked body.
+	public let contentLength: Int?
+}
+
+/// a request body pulled as it arrives.
+///
+/// one cursor, bounded window: each `next()` answers at most the bytes of one
+/// socket read, and nothing is retained between calls — the caller's loop
+/// variable is the whole of what the route holds. the source is the
+/// connection's inbound stream, so iterating this body reads the wire; a
+/// handler that stops early stops reading, and the request loop skips the
+/// rest.
+///
+/// on ownership: the stdlib's `AsyncSequence` inherits `Copyable`, so a
+/// `~Copyable` conformance is not expressible — `_Concurrency` declares
+/// `public protocol AsyncSequence<Element, Failure>` with the default
+/// `Copyable` constraint. the single cursor is therefore the source object
+/// below: every copy shares it, and each chunk is handed out once, never
+/// replayed or duplicated.
+public struct UploadBody: AsyncSequence {
+	public typealias Element = [UInt8]
+
+	/// where the chunks come from: the connection's one inbound cursor.
+	let source: any UploadChunkSource
+
+	init(source: any UploadChunkSource) {
+		self.source = source
+	}
+
+	public func makeAsyncIterator() -> Iterator {
+		Iterator(source: source)
+	}
+
+	public struct Iterator: AsyncIteratorProtocol {
+		let source: any UploadChunkSource
+
+		public mutating func next() async throws -> [UInt8]? {
+			try await source.nextChunk()
+		}
+	}
+}
+
+/// the pull side of an ``UploadBody``: one chunk per call, never accumulated.
+/// the server's connection implements it over nio's inbound stream.
+protocol UploadChunkSource: AnyObject {
+	func nextChunk() async throws -> [UInt8]?
+}
+
+/// the streaming arm of a ``Route``: the handler and the byte budget the route
+/// is held to.
+struct UploadRoute: Sendable {
+	/// the route's own limit, in bytes. kept with the route so the counted
+	/// enforcement reads one number rather than one per handler.
+	let limit: Int
+	let handler: @Sendable (UploadHead, consuming UploadBody) async throws -> HTTPResponse
+
+	func respond(_ head: UploadHead, body: consuming UploadBody) async throws -> HTTPResponse {
+		try await handler(head, consume body)
+	}
+}
+
 // MARK: - RouteBuilder
 
 @resultBuilder public enum RouteBuilder {
@@ -266,23 +384,22 @@ public struct Router: Sendable, Responder {
 	}
 
 	public func respond(to request: HTTPRequest) async throws -> HTTPResponse {
-		let matching = routes.filter { $0.pattern.match(request.path) != nil }
-		guard !matching.isEmpty else {
+		let ranked = ranking(for: request.path)
+		guard !ranked.isEmpty else {
 			return HTTPResponse(status: .notFound, body: .text("not found"))
 		}
-		// most specific first; the enumerated offset keeps the sort stable
-		// regardless of the library's own stability guarantees.
-		let ranked = matching.enumerated().sorted { lhs, rhs in
-			if lhs.element.pattern.specificity != rhs.element.pattern.specificity {
-				return lhs.element.pattern.specificity > rhs.element.pattern.specificity
-			}
-			return lhs.offset < rhs.offset
-		}.map(\.element)
 
 		if let route = ranked.first(where: { $0.method == request.method }) {
+			// an upload route answers on the wire, where its body is a stream.
+			// reaching one here means the caller handed in a finished request
+			// instead of the connection, so there is no body to stream: say so
+			// rather than routing it an empty one.
+			guard case .respond(let responder) = route.action else {
+				return HTTPResponse(status: 500, body: .text(Self.uploadNeedsTheWire))
+			}
 			var routed = request
 			routed.params = route.pattern.match(request.path) ?? [:]
-			return try await route.responder.respond(to: routed)
+			return try await responder.respond(to: routed)
 		}
 
 		// a matched pattern with an unmatched method: 405, and the Allow
@@ -298,9 +415,43 @@ public struct Router: Sendable, Responder {
 		)
 	}
 
+	/// the upload route that answers a `method`-`path` pair, most specific
+	/// first. nil when the winning route for that method is an ordinary one —
+	/// the server then takes the buffered path, exactly as it always has.
+	func uploadRoute(method: HTTPMethod, path: String) -> UploadRoute? {
+		for route in ranking(for: path) where route.method == method {
+			guard case .upload(let upload) = route.action else { return nil }
+			return upload
+		}
+		return nil
+	}
+
+	/// every route whose pattern matches `path`, most specific first; ties keep
+	/// declaration order. one ranking for both dispatch paths, so an upload
+	/// route and an ordinary route can never disagree about which pattern wins.
+	private func ranking(for path: String) -> [Route] {
+		routes
+			.filter { $0.pattern.match(path) != nil }
+			.enumerated()
+			.sorted { lhs, rhs in
+				if lhs.element.pattern.specificity != rhs.element.pattern.specificity {
+					return lhs.element.pattern.specificity > rhs.element.pattern.specificity
+				}
+				return lhs.offset < rhs.offset
+			}
+			.map(\.element)
+	}
+
 	/// the 405 body. kept identical to the pre-router page message so a form
 	/// POST lands on the same explanation it always had.
 	static let methodNotAllowedBody =
 		"405 — WebUIServer accepts GET only; a POST here means a <form> has no JS "
 		+ "interception. See Documentation/API.md#forms (POST support: W3)."
+
+	/// the 500 body for an upload route reached with a finished request: the
+	/// server hands a streaming route the connection, and only the connection
+	/// can answer it.
+	static let uploadNeedsTheWire =
+		"500 — this route streams its request body; it is answered on the wire "
+		+ "(Route.upload receives an UploadBody), not from a finished HTTPRequest"
 }

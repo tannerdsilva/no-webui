@@ -710,6 +710,57 @@ final class ConnectionSinks: Sendable {
 	}
 }
 
+// MARK: - inbound parts
+
+/// the connection's one inbound iterator, boxed.
+///
+/// nio's upgraded http stream allows exactly one iterator per connection, and
+/// two readers share it: the request loop for heads, and an upload route's
+/// body for the parts between them. whoever asks next gets the next wire part.
+/// a part read while serving an upload that is not the body's — a pipelined
+/// head — is put back for the loop rather than consumed here.
+final class InboundParts: UploadChunkSource {
+	private var iterator: NIOAsyncChannelInboundStream<HTTPServerRequestPart>.AsyncIterator
+	private var deferred: HTTPServerRequestPart?
+
+	init(_ inbound: NIOAsyncChannelInboundStream<HTTPServerRequestPart>) {
+		self.iterator = inbound.makeAsyncIterator()
+	}
+
+	/// the next wire part, from the put-back slot first.
+	func next() async throws -> HTTPServerRequestPart? {
+		if let deferred {
+			self.deferred = nil
+			return deferred
+		}
+		return try await iterator.next()
+	}
+
+	/// hand a part back to the request loop.
+	func putBack(_ part: HTTPServerRequestPart) {
+		deferred = part
+	}
+
+	/// one body chunk: a single wire read's bytes, and nothing more. the body
+	/// ends at nio's `.end`; a head can only mean the body ended early — or
+	/// that a pipelined request is already waiting — so it goes back to the
+	/// loop untouched.
+	func nextChunk() async throws -> [UInt8]? {
+		while let part = try await next() {
+			switch part {
+			case .body(let buffer):
+				return Array(buffer.readableBytesView)
+			case .end:
+				return nil
+			case .head(let head):
+				putBack(.head(head))
+				return nil
+			}
+		}
+		return nil
+	}
+}
+
 // MARK: - request runner
 
 /// the connection-bound logic. `Sendable`: all state is immutable after init
@@ -1218,8 +1269,11 @@ final class Runner: Sendable {
 		try await channel.executeThenClose { inbound, outbound in
 			// nio's upgraded http stream allows exactly ONE iterator per
 			// connection, so the whole request loop — the head, the bounded body
-			// read, the next request's head — shares this one.
-			var iterator = inbound.makeAsyncIterator()
+			// read, the next request's head — shares this one. an upload route
+			// reads its body through the same cursor (`InboundParts`), which is
+			// why the cursor is a value the loop holds rather than a local
+			// iterator.
+			let parts = InboundParts(inbound)
 			// a streaming response runs as a lease alongside this loop: the
 			// response is written by its own task, so a pipelined request is
 			// simply deferred until the stream's response completes (http/1.1
@@ -1227,7 +1281,7 @@ final class Runner: Sendable {
 			// armed so a mid-stream disconnect cancels the lease.
 			var streaming: Task<Void, Never>? = nil
 
-			while let part = try await iterator.next() {
+			while let part = try await parts.next() {
 				guard case .head(let head) = part else { continue }
 				// a request that arrived while a stream is still answering the
 				// previous one cannot be answered out of order (http/1.1), so
@@ -1259,13 +1313,44 @@ final class Runner: Sendable {
 				// mid-stream is refused the moment it does — the bounded-parse
 				// discipline, applied to request bodies (plan w3.3).
 				if method != .get {
+					// an upload route consumes the body as it arrives, so it is
+					// matched BEFORE the buffering read below: the server hands
+					// the connection's cursor to the handler and never holds a
+					// body byte of its own. every other non-get keeps the
+					// bounded buffer, byte for byte.
+					if let upload = pageRouter.uploadRoute(method: method, path: path) {
+						let uploadHead = UploadHead(
+							path: path,
+							headers: head.headers,
+							contentLength: BodyReader.contentLength(head.headers)
+						)
+						do {
+							let response = try await upload.respond(
+								uploadHead,
+								body: UploadBody(source: parts)
+							)
+							streaming = try await respond(channel: channel.channel, response: response)
+						} catch {
+							// the handler may have read part of the body: the
+							// connection still owes the client an answer, so the
+							// failure becomes a 500 rather than a dropped socket.
+							logger.error("WebUIServer: upload handler failed for \(path): \(error)")
+							try await respond(
+								channel: channel.channel,
+								body: "500 — the upload handler failed: \(error)",
+								contentType: "text/plain; charset=utf-8",
+								status: .internalServerError
+							)
+						}
+						continue
+					}
 					let declaredLength = BodyReader.contentLength(head.headers)
 					var bodyBytes: [UInt8] = []
 					var received: Int = 0
 					if let declaredLength, declaredLength > config.maxBodyBytes {
 						received = declaredLength
 					} else {
-						while let bodyPart = try await iterator.next() {
+						while let bodyPart = try await parts.next() {
 							guard case .body(let buffer) = bodyPart else { break }
 							if received != 0 { continue }
 							bodyBytes.append(contentsOf: buffer.readableBytesView)

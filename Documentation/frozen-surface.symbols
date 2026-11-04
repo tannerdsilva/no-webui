@@ -10,7 +10,7 @@
 # forced it. `Tests/WebUITests/FrozenSurfaceTests.swift` fails when this
 # file and a fresh extraction diverge, naming every added and removed symbol.
 #
-# re-measured 2026-11-01: 5202 symbols across 11 modules.
+# re-measured 2026-11-03: 5212 symbols across 11 modules.
 
 ## WebUISharedCore
 
@@ -4876,6 +4876,7 @@ Route.method
 Route.page(_:content:)
 Route.pattern
 Route.post(_:_:)
+Route.upload(_:limit:handler:)
 RouteBuilder
 RouteBuilder.buildArray(_:)
 RouteBuilder.buildBlock(_:)
@@ -4899,6 +4900,15 @@ SSEEvent.retryMs
 SocketLifecycleObserver
 SocketLifecycleObserver.socketClosed(session:connection:)
 SocketLifecycleObserver.socketOpened(session:connection:close:)
+UploadBody
+UploadBody.Element
+UploadBody.Iterator
+UploadBody.Iterator.next()
+UploadBody.makeAsyncIterator()
+UploadHead
+UploadHead.contentLength
+UploadHead.headers
+UploadHead.path
 UploadedFile
 UploadedFile.bytes
 UploadedFile.contentType
