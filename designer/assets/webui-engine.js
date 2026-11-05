@@ -1071,6 +1071,16 @@ window.WebUIEngine = (function () {
     }
 
 
+    function inputStateKey(el, index) {
+      var form = el.form || (el.closest ? el.closest('form') : null);
+      var scope = form ? (form.id || form.getAttribute('name') || '') : '';
+      return scope + '|' + (el.id || el.name || index);
+    }
+
+    function skipsRestore(el) {
+      return !!(el.hasAttribute && el.hasAttribute('data-no-restore'));
+    }
+
     function saveInputState(root) {
       var state = {};
       var inputs = root.querySelectorAll('input, textarea, select');
@@ -1078,7 +1088,8 @@ window.WebUIEngine = (function () {
       try { active = document.activeElement; } catch (e) { active = null; }
       for (var i = 0; i < inputs.length; i++) {
         var el = inputs[i];
-        var key = el.id || el.name || i;
+        if (skipsRestore(el)) continue;
+        var key = inputStateKey(el, i);
         var record = { value: el.value };
         if (el.type === 'checkbox' || el.type === 'radio') {
           record.checked = el.checked;
@@ -1170,7 +1181,8 @@ window.WebUIEngine = (function () {
       var focusState = null;
       for (var i = 0; i < inputs.length; i++) {
         var el = inputs[i];
-        var key = el.id || el.name || i;
+        if (skipsRestore(el)) continue;
+        var key = inputStateKey(el, i);
         var saved = state[key];
         if (saved) {
           if (saved.value !== undefined && el.value !== saved.value) {
