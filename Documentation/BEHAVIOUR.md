@@ -18,7 +18,22 @@ Two rules make the contract hold:
    picks an arbitrary CSS selector.
 
 Islands are behavior-free (§19.1): markup inside `[data-webui-island]` is
-render-only, and the engine does not run behavior consequences there.
+render-only, and the engine does not run behavior consequences there. A
+behavior attribute inside an island region is inert at boot and after a patch
+alike — an interactive control belongs outside the island boundary.
+
+## two assets, one vocabulary
+
+The runtime ships as two files. `webui-engine.js` carries the patch-survival
+consequences — scroll follow, scroll memory, scroll-to, draft identity, focus
+return, the dismiss stack, disclosure state, the theme choice — and applies them
+before the first paint. `webui-engine-ext.js` carries the interaction
+consequences and is fetched once at boot into the same dispatch table. The split
+is an implementation detail: the names, the consequences and the readiness
+contract are identical across the two, and `on.ready` fires only after the
+extension settles (loaded or failed), so no behavior races the first patch. A
+page whose extension request fails keeps the core consequences, warns once, and
+stays functional — it never sees a second protocol or a second name.
 
 ## attributes the engine reads today
 
@@ -57,17 +72,21 @@ control.
 | `ScrollFollow` (state) | `data-follow-state` | `away` while the reader is detached — the state that shows the jump control (engine-written) |
 | `ScrollKey` | `data-scroll-key` | a per-region key whose scroll position survives a patch |
 | `ScrollTo` | `data-scroll-to` | the element id to scroll to, with the 1.4 s flash contract |
+| `ScrollTo` (flash) | `data-scroll-flash` | presence while the scroll-to target flashes (engine-written, removed after 1400 ms) |
 | `DraftIdentity` | `data-draft-id` | the draft key a control's unsubmitted value is remembered under |
 | `FocusReturn` | `data-focus-return` | the id to return focus to after a patch (empty = the element itself) |
 | `DismissStack` | `data-dismiss` | presence marks a layer; the engine orders Escape and outside-click |
 | `Reorder` | `data-reorder` | the hidden input id the engine writes the new order into |
 | `Clipboard` | `data-copy` | text to copy (empty = the element's own text) |
 | `TableEnhance` | `data-table-enhance` | `sort`, `filter`, or `sort filter` |
+| `TableEnhance` (filter) | `data-table-filter` | the filter input inside the enhanced region (engine-read) |
 | `SkipTarget` | `data-skip-to` | the id a skip link moves focus to |
 | `TickingLabel` | `data-reltime` | ms epoch; the relative-time ladder paints the label |
 | `TickingLabel` (elapsed) | `data-started` + `data-elapsed` | ms epoch + presence; the elapsed clock paints `floor(s/60):SS` |
 | `Disclosure` | `data-preserve-open` | presence marks a `<details>` whose `open` state survives a patch |
 | `InlineEdit` | `data-inline-edit` | presence; local edit entry (no round-trip), save through the server |
+| `InlineEdit` (mode) | `data-editing` | presence while the control is in local edit mode (engine-written) |
+| `Clipboard` (toast) | `data-webui-toast` | the engine-owned toast element a copy consequence mounts (engine-written) |
 | `Roving` | `data-roving` | presence; one tab stop for the group, arrow keys move it |
 | `Scrollspy` | `data-scrollspy` | presence; the container whose sections the nav highlights |
 | `ThemeChoice` | `data-theme-choice` | the chosen mode (see above; already live) |

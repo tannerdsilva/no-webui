@@ -83,6 +83,7 @@ struct ProseGuardTests {
 	func shippedPayloadsAreProseFree() {
 		let payloads: [(String, String, ProseGuard.Language)] = [
 			("WebUIAssets.engine", WebUIAssets.engine, .javaScript),
+			("WebUIAssets.engineExt", WebUIAssets.engineExt, .javaScript),
 			("WebUIAssets.shell", WebUIAssets.shell, .javaScript),
 			("WebUIAssets.cssMinified", WebUIAssets.cssMinified, .css),
 		]

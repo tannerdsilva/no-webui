@@ -68,8 +68,37 @@ struct WebUIBudgetPlugin: CommandPlugin {
     /// only 12 bytes of headroom, so the next deliberate change was always going to trip
     /// it. ceilings move to 68,500 / 16,300 (~8% headroom again); sheet, shell and island
     /// hold unchanged.
+    ///
+    /// re-pinned 2026-11-12 (S3, the behavior dispatch table — two assets):
+    ///
+    /// the table cost 20,165 bytes and put the engine at 84,041 raw / 19,639 gz, i.e.
+    /// 12,041 over the plan's 72,000 fork trigger and 4,041 over even the absolute
+    /// 80,000 ceiling. §19.2's remedy — the interaction consequences move behind one
+    /// fetch-once door — is what shipped: `designer/assets/webui-engine-ext.js` carries
+    /// `data-reorder`, `data-copy` (+ the toast), `data-table-enhance` (+ its filter
+    /// input), `data-skip-to`, `data-reltime`, `data-started`, `data-inline-edit`,
+    /// `data-roving`, `data-scrollspy`, `data-autogrow`, `data-submit-on-enter`,
+    /// `data-clear-on-submit`, `data-clamp`, with the helpers only they use and the
+    /// document-level listeners and tickers they own. The patch-survival core —
+    /// `data-follow`, `data-scroll-key`, `data-scroll-to`, `data-draft-id`,
+    /// `data-focus-return`, `data-dismiss`, `data-preserve-open`, `data-theme-choice` —
+    /// stays in the engine and applies before the first paint.
+    ///
+    /// measured on this tree, from the asset tool's manifest (`served`):
+    ///   engine      72,435 raw / 17,154 gz   (≤ 74,500 / 18,600 — ~2.1 kb raw headroom)
+    ///   engine-ext  13,592 raw /  3,649 gz   (≤ 14,700 /  3,950 — ~8% headroom)
+    ///
+    /// the arithmetic does not reach 72,000: the moved binders and helpers are 12,605
+    /// bytes, the boot loader that fetches the extension is 1,1xx bytes of new code, and
+    /// the engine's own scaffolding drops ~230 — so 84,041 − 12,605 + ~1,1xx ≈ 72,4xx.
+    /// §19.2 priced the extension as "~50 internal lines" and did not carry that loader.
+    /// `data-theme-choice`'s binder (137 bytes) stays with the theme prelude it calls:
+    /// moving it would leave the extension reading a `press` seam main owns, i.e. a
+    /// broken binder rather than a smaller engine. the 74,500 pin is measured +2 kb and
+    /// still under the plan's 80,000 absolute ceiling.
     private static let ceilings: [Ceiling] = [
-        Ceiling(surface: "engine", label: "webui-engine.js", raw: 68_500, gz: 16_300),
+        Ceiling(surface: "engine", label: "webui-engine.js", raw: 74_500, gz: 18_600),
+        Ceiling(surface: "engineExt", label: "webui-engine-ext.js", raw: 14_700, gz: 3_950),
         Ceiling(surface: "sheet", label: "design-system.css", raw: 335_000, gz: 49_500),
         Ceiling(surface: "shell", label: "webui-shell.js", raw: 1_700, gz: 650),
     ]

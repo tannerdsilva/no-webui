@@ -88,14 +88,21 @@ struct WebUISmokePlugin: CommandPlugin {
 
         let engineSource = context.package.directoryURL
             .appendingPathComponent("designer/assets/webui-engine.js")
+        let extSource = context.package.directoryURL
+            .appendingPathComponent("designer/assets/webui-engine-ext.js")
         if let servedEngine = await GET(session, "\(base)/ui/webui-engine.js"),
            let sourceEngine = try? Data(contentsOf: engineSource),
            servedEngine == sourceEngine,
            let engineText = String(data: servedEngine, encoding: .utf8),
-           !engineText.contains("/*") {
-            ok("engine served bytes == source, comment-free (\(sourceEngine.count) bytes)")
+           !engineText.contains("/*"),
+           let servedExt = await GET(session, "\(base)/ui/webui-engine-ext.js"),
+           let sourceExt = try? Data(contentsOf: extSource),
+           servedExt == sourceExt,
+           let extText = String(data: servedExt, encoding: .utf8),
+           !extText.contains("/*") {
+            ok("engine + extension served bytes == source, comment-free (\(sourceEngine.count) + \(sourceExt.count) bytes)")
         } else {
-            bad("engine served bytes DIFFER from source or carry comments")
+            bad("engine or extension served bytes DIFFER from source, or carry comments")
         }
 
         // the embed plugin's dogfood, end to end: /ui/probe.css is served from the generated

@@ -17,12 +17,14 @@ import WebUIState
 private enum CachedAssets {
 	static let css = ByteBuffer(string: DesignSystemAssets.minifiedCss)
 	static let engine = ByteBuffer(string: WebUIAssets.engine)
+	static let engineExt = ByteBuffer(string: WebUIAssets.engineExt)
 	static let shell = ByteBuffer(string: WebUIAssets.shell)
 	/// the build-time pre-compressed variants, served when the client accepts gzip.
 	/// `nil` when the build host had no `gzip`, in which case the raw bytes serve.
 	/// the runtime never compresses anything — see `WebUIAssetTool.gzipBase64`.
 	static let cssGzip = WebUIAssets.cssGzip.map { ByteBuffer(bytes: $0) }
 	static let engineGzip = WebUIAssets.engineGzip.map { ByteBuffer(bytes: $0) }
+	static let engineExtGzip = WebUIAssets.engineExtGzip.map { ByteBuffer(bytes: $0) }
 	static let shellGzip = WebUIAssets.shellGzip.map { ByteBuffer(bytes: $0) }
 }
 
@@ -36,8 +38,8 @@ private enum CachedAssets {
 /// server just to answer asset paths.
 ///
 /// the framework routes win: a host asset whose path collides with
-/// `/__assets/css`, `/__assets/css.<sha>`, `/ui/webui-engine.js`, or
-/// `/ui/webui-shell.js` is never reached.
+/// `/__assets/css`, `/__assets/css.<sha>`, `/ui/webui-engine.js`,
+/// `/ui/webui-engine-ext.js`, or `/ui/webui-shell.js` is never reached.
 public struct WebUIServerAsset: Sendable {
 	/// the response body. `text` covers css/js/html; `bytes` covers binary
 	/// payloads (fonts) that must not round-trip through `String`.
@@ -1533,6 +1535,18 @@ final class Runner: Sendable {
 						channel: channel.channel,
 						bytes: CachedAssets.engine,
 						gzip: CachedAssets.engineGzip,
+						acceptEncoding: acceptEncoding,
+						contentType: "text/javascript; charset=utf-8",
+						cacheControl: "public, max-age=\(config.assetCacheSeconds)"
+					)
+				} else if path == "/ui/webui-engine-ext.js" {
+					// the engine's second asset: same cache policy as the engine, because the
+					// two are versioned together and a page that pairs them wrongly has no
+					// dispatch table. the engine fetches it once at boot.
+					try await respond(
+						channel: channel.channel,
+						bytes: CachedAssets.engineExt,
+						gzip: CachedAssets.engineExtGzip,
 						acceptEncoding: acceptEncoding,
 						contentType: "text/javascript; charset=utf-8",
 						cacheControl: "public, max-age=\(config.assetCacheSeconds)"

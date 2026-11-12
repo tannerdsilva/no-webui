@@ -27,12 +27,20 @@ struct WebUIAssetPlugin: BuildToolPlugin {
         let cssFile = assetsDir.appendingPathComponent("design-system.css")
         let engineFile = assetsDir.appendingPathComponent("webui-engine.js")
         let shellFile = assetsDir.appendingPathComponent("webui-shell.js")
+        let extFile = assetsDir.appendingPathComponent("webui-engine-ext.js")
         let cssExists = FileManager.default.fileExists(atPath: cssFile.path)
         let engineExists = FileManager.default.fileExists(atPath: engineFile.path)
         let shellExists = FileManager.default.fileExists(atPath: shellFile.path)
+        let extExists = FileManager.default.fileExists(atPath: extFile.path)
 
         guard cssExists else {
             throw AssetError("no css file found in designer/assets/ at \(assetsDir.path) — required to embed the shipped sheet")
+        }
+        // the extension is load-bearing: the engine fetches it at boot for the
+        // interaction consequences. an absent file would ship a page that logs a
+        // degrade warning forever, so it fails the build instead.
+        guard extExists else {
+            throw AssetError("designer/assets/webui-engine-ext.js not found at \(assetsDir.path) — the engine's extension asset is required")
         }
 
         let assetTool = try context.tool(named: "WebUIAssetTool")
@@ -74,6 +82,10 @@ struct WebUIAssetPlugin: BuildToolPlugin {
         if shellExists {
             args += ["--shell-input", shellFile.path]
             inputs.append(shellFile)
+        }
+        if extExists {
+            args += ["--ext-input", extFile.path]
+            inputs.append(extFile)
         }
         let manifestURL = context.pluginWorkDirectoryURL
             .appendingPathComponent("AssetsManifest.json")

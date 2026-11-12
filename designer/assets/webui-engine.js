@@ -25,8 +25,10 @@ window.WebUIEngine = (function () {
   var LOST_ANCHOR_WARNED = {};
   var LOST_OPEN_WARNED = {};
   var RETAINED_OPEN = {};
+  var THEME_PRESS = null;
 
   var afterPatchHooks = [];
+  var beforePatchHooks = [];
   var readyHooks = [];
   var hookLog = null;
 
@@ -53,8 +55,6 @@ window.WebUIEngine = (function () {
       ? savedMode
       : (serverMode === 'light' || serverMode === 'dark' || serverMode === 'system') ? serverMode : 'system';
     var scheme = savedScheme || null;
-
-    function sysDark() { return mql ? mql.matches : false; }
 
     function reflect() {
       var root = document.documentElement;
@@ -113,11 +113,11 @@ window.WebUIEngine = (function () {
       });
     }
     reflect();
-    function pressInitial() { press(); }
+    THEME_PRESS = press;
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', pressInitial);
+      document.addEventListener('DOMContentLoaded', press);
     } else {
-      pressInitial();
+      press();
     }
   })();
 
@@ -303,7 +303,7 @@ window.WebUIEngine = (function () {
     };
   }
 
-  function createEventDelegator(log, send, fragmentPatcher) {
+  function createEventDelegator(log, send, fragmentPatcher, behaviors) {
     var inputTimers = {};
     var listeners = [];
     var config = {};
@@ -385,14 +385,7 @@ window.WebUIEngine = (function () {
       }
 
       if (event.type === 'keydown' && event.key === 'Escape') {
-        var overlay = event.target && event.target.closest && event.target.closest('.modal-overlay');
-        if (overlay) {
-          var dismissBtn = overlay.querySelector('[data-dismiss]');
-          if (dismissBtn) {
-            dismissBtn.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-          }
-          restoreModalFocus();
-        }
+        behaviors.escape(event);
       }
 
       var componentEl = findComponent(event);
@@ -560,6 +553,7 @@ window.WebUIEngine = (function () {
       var tag = el.tagName;
       if (tag !== 'BUTTON' && !(el.getAttribute && el.getAttribute('role') === 'button')) return;
       if (el.closest && el.closest('form[action]')) return;
+      for (var k in BEHAVIORS) { if (el.hasAttribute(k)) return; }
       if (UNWIRED_WARNED && UNWIRED_WARNED.has(el)) return;
       if (UNWIRED_WARNED) UNWIRED_WARNED.add(el);
       log.warn('click on unwired control' + (el.id ? ' #' + el.id : ' <' + tag.toLowerCase() + '>') + ' — no data-component-id in the path, no server handler. wire it with onTap/onClick/controlAttributes.');
@@ -896,6 +890,7 @@ window.WebUIEngine = (function () {
     }
 
     function applyFragments(fragments, optimistic) {
+      if (beforePatchHooks.length) { runHooks(beforePatchHooks, fragments); }
       var changed = [];
       for (var i = 0; i < fragments.length; i++) {
         var f = fragments[i];
@@ -1737,6 +1732,273 @@ window.WebUIEngine = (function () {
   }
 
 
+  var BEHAVIORS = {};
+
+  function createBehaviors(log) {
+    var followMemo = {};
+    var scrollMemo = {};
+    var openMemo = {};
+    var focusMemo = null;
+    var layers = [];
+    var mounted = false;
+
+    function warn(name, el, e) {
+      log.warn('behavior ' + name + ' failed on ' + (el.id ? '#' + el.id : el.tagName) + ': ' + e);
+    }
+
+    function bind(el, name, fn) {
+      var marks = el.__webuiBound || (el.__webuiBound = {});
+      if (marks[name]) { return; }
+      marks[name] = true;
+      try { fn(el); } catch (e) { warn(name, el, e); }
+    }
+
+    function each(root, name) {
+      var out = [];
+      if (!root || (root.nodeType !== 1 && root.nodeType !== 9)) { return out; }
+      if (root.nodeType === 1 && root.hasAttribute(name)) { out.push(root); }
+      var list = root.querySelectorAll('[' + name + ']');
+      for (var i = 0; i < list.length; i++) { out.push(list[i]); }
+      return out;
+    }
+
+    function applyOne(el, name) {
+      if (el.closest && el.closest('[data-webui-island]')) { return; }
+      bind(el, name, BEHAVIORS[name]);
+    }
+
+    function applyAll(root) {
+      for (var name in BEHAVIORS) {
+        if (!BEHAVIORS.hasOwnProperty(name)) { continue; }
+        var els = each(root, name);
+        for (var i = 0; i < els.length; i++) { applyOne(els[i], name); }
+      }
+    }
+
+
+    function gap(el) {
+      return el.scrollHeight - el.scrollTop - el.clientHeight;
+    }
+
+    function fire(el) {
+      el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+    }
+
+    function isControl(el) {
+      var tag = el.tagName;
+      return tag === 'BUTTON' || tag === 'A' || tag === 'INPUT' || tag === 'SELECT' ||
+        tag === 'TEXTAREA' || el.getAttribute('role') === 'button';
+    }
+
+    function onScreen(el) {
+      return !!el.isConnected && el.getClientRects().length > 0;
+    }
+
+    function topLayer() {
+      var live = [];
+      for (var i = 0; i < layers.length; i++) { if (onScreen(layers[i])) { live.push(layers[i]); } }
+      layers = live;
+      return live.length ? live[live.length - 1] : null;
+    }
+
+    function closeLayer(el) {
+      if (el.tagName === 'DETAILS') { el.open = false; return; }
+      fire(el.querySelector('button[data-dismiss], a[data-dismiss], [role=button][data-dismiss]') || el);
+    }
+
+
+    BEHAVIORS['data-follow'] = function (el) {
+      if (el.getAttribute('data-follow') === 'off') { return; }
+      var id = el.id;
+      el.addEventListener('scroll', function () {
+        if (gap(el) <= 24) { el.removeAttribute('data-follow-state'); }
+        else { el.setAttribute('data-follow-state', 'away'); }
+      }, { passive: true });
+      if (!id || followMemo[id] === undefined) { return; }
+      if (followMemo[id]) { el.scrollTop = el.scrollHeight; }
+      else { el.setAttribute('data-follow-state', 'away'); }
+    };
+
+    BEHAVIORS['data-scroll-key'] = function (el) {
+      var key = el.getAttribute('data-scroll-key');
+      if (!key) { return; }
+      el.addEventListener('scroll', function () { scrollMemo[key] = el.scrollTop; }, { passive: true });
+      if (scrollMemo[key] !== undefined) { el.scrollTop = scrollMemo[key]; }
+    };
+
+    BEHAVIORS['data-scroll-to'] = function (el) {
+      el.addEventListener('click', function (e) {
+        var target = document.getElementById(el.getAttribute('data-scroll-to') || '');
+        if (!target) { return; }
+        e.preventDefault();
+        try { target.scrollIntoView({ behavior: 'smooth', block: 'start' }); }
+        catch (err) { target.scrollIntoView(); }
+        target.setAttribute('data-scroll-flash', '');
+        if (target.__webuiFlash) { clearTimeout(target.__webuiFlash); }
+        target.__webuiFlash = setTimeout(function () {
+          target.removeAttribute('data-scroll-flash');
+          target.__webuiFlash = null;
+        }, 1400);
+      });
+    };
+
+    BEHAVIORS['data-draft-id'] = function (el) {
+      var key = 'webui-draft:' + el.getAttribute('data-draft-id');
+      if (!el.value) {
+        try {
+          var saved = sessionStorage.getItem(key);
+          if (saved) { el.value = saved; }
+        } catch (e) { }
+      }
+      el.addEventListener('input', function () {
+        try { sessionStorage.setItem(key, el.value); } catch (e) { }
+      });
+    };
+
+    BEHAVIORS['data-focus-return'] = function () { };
+
+    BEHAVIORS['data-dismiss'] = function (el) {
+      if (isControl(el)) { return; }
+      for (var i = 0; i < layers.length; i++) { if (layers[i] === el) { return; } }
+      layers.push(el);
+    };
+
+
+    BEHAVIORS['data-theme-choice'] = function () { if (THEME_PRESS) { THEME_PRESS(); } };
+
+    BEHAVIORS['data-preserve-open'] = function (el) {
+      if (el.tagName !== 'DETAILS' || !el.id) { return; }
+      if (openMemo[el.id] !== undefined) { el.open = openMemo[el.id]; }
+    };
+
+
+    function capture(fragments) {
+      var replaced = false;
+      for (var i = 0; i < fragments.length; i++) {
+        var op = fragments[i] && fragments[i].op;
+        if (op !== 'append' && op !== 'text') { replaced = true; }
+      }
+      if (!replaced) { return; }
+      var list = document.querySelectorAll('[data-follow]');
+      for (var a = 0; a < list.length; a++) {
+        if (list[a].id) { followMemo[list[a].id] = gap(list[a]) <= 24; }
+      }
+      list = document.querySelectorAll('[data-scroll-key]');
+      for (var b = 0; b < list.length; b++) {
+        var key = list[b].getAttribute('data-scroll-key');
+        if (key) { scrollMemo[key] = list[b].scrollTop; }
+      }
+      list = document.querySelectorAll('details[data-preserve-open]');
+      for (var c = 0; c < list.length; c++) {
+        if (list[c].id) { openMemo[list[c].id] = !!list[c].open; }
+      }
+      var active = document.activeElement;
+      var decl = active && active.closest ? active.closest('[data-focus-return]') : null;
+      focusMemo = decl ? { active: active, target: decl.getAttribute('data-focus-return') || decl.id } : null;
+    }
+
+    function restore(nodes) {
+      for (var i = 0; i < nodes.length; i++) { applyAll(nodes[i]); }
+      var memo = focusMemo;
+      focusMemo = null;
+      if (!memo || !memo.target) { return; }
+      if (memo.active && memo.active.isConnected) { return; }
+      var target = document.getElementById(memo.target);
+      if (target && target.focus) { try { target.focus(); } catch (e) { } }
+    }
+
+    function escape(e) {
+      var target = e.target;
+      var overlay = target && target.closest ? target.closest('.modal-overlay') : null;
+      if (overlay) {
+        var control = overlay.querySelector('[data-dismiss]');
+        if (control) { fire(control); }
+        restoreModalFocus();
+        return;
+      }
+      var top = topLayer();
+      if (top) { closeLayer(top); }
+    }
+
+    function onDocClick(e) {
+      var top = topLayer();
+      if (top && !top.contains(e.target)) { closeLayer(top); }
+    }
+
+
+    function mount() {
+      if (mounted) { return; }
+      mounted = true;
+      document.addEventListener('click', onDocClick);
+    }
+
+    function destroy() {
+      if (mounted) {
+        document.removeEventListener('click', onDocClick);
+      }
+      mounted = false;
+      layers = [];
+      followMemo = {};
+      scrollMemo = {};
+      openMemo = {};
+      focusMemo = null;
+    }
+
+    return {
+      mount: mount,
+      apply: applyAll,
+      capture: capture,
+      restore: restore,
+      escape: escape,
+      destroy: destroy,
+    };
+  }
+
+  var extState = 0;
+  var bootSettled = false;
+  var readyFired = false;
+  var extStop = null;
+
+  function registerBehavior(name, fn) {
+    if (typeof name === 'string' && typeof fn === 'function') { BEHAVIORS[name] = fn; }
+  }
+
+  function settle(log) {
+    if (extState !== 2 || !bootSettled || readyFired) { return; }
+    readyFired = true;
+    runHooks(readyHooks, document);
+  }
+
+  function loadExt(log) {
+    if (extState) { return; }
+    extState = 1;
+    var failed = function (why) {
+      extState = 2;
+      log.warn('behavior extension unavailable (' + why + '); the main asset\'s behaviors are all this page has');
+      settle(log);
+    };
+    var install = function () {
+      var ext = window.WebUIEngineExt;
+      if (!ext || typeof ext.install !== 'function') { failed('no installer'); return; }
+      try {
+        extStop = ext.install(registerBehavior) || null;
+      } catch (e) {
+        failed('install threw: ' + e);
+        return;
+      }
+      extState = 2;
+      if (instance) { instance.behaviors.apply(document); }
+      settle(log);
+    };
+    if (window.WebUIEngineExt) { install(); return; }
+    var script = document.createElement('script');
+    script.async = true;
+    script.src = '/ui/webui-engine-ext.js';
+    script.onload = install;
+    script.onerror = function () { failed('fetch failed'); };
+    (document.head || document.documentElement).appendChild(script);
+  }
+
   function init(opts) {
     if (instance) {
       console.warn('[WebUIEngine] Already initialized');
@@ -1758,7 +2020,8 @@ window.WebUIEngine = (function () {
     var router = createRouter(log);
     var handleMessage = createMessageDispatcher(log, fragmentPatcher, stateStore, router, config);
     var wsClient = createWSClient(log, handleMessage);
-    var eventDelegator = createEventDelegator(log, wsClient.send, fragmentPatcher);
+    var behaviors = createBehaviors(log);
+    var eventDelegator = createEventDelegator(log, wsClient.send, fragmentPatcher, behaviors);
 
     wsClient.reset(config);
     eventDelegator.reset(config);
@@ -1768,12 +2031,16 @@ window.WebUIEngine = (function () {
     _islandConfig = config;
 
     eventDelegator.mount();
+    behaviors.mount();
 
     hookLog = log;
+    beforePatchHooks.push(behaviors.capture);
+    afterPatchHooks.push(behaviors.restore);
     wsClient.connect();
 
     var bootIslands = function () {
       ensureStatus();
+      behaviors.apply(document);
       if (_islandConfig && _islandConfig.capabilities && _islandConfig.capabilities.indexOf('offline') !== -1 && navigator.serviceWorker) {
         navigator.serviceWorker.register('/ui/webui-shell.js', { scope: '/' }).catch(function () { });
       }
@@ -1781,6 +2048,8 @@ window.WebUIEngine = (function () {
         if (instance && instance.wsClient) { instance.wsClient.connect(); }
       });
       wireIslandInputs(); mountAllIslands(); observeIslandRegions();
+      bootSettled = true;
+      settle(log);
     };
     if (document.readyState === 'loading') {
       document.addEventListener('DOMContentLoaded', bootIslands);
@@ -1804,11 +2073,12 @@ window.WebUIEngine = (function () {
       eventDelegator: eventDelegator,
       fragmentPatcher: fragmentPatcher,
       patch: fragmentPatcher.patch,
+      behaviors: behaviors,
       stateStore: stateStore,
       popstateHandler: popstateHandler,
     };
 
-    runHooks(readyHooks, document);
+    loadExt(log);
 
     log.info('WebUI Engine initialized');
   }
@@ -1822,8 +2092,13 @@ window.WebUIEngine = (function () {
     }
     instance.wsClient.disconnect();
     instance.eventDelegator.unmount();
+    instance.behaviors.destroy();
     instance.fragmentPatcher.reset();
     instance.stateStore.clear();
+    if (extStop) { try { extStop(); } catch (e) { } extStop = null; }
+    extState = 0;
+    bootSettled = false;
+    readyFired = false;
     instance = null;
   }
 

@@ -587,7 +587,8 @@ try await server.start()                       // serves until stop() / process 
   own served files (see below).
 - routes: page path + `/index.html`, `/__assets/css`,
   `/__assets/css.<sha256>` (immutable), `/ui/webui-engine.js`,
-  `/ui/webui-shell.js`; then `config.assets`; 404/405 elsewhere.
+  `/ui/webui-engine-ext.js`, `/ui/webui-shell.js`; then `config.assets`; 404/405
+  elsewhere.
   `Service-Worker-Allowed: /` + security headers on every response.
 - the query string is stripped before routing, so `/__assets/css?v=9` and a
   query-bearing page url both resolve. `+` decodes to a space, `%XX` to its
@@ -834,8 +835,8 @@ the last four all the server's, not the app's.
 - `GET /` — authenticated dashboard, else `303` to `/login` (from the catalog)
 - `POST /logout` — CSRF-protected; `AuthenticatedHost.signOut` drops the socket,
   the handler table and the store record, and clears the cookie (`GET` → 405)
-- `GET /__assets/css*`, `/ui/webui-engine.js`, `/ui/webui-shell.js` — the
-  framework's routes, served by `WebUIServer`
+- `GET /__assets/css*`, `/ui/webui-engine.js`, `/ui/webui-engine-ext.js`,
+  `/ui/webui-shell.js` — the framework's routes, served by `WebUIServer`
 - `WebSocket /ws` — a frame is admitted only under a live render token
 
 **Port:** 9091

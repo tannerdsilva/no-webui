@@ -10,7 +10,7 @@
 # forced it. `Tests/WebUITests/FrozenSurfaceTests.swift` fails when this
 # file and a fresh extraction diverge, naming every added and removed symbol.
 #
-# re-measured 2026-11-12: 5420 symbols across 11 modules.
+# re-measured 2026-11-12: 5422 symbols across 11 modules.
 
 ## WebUISharedCore
 
@@ -2623,6 +2623,8 @@ WebUIAssets.css
 WebUIAssets.cssGzip
 WebUIAssets.cssMinified
 WebUIAssets.engine
+WebUIAssets.engineExt
+WebUIAssets.engineExtGzip
 WebUIAssets.engineGzip
 WebUIAssets.shell
 WebUIAssets.shellGzip

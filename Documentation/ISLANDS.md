@@ -310,6 +310,12 @@ coalesce to one re-render per region after 120 ms, measured fresh at fire time. 
 fragment patch that replaces island content re-mounts it from the cached module and
 re-observes the replacement (the old node is unobserved — no leak).
 
+**island markup is behavior-free.** the engine's behavior dispatch never runs inside a
+`[data-webui-island]` region: a `data-follow`/`data-copy`/`data-dismiss`/… attribute in
+mounted island html is inert, at boot and after a patch alike. an interactive control
+belongs outside the island boundary — the island is a rendering capability, not an
+interaction one (`Documentation/BEHAVIOUR.md`, plan §19.1).
+
 ## 5. gotchas
 
 - **one capability per artifact.** the product's entry is single-purpose; the four

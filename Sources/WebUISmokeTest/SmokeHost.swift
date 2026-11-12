@@ -146,9 +146,15 @@ func smokeAssets() -> [WebUIServerAsset] {
 /// `/` and `/index.html` aliases), the blocks preview, and the upload POST.
 func smokeRoutes(state: SmokeState, router: EventRouter) -> Router {
 	let page = SmokePageResponder(state: state, router: router)
+	// the behavior fixture is its own page with its own state: the `/` page's
+	// 27-component pin is a smoke-gate contract, so a fixture that adds controls
+	// must not live there.
+	let behaviourState = BehaviourFixtureState()
+	let behaviourPage = BehaviourPageResponder(state: behaviourState, router: router)
 	return Router {
 		Route(method: .get, pattern: "/", responder: page)
 		Route(method: .get, pattern: "/index.html", responder: page)
+		Route(method: .get, pattern: "/behaviour", responder: behaviourPage)
 		Route.get("/blocks") { _ in
 			HTTPResponse(headers: smokeHeaders(), body: .html(UnsafeMarkup.trusted(blocksPage("/blocks"))))
 		}

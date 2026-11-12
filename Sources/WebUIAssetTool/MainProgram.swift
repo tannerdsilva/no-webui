@@ -12,6 +12,7 @@ enum WebUIAssetTool {
         var jsInput: String?
         var engineInput: String?
         var shellInput: String?
+        var extInput: String?
         var outputPath: String?
         var tokensOutputPath: String?
         var manifestOutputPath: String?
@@ -30,6 +31,8 @@ enum WebUIAssetTool {
                 engineInput = iterator.next()
             case "--shell-input":
                 shellInput = iterator.next()
+            case "--ext-input":
+                extInput = iterator.next()
             case "--output":
                 outputPath = iterator.next()
             case "--tokens-output":
@@ -48,7 +51,7 @@ enum WebUIAssetTool {
         }
 
         guard outputPath != nil || tokensOutputPath != nil else {
-            print("usage: WebUIAssetTool --css-input <path> --js-input <path> --engine-input <path> --shell-input <path> --output <path> [--tokens-output <path>] [--manifest-output <path>] [--used-tokens <path>] [--guard-css <path>]… | --embed-manifest <json> --output <path>")
+            print("usage: WebUIAssetTool --css-input <path> --js-input <path> --engine-input <path> --shell-input <path> --ext-input <path> --output <path> [--tokens-output <path>] [--manifest-output <path>] [--used-tokens <path>] [--guard-css <path>]… | --embed-manifest <json> --output <path>")
             exit(1)
         }
 
@@ -126,6 +129,11 @@ enum WebUIAssetTool {
             shellContent = try String(contentsOfFile: shellInput, encoding: .utf8)
         }
 
+        var extContent = ""
+        if let extInput {
+            extContent = try String(contentsOfFile: extInput, encoding: .utf8)
+        }
+
         // the token vocabulary is written to its own output so the wasm-clean
         // design-system core can embed it without the server-bound WebUI target
         // (p5-t7: `DesignToken` is a client-reachable core surface).
@@ -182,6 +190,7 @@ enum WebUIAssetTool {
             let jsGz = jsInput.flatMap { _ in WebUIBuild.gzip(jsContent) }
             let engineGz = engineInput.flatMap { _ in WebUIBuild.gzip(engineContent) }
             let shellGz = shellInput.flatMap { _ in WebUIBuild.gzip(shellContent) }
+            let extGz = extInput.flatMap { _ in WebUIBuild.gzip(extContent) }
 
             // the first law, enforced where the payloads are fixed: prose never
             // reaches a client. the working sheet may carry designer notes —
@@ -195,6 +204,7 @@ enum WebUIAssetTool {
             }
             payloads.append((engineInput ?? "webui-engine.js", engineContent, .javaScript))
             payloads.append((shellInput ?? "webui-shell.js", shellContent, .javaScript))
+            payloads.append((extInput ?? "webui-engine-ext.js", extContent, .javaScript))
             payloads.append(("design-system.css (minified)", cssMinified, .css))
             var proseFound = false
             for payload in payloads {
@@ -213,11 +223,13 @@ enum WebUIAssetTool {
 
             let generated = try generateAssetsSource(
                 css: cssContent, js: jsContent, engine: engineContent, shell: shellContent,
+                ext: extContent,
                 cssMinified: cssMinified,
                 cssGzip: cssGz?.base64EncodedString() ?? "",
                 jsGzip: jsGz?.base64EncodedString() ?? "",
                 engineGzip: engineGz?.base64EncodedString() ?? "",
-                shellGzip: shellGz?.base64EncodedString() ?? ""
+                shellGzip: shellGz?.base64EncodedString() ?? "",
+                extGzip: extGz?.base64EncodedString() ?? ""
             )
 
             try generated.write(toFile: outputPath, atomically: true, encoding: .utf8)
@@ -226,7 +238,8 @@ enum WebUIAssetTool {
             let jsBytes = jsContent.utf8.count
             let engineBytes = engineContent.utf8.count
             let shellBytes = shellContent.utf8.count
-            print("generated \(outputPath) (\(cssBytes) bytes CSS, \(jsBytes) bytes JS, \(engineBytes) bytes engine, \(shellBytes) bytes shell)")
+            let extBytes = extContent.utf8.count
+            print("generated \(outputPath) (\(cssBytes) bytes CSS, \(jsBytes) bytes JS, \(engineBytes) bytes engine, \(shellBytes) bytes shell, \(extBytes) bytes engine-ext)")
 
             // the SERVED numbers, for the budget gate. `plugin budget` otherwise has to
             // measure the working files, and the sheet differs from what ships by ~15%
@@ -236,6 +249,7 @@ enum WebUIAssetTool {
                     "sheet": ["raw": cssMinified.utf8.count, "gz": cssGz?.count ?? 0,
                               "workingRaw": cssBytes],
                     "engine": ["raw": engineBytes, "gz": engineGz?.count ?? 0],
+                    "engineExt": ["raw": extBytes, "gz": extGz?.count ?? 0],
                     "shell": ["raw": shellBytes, "gz": shellGz?.count ?? 0],
                 ]
                 // the js asset is optional: a target that ships no separate js
@@ -263,14 +277,15 @@ enum WebUIAssetTool {
     }
 
     static func generateAssetsSource(
-        css: String, js: String, engine: String, shell: String,
+        css: String, js: String, engine: String, shell: String, ext: String,
         cssMinified: String,
-        cssGzip: String, jsGzip: String, engineGzip: String, shellGzip: String
+        cssGzip: String, jsGzip: String, engineGzip: String, shellGzip: String, extGzip: String
     ) throws -> String {
         let escapedCSS = css.replacingOccurrences(of: "\\", with: "\\\\")
         let escapedJS = js.replacingOccurrences(of: "\\", with: "\\\\")
         let escapedEngine = engine.replacingOccurrences(of: "\\", with: "\\\\")
         let escapedShell = shell.replacingOccurrences(of: "\\", with: "\\\\")
+        let escapedExt = ext.replacingOccurrences(of: "\\", with: "\\\\")
 
         let indentedCSS = escapedCSS
             .split(separator: "\n", omittingEmptySubsequences: false)
@@ -288,6 +303,11 @@ enum WebUIAssetTool {
             .joined(separator: "\n")
 
         let indentedShell = escapedShell
+            .split(separator: "\n", omittingEmptySubsequences: false)
+            .map { "    \($0)" }
+            .joined(separator: "\n")
+
+        let indentedExt = escapedExt
             .split(separator: "\n", omittingEmptySubsequences: false)
             .map { "    \($0)" }
             .joined(separator: "\n")
@@ -325,6 +345,12 @@ enum WebUIAssetTool {
             public static let shell: String = \"\"\"
         \(indentedShell)
             \"\"\"
+            /// the interaction consequences the engine fetches once at boot: same
+            /// vocabulary, same dispatch table, a second asset so the patch-survival
+            /// core stays small enough to apply before the first paint.
+            public static let engineExt: String = \"\"\"
+        \(indentedExt)
+            \"\"\"
             /// the sheet exactly as it ships: minified at BUILD time, so the served
             /// bytes are build-time-known and therefore compressible at build time.
             public static let cssMinified: String = \"\"\"
@@ -336,9 +362,11 @@ enum WebUIAssetTool {
             private static let cssGzipBase64 = "\(cssGzip)"
         \(jsGzipDeclaration)    private static let engineGzipBase64 = "\(engineGzip)"
             private static let shellGzipBase64 = "\(shellGzip)"
+            private static let engineExtGzipBase64 = "\(extGzip)"
             public static let cssGzip: [UInt8]? = decodeGzip(cssGzipBase64)
         \(jsGzipProperty)    public static let engineGzip: [UInt8]? = decodeGzip(engineGzipBase64)
             public static let shellGzip: [UInt8]? = decodeGzip(shellGzipBase64)
+            public static let engineExtGzip: [UInt8]? = decodeGzip(engineExtGzipBase64)
             private static func decodeGzip(_ text: String) -> [UInt8]? {
                 guard !text.isEmpty, let bytes = Base64.decode(text), !bytes.isEmpty else { return nil }
                 return bytes
