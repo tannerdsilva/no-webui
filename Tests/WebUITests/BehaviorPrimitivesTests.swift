@@ -2,7 +2,7 @@ import Testing
 import Foundation
 import WebUICore
 
-// the 21 register rows, pinned one test each.
+// the 22 register rows, pinned one test each.
 //
 // §24 of the behavior-layer journal is the naming authority: a row is a Swift
 // type whose `AttributeRepresentable.name` equals the register's attribute
@@ -242,6 +242,16 @@ struct BehaviorPrimitivesTests {
 		#expect(rendered(NumberClamp(min: -5, max: 5)).contains(" data-clamp=\"-5,5\""))
 	}
 
+	// MARK: - 22. filter list
+
+	@Test("FilterList serializes the bare data-filter-list")
+	func filterList() {
+		#expect(FilterListAttribute.name == "data-filter-list")
+		#expect(FilterList().attribute().value == "")
+		#expect(rendered(FilterList()).contains(" data-filter-list"))
+		#expect(!rendered(FilterList()).contains("data-filter-list=\"\""))
+	}
+
 	// MARK: - the rules the register rests on
 
 	@Test("an empty value is the bare attribute; a non-empty value is quoted and escaped")
@@ -272,7 +282,7 @@ struct BehaviorPrimitivesTests {
 		#expect(!html.contains("onmouseover"), "attribute value escaped its quotes: \(html)")
 	}
 
-	@Test("the register's 21 attributes are distinct")
+	@Test("the register's 22 attributes are distinct")
 	func registerIsInjective() {
 		let names: [String] = [
 			ScrollFollowAttribute.name,
@@ -296,8 +306,9 @@ struct BehaviorPrimitivesTests {
 			SubmitOnEnterAttribute.name,
 			ClearOnSubmitAttribute.name,
 			NumberClampAttribute.name,
+			FilterListAttribute.name,
 		]
-		#expect(names.count == 21)
+		#expect(names.count == 22)
 		#expect(Set(names).count == names.count, "two behaviors claim one attribute")
 	}
 

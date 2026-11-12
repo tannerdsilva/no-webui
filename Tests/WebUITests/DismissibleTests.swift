@@ -96,9 +96,11 @@ struct DismissibleTests {
             .onDismiss { _, _ in [] }
             .markup.html
 
-        // no component id, no minted element id — byte-identical to un-wired output
+        // no component id, no minted element id — the close control's static
+        // marker is unchanged. the root carries the layer marker (S4) so Escape
+        // and outside-click reach the same close control.
         #expect(!html.contains("data-component-id"), "emitted: \(html)")
-        #expect(html == "<div class=\"toast toast--info\" role=\"alert\"><span class=\"toast__icon\"></span><span class=\"toast__message\">Saved</span><button class=\"toast__close\" data-dismiss aria-label=\"Dismiss\">&times;</button></div>")
+        #expect(html == "<div class=\"toast toast--info\" data-dismiss role=\"alert\"><span class=\"toast__icon\"></span><span class=\"toast__message\">Saved</span><button class=\"toast__close\" data-dismiss aria-label=\"Dismiss\">&times;</button></div>")
     }
 
     // MARK: static byte-compatibility (the legacy container-handler pattern)
@@ -106,7 +108,7 @@ struct DismissibleTests {
     @Test("unwired dismissible toast keeps the legacy static marker")
     func toastStaticMarkerUnchanged() {
         let html = WebUIToast(message: "Saved", dismissible: true).markup.html
-        #expect(html == "<div class=\"toast toast--info\" role=\"alert\"><span class=\"toast__icon\"></span><span class=\"toast__message\">Saved</span><button class=\"toast__close\" data-dismiss aria-label=\"Dismiss\">&times;</button></div>")
+        #expect(html == "<div class=\"toast toast--info\" data-dismiss role=\"alert\"><span class=\"toast__icon\"></span><span class=\"toast__message\">Saved</span><button class=\"toast__close\" data-dismiss aria-label=\"Dismiss\">&times;</button></div>")
         #expect(!html.contains("data-component-id"))
     }
 

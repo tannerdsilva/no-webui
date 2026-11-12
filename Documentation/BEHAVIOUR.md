@@ -71,7 +71,7 @@ control.
 | `ScrollFollow` | `data-follow` | `bottom` (stick while at the bottom, release on upward movement) or `off` |
 | `ScrollFollow` (state) | `data-follow-state` | `away` while the reader is detached — the state that shows the jump control (engine-written) |
 | `ScrollKey` | `data-scroll-key` | a per-region key whose scroll position survives a patch |
-| `ScrollTo` | `data-scroll-to` | the element id to scroll to, with the 1.4 s flash contract |
+| `ScrollTo` | `data-scroll-to` | the element id to scroll to, with the 1.4 s flash contract; an empty value scrolls the document to the top |
 | `ScrollTo` (flash) | `data-scroll-flash` | presence while the scroll-to target flashes (engine-written, removed after 1400 ms) |
 | `DraftIdentity` | `data-draft-id` | the draft key a control's unsubmitted value is remembered under |
 | `FocusReturn` | `data-focus-return` | the id to return focus to after a patch (empty = the element itself) |
@@ -80,6 +80,7 @@ control.
 | `Clipboard` | `data-copy` | text to copy (empty = the element's own text) |
 | `TableEnhance` | `data-table-enhance` | `sort`, `filter`, or `sort filter` |
 | `TableEnhance` (filter) | `data-table-filter` | the filter input inside the enhanced region (engine-read) |
+| `FilterList` | `data-filter-list` | presence; the region whose input filters its `[role=option]` / `[role=menuitem]` / `.command-palette__item` items by case-insensitive substring, hiding non-matches |
 | `SkipTarget` | `data-skip-to` | the id a skip link moves focus to |
 | `TickingLabel` | `data-reltime` | ms epoch; the relative-time ladder paints the label |
 | `TickingLabel` (elapsed) | `data-started` + `data-elapsed` | ms epoch + presence; the elapsed clock paints `floor(s/60):SS` |

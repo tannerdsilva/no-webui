@@ -138,7 +138,7 @@ struct BehaviourVocabularyTests {
 
 	// MARK: - the dispatch table's structural pins (S3)
 
-	/// the 21 keys of the engine's dispatch table, in register order. the table
+	/// the 22 keys of the engine's dispatch table, in register order. the table
 	/// is keyed by the exact attribute names the register fixes; a key here that
 	/// the document does not name, or a register row missing from the table, is
 	/// a dead control.
@@ -164,6 +164,7 @@ struct BehaviourVocabularyTests {
 		"data-clear-on-submit",
 		"data-clamp",
 		"data-theme-choice",
+		"data-filter-list",
 	]
 
 	enum EngineSourceError: Error, CustomStringConvertible {
@@ -240,13 +241,13 @@ struct BehaviourVocabularyTests {
 		let core = try Self.dispatchTableKeys(in: sources[0])
 		let ext = try Self.dispatchTableKeys(in: sources[1])
 		let keys = core.union(ext)
-		#expect(keys.count >= 21, "the dispatch table read as \(keys.count) keys — the gate would pass vacuously")
+		#expect(keys.count >= 22, "the dispatch table read as \(keys.count) keys — the gate would pass vacuously")
 		// the split is a checked property, not a memory: eight patch-survival
-		// consequences in the engine, thirteen interaction consequences behind the
+		// consequences in the engine, fourteen interaction consequences behind the
 		// extension's fetch, and no key registered twice (a duplicate binder is a
 		// dead copy of a consequence).
 		#expect(core.count == 8, "the engine's table read as \(core.count) keys, expected the 8 patch-survival consequences")
-		#expect(ext.count == 13, "the extension's table read as \(ext.count) keys, expected the 13 interaction consequences")
+		#expect(ext.count == 14, "the extension's table read as \(ext.count) keys, expected the 14 interaction consequences")
 		#expect(
 			core.intersection(ext).isEmpty,
 			"a consequence is registered in both assets: \(core.intersection(ext).sorted().joined(separator: ", "))"

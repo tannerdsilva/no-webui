@@ -218,10 +218,30 @@ public struct WebUIKanban: View {
     public struct Column: Sendable { public let title: String; public let cards: [Card]
         public init(_ title: String, cards: [Card]) { self.title = title; self.cards = cards } }
     public let columns: [Column]
-    public init(columns: [Column]) { self.columns = columns }
+    /// stable board id. when set (or when `reorderInputID` is) the board emits
+    /// `data-reorder` and a hidden input the new order is written into.
+    public let id: String?
+    /// the hidden input the engine writes the dragged order into. `nil` derives
+    /// `"<id>-order"` from `id`; with neither, the board is inert — no attribute,
+    /// no input, nothing that promises a reorder the page cannot deliver.
+    public let reorderInputID: String?
+
+    public init(columns: [Column], id: String? = nil, reorderInputID: String? = nil) {
+        self.columns = columns; self.id = id; self.reorderInputID = reorderInputID
+    }
+
+    /// the hidden input's id, or `nil` when the board names neither.
+    private var orderInputID: String? {
+        if let reorderInputID, !reorderInputID.isEmpty { return reorderInputID }
+        if let id, !id.isEmpty { return "\(id)-order" }
+        return nil
+    }
 
     public func render(into buffer: inout HTMLBuffer) {
-        var html = "<div class=\"kanban\">"
+        var html = "<div class=\"kanban\""
+        if let id { html += " id=\"\(htmlEscape(id))\"" }
+        if let orderInputID { html += Reorder(inputID: orderInputID).attributeText }
+        html += ">"
         for column in columns {
             html += "<div class=\"kanban__column\"><div class=\"kanban__header\">\(htmlEscape(column.title))<span class=\"kanban__count\">\(column.cards.count)</span></div><div class=\"kanban__body\">"
             for card in column.cards {
@@ -240,6 +260,9 @@ public struct WebUIKanban: View {
             html += "</div></div>"
         }
         html += "</div>"
+        if let orderInputID {
+            html += "<input id=\"\(htmlEscape(orderInputID))\" type=\"hidden\" name=\"order\" value=\"\">"
+        }
         buffer.append(html)
     }
 }

@@ -1051,7 +1051,7 @@ public struct WebUIToast: View, Dismissible {    @available(*, deprecated, renam
 
     public func render(into buffer: inout HTMLBuffer) {
         let dismissal = makeDismissal(ariaLabel: RenderContext.currentStrings.dismiss)
-        var attributeText = " class=\"toast \(Self.classFor(tone))\"" + AriaRole.alert.render()
+        var attributeText = " class=\"toast \(Self.classFor(tone))\"" + DismissStack().attributeText + AriaRole.alert.render()
         if let elementID = dismissal.elementID ?? id {
             attributeText += " id=\"\(htmlEscape(elementID))\""
         }

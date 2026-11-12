@@ -10,7 +10,7 @@
 # forced it. `Tests/WebUITests/FrozenSurfaceTests.swift` fails when this
 # file and a fresh extraction diverge, naming every added and removed symbol.
 #
-# re-measured 2026-11-12: 5422 symbols across 11 modules.
+# re-measured 2026-11-12: 5440 symbols across 11 modules.
 
 ## WebUISharedCore
 
@@ -713,6 +713,13 @@ FieldValues.isEmpty
 FieldValues.removeAll()
 FieldValues.subscript(_:)
 FieldValues.subscript(_:default:)
+FilterList
+FilterList.attribute()
+FilterList.init()
+FilterListAttribute
+FilterListAttribute.init()
+FilterListAttribute.name
+FilterListAttribute.value
 FocusReturn
 FocusReturn.attribute()
 FocusReturn.id
@@ -3573,6 +3580,13 @@ WebUIDiff.init(file:stats:lines:)
 WebUIDiff.lines
 WebUIDiff.render(into:)
 WebUIDiff.stats
+WebUIDisclosure
+WebUIDisclosure.children
+WebUIDisclosure.id
+WebUIDisclosure.init(_:open:id:content:)
+WebUIDisclosure.open
+WebUIDisclosure.render(into:)
+WebUIDisclosure.summary
 WebUIDonut
 WebUIDonut.Slice
 WebUIDonut.Slice.color
@@ -3749,8 +3763,10 @@ WebUIKanban.Column.cards
 WebUIKanban.Column.init(_:cards:)
 WebUIKanban.Column.title
 WebUIKanban.columns
-WebUIKanban.init(columns:)
+WebUIKanban.id
+WebUIKanban.init(columns:id:reorderInputID:)
 WebUIKanban.render(into:)
+WebUIKanban.reorderInputID
 WebUIKbd
 WebUIKbd.Size
 WebUIKbd.controlSize
@@ -3901,8 +3917,9 @@ WebUIMessageScroller.children
 WebUIMessageScroller.fade
 WebUIMessageScroller.height
 WebUIMessageScroller.id
-WebUIMessageScroller.init(height:id:fade:ariaLabel:content:)
+WebUIMessageScroller.init(height:id:fade:ariaLabel:scrollKey:content:)
 WebUIMessageScroller.render(into:)
+WebUIMessageScroller.scrollKey
 WebUIModal
 WebUIModal.children
 WebUIModal.dismissButtonClass
@@ -4087,11 +4104,12 @@ WebUIRecurrence.render(into:)
 WebUIScrollTop
 WebUIScrollTop.icon
 WebUIScrollTop.id
-WebUIScrollTop.init(progress:icon:label:id:onTap:)
+WebUIScrollTop.init(progress:icon:label:id:onTap:scrollToID:)
 WebUIScrollTop.label
 WebUIScrollTop.onTap
 WebUIScrollTop.progress
 WebUIScrollTop.render(into:)
+WebUIScrollTop.scrollToID
 WebUISearchField
 WebUISearchField.ariaLabel
 WebUISearchField.id

@@ -2332,6 +2332,34 @@ code, .inline-code {
 }
 .accordion-item--open .accordion-item__panel { display: block; }
 
+/* native disclosure: the zero-javascript counterpart to `.accordion` — the
+   platform owns open/close, the sheet owns the look. */
+.disclosure {
+  border: var(--border-width) solid var(--color-border);
+  border-radius: var(--radius-lg);
+  background: var(--color-bg-raised);
+  overflow: hidden;
+}
+.disclosure__summary {
+  padding: var(--space-3) var(--space-4);
+  font-size: var(--font-size-sm);
+  font-weight: var(--font-weight-medium);
+  color: var(--color-text);
+  cursor: pointer;
+  user-select: none;
+}
+.disclosure__summary:focus-visible { box-shadow: inset var(--ring-focus); }
+.disclosure__body {
+  padding: var(--space-3) var(--space-4);
+  border-top: var(--border-width) solid var(--color-border);
+  font-size: var(--font-size-sm);
+  color: var(--color-text-muted);
+}
+
+/* a filtered list hides its non-matching items through the `hidden` attribute;
+   the component's own `display` would otherwise beat the UA rule. */
+[data-filter-list] [hidden] { display: none; }
+
 .bottom-nav {
   display: flex;
   align-items: stretch;

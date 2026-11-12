@@ -209,6 +209,19 @@ window.WebUIEngineExt = (function () {
       }
     };
 
+    BEHAVIORS['data-filter-list'] = function (el) {
+      var field = el.querySelector('input');
+      if (!field) { return; }
+      function apply() {
+        var q = String(field.value || '').toLowerCase();
+        var items = el.querySelectorAll('[role=option], [role=menuitem], .command-palette__item');
+        for (var i = 0; i < items.length; i++) {
+          items[i].hidden = !!q && String(items[i].textContent).toLowerCase().indexOf(q) === -1;
+        }
+      }
+      field.addEventListener('input', apply);
+    };
+
     BEHAVIORS['data-skip-to'] = function (el) {
       el.addEventListener('click', function (e) {
         var target = document.getElementById(el.getAttribute('data-skip-to') || '');

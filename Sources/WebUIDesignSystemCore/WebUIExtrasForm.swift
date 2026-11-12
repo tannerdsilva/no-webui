@@ -416,11 +416,14 @@ public struct WebUIInlineEdit: View {
         let rootAttrs = id.map { controlAttributes(id: $0, event: .click, handler: onSave) } ?? ""
         let saveID = id.map { " id=\"\(htmlEscape("\($0)-save"))\"" } ?? ""
         let cancelID = id.map { " id=\"\(htmlEscape("\($0)-cancel"))\"" } ?? ""
-        var html = "<div class=\"inline-edit\(Self.classFor(state))\(error ? " inline-edit--error" : "")\"\(rootAttrs)>"
+        var html = "<div class=\"inline-edit\(Self.classFor(state))\(error ? " inline-edit--error" : "")\"\(rootAttrs)\(InlineEdit().attributeText)>"
         html += "<div class=\"inline-edit__value\">\(htmlEscape(value))<span class=\"inline-edit__pencil\"" + Aria.hidden(.yes).render() + ">✎</span></div>"
         if state == .editing {
             html += "<div class=\"inline-edit__editing\"><input class=\"inline-edit__input\(error ? " inline-edit__input--error" : "")\" value=\"\(htmlEscape(value))\">"
-            html += "<div class=\"inline-edit__actions\"><button class=\"inline-edit__check\"\(saveID)" + Aria.label(RenderContext.currentStrings.save).render() + ">✓</button><button class=\"inline-edit__pencil\"\(cancelID)" + Aria.label(RenderContext.currentStrings.cancel).render() + ">✕</button></div></div>"
+            // the check is the form submit — the save gesture a keyboard reader
+            // already has — and the cancel is explicitly not a submit, or it
+            // would save the edit it means to discard.
+            html += "<div class=\"inline-edit__actions\"><button class=\"inline-edit__check\" type=\"submit\"\(saveID)" + Aria.label(RenderContext.currentStrings.save).render() + ">✓</button><button class=\"inline-edit__pencil\" type=\"button\"\(cancelID)" + Aria.label(RenderContext.currentStrings.cancel).render() + ">✕</button></div></div>"
         }
         html += "</div>"
         buffer.append(html)

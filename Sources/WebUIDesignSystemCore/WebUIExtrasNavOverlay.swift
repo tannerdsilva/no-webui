@@ -473,6 +473,40 @@ public struct WebUIAccordion: View {
     }
 }
 
+// MARK: WebUI Disclosure
+/// a native `<details>`/`<summary>` disclosure.
+///
+/// the platform already knows how to open and close; what a patch would discard
+/// is the reader's choice, so an `id` also carries `data-preserve-open` and the
+/// engine restores `open` across a replace. no id means no memo key, so the
+/// marker is omitted rather than emitted inert.
+public struct WebUIDisclosure<Content: View>: View {
+    public let summary: String
+    public let open: Bool
+    /// the id the open state is remembered under; `nil` renders an uncoupled
+    /// disclosure that keeps native behaviour only.
+    public let id: String?
+    public let children: Content
+
+    public init(_ summary: String, open: Bool = false, id: String? = nil,
+                @ElementBuilder content: () -> Content) {
+        self.summary = summary
+        self.open = open
+        self.id = id
+        self.children = content()
+    }
+
+    public func render(into buffer: inout HTMLBuffer) {
+        var html = "<details class=\"disclosure\""
+        if let id { html += " id=\"\(htmlEscape(id))\"" + Disclosure().attributeText }
+        if open { html += " open" }
+        html += "><summary class=\"disclosure__summary\">\(htmlEscape(summary))</summary><div class=\"disclosure__body\">"
+        buffer.append(html)
+        children.render(into: &buffer)
+        buffer.append("</div></details>")
+    }
+}
+
 // MARK: WebUI Collapse
 /// a single collapsible region.
 public struct WebUICollapse<Content: View>: View {
@@ -699,10 +733,10 @@ public struct WebUIDrawer<Content: View, Footer: View>: View {
             attrs = ""
         }
         var html = "<div class=\"drawer\(Self.classFor(edge))\(Self.classFor(size))\"\(attrs)" + Aria.attributes([.modal(.yes)], role: .dialog) + ">"
-        html += "<div class=\"drawer__panel\">"
+        html += "<div class=\"drawer__panel\"\(DismissStack().attributeText)>"
         if let title {
             let closeID = id.map { " id=\"\(htmlEscape("\($0)-close"))\"" } ?? ""
-            html += "<div class=\"drawer__header\"><div class=\"drawer__title\">\(htmlEscape(title))</div><button class=\"drawer__close\"\(closeID)" + Aria.label(RenderContext.currentStrings.close).render() + ">×</button></div>"
+            html += "<div class=\"drawer__header\"><div class=\"drawer__title\">\(htmlEscape(title))</div><button class=\"drawer__close\"\(closeID)\(DismissStack().attributeText)" + Aria.label(RenderContext.currentStrings.close).render() + ">×</button></div>"
         }
         html += "<div class=\"drawer__content\">"
         buffer.append(html)
@@ -1169,9 +1203,9 @@ public struct WebUIComboBox: View {
         } else {
             attrs = ""
         }
-        var html = "<div class=\"combo\"\(attrs)>"
+        var html = "<div class=\"combo\"\(attrs)\(FilterList().attributeText)>"
         html += "<div class=\"combo__input\"><input type=\"text\" placeholder=\"\(htmlEscape(placeholder))\"><span class=\"dropdown__chevron\">▾</span></div>"
-        html += "<div class=\"combo__panel\">"
+        html += "<div class=\"combo__panel\"\(DismissStack().attributeText)\(Roving().attributeText)>"
         if options.isEmpty {
             html += "<div class=\"combo__empty\">\(htmlEscape(emptyMessage))</div>"
         }
@@ -1179,7 +1213,7 @@ public struct WebUIComboBox: View {
             var cls = "combo__option"
             if option.selected { cls += " combo__option--selected" }
             let optID = id.map { " id=\"\(htmlEscape("\($0)-opt-\(index)"))\"" } ?? ""
-            html += "<div class=\"\(cls)\"\(optID)" + Aria.attributes([.selected(option.selected ? .yes : .no)], role: .option) + ">\(htmlEscape(option.label))</div>"
+            html += "<div class=\"\(cls)\"\(optID) tabindex=\"-1\"" + Aria.attributes([.selected(option.selected ? .yes : .no)], role: .option) + ">\(htmlEscape(option.label))</div>"
         }
         html += "</div></div>"
         buffer.append(html)
@@ -1217,16 +1251,16 @@ public struct WebUICommandPalette: View {
         } else {
             attrs = ""
         }
-        var html = "<div class=\"command-palette\"\(attrs)" + Aria.attributes([.modal(.yes)], role: .dialog) + ">"
+        var html = "<div class=\"command-palette\"\(attrs)\(DismissStack().attributeText)\(FilterList().attributeText)" + Aria.attributes([.modal(.yes)], role: .dialog) + ">"
         html += "<div class=\"command-palette__input\"><input type=\"text\" placeholder=\"\(htmlEscape(placeholder))\"></div>"
-        html += "<div class=\"command-palette__results\">"
+        html += "<div class=\"command-palette__results\"\(Roving().attributeText)>"
         let groupsOrdered = commands.map(\.group).filter { !$0.isEmpty }.uniquePreservingOrder
         var cmdIndex = 0
         for group in groupsOrdered {
             html += "<div class=\"command-palette__group\"><div class=\"command-palette__group-label\">\(htmlEscape(group))</div>"
             for c in commands where c.group == group {
                 let cmdID = id.map { " id=\"\(htmlEscape("\($0)-cmd-\(cmdIndex)"))\"" } ?? ""
-                html += "<div class=\"command-palette__item\"\(cmdID)>"
+                html += "<div class=\"command-palette__item\"\(cmdID) tabindex=\"-1\">"
                 html += "<span class=\"command-palette__item-label\">\(htmlEscape(c.label))</span>"
                 if let sc = c.shortcut { html += "<kbd>\(htmlEscape(sc))</kbd>" }
                 html += "</div>"
@@ -1368,19 +1402,25 @@ public struct WebUIScrollTop: View {
     public let label: String
     public let id: String?
     public let onTap: EventHandler?
+    /// the element id the affordance scrolls to. `nil` is the document top —
+    /// the affordance's own promise — carried as the empty `data-scroll-to`
+    /// value the engine reads as the window.
+    public let scrollToID: String?
 
     public init(
         progress: Double? = nil,
         icon: IconName = .arrowUp,
         label: String = WebUIStrings.english.backToTop,
         id: String? = nil,
-        onTap: EventHandler? = nil
+        onTap: EventHandler? = nil,
+        scrollToID: String? = nil
     ) {
         self.progress = progress
         self.icon = icon
         self.label = label
         self.id = id
         self.onTap = onTap
+        self.scrollToID = scrollToID
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -1392,7 +1432,7 @@ public struct WebUIScrollTop: View {
         }
         var html = "<button class=\"scroll-top\(progress != nil ? " scroll-top--ring" : "")\" type=\"button\"" + Aria.label(label).render()
         if let id { html += " id=\"\(htmlEscape(id))\"" }
-        html += attrs + ">"
+        html += attrs + ScrollTo(id: scrollToID ?? "").attributeText + ">"
         if let progress {
             let clamped = progress < 0 ? 0 : (progress > 1 ? 1 : progress)
             let offset = webuiFixedPoint((1 - clamped) * 100, places: 1)

@@ -11,7 +11,14 @@ import WebUIShowcaseContent
 // hash of the raw bytes: `JSONValue.serialize()` emits object keys by direct
 // dictionary iteration and swift dictionary order is per-process randomized,
 // so the raw bytes are not stable run-to-run — only their count is.
-private let showcaseBytePin = 169558
+//
+// 169,558 -> 169,659 (2.7.0, slice S4): +101 bytes, all of it behavior
+// attributes on components the showcase already demos — five ` data-dismiss`
+// on the toast roots (65), ` data-scroll-to` on the back-to-top button (15),
+// and ` data-follow="bottom"` on the live chat scroller (21). no element,
+// class, or text changed; `Tests/WebUITests/Fixtures/showcase.normalized.html`
+// records the same three insertions.
+private let showcaseBytePin = 169659
 
 // pins the showcase's live interactive surface. if a wiring migration (like
 // the WebUIButton onTap flip, or a component dropping its typed handler)

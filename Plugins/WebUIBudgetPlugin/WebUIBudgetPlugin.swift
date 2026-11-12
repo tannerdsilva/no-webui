@@ -85,8 +85,16 @@ struct WebUIBudgetPlugin: CommandPlugin {
     /// stays in the engine and applies before the first paint.
     ///
     /// measured on this tree, from the asset tool's manifest (`served`):
-    ///   engine      72,435 raw / 17,154 gz   (≤ 74,500 / 18,600 — ~2.1 kb raw headroom)
-    ///   engine-ext  13,592 raw /  3,649 gz   (≤ 14,700 /  3,950 — ~8% headroom)
+    ///   engine      72,649 raw / 17,196 gz   (≤ 74,500 / 18,600 — 1,851 raw headroom)
+    ///   engine-ext  14,118 raw /  3,762 gz   (≤ 14,700 /  3,950 —   582 raw headroom)
+    ///
+    /// re-measured 2026-11-12 (S4, view wiring — ceilings hold, neither tripped):
+    /// the engine's `data-scroll-to` binder gained the empty-value branch that
+    /// reads the document top (+214 raw), and the extension gained
+    /// `data-filter-list` (+526 raw: the region's input filters its
+    /// `[role=option]`/`[role=menuitem]`/`.command-palette__item` items). both
+    /// surfaces stay inside their S3 pins, so the pins do not move; the next
+    /// deliberate change to either is what trips them.
     ///
     /// the arithmetic does not reach 72,000: the moved binders and helpers are 12,605
     /// bytes, the boot loader that fetches the extension is 1,1xx bytes of new code, and

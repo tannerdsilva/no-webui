@@ -1,4 +1,4 @@
-// the behavior primitives — the 21 rows of the attribute register.
+// the behavior primitives — the 22 rows of the attribute register.
 //
 // one row is two types: a `Behavior` the view author holds, and the
 // `AttributeRepresentable` it serializes to. the split is what makes the
@@ -97,7 +97,8 @@ public struct ScrollKeyAttribute: AttributeRepresentable {
 ///
 /// the id names the element to scroll to; the flash is the engine's way of
 /// saying which element moved, so a link that jumps across a long page does not
-/// leave the reader guessing.
+/// leave the reader guessing. an empty id is the document top — the back-to-top
+/// affordance's own promise — and flashes nothing, because no element moved.
 public struct ScrollTo: Behavior {
 	/// the element id to scroll to.
 	public let id: String
@@ -670,4 +671,30 @@ public struct NumberClampAttribute: AttributeRepresentable {
 	}
 
 	public var value: String { "\(min),\(max)" }
+}
+
+// MARK: - 22. filter list
+
+/// filter a rendered list by what the reader types into its input.
+///
+/// the region owns both halves: the input that carries the query and the items
+/// the query hides. a list is filtered by the text it already renders, so a
+/// server render needs no second copy of the labels on the wire; a component
+/// that ships this attribute without an input inside the region is inert, which
+/// is why the marker is spliced where both live.
+public struct FilterList: Behavior {
+	public init() {}
+
+	public func attribute() -> FilterListAttribute {
+		FilterListAttribute()
+	}
+}
+
+/// `data-filter-list` — the serialized form of ``FilterList``.
+public struct FilterListAttribute: AttributeRepresentable {
+	public static let name = "data-filter-list"
+
+	public init() {}
+
+	public var value: String { "" }
 }

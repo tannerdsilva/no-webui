@@ -340,6 +340,66 @@ if (!clipboardGranted) {
 }
 
 // ---------------------------------------------------------------------------
+// 10b. data-scroll-to with an empty value — the document top. dispatched from
+//      the bottom of the page by script, because a playwright click would
+//      scroll the button into view first and pass on its own.
+// ---------------------------------------------------------------------------
+{
+  await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
+  await page.waitForTimeout(120);
+  const from = await page.evaluate(() => window.scrollY);
+  await page.evaluate(() => {
+    document.getElementById("to-top").dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
+  });
+  await page.waitForTimeout(2000);
+  const at = await page.evaluate(() => window.scrollY);
+  if (from > 800 && at < 80) ok(`data-scroll-to: an empty value scrolls the document to the top (${Math.round(from)}px -> ${Math.round(at)}px)`);
+  else bad(`data-scroll-to: the empty value did not reach the document top (${Math.round(from)}px -> ${Math.round(at)}px)`);
+}
+
+// ---------------------------------------------------------------------------
+// 10c. data-filter-list — the region's input filters its role=option items by
+//      case-insensitive substring, hiding non-matches. driven through the real
+//      `WebUIComboBox` markup, so the component's wiring is what is measured.
+// ---------------------------------------------------------------------------
+{
+  const wiring = await page.evaluate(() => {
+    const region = document.querySelector("#fx-filter .combo");
+    const panel = region ? region.querySelector(".combo__panel") : null;
+    const options = region ? Array.from(region.querySelectorAll(".combo__option")) : [];
+    return {
+      region: region ? region.hasAttribute("data-filter-list") : false,
+      roving: panel ? panel.hasAttribute("data-roving") : false,
+      dismiss: panel ? panel.hasAttribute("data-dismiss") : false,
+      tabindex: options.map((o) => o.getAttribute("tabindex")),
+      role: options.map((o) => o.getAttribute("role")),
+      tabStops: options.filter((o) => o.getAttribute("tabindex") === "0").length,
+    };
+  });
+  const labelled = wiring.region && wiring.role.every((r) => r === "option");
+  const rovingBound = wiring.roving && wiring.dismiss && wiring.tabStops === 1 &&
+    wiring.tabindex.filter((t) => t === "0").length === 1;
+  if (labelled) ok("data-filter-list: the combo region carries the marker and its items are role=option");
+  else bad(`data-filter-list: the combo region wiring was ${JSON.stringify(wiring)}`);
+  if (rovingBound) ok("data-roving + data-dismiss: the combo panel carries both and roving left exactly one tab stop");
+  else bad(`data-roving/data-dismiss on the combo panel was ${JSON.stringify(wiring)}`);
+  await page.fill("#fx-filter .combo input", "BET");
+  await page.waitForTimeout(150);
+  const filtered = await page.evaluate(() => Array.from(document.querySelectorAll("#fx-filter .combo__option"))
+    .map((o) => ({ text: (o.textContent || "").trim(), hidden: o.hidden, display: getComputedStyle(o).display })));
+  await page.fill("#fx-filter .combo input", "");
+  await page.waitForTimeout(150);
+  const restored = await page.evaluate(() => Array.from(document.querySelectorAll("#fx-filter .combo__option"))
+    .filter((o) => o.hidden || getComputedStyle(o).display === "none").length);
+  const visibleText = filtered.filter((o) => !o.hidden && o.display !== "none").map((o) => o.text);
+  const hiddenRight = filtered.filter((o) => o.text !== "beta").every((o) => o.hidden && o.display === "none");
+  if (visibleText.join(",") === "beta" && hiddenRight) ok(`data-filter-list: a case-insensitive substring hides the non-matches (${JSON.stringify(filtered.map((o) => o.text + ":" + o.display))})`);
+  else bad(`data-filter-list: filtering left ${JSON.stringify(filtered)}`);
+  if (restored === 0) ok("data-filter-list: clearing the input restores every item");
+  else bad(`data-filter-list: ${restored} items stayed hidden after the input was cleared`);
+}
+
+// ---------------------------------------------------------------------------
 // 11. data-scrollspy — the section in view marks its own anchor.
 // ---------------------------------------------------------------------------
 {

@@ -1828,7 +1828,14 @@ window.WebUIEngine = (function () {
 
     BEHAVIORS['data-scroll-to'] = function (el) {
       el.addEventListener('click', function (e) {
-        var target = document.getElementById(el.getAttribute('data-scroll-to') || '');
+        var id = el.getAttribute('data-scroll-to') || '';
+        if (!id) {
+          e.preventDefault();
+          try { window.scrollTo({ top: 0, behavior: 'smooth' }); }
+          catch (err) { window.scrollTo(0, 0); }
+          return;
+        }
+        var target = document.getElementById(id);
         if (!target) { return; }
         e.preventDefault();
         try { target.scrollIntoView({ behavior: 'smooth', block: 'start' }); }

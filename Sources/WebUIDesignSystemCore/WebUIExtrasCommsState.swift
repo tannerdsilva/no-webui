@@ -614,6 +614,10 @@ public struct WebUIMessageScroller: View {
     public let fade: Bool
     /// accessible name for the log region.
     public let ariaLabel: String
+    /// the key this scroller's offset survives a patch under; `nil` keeps the
+    /// engine's default (no per-key memory), which is what a single scroller on
+    /// a page wants.
+    public let scrollKey: String?
     /// // erased: the scroller renders its children in REVERSE order
     /// (`children.reversed()`), a runtime sequence walk with no pack equivalent —
     /// a tuple cannot be reversed. an erased array is the one documented door
@@ -625,12 +629,14 @@ public struct WebUIMessageScroller: View {
         id: String? = nil,
         fade: Bool = true,
         ariaLabel: String = WebUIStrings.english.messages,
+        scrollKey: String? = nil,
         content: [any View]           // erased: rendered in reverse (see `children`)
     ) {
         self.height = height
         self.id = id
         self.fade = fade
         self.ariaLabel = ariaLabel
+        self.scrollKey = scrollKey
         self.children = content
     }
 
@@ -639,6 +645,8 @@ public struct WebUIMessageScroller: View {
         if fade { html += " scroll-area--fade-y" }
         html += "\""
         if let id { html += " id=\"\(htmlEscape(id))\"" }
+        html += ScrollFollow().attributeText
+        if let scrollKey, !scrollKey.isEmpty { html += ScrollKey(key: scrollKey).attributeText }
         let size = htmlEscape(height)
         html += " style=\"height: \(size); max-height: \(size)\""
         html += Aria.attributes([.live(.polite), .label(ariaLabel)], role: .log) + " tabindex=\"0\">"

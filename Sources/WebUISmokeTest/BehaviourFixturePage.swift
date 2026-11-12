@@ -138,7 +138,7 @@ func renderBehaviourPage(
 	</div>
 
 	<section class="fx-sec"><h2>scroll follow · scroll key · disclosure · focus return</h2>
-	<div class="fx-row"><button id="patch" type="button" data-component-id="fx-patch" data-event="click">Grow feed</button><button id="to-target" type="button"\(ScrollTo(id: "scroll-target").attributeText)>Jump to the marker</button></div>
+	<div class="fx-row"><button id="patch" type="button" data-component-id="fx-patch" data-event="click">Grow feed</button><button id="to-target" type="button"\(ScrollTo(id: "scroll-target").attributeText)>Jump to the marker</button><button id="to-top" type="button"\(ScrollTo(id: "").attributeText)>Back to the document top</button></div>
 	\(behaviourFeedHTML(state))
 	<div class="fx-row"><button id="to-feed" type="button"\(ScrollTo(id: "feed").attributeText)>Jump to the feed</button></div>
 	<div id="follow-off"\(followOff) class="fx-thread" aria-label="not followed"><p>off</p><p>off</p><p>off</p><p>off</p><p>off</p><p>off</p><p>off</p><p>off</p><p>off</p><p>off</p><p>off</p><p>off</p></div>
@@ -191,6 +191,11 @@ func renderBehaviourPage(
 
 	<section class="fx-sec"><h2>roving</h2>
 	<div id="roving"\(Roving().attributeText) class="fx-roving" role="toolbar" aria-label="Letters"><button id="rov-1" type="button">1</button><button id="rov-2" type="button">2</button><button id="rov-3" type="button">3</button></div>
+	</section>
+
+	<section class="fx-sec" id="fx-filter"><h2>filter list</h2>
+	<p class="fx-muted">the combo below is the real component: its region carries the marker, its panel carries the dismiss layer and the roving group.</p>
+	\(WebUIComboBox(placeholder: "filter the options", options: [.init("alpha"), .init("beta"), .init("gamma")], emptyMessage: "nothing matches").markup.html)
 	</section>
 
 	<section class="fx-sec"><h2>form semantics</h2>
