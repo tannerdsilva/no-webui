@@ -10,7 +10,7 @@
 # forced it. `Tests/WebUITests/FrozenSurfaceTests.swift` fails when this
 # file and a fresh extraction diverge, naming every added and removed symbol.
 #
-# re-measured 2026-11-06: 5216 symbols across 11 modules.
+# re-measured 2026-11-12: 5229 symbols across 11 modules.
 
 ## WebUISharedCore
 
@@ -310,6 +310,10 @@ AttributeContribution
 AttributeContribution.decorate(_:into:)
 AttributeContribution.init(_:)
 AttributeContribution.text
+AttributeRepresentable
+AttributeRepresentable.attributeText
+AttributeRepresentable.name
+AttributeRepresentable.value
 Audio
 Audio.autoplay
 Audio.controls
@@ -324,6 +328,14 @@ Base64.decode(_:)
 Base64.decodeURL(_:)
 Base64.encode(_:)
 Base64.encodeURL(_:)
+Behavior
+Behavior.Attribute
+Behavior.attribute()
+Behavior.attributeText
+BehaviorModifier
+BehaviorModifier.behavior
+BehaviorModifier.decorate(_:into:)
+BehaviorModifier.init(_:)
 Blockquote
 Blockquote.content
 Blockquote.init(_:)
@@ -2063,6 +2075,7 @@ View.ariaLabel(_:)
 View.ariaLive(_:)
 View.attribute(_:_:)
 View.backgroundColor(_:)
+View.behavior(_:)
 View.border(_:)
 View.class(_:)
 View.classes(_:)
