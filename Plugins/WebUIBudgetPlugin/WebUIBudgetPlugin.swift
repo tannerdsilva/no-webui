@@ -61,8 +61,15 @@ struct WebUIBudgetPlugin: CommandPlugin {
     ///
     /// the theming work (T8/T9) will add tokens and therefore grow the sheet, which should
     /// trip this gate and force a deliberate re-pin rather than a silent drift.
+    ///
+    /// re-pinned 2026-11-06: the engine grew to 63,426 raw / 15,086 gz (fragment
+    /// input-state scoping + `data-no-restore`, `b249bd7` — probe-tested in
+    /// `designer/fragment-restore-probe.mjs`). the 2026-10-12 raw pin had shipped with
+    /// only 12 bytes of headroom, so the next deliberate change was always going to trip
+    /// it. ceilings move to 68,500 / 16,300 (~8% headroom again); sheet, shell and island
+    /// hold unchanged.
     private static let ceilings: [Ceiling] = [
-        Ceiling(surface: "engine", label: "webui-engine.js", raw: 63_000, gz: 15_200),
+        Ceiling(surface: "engine", label: "webui-engine.js", raw: 68_500, gz: 16_300),
         Ceiling(surface: "sheet", label: "design-system.css", raw: 335_000, gz: 49_500),
         Ceiling(surface: "shell", label: "webui-shell.js", raw: 1_700, gz: 650),
     ]

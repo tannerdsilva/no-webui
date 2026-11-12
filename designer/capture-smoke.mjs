@@ -70,11 +70,22 @@ try {
     const context = await browser.newContext({
       viewport: { width: 1440, height: 2400 },
       deviceScaleFactor: 2,
-      colorScheme: scheme,
     });
+    // the engine ignores the OS colorScheme by design (the pre-paint prelude applies a
+    // STORED choice, not the media query), so the flip is driven the way a user drives
+    // it: the stored `webui-theme` choice — the documented "a stored choice wins" path.
+    // emulating colorScheme alone captured the same light page twice (measured: the two
+    // pngs were byte-identical).
+    await context.addInitScript(
+      (mode) => localStorage.setItem("webui-theme", mode),
+      scheme,
+    );
     const page = await context.newPage();
     page.on("pageerror", (e) => console.log(`  console error (${scheme}): ${e.message}`));
-    await page.goto(BASE, { waitUntil: "networkidle" });
+    await page.goto(BASE, { waitUntil: "domcontentloaded" });
+    // the engine holds a websocket open from boot, so networkidle never fires;
+    // settle past the connect + first patch instead.
+    await page.waitForTimeout(800);
     const file = join(OUT, `smoke-${scheme}.png`);
     await page.screenshot({ path: file, fullPage: true });
     console.log(`  wrote ${file}`);

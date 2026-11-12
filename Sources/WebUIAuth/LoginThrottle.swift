@@ -15,13 +15,26 @@ public final class LoginThrottle: Sendable {
     }
     private let state = Mutex(State())
 
+    /// the hard cap on tracked windows. keys are caller-supplied — for a login
+    /// endpoint that includes attacker-controlled usernames — so a host that
+    /// never invokes `prune(before:)` would otherwise let this dictionary grow
+    /// without bound (the same growth-cap doctrine as `EventRouter.maxHandlers`
+    /// and `ObserverList.maxObservers`). when the cap is reached the limiter
+    /// first drops rolled-over windows, and if every tracked window is still
+    /// live it refuses *new* keys while existing keys keep their budget —
+    /// failing closed, because the failure mode a throttle must never take is
+    /// the attacker's rotation silently evicting the limit itself.
+    public let maxWindows: Int
+
     public let windowSeconds: TimeInterval
     public let maxAttempts: Int
 
-    public init(windowSeconds: TimeInterval = 60, maxAttempts: Int = 20) {
+    public init(windowSeconds: TimeInterval, maxAttempts: Int, maxWindows: Int = 4_096) {
         precondition(windowSeconds > 0 && maxAttempts > 0)
+        precondition(maxWindows > 0)
         self.windowSeconds = windowSeconds
         self.maxAttempts = maxAttempts
+        self.maxWindows = maxWindows
     }
 
     /// record one attempt under `key`. returns `true` while the key is under
@@ -34,6 +47,17 @@ public final class LoginThrottle: Sendable {
                 guard entry.count < maxAttempts else { return false }
                 state.windows[key] = (entry.start, entry.count + 1)
                 return true
+            }
+            // a key with no live window is either brand-new or rolled over; both
+            // start a fresh window. the cap check rides this same door so the
+            // memory bound holds without a host calling `prune(before:)`.
+            if state.windows[key] == nil, state.windows.count >= maxWindows {
+                // drop every window that has already rolled over, then re-check.
+                let boundary = t - windowSeconds
+                state.windows = state.windows.filter { $0.value.start > boundary }
+                // every tracked window is live: fail closed for new keys rather
+                // than evict a live limit under a key-rotation flood.
+                guard state.windows.count < maxWindows else { return false }
             }
             state.windows[key] = (t, 1)
             return true

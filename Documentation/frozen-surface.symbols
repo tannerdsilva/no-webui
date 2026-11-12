@@ -10,7 +10,7 @@
 # forced it. `Tests/WebUITests/FrozenSurfaceTests.swift` fails when this
 # file and a fresh extraction diverge, naming every added and removed symbol.
 #
-# re-measured 2026-11-04: 5215 symbols across 11 modules.
+# re-measured 2026-11-06: 5216 symbols across 11 modules.
 
 ## WebUISharedCore
 
@@ -4451,8 +4451,9 @@ InMemoryAuthSessionStore.listSessions(for:)
 InMemoryAuthSessionStore.purgeExpired(before:)
 InMemoryAuthSessionStore.touch(_:)
 LoginThrottle
-LoginThrottle.init(windowSeconds:maxAttempts:)
+LoginThrottle.init(windowSeconds:maxAttempts:maxWindows:)
 LoginThrottle.maxAttempts
+LoginThrottle.maxWindows
 LoginThrottle.prune(before:)
 LoginThrottle.record(_:now:)
 LoginThrottle.reset(_:)
