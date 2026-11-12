@@ -28,11 +28,21 @@ public protocol AttributeRepresentable: Sendable {
 }
 
 extension AttributeRepresentable {
-	/// ` name="value"` — the one spelling of an attribute, ready to splice
-	/// into a tag. the name is a compile-time constant and is not
-	/// caller-controlled; the value goes through `htmlEscape`.
+	/// ` name="value"` for a value-bearing attribute, ` name` when the value is
+	/// empty — the one spelling of an attribute, ready to splice into a tag.
+	///
+	/// the empty case is a rule, not an optimization: a presence attribute
+	/// cannot be expressed by an empty value (`data-dismiss=""` is not "absent",
+	/// so the generic attribute emitter cannot carry it), and `data-dismiss=""`
+	/// and `data-dismiss` read the same to `hasAttribute` — which makes the
+	/// quoted-empty form a second spelling of one consequence. the bare form is
+	/// canonical: `DismissStack()`, `Disclosure()` and `Clipboard()` all emit it.
+	/// the name is a compile-time constant and is not caller-controlled; a
+	/// non-empty value goes through `htmlEscape`.
 	public var attributeText: String {
-		" \(Self.name)=\"\(htmlEscape(value))\""
+		let value = self.value
+		guard !value.isEmpty else { return " \(Self.name)" }
+		return " \(Self.name)=\"\(htmlEscape(value))\""
 	}
 }
 
