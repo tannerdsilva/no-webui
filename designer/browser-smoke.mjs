@@ -1088,9 +1088,15 @@ await page.evaluate(() => { document.querySelectorAll('link[rel="stylesheet"]').
       await waitRow("paste.png", "done");
       ok("upload (paste): a clipboard image uploads through the same route (synthesized ClipboardEvent; native clipboard is a manual pass)");
     } catch { bad(`upload (paste): no done row for paste.png — ${JSON.stringify(await trayRows())}`); }
-    const pasteEcho = await uploadPage.evaluate(() => (document.getElementById("upload-out-a") || {}).textContent || "");
-    if (/name=paste\.png/.test(pasteEcho)) ok("upload (paste): the route received the pasted file's name");
-    else bad(`upload (paste): the region did not carry name=paste.png — ${JSON.stringify(pasteEcho.trim())}`);
+    // the row reaching "done" means the XHR finished; the server's .refresh
+    // patch is a separate frame. poll the settled region rather than sampling
+    // one frame, or the previous upload's echo reads as this one's.
+    const pasteEcho = await uploadPage.waitForFunction(() => {
+      const el = document.getElementById("upload-out-a");
+      return el && /name=paste\.png/.test(el.textContent) ? el.textContent.trim() : false;
+    }, null, { timeout: 8000 }).then((h) => h.jsonValue()).catch(() => null);
+    if (pasteEcho) ok("upload (paste): the route received the pasted file's name");
+    else bad(`upload (paste): the region did not carry name=paste.png — ${JSON.stringify(await uploadPage.evaluate(() => (document.getElementById("upload-out-a") || {}).textContent || ""))}`);
     if (paste.prevented === true) ok("upload (paste): a files-only clipboard is consumed (preventDefault ran)");
     else bad("upload (paste): preventDefault did not run on a files-only clipboard");
   }
