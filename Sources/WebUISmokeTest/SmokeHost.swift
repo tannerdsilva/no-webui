@@ -212,10 +212,14 @@ func smokeRoutes(state: SmokeState, router: EventRouter) -> Router {
 	// must not live there.
 	let behaviourState = BehaviourFixtureState()
 	let behaviourPage = BehaviourPageResponder(state: behaviourState, router: router)
+	// the residue proof page: §20's zero-JS re-expressions, one page.
+	let residueState = ResidueState()
+	let residuePage = ResiduePageResponder(state: residueState, router: router)
 	return Router {
 		Route(method: .get, pattern: "/", responder: page)
 		Route(method: .get, pattern: "/index.html", responder: page)
 		Route(method: .get, pattern: "/behaviour", responder: behaviourPage)
+		Route(method: .get, pattern: "/residue", responder: residuePage)
 		Route.get("/blocks") { _ in
 			HTTPResponse(headers: smokeHeaders(), body: .html(UnsafeMarkup.trusted(blocksPage("/blocks"))))
 		}

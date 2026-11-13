@@ -969,6 +969,22 @@ await page.evaluate(() => { document.querySelectorAll('link[rel="stylesheet"]').
     ok("upload (picker): the tray row reached done via the engine's XHR transport");
   } catch { bad(`upload (picker): no done row for note.txt — rows: ${JSON.stringify(await trayRows())}`); }
 
+  // the bar animates to 100% after the state flips to done; poll for the
+  // settled width instead of sampling once (one sample caught the transition's
+  // first frame and read 0% — a timing flake, not an engine defect).
+  await uploadPage.waitForFunction(() => {
+    const tray = document.querySelector("[data-webui-upload-tray]");
+    if (!tray) return false;
+    const row = Array.from(tray.querySelectorAll("[data-webui-upload-state]")).find((r) => (r.querySelector(".upload-tray__name") || {}).textContent === "note.txt");
+    if (!row) return false;
+    const bar = row.querySelector(".upload-tray__bar");
+    const track = row.querySelector(".upload-tray__track");
+    if (!bar || !track) return false;
+    const br = bar.getBoundingClientRect();
+    const tr = track.getBoundingClientRect();
+    return tr.width > 0 && br.width / tr.width >= 0.99;
+  }, null, { timeout: 3000 }).catch(() => {});
+
   const trayShape = await uploadPage.evaluate(() => {
     const tray = document.querySelector("[data-webui-upload-tray]");
     if (!tray) return { tray: false };

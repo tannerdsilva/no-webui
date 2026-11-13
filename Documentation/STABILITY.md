@@ -371,6 +371,33 @@ frozen surface is a mistake:
    their declared value at the call site rather than being re-resolved per
    render; a host localizing one passes the catalog's value explicitly.
 
+## the two public contracts
+
+A release freezes two contracts, and both are gated:
+
+1. **the Swift surface** — `Documentation/frozen-surface.symbols`, generated
+   from the built modules by `swift-symbolgraph-extract` and enforced by
+   `FrozenSurfaceTests`. A public-symbol change regenerates the file in the
+   same commit (`FROZEN_SURFACE_EMIT=1 swift test --filter FrozenSurfaceTests`);
+   semver applies — a minor may add, a patch may not move it.
+2. **the JS vocabulary** — every `data-*` the client engine reads or writes,
+   documented in `Documentation/BEHAVIOUR.md` and enforced by
+   `BehaviourVocabularyTests`, which fails when the engine reads an
+   undocumented attribute. The vocabulary is ONE contract even though it ships
+   in two assets: `webui-engine.js` carries the patch-survival core and
+   `webui-engine-ext.js` the interaction consequences (fetched once at boot,
+   with a documented degrade when absent). The split is an implementation
+   detail; a consumer names attributes, never assets.
+
+Both contracts move only in a minor tag. The behavior-layer program ships one
+annotated, immutable minor per capability slice — `2.4.0` vocabulary, `2.5.0`
+primitives, `2.6.0` engine dispatch, `2.7.0` component wiring, `2.8.0` host
+table and seal, `2.9.0` refresh, `2.10.0` upload — and nothing in this program
+ships in a patch. The `on.afterPatch`/`on.ready` seam is supported through
+`2.10.0` and deprecated at `3.0.0`; `3.0.0` is also the consumer-adoption
+close (the consumer's overlay file deleted). Consumer-side deletions are the
+consumer's workstream, not a framework change.
+
 ## change discipline
 
 - every public-surface change lands with (a) a test — in `APISurfaceTests`

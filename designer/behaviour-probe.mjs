@@ -835,6 +835,108 @@ if (!clipboardGranted) {
   await degraded.close();
 }
 
+// ---------------------------------------------------------------------------
+// 25. the residue proof page: every §20 row, zero consumer JavaScript.
+// ---------------------------------------------------------------------------
+{
+  const residueHTML = await (await fetch(BASE + "/residue")).text();
+  const scriptTags = [...residueHTML.matchAll(/<script\b[^>]*>/g)].map((m) => m[0]);
+  const foreign = scriptTags.filter((s) => !/src="\/ui\//.test(s) && !/nonce=/.test(s));
+  const wiredInPage = /addEventListener\s*\(/.test(residueHTML);
+  if (foreign.length === 0 && !wiredInPage) {
+    ok(`residue page carries no consumer script (${scriptTags.length} script tag(s): engine/shell + the nonce'd prelude only)`);
+  } else {
+    bad(`residue page carries consumer script: foreign=${JSON.stringify(foreign)} wiredInPage=${wiredInPage}`);
+  }
+
+  const residue = await browser.newContext({
+    viewport: { width: 1200, height: 800 },
+    permissions: ["clipboard-read", "clipboard-write"],
+  });
+  const rp = await residue.newPage();
+  const residueErrors = [];
+  rp.on("pageerror", (e) => residueErrors.push(String(e)));
+  await rp.goto(BASE + "/residue", { waitUntil: "domcontentloaded" });
+  await rp.waitForTimeout(700);
+
+  // outline: a server-rendered anchor scrolls and flashes.
+  await rp.click('#res-outline a[data-scroll-to="res-sec-2"]');
+  const flashed = await rp.evaluate(() => document.getElementById("res-sec-2")?.hasAttribute("data-scroll-flash") === true);
+  await rp.waitForTimeout(600);
+  const jumped = await rp.evaluate(() => Math.abs(document.getElementById("res-sec-2").getBoundingClientRect().top) < 220);
+  if (jumped && flashed) ok("residue/outline: the anchor scrolled the section into view and flashed it");
+  else bad(`residue/outline: jumped=${jumped} flashed=${flashed}`);
+
+  // rename: inline edit + native submit + .refresh.
+  await rp.fill("#res-name-input", "renamed plan");
+  await rp.click("#res-rename-save");
+  await rp.waitForFunction(() => (document.getElementById("res-rename-value")?.textContent || "").includes("renamed plan"), null, { timeout: 4000 }).catch(() => {});
+  const namePatched = await rp.evaluate(() => (document.getElementById("res-rename-value")?.textContent || "").includes("renamed plan"));
+  if (namePatched) ok("residue/rename: the inline edit saved and .refresh patched the region with the new name");
+  else bad("residue/rename: the refreshed region did not carry the new name");
+
+  // card rename: the same shape on a second region.
+  await rp.fill("#res-card-input", "ship it now");
+  await rp.click("#res-card-save");
+  await rp.waitForFunction(() => (document.getElementById("res-card-value")?.textContent || "").includes("ship it now"), null, { timeout: 4000 }).catch(() => {});
+  const cardPatched = await rp.evaluate(() => (document.getElementById("res-card-value")?.textContent || "").includes("ship it now"));
+  if (cardPatched) ok("residue/card: the card rename round-tripped through .refresh");
+  else bad("residue/card: the card region did not carry the new title");
+
+  // session menus: two layers, Escape closes the topmost (LIFO).
+  await rp.click("#res-open-a");
+  await rp.waitForTimeout(250);
+  await rp.click("#res-open-b");
+  await rp.waitForTimeout(250);
+  await rp.keyboard.press("Escape");
+  await rp.waitForTimeout(300);
+  const afterFirst = await rp.evaluate(() => ({
+    a: !!document.getElementById("res-menu-a"),
+    b: !!document.getElementById("res-menu-b"),
+  }));
+  await rp.keyboard.press("Escape");
+  await rp.waitForTimeout(300);
+  const afterSecond = await rp.evaluate(() => ({ a: !!document.getElementById("res-menu-a") }));
+  if (afterFirst.a && !afterFirst.b && !afterSecond.a) {
+    ok("residue/menus: Escape closed the topmost layer first, then the next (LIFO)");
+  } else {
+    bad(`residue/menus: after first ${JSON.stringify(afterFirst)}, after second ${JSON.stringify(afterSecond)}`);
+  }
+
+  // disclosures: native details toggle, and open state survives a refresh.
+  await rp.click("#res-chip > summary");
+  await rp.waitForTimeout(150);
+  const chipOpen = await rp.evaluate(() => document.getElementById("res-chip").open === true);
+  await rp.fill("#res-name-input", "renamed again");
+  await rp.click("#res-rename-save");
+  await rp.waitForTimeout(700);
+  const chipAfterPatch = await rp.evaluate(() => document.getElementById("res-chip").open === true);
+  await rp.click("#res-group > summary");
+  await rp.click("#res-skills > summary");
+  await rp.waitForTimeout(150);
+  const othersOpen = await rp.evaluate(() => document.getElementById("res-group").open === true && document.getElementById("res-skills").open === true);
+  if (chipOpen && chipAfterPatch && othersOpen) {
+    ok("residue/disclosure: the chip, session group and skill category toggle, and an open disclosure survives a refresh patch");
+  } else {
+    bad(`residue/disclosure: chipOpen=${chipOpen} afterPatch=${chipAfterPatch} others=${othersOpen}`);
+  }
+
+  // copy halves: data-copy writes the clipboard and the engine shows its toast.
+  await rp.click("#res-copy-btn");
+  await rp.waitForTimeout(400);
+  const copied = await rp.evaluate(() => navigator.clipboard.readText().catch(() => ""));
+  const toast = await rp.evaluate(() => (document.querySelector("[data-webui-toast]")?.textContent || "").trim());
+  if (copied === "echo hello" && /Copied/i.test(toast)) {
+    ok("residue/copy: data-copy wrote the clipboard and the engine's toast reported it");
+  } else {
+    bad(`residue/copy: clipboard=${JSON.stringify(copied)} toast=${JSON.stringify(toast)}`);
+  }
+
+  if (residueErrors.length === 0) ok("residue: no uncaught page errors while driving every row");
+  else bad(`residue page errors: ${JSON.stringify(residueErrors)}`);
+  await residue.close();
+}
+
 await browser.close();
 server.kill();
 

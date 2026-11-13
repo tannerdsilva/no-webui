@@ -101,6 +101,21 @@ control.
 the upload rows' transport — the headers, the route's json shape, the tray's
 DOM and class contract — is `Documentation/UPLOAD.md`.
 
+## the migration seam
+
+Two engine hooks are the only client seam a consumer may use while adopting
+the vocabulary, and both are temporary:
+
+- `WebUIEngine.on.afterPatch(fn)` — called after a fragment patch applies.
+- `WebUIEngine.on.ready(fn)` — called once the page is live; with the split
+  engine it fires after the extension asset settles (loaded or failed), so a
+  behavior never races the first patch.
+
+They are supported through `2.10.0`, deprecated at `3.0.0`, and removed later.
+App code must not register on them: they exist for migration and for framework
+debugging, and a consumer still relying on one at `3.0.0` has a **capability
+request** — a ledger row and a slice — not a supported seam.
+
 ## changing the vocabulary
 
 1. add the behavior as a Swift type whose `AttributeRepresentable.name` is the
