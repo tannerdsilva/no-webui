@@ -85,6 +85,13 @@ struct BehaviorPrimitivesTests {
 		#expect(!rendered(DismissStack()).contains("data-dismiss=\"\""))
 	}
 
+	@Test("DrawerToggle serializes the drawer id")
+	func drawerToggle() {
+		#expect(DrawerToggleAttribute.name == "data-drawer-toggle")
+		#expect(DrawerToggle(drawerID: "d1").attribute().value == "d1")
+		#expect(rendered(DrawerToggle(drawerID: "d1")).contains(" data-drawer-toggle=\"d1\""))
+	}
+
 	// MARK: - 7. reorder
 
 	@Test("Reorder serializes data-reorder")

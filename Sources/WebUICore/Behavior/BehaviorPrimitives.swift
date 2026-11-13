@@ -262,6 +262,39 @@ public struct DismissStackAttribute: AttributeRepresentable {
 	public var value: String { layer }
 }
 
+/// the id of the drawer a control opens and closes.
+///
+/// one behavior, one attribute: the value is the drawer root's id, never a
+/// selector. the engine flips `data-open` on `#<id>` with no round-trip, moves
+/// focus into the panel on open and back to the toggle on close. the drawer's
+/// own scrim and close control carry it too, so a built-in drawer needs no
+/// host wiring; at 861px and wider the drawer keeps its static rail form.
+public struct DrawerToggle: Behavior {
+	/// the id of the drawer root this control flips.
+	public let drawerID: String
+
+	public init(drawerID: String) {
+		self.drawerID = drawerID
+	}
+
+	public func attribute() -> DrawerToggleAttribute {
+		DrawerToggleAttribute(drawerID: drawerID)
+	}
+}
+
+/// `data-drawer-toggle` — the serialized form of ``DrawerToggle``.
+public struct DrawerToggleAttribute: AttributeRepresentable {
+	public static let name = "data-drawer-toggle"
+
+	public let drawerID: String
+
+	public init(drawerID: String) {
+		self.drawerID = drawerID
+	}
+
+	public var value: String { drawerID }
+}
+
 // MARK: - 7. reorder
 
 /// let the engine write a new order into a hidden input.

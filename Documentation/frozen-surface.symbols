@@ -10,7 +10,7 @@
 # forced it. `Tests/WebUITests/FrozenSurfaceTests.swift` fails when this
 # file and a fresh extraction diverge, naming every added and removed symbol.
 #
-# re-measured 2026-11-13: 5537 symbols across 11 modules.
+# re-measured 2026-11-13: 5546 symbols across 11 modules.
 
 ## WebUISharedCore
 
@@ -579,6 +579,15 @@ DragPayload
 DragPayload.data
 DragPayload.files
 DragPayload.init(data:files:)
+DrawerToggle
+DrawerToggle.attribute()
+DrawerToggle.drawerID
+DrawerToggle.init(drawerID:)
+DrawerToggleAttribute
+DrawerToggleAttribute.drawerID
+DrawerToggleAttribute.init(drawerID:)
+DrawerToggleAttribute.name
+DrawerToggleAttribute.value
 DroppedFile
 DroppedFile.init(name:size:type:)
 DroppedFile.name

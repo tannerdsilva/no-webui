@@ -389,14 +389,43 @@ A release freezes two contracts, and both are gated:
    with a documented degrade when absent). The split is an implementation
    detail; a consumer names attributes, never assets.
 
+   Every attribute a Swift value emits is an `AttributeRepresentable` with the
+   attribute's exact `name`; that is what makes the vocabulary typed rather
+   than stringly. The engine-written state attributes (`data-open`,
+   `data-follow-state`, `data-editing`, the island and upload state markers)
+   are written by the client and have no Swift writer, and a few framework
+   markers a host writes by hand (`data-no-restore`, `data-prevent-enter`) are
+   documented without a type. Everything else — the dispatch keys and the
+   parameter attributes read inside a binder — has a type in `WebUICore`.
+
 Both contracts move only in a minor tag. The behavior-layer program ships one
 annotated, immutable minor per capability slice — `2.4.0` vocabulary, `2.5.0`
 primitives, `2.6.0` engine dispatch, `2.7.0` component wiring, `2.8.0` host
-table and seal, `2.9.0` refresh, `2.10.0` upload — and nothing in this program
-ships in a patch. The `on.afterPatch`/`on.ready` seam is supported through
-`2.10.0` and deprecated at `3.0.0`; `3.0.0` is also the consumer-adoption
-close (the consumer's overlay file deleted). Consumer-side deletions are the
-consumer's workstream, not a framework change.
+table and seal, `2.9.0` refresh, `2.10.0` upload — and the
+overlay-elimination program continues it: `2.11.0` upload wire (relative
+destination, composed path, name template), `2.12.0` `@Wired` outcomes and the
+producer refresh door, `2.13.0` follow across deltas and reading keys,
+`2.14.0` focus return by id and T26, `2.15.0` filter write-back, drawer open
+state and dismiss arming, `2.16.0` the draft seed, `2.17.0` submit-on-enter
+modes and the theme selected contract. `3.0.0` closes the program and adds the
+one missing typed door, `DrawerToggle`. Nothing in either program ships in a
+patch. The `on.afterPatch`/`on.ready` seam is supported through `2.10.0` and
+deprecated at `3.0.0`; `3.0.0` is also the consumer-adoption close (the
+consumer's overlay file deleted). Consumer-side deletions are the consumer's
+workstream, not a framework change.
+
+**the 3.0.0 baseline (measured 2026-11-13):** `swift test` 1,950 tests across
+nine executables / 0 failures; frozen surface 5,546 symbols across 11 modules;
+`budget` PASS with engine 79,587 raw / 18,446 gz (pin 79,600 / 18,500),
+extension 28,558 / 6,935 (pin 28,600 / 7,000), sheet 325,766 / 45,622 (pin
+335,000 / 49,500), shell 1,514 / 539 (pin 1,700 / 650); `behaviour-probe`
+128/128, `browser-smoke` 84/84, `smoke` 22/22 (27 interactive components),
+`fullstack-smoke` 24/24, `showcase-ws-smoke` 10/10, `fragment-restore-probe`
+4/4. The byte-diff proof recorded at `2.7.0` (strip every `data-*` → fixture
+byte-identical) has no committed pre-wiring capture to diff against at this
+tree; the equivalent evidence at 3.0.0 is the vocabulary gate (every engine
+attribute documented, every dispatch key in the register) plus the
+`RenderSnapshotTests` golden.
 
 ## change discipline
 

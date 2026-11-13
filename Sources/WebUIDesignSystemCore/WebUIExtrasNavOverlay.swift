@@ -738,14 +738,14 @@ public struct WebUIDrawer<Content: View, Footer: View>: View {
             // the scrim is the layer's outside surface: a click on it is a
             // close, and it exists only on an id-bearing drawer (the id is
             // the state the engine flips).
-            html += "<div class=\"drawer__scrim\" data-drawer-toggle=\"\(htmlEscape(id))\"></div>"
+            html += "<div class=\"drawer__scrim\"\(DrawerToggle(drawerID: id).attributeText)></div>"
             html += "<div class=\"drawer__panel\"\(DismissStack().attributeText) tabindex=\"-1\">"
         } else {
             html += "<div class=\"drawer__panel\"\(DismissStack().attributeText)>"
         }
         if let title {
             let closeID = id.map { " id=\"\(htmlEscape("\($0)-close"))\"" } ?? ""
-            let toggle = id.map { " data-drawer-toggle=\"\(htmlEscape($0))\"" } ?? ""
+            let toggle = id.map { DrawerToggle(drawerID: $0).attributeText } ?? ""
             html += "<div class=\"drawer__header\"><div class=\"drawer__title\">\(htmlEscape(title))</div><button class=\"drawer__close\"\(closeID)\(DismissStack().attributeText)\(toggle)" + Aria.label(RenderContext.currentStrings.close).render() + ">×</button></div>"
         }
         html += "<div class=\"drawer__content\">"

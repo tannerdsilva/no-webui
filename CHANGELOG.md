@@ -2,6 +2,38 @@
 
 all notable changes to this project are documented here.
 
+## [3.0.0] — 2026-11-13 — the overlay-elimination close
+
+the ten-capability program that lets a consumer delete its last client overlay
+JavaScript. annotated minors, one per capability:
+
+- **2.11.0** — the upload wire: `UploadDestination.folder(path:)` is a relative
+  directory, the engine sends the composed `<dir>/<name>` as `X-Upload-Path`,
+  the route's `{path}` answer is authoritative, and `UploadNameTemplate`
+  composes collision-free names (`{name}`, `{ext}`, `{ts}`, `{seq}`).
+- **2.12.0** — `@Wired` accepts `HandlerOutcome` as well as `[FragmentUpdate]`
+  (the return type picks the registration), and `WebUIServer.refresh(session:)`
+  is the producer's door to the same refresh pass.
+- **2.13.0** — follow across appended and streamed-text deltas, and
+  `data-reading-keys` (layer-aware Escape).
+- **2.14.0** — focus return by opener id across a server round-trip (including
+  empty-fragment removals) and T26 (a replaced button keeps focus by id).
+- **2.15.0** — `FilterList(source:)`, `FilterInsert`/`FilterTemplate`/
+  `FilterClear` write-back, combo/drawer `data-open` state with the 860px
+  drawer breakpoint and scrim, and the general `data-dismiss` arming rule.
+- **2.16.0** — `DraftSeed` (`data-draft-value`): an identity change takes the
+  server's seed, the same identity keeps the reader's keystrokes.
+- **2.17.0** — `SubmitOnEnterMode` (bare legacy / plain / meta, IME-safe) and
+  the normative `aria-pressed` theme-selected contract.
+- **3.0.0** — `DrawerToggle` (the missing typed door for `data-drawer-toggle`),
+  the measured closeout in `Documentation/STABILITY.md`, and the program's
+  frozen-surface/budget baseline.
+
+measured at the tag: 1,950 tests / 0 failures; frozen surface 5,546 symbols;
+budget PASS (engine 79,587/18,446, ext 28,558/6,935, sheet 325,766/45,622);
+behaviour-probe 128/128, browser-smoke 84/84, smoke 22/22, fullstack 24/24,
+showcase-ws 10/10.
+
 ## [unreleased] — application state and the multi-tenant host
 
 ### added
