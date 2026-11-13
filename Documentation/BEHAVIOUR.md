@@ -69,8 +69,9 @@ control.
 | behavior | attribute(s) | value |
 |---|---|---|
 | `ScrollFollow` | `data-follow` | `bottom` (stick while at the bottom, release on upward movement) or `off` |
-| `ScrollFollow` (state) | `data-follow-state` | `away` while the reader is detached — the state that shows the jump control (engine-written) |
+| `ScrollFollow` (state) | `data-follow-state` | `away` while the reader is detached — the state that shows the jump control (engine-written). evaluated on every patch kind, including appended and streamed-text batches; first bind evaluates the mount position |
 | `ScrollKey` | `data-scroll-key` | a per-region key whose scroll position survives a patch |
+| `ReadingKeys` | `data-reading-keys` | presence on a focusable (`tabindex="0"`) scrolling region: `ArrowUp`/`PageUp` scroll it, `Home`/`End` go to the top/the bottom, and `Escape` returns to the live tail only while no layer is open. deliberately not a plural of `data-scroll-key` — that name remembers an offset across a patch, this one moves the offset from the keyboard |
 | `ScrollTo` | `data-scroll-to` | the element id to scroll to, with the 1.4 s flash contract; an empty value scrolls the document to the top |
 | `ScrollTo` (flash) | `data-scroll-flash` | presence while the scroll-to target flashes (engine-written, removed after 1400 ms) |
 | `DraftIdentity` | `data-draft-id` | the draft key a control's unsubmitted value is remembered under |

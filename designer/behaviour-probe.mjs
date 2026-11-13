@@ -624,6 +624,153 @@ if (!clipboardGranted) {
   });
   if (offState === null) ok('data-follow="off": the region is never bound (no follow state is written)');
   else bad(`data-follow="off": the engine wrote ${JSON.stringify(offState)}`);
+
+  // the second patch kind: a streamed-text delta on the feed's tail. nothing is
+  // replaced, so the old bind-time memo could never see it; capture runs on
+  // every patch kind and syncFollow applies the pass after the ops land.
+  await page.evaluate(() => {
+    const el = document.getElementById("feed");
+    el.scrollTop = el.scrollHeight;
+    el.dispatchEvent(new Event("scroll"));
+  });
+  await page.waitForTimeout(150);
+  await page.evaluate(() => document.getElementById("stream").click());
+  await page.waitForTimeout(450);
+  await page.evaluate(() => document.getElementById("stream").click());
+  await page.waitForTimeout(450);
+  const streamed = await page.evaluate(() => {
+    const el = document.getElementById("feed");
+    return {
+      gap: el.scrollHeight - el.scrollTop - el.clientHeight,
+      state: el.getAttribute("data-follow-state"),
+      lines: (document.getElementById("feed-tail")?.textContent || "").split("\n").length,
+    };
+  });
+  if (streamed.gap <= 24 && streamed.state === null && streamed.lines === 2) {
+    ok(`data-follow: two streamed text deltas from the bottom stay pinned (gap ${streamed.gap}px, no data-follow-state, ${streamed.lines} lines)`);
+  } else {
+    bad(`data-follow: streamed deltas from the bottom produced ${JSON.stringify(streamed)}`);
+  }
+
+  await page.evaluate(() => {
+    const el = document.getElementById("feed");
+    el.scrollTop = 0;
+    el.dispatchEvent(new Event("scroll"));
+  });
+  await page.waitForTimeout(150);
+  await page.evaluate(() => document.getElementById("stream").click());
+  await page.waitForTimeout(450);
+  const awayText = await page.evaluate(() => ({
+    state: document.getElementById("feed").getAttribute("data-follow-state"),
+    top: document.getElementById("feed").scrollTop,
+  }));
+  if (awayText.state === "away" && awayText.top <= 24) {
+    ok(`data-follow-state: a streamed text delta while the reader is up does not yank it (top ${awayText.top}px, state "away")`);
+  } else {
+    bad(`data-follow-state: a streamed text delta while detached produced ${JSON.stringify(awayText)}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 17b. data-reading-keys — the keyboard drives the scroller, and a layer's
+//      Escape wins before the reader's return to the live tail.
+// ---------------------------------------------------------------------------
+{
+  await page.focus("#reader");
+  const focused = await page.evaluate(() => document.activeElement?.id ?? null);
+  await page.keyboard.press("End");
+  await page.waitForTimeout(150);
+  const atEnd = await page.evaluate(() => {
+    const el = document.getElementById("reader");
+    return { top: el.scrollTop, max: el.scrollHeight - el.clientHeight };
+  });
+  if (focused === "reader" && atEnd.max > 0 && atEnd.top >= atEnd.max - 2) {
+    ok(`data-reading-keys: End scrolls the focused region to the bottom (${atEnd.top}/${atEnd.max})`);
+  } else {
+    bad(`data-reading-keys: focus ${JSON.stringify(focused)}, End left ${JSON.stringify(atEnd)}`);
+  }
+
+  await page.keyboard.press("Home");
+  await page.waitForTimeout(150);
+  const atHome = await page.evaluate(() => document.getElementById("reader").scrollTop);
+  if (atHome === 0) ok("data-reading-keys: Home scrolls it back to the top");
+  else bad(`data-reading-keys: Home left scrollTop ${atHome}`);
+
+  await page.evaluate(() => { const el = document.getElementById("reader"); el.scrollTop = el.scrollHeight; });
+  const fromEnd = await page.evaluate(() => document.getElementById("reader").scrollTop);
+  await page.keyboard.press("PageUp");
+  await page.waitForTimeout(150);
+  const afterPageUp = await page.evaluate(() => document.getElementById("reader").scrollTop);
+  await page.keyboard.press("ArrowUp");
+  await page.waitForTimeout(150);
+  const afterArrow = await page.evaluate(() => document.getElementById("reader").scrollTop);
+  if (afterPageUp < fromEnd && afterArrow < afterPageUp) {
+    ok(`data-reading-keys: PageUp and ArrowUp scroll the region up (${fromEnd} -> ${afterPageUp} -> ${afterArrow})`);
+  } else {
+    bad(`data-reading-keys: PageUp/ArrowUp produced ${fromEnd} -> ${afterPageUp} -> ${afterArrow}`);
+  }
+
+  // a layer's Escape is the reader's first intent: open layer A programmatically
+  // so focus stays on the reader, then press Escape. the layer must close and
+  // the reader must not move.
+  await page.evaluate(() => document.getElementById("open-a").click());
+  await page.waitForTimeout(500);
+  await page.focus("#reader");
+  const beforeLayer = await page.evaluate(() => {
+    const el = document.getElementById("reader");
+    el.scrollTop = 40;
+    return { top: el.scrollTop, layer: !!document.getElementById("layer-a") };
+  });
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(500);
+  const afterLayer = await page.evaluate(() => ({
+    top: document.getElementById("reader").scrollTop,
+    layer: !!document.getElementById("layer-a"),
+  }));
+  if (beforeLayer.layer && !afterLayer.layer && afterLayer.top === beforeLayer.top) {
+    ok("data-reading-keys: with a layer open, Escape closes the layer and does NOT move the reader");
+  } else {
+    bad(`data-reading-keys: layer Escape produced before ${JSON.stringify(beforeLayer)}, after ${JSON.stringify(afterLayer)}`);
+  }
+
+  // this fixture always renders the combo panel, which is a dismiss layer on
+  // screen for the life of the page (the hazard §5 arms `data-open` against), so
+  // `topLayer()` is never null here — Escape keeps choosing the layer. the
+  // no-layer branch is proved on the bare render below, which ships no layer.
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(300);
+  const afterStillLayered = await page.evaluate(() => document.getElementById("reader").scrollTop);
+  if (afterStillLayered === beforeLayer.top) {
+    ok("data-reading-keys: while any layer is on screen, Escape leaves the reader put (the layer keeps the key)");
+  } else {
+    bad(`data-reading-keys: Escape moved the reader to ${afterStillLayered} while a layer was still on screen`);
+  }
+
+  const barePage = await context.newPage();
+  await barePage.goto(BASE + "/behaviour?bare=reader", { waitUntil: "domcontentloaded" });
+  await barePage.waitForTimeout(700);
+  await barePage.focus("#reader");
+  const bareBefore = await barePage.evaluate(() => {
+    const el = document.getElementById("reader");
+    el.scrollTop = 40;
+    return {
+      top: el.scrollTop,
+      max: el.scrollHeight - el.clientHeight,
+      layers: document.querySelectorAll("[data-dismiss]").length,
+    };
+  });
+  await barePage.keyboard.press("Escape");
+  await barePage.waitForTimeout(200);
+  const bareAfter = await barePage.evaluate(() => {
+    const el = document.getElementById("reader");
+    return { top: el.scrollTop, max: el.scrollHeight - el.clientHeight };
+  });
+  if (bareBefore.layers === 0 && bareBefore.max > 0 && bareAfter.top >= bareAfter.max - 2) {
+    ok(`data-reading-keys: with no layer open, Escape returns the reader to the live tail (${bareAfter.top}/${bareAfter.max})`);
+  } else {
+    bad(`data-reading-keys: the no-layer Escape left ${JSON.stringify({ before: bareBefore, after: bareAfter })}`);
+  }
+  await barePage.close();
 }
 
 // ---------------------------------------------------------------------------

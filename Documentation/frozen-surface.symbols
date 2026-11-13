@@ -10,7 +10,7 @@
 # forced it. `Tests/WebUITests/FrozenSurfaceTests.swift` fails when this
 # file and a fresh extraction diverge, naming every added and removed symbol.
 #
-# re-measured 2026-11-13: 5483 symbols across 11 modules.
+# re-measured 2026-11-13: 5490 symbols across 11 modules.
 
 ## WebUISharedCore
 
@@ -1867,6 +1867,13 @@ Raw.content
 Raw.init(_:)
 Raw.markup
 Raw.render(into:)
+ReadingKeys
+ReadingKeys.attribute()
+ReadingKeys.init()
+ReadingKeysAttribute
+ReadingKeysAttribute.init()
+ReadingKeysAttribute.name
+ReadingKeysAttribute.value
 Recoverable
 Recoverable.Fallback
 Recoverable.fallback

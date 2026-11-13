@@ -62,9 +62,26 @@ all notable changes to this project are documented here.
   remembered page (unknown, or evicted at `maxSessions`) answers its sockets with
   the existing `refresh` error frame instead of silence. binding is lazy: a socket
   reaches the fan-out only after its first token-bearing frame.
+- **`data-reading-keys`** — `ReadingKeys()` on a focusable (`tabindex="0"`)
+  scrolling region makes the keyboard a reader: `ArrowUp`/`PageUp` scroll it by
+  a line/a page, `Home`/`End` jump to the top/the bottom, and `Escape` returns to
+  the live tail **only while no layer is open** — an open layer's `Escape` wins,
+  so the key closes what is on top first. it is its own dispatch key in the main
+  asset (Escape and `topLayer()` are main-owned), and deliberately not a plural
+  of `data-scroll-key`: that spelling remembers an offset across a patch, this
+  one moves the offset from the keyboard.
 
 ### changed
 
+- **scroll follow runs on every patch kind.** `capture()` records each
+  `[data-follow]` region's at-the-bottom state before *any* patch — including
+  all-`append` and `text` batches, where nothing is replaced — and a new
+  `syncFollow()` pass applies that memory after the ops land: a reader who was at
+  the bottom stays pinned through an appended row or a streamed-text delta, and
+  one who was not gets `data-follow-state="away"` without being yanked. first
+  bind now evaluates the mount position instead of waiting for the first patch.
+  `data-follow="off"` stays inert, and the per-region scroll listener is
+  unchanged.
 - **the upload wire: `data-upload-into` is a relative directory, and the engine
   sends the composed file path.** `UploadDestination.folder(path:)` no longer
   serializes a `folder:` scheme — `.folder(path: "docs")` is `docs`, normalized

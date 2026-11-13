@@ -36,6 +36,7 @@ struct BehaviourVocabularyTests {
 		"data-follow-state",
 		"data-scroll-key",
 		"data-scroll-to",
+		"data-reading-keys",
 		"data-draft-id",
 		"data-focus-return",
 		"data-dismiss",
@@ -146,6 +147,7 @@ struct BehaviourVocabularyTests {
 	/// a dead control.
 	private static let dispatched: Set<String> = [
 		"data-follow",
+		"data-reading-keys",
 		"data-scroll-key",
 		"data-scroll-to",
 		"data-draft-id",
@@ -245,12 +247,12 @@ struct BehaviourVocabularyTests {
 		let ext = try Self.dispatchTableKeys(in: sources[1])
 		let keys = core.union(ext)
 		#expect(keys.count >= 23, "the dispatch table read as \(keys.count) keys — the gate would pass vacuously")
-		// the split is a checked property, not a memory: eight patch-survival
+		// the split is a checked property, not a memory: nine patch-survival
 		// consequences in the engine, fifteen interaction consequences behind
 		// the extension's fetch (the upload transport is the fifteenth), and no
 		// key registered twice (a duplicate binder is a dead copy of a
 		// consequence).
-		#expect(core.count == 8, "the engine's table read as \(core.count) keys, expected the 8 patch-survival consequences")
+		#expect(core.count == 9, "the engine's table read as \(core.count) keys, expected the 9 patch-survival consequences")
 		#expect(ext.count == 15, "the extension's table read as \(ext.count) keys, expected the 15 interaction consequences")
 		#expect(
 			core.intersection(ext).isEmpty,

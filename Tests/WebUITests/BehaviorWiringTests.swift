@@ -129,4 +129,17 @@ struct BehaviorWiringTests {
 		#expect(!closed.contains("data-preserve-open"), "no id, no promise of preservation: \(closed)")
 		#expect(!closed.contains(" open>"), "closed by default: \(closed)")
 	}
+
+	// MARK: - ReadingKeys
+
+	@Test("ReadingKeys: a bare presence marker on the element that scrolls")
+	func readingKeysWiring() {
+		let attribute = ReadingKeys().attributeText
+		#expect(attribute == " data-reading-keys", "a presence marker is the bare spelling: \(attribute)")
+		#expect(ReadingKeysAttribute.name == "data-reading-keys", "the name is the dispatch key: \(ReadingKeysAttribute.name)")
+
+		let out = html(Element(.div) { Text("lines") }.behavior(ReadingKeys()))
+		#expect(out.contains("data-reading-keys"), "the marker reaches the element: \(out)")
+		#expect(!out.contains("data-reading-keys=\""), "and never carries a value: \(out)")
+	}
 }

@@ -26,6 +26,7 @@ final class BehaviourFixtureState: Sendable {
 		var refreshes = 0
 		var uploads: [String: String] = [:]
 		var templated: [String] = []
+		var streamLines: [String] = []
 	}
 	private let values = Mutex(Values())
 
@@ -76,6 +77,20 @@ final class BehaviourFixtureState: Sendable {
 		get { values.withLock { $0.refreshes } }
 		set { values.withLock { $0.refreshes = newValue } }
 	}
+
+	/// the streamed-delta fixture: `#stream` appends one line and the handler
+	/// answers with a **single `text` fragment** carrying the accumulated text
+	/// — the patch kind the follow pass has to survive without a replacement.
+	func appendStreamLine() -> String {
+		values.withLock {
+			$0.streamLines.append("stream line \($0.streamLines.count + 1) (delta)")
+			return $0.streamLines.joined(separator: "\n")
+		}
+	}
+
+	var streamText: String {
+		values.withLock { $0.streamLines.joined(separator: "\n") }
+	}
 }
 
 // MARK: - fragments
@@ -100,6 +115,7 @@ func behaviourFeedHTML(_ state: BehaviourFixtureState) -> String {
 	<div id="thread-\(n)"\(ScrollKey(key: "thread").attributeText) class="fx-thread" aria-label="thread">\(threadLines)</div>
 	<div id="focus-region"\(FocusReturn(id: "panel-search").attributeText) class="fx-focus"><a id="feed-link" href="#feed-more">a link inside the replaced region</a><input id="panel-search" type="search" aria-label="search the feed" placeholder="search"></div>
 	<ul class="fx-items">\(rows)</ul>
+	<pre id="feed-tail" class="fx-tail">\(htmlEscape(state.streamText))</pre>
 	</div>
 	"""
 }
@@ -150,6 +166,8 @@ let behaviourFixtureStyle: String = """
 	.fx-inline { border: 1px solid #ccc; padding: 6px; }
 	.fx-inline[data-editing] { border-color: #06c; }
 	.fx-roving button { margin-right: 4px; }
+	.fx-tail { margin: 6px 0 0; }
+	.fx-reader { height: 120px; overflow-y: auto; border: 1px solid #ccc; padding: 6px; }
 	.fx-upload-zone { width: 22rem; max-width: 100%; }
 	</style>
 	"""
@@ -158,7 +176,8 @@ let behaviourFixtureStyle: String = """
 /// order, so a failure names the attribute and the section it lives in.
 func renderBehaviourPage(
 	state: BehaviourFixtureState,
-	renderToken: String
+	renderToken: String,
+	bareReader: Bool = false
 ) -> String {
 	let now = state.stamp
 	let followOff = ScrollFollow(mode: .off).attributeText
@@ -198,7 +217,17 @@ func renderBehaviourPage(
 	for i in 0..<30 {
 		refreshLines += "<p>refresh line \(i + 1)</p>"
 	}
-	let body = """
+	var readerLines = ""
+	for i in 0..<24 {
+		readerLines += "<p>reader line \(i + 1)</p>"
+	}
+	let body = bareReader ? """
+	<main class="fx">
+	<h1>Reading keys, bare</h1>
+	<p class="fx-muted">the same reader on a page that renders no layer at all: with no layer open, Escape returns it to the live tail.</p>
+	<div id="reader" class="fx-reader" tabindex="0" aria-label="reader"\(ReadingKeys().attributeText)>\(readerLines)</div>
+	</main>
+	""" : """
 	<main class="fx">
 	<h1>Behavior fixture</h1>
 	<p class="fx-muted">Every attribute in the register, on one page, driven by <code>designer/behaviour-probe.mjs</code>.</p>
@@ -212,11 +241,16 @@ func renderBehaviourPage(
 	</div>
 
 	<section class="fx-sec"><h2>scroll follow · scroll key · disclosure · focus return</h2>
-	<div class="fx-row"><button id="patch" type="button" data-component-id="fx-patch" data-event="click">Grow feed</button><button id="to-target" type="button"\(ScrollTo(id: "scroll-target").attributeText)>Jump to the marker</button><button id="to-top" type="button"\(ScrollTo(id: "").attributeText)>Back to the document top</button></div>
+	<div class="fx-row"><button id="patch" type="button" data-component-id="fx-patch" data-event="click">Grow feed</button><button id="stream" type="button" data-component-id="fx-stream" data-event="click">Stream a line</button><button id="to-target" type="button"\(ScrollTo(id: "scroll-target").attributeText)>Jump to the marker</button><button id="to-top" type="button"\(ScrollTo(id: "").attributeText)>Back to the document top</button></div>
 	\(behaviourFeedHTML(state))
 	<div class="fx-row"><button id="to-feed" type="button"\(ScrollTo(id: "feed").attributeText)>Jump to the feed</button></div>
 	<div id="follow-off"\(followOff) class="fx-thread" aria-label="not followed"><p>off</p><p>off</p><p>off</p><p>off</p><p>off</p><p>off</p><p>off</p><p>off</p><p>off</p><p>off</p><p>off</p><p>off</p></div>
 	<input id="draft" type="text" aria-label="draft" placeholder="draft"\(DraftIdentity(key: "note").attributeText)>
+	</section>
+
+	<section class="fx-sec"><h2>reading keys</h2>
+	<p class="fx-muted">focus the reader, then use ArrowUp/PageUp/Home/End; Escape returns to the live tail unless a layer is open.</p>
+	<div id="reader" class="fx-reader" tabindex="0" aria-label="reader"\(ReadingKeys().attributeText)>\(readerLines)</div>
 	</section>
 
 	<section class="fx-sec" id="fx-refresh-region" data-component-id="fx-refresh-region"><h2>refresh contract</h2>
@@ -346,6 +380,11 @@ struct BehaviourPageResponder: Responder {
 			state.feed += 1
 			return .fragments([FragmentUpdate(id: "feed", html: behaviourFeedHTML(state))])
 		}, for: ComponentID("fx-patch"), in: session)
+		// the streamed-delta fixture: one text op per click, never a replace —
+		// the patch kind `capture()`'s follow loop has to see.
+		router.register(outcome: { _ in
+			.fragments([FragmentUpdate.text(id: "feed-tail", value: state.appendStreamLine())])
+		}, for: ComponentID("fx-stream"), in: session)
 		router.register(outcome: { _ in
 			.fragments([FragmentUpdate(id: "layers", html: behaviourLayerAHTML())])
 		}, for: ComponentID("fx-open-a"), in: session)
@@ -403,7 +442,11 @@ struct BehaviourPageResponder: Responder {
 			)
 			return .refresh
 		}, for: ComponentID("fx-upload-c"), in: session)
-		let html = renderBehaviourPage(state: state, renderToken: request.renderToken.value)
+		let html = renderBehaviourPage(
+			state: state,
+			renderToken: request.renderToken.value,
+			bareReader: request.query["bare"] == "reader"
+		)
 		return HTTPResponse(headers: smokeHeaders(), body: .html(UnsafeMarkup.trusted(html)))
 	}
 }

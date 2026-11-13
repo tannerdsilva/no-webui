@@ -768,3 +768,35 @@ public struct UploadNameTemplate: AttributeRepresentable, Sendable, Equatable, H
 
 	public var value: String { template }
 }
+
+// MARK: - 24. reading keys
+
+/// a scrolling region a reader can drive from the keyboard.
+///
+/// the element that carries this attribute is the region, not a control inside
+/// it: while focus is anywhere inside the region, `ArrowUp`/`PageUp` scroll it
+/// by a line/a page, `Home`/`End` jump to the top/the bottom, and `Escape`
+/// returns to the live tail — but only when no layer is open, because a layer's
+/// `Escape` is the reader's first intent. the element needs a `tabindex` (0) to
+/// take focus at all; a scroller without one is inert.
+///
+/// deliberately not a plural of `data-scroll-key`: that attribute names a
+/// *memory* (an offset that survives a patch), this one names a *keyboard*
+/// consequence. one spelling for two unrelated consequences would make each
+/// unreadable at the site that carries only one of them.
+public struct ReadingKeys: Behavior {
+	public init() {}
+
+	public func attribute() -> ReadingKeysAttribute {
+		ReadingKeysAttribute()
+	}
+}
+
+/// `data-reading-keys` — the serialized form of ``ReadingKeys``.
+public struct ReadingKeysAttribute: AttributeRepresentable {
+	public static let name = "data-reading-keys"
+
+	public init() {}
+
+	public var value: String { "" }
+}
