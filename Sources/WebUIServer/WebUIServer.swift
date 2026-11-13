@@ -253,6 +253,9 @@ public actor WebUIServer {
 	private let config: WebUIServerConfig
 	private let logger: Logger
 	private var lifecycle: Lifecycle?
+	/// the runner `start()` built — held so diagnostics (the refresh state's
+	/// size) can be read without reaching into a serving process.
+	private var runner: Runner?
 	/// how many websocket frames the decoder refused as over budget since this
 	/// server started.
 	///
@@ -361,6 +364,7 @@ public actor WebUIServer {
 		DesignSystemAssets.prewarm()
 		let cfg = config
 		let runner = Runner(router: router, pageRouter: pageRouter, config: cfg, logger: logger, sinks: sinks)
+		self.runner = runner
 		let group = MultiThreadedEventLoopGroup(numberOfThreads: System.coreCount)
 		let bootstrap = ServerBootstrap(group: group)
 			.serverChannelOption(ChannelOptions.backlog, value: 128)
@@ -570,6 +574,17 @@ public actor WebUIServer {
 		router
 	}
 
+	/// the refresh state's size, for tests and diagnostics: how many sessions
+	/// remember a page, how many hold a diff baseline, and how many sockets are
+	/// bound to a session.
+	///
+	/// the first two are capped by `maxSessions` and the third by
+	/// `maxConnections` — a test reads these to prove the refresh state is
+	/// bounded, never to reach into it. zero before ``start()``.
+	package var refreshStateCounts: (renders: Int, baselines: Int, bindings: Int) {
+		runner?.refreshStateCounts ?? (0, 0, 0)
+	}
+
 	// MARK: - lifecycle state
 
 	struct Lifecycle: Sendable {
@@ -765,7 +780,23 @@ final class ConnectionSinks: Sendable {
 	/// snapshot and the writes simply misses this push — it will be rendered
 	/// from current state on its own first request.
 	func broadcast(_ bytes: [UInt8]) async {
-		let targets = state.withLock { Array($0) }
+		await write(bytes, to: state.withLock { Array($0) })
+	}
+
+	/// push `bytes` to the named connections only — the session-scoped arm.
+	///
+	/// a refresh fans out to the sockets that speak for one render session, so
+	/// a page in another session is never woken by it. an id that closed
+	/// between the snapshot and the write is simply absent; a failed write
+	/// drops the entry, exactly as a global push does.
+	func send(_ bytes: [UInt8], to ids: [Int]) async {
+		let targets = state.withLock { table in
+			ids.compactMap { id in table[id].map { (id, $0) } }
+		}
+		await write(bytes, to: targets)
+	}
+
+	private func write(_ bytes: [UInt8], to targets: [(Int, Target)]) async {
 		guard !targets.isEmpty else { return }
 		for (id, target) in targets {
 			var buffer = ByteBufferAllocator().buffer(capacity: bytes.count)
@@ -893,22 +924,49 @@ final class Runner: Sendable {
 
 	// MARK: region diff state (design E)
 
+	/// the page a session last rendered — everything `HandlerOutcome.refresh`
+	/// needs to re-render the page the session is already on, as the identity
+	/// it was rendered for.
+	private struct LastRender: Sendable {
+		let path: String
+		let query: [String: String]
+		let principal: SessionKey?
+	}
+
 	/// what a re-render is diffed against: the last render's region hashes per
-	/// render session, and the session each live socket has already spoken as.
+	/// render session, the page each session last rendered, and the session
+	/// each live socket has already spoken as.
 	///
 	/// hashes only — never html. 8 bytes per region per session is the whole
 	/// reason a patch can be built without keeping the previous page.
 	private struct DiffState: Sendable {
 		var baselines: [RenderSessionID: (baseline: RenderBaseline, tick: UInt64)] = [:]
+		/// the remembered page per session. bounded by `maxSessions` and evicted
+		/// oldest-first beside the baselines: a page that fell off the router's
+		/// session table cannot speak, so it cannot refresh either — which is
+		/// what keeps this map from ever growing past the sessions that could
+		/// use it (plan risk 6).
+		var lastRenders: [RenderSessionID: (render: LastRender, tick: UInt64)] = [:]
 		/// connection id → the render session its page belongs to. the engine's
 		/// `navigate` frame carries no token (it is a client-side history
 		/// event), so the socket's last token-bearing frame is what a navigate
 		/// can be attributed to.
 		var sessions: [Int: RenderSessionID] = [:]
+		/// the reverse index, session → the sockets that currently speak for it:
+		/// the refresh fan-out's targets. a connection is in exactly one set
+		/// (`bind` moves it), an empty set is dropped, and both maps are cleaned
+		/// on close — so the index is bounded by `maxConnections`, never by the
+		/// frames a page sends.
+		var connections: [RenderSessionID: Set<Int>] = [:]
 		var tick: UInt64 = 0
 	}
 
 	private let diff = Mutex(DiffState())
+
+	/// the size of the refresh state, for the server's diagnostics accessor.
+	var refreshStateCounts: (renders: Int, baselines: Int, bindings: Int) {
+		diff.withLock { ($0.lastRenders.count, $0.baselines.count, $0.sessions.count) }
+	}
 
 	/// the `id` a page's patchable root carries, as a substring test.
 	private static var pageRegionMarker: String { "id=\"\(WebUIServer.pageRegionID)\"" }
@@ -933,22 +991,70 @@ final class Runner: Sendable {
 		}
 	}
 
+	/// remember the page a render just served, so `HandlerOutcome.refresh` can
+	/// re-render it. bounded exactly like the baselines, by the same cap.
+	private func recordLastRender(_ render: LastRender, for session: RenderSessionID) {
+		let cap = max(1, config.maxSessions)
+		diff.withLock { state in
+			state.tick &+= 1
+			state.lastRenders[session] = (render, state.tick)
+			guard state.lastRenders.count > cap else { return }
+			let doomed = state.lastRenders
+				.sorted { $0.value.tick < $1.value.tick }
+				.prefix(state.lastRenders.count - cap)
+				.map(\.key)
+			for key in doomed { state.lastRenders.removeValue(forKey: key) }
+		}
+	}
+
+	/// the page `session` last rendered, or nil when no render of this server
+	/// served it (an evicted session, or a session nothing ever rendered).
+	private func lastRender(for session: RenderSessionID) -> LastRender? {
+		diff.withLock { $0.lastRenders[session]?.render }
+	}
+
 	/// the previous render's hashes for `session`, or nil when this session's
 	/// page has not been rendered by this server.
 	private func baseline(for session: RenderSessionID) -> RenderBaseline? {
 		diff.withLock { $0.baselines[session]?.baseline }
 	}
 
+	/// bind a socket to the render session its frames speak for.
+	///
+	/// one connection belongs to one session: a frame naming a different token
+	/// MOVES the socket, so a refresh reaches the sockets that currently speak
+	/// for the session and never one that has moved on.
 	private func bind(_ connection: Int, to session: RenderSessionID) {
-		diff.withLock { $0.sessions[connection] = session }
+		diff.withLock { state in
+			if let previous = state.sessions[connection], previous != session {
+				state.connections[previous]?.remove(connection)
+				if state.connections[previous]?.isEmpty == true {
+					state.connections.removeValue(forKey: previous)
+				}
+			}
+			state.sessions[connection] = session
+			state.connections[session, default: []].insert(connection)
+		}
 	}
 
 	private func session(ofConnection connection: Int) -> RenderSessionID? {
 		diff.withLock { $0.sessions[connection] }
 	}
 
+	/// drop a closed connection from both directions of the index.
 	private func releaseConnection(_ connection: Int) {
-		diff.withLock { _ = $0.sessions.removeValue(forKey: connection) }
+		diff.withLock { state in
+			guard let session = state.sessions.removeValue(forKey: connection) else { return }
+			state.connections[session]?.remove(connection)
+			if state.connections[session]?.isEmpty == true {
+				state.connections.removeValue(forKey: session)
+			}
+		}
+	}
+
+	/// every socket currently bound to `session` — the refresh fan-out's targets.
+	private func connections(for session: RenderSessionID) -> [Int] {
+		diff.withLock { Array($0.connections[session] ?? []) }
 	}
 
 	/// what an in-place re-render puts on the wire.
@@ -962,9 +1068,15 @@ final class Runner: Sendable {
 		session: RenderSessionID,
 		url: String
 	) -> WSOutgoing? {
-		let snapshot = RenderSnapshot.derived(fromMarkup: html)
+		// one policy for the baseline and the diff: `config.refreshPolicy`
+		// decides which regions are tracked, and the snapshot recorded here is
+		// compared under the same rule, so a session is never diffed under two
+		// regimes (an exclusion that only one side knew about would read as a
+		// residue change and escalate every refresh to a full page).
+		let policy = config.refreshPolicy
+		let snapshot = RenderSnapshot.derived(fromMarkup: html, policy: policy)
 		let prior = baseline(for: session)
-		let patch = RenderDiffer(previous: prior).patch(snapshot)
+		let patch = RenderDiffer(previous: prior, policy: policy).patch(snapshot)
 		recordBaseline(snapshot, for: session)
 		if !patch.isFullPage {
 			guard !patch.changed.isEmpty else { return nil }
@@ -1182,6 +1294,13 @@ final class Runner: Sendable {
 				bind(connection, to: session)
 				let eventData = EventData(component: ComponentID(component), event: event, data: data)
 				let outcome = await router.dispatch(eventData, in: session)
+				if case .refresh = outcome {
+					// the outcome carries no session: it is applied to the one
+					// this event was dispatched in, and that is also the one
+					// whose sockets receive the fan-out.
+					await refresh(session: session, principal: principal)
+					return true
+				}
 				for frame in frames(of: outcome) {
 					try await writeJSON(frame, outbound: outbound)
 				}
@@ -1276,12 +1395,22 @@ final class Runner: Sendable {
 		// onto the re-render: a navigate frame has no headers of its own, and
 		// a host that renders per-identity content needs the identity the
 		// socket already proved rather than a second, weaker resolution.
-		let request = HTTPRequest(
+		var request = HTTPRequest(
 			method: .get,
 			path: pathPart,
 			query: parseQuery(navigateQuery(url)),
 			renderToken: RenderToken(""),
 			principal: principal
+		)
+		// the re-render is a navigate, not a load: a host that arms a
+		// load-only side effect (scroll-to-bottom, a history push) must not
+		// replay it here.
+		request.renderIntent = .navigate
+		// this is the page the session is on now, and what a later
+		// `HandlerOutcome.refresh` re-renders.
+		recordLastRender(
+			LastRender(path: pathPart, query: request.query, principal: principal),
+			for: session
 		)
 		// the re-render takes the same path a fresh page request takes: a
 		// session pass, the render context established for its duration — but
@@ -1329,6 +1458,111 @@ final class Runner: Sendable {
 		}
 		guard let frame else { return }
 		try? await writeJSON(frame, outbound: outbound)
+	}
+
+	// MARK: refresh
+
+	/// answer `HandlerOutcome.refresh`: re-render the dispatch session's page
+	/// and fan the diff out to every socket that session holds.
+	///
+	/// authority is the dispatch context, never a value a handler returns
+	/// (§22.2): `session` is the session the event was routed in, so no handler
+	/// can name another page. the re-render is the navigate path's shape —
+	/// `begin(preservingRegistrations:)`, the render context for the pass, the
+	/// page router — and the bytes are diffed against this session's baseline,
+	/// so a refresh ships the regions an interaction would and never a document.
+	///
+	/// every failure answers the session's sockets: a refresh that throws must
+	/// not leave a page waiting for a frame that will not come.
+	private func refresh(session: RenderSessionID, principal: SessionKey?) async {
+		guard let remembered = lastRender(for: session) else {
+			logger.error(
+				"WebUIServer: refresh asked in session '\(session.rawValue)' with no remembered page"
+			)
+			await fanOut(
+				.error(code: "refresh", message: "this session has no page to refresh"),
+				session: session
+			)
+			return
+		}
+		let url = Self.urlString(path: remembered.path, query: remembered.query)
+		// the token the page already publishes: `RenderSessionID` IS the token
+		// value a page was rendered under, so re-rendering with it keeps a page
+		// that echoes the token into its body byte-identical across a refresh.
+		// a tokenless page routes in `.default`, whose name is not a token.
+		var request = HTTPRequest(
+			method: .get,
+			path: remembered.path,
+			query: remembered.query,
+			renderToken: session == .default ? RenderToken("") : RenderToken(session.rawValue),
+			principal: remembered.principal ?? principal
+		)
+		request.renderIntent = .refresh
+		router.begin(session, preservingRegistrations: true)
+		let response: HTTPResponse
+		do {
+			response = try await RenderContext.$current.withValue(
+				RenderContext(router: router, session: session)
+			) {
+				try await pageRouter.respond(to: request)
+			}
+		} catch {
+			logger.error("WebUIServer: refresh re-render failed for \(url): \(error)")
+			await fanOut(
+				.error(code: "render", message: "refresh failed: \(error)"),
+				session: session
+			)
+			return
+		}
+		let frame: WSOutgoing?
+		switch response.body {
+		case .html(let markup):
+			frame = diffFrame(after: markup.html, session: session, url: url)
+		case .redirect(let to, _):
+			frame = .redirect(url: to, replace: true)
+		default:
+			// the remembered path no longer renders a page (a route removed, a
+			// handler that answered text): answer the document load it would
+			// take to get one.
+			frame = .redirect(url: url, replace: true)
+		}
+		guard let frame else { return }
+		await fanOut(frame, session: session)
+	}
+
+	/// send one frame to every socket bound to `session` — and to none other.
+	private func fanOut(_ frame: WSOutgoing, session: RenderSessionID) async {
+		let targets = connections(for: session)
+		guard !targets.isEmpty else { return }
+		await sinks.send(frame.jsonBytes, to: targets)
+	}
+
+	/// a rendered path + query as one url: the fallback a refresh answers with
+	/// when the remembered path is no longer a page.
+	private static func urlString(path: String, query: [String: String]) -> String {
+		guard !query.isEmpty else { return path }
+		let pairs = query
+			.sorted { $0.key < $1.key }
+			.map { "\(percentEncode($0.key))=\(percentEncode($0.value))" }
+			.joined(separator: "&")
+		return "\(path)?\(pairs)"
+	}
+
+	/// percent-encode one query component: unreserved characters stay literal,
+	/// everything else becomes `%XX` over its utf-8 bytes.
+	private static func percentEncode(_ text: String) -> String {
+		var out = ""
+		out.reserveCapacity(text.utf8.count)
+		for byte in text.utf8 {
+			switch byte {
+			case 0x41...0x5A, 0x61...0x7A, 0x30...0x39, // A-Z a-z 0-9
+				 0x2D, 0x2E, 0x5F, 0x7E:               // - . _ ~
+				out.append(Character(UnicodeScalar(byte)))
+			default:
+				out += String(format: "%%%02X", byte)
+			}
+		}
+		return out
 	}
 
 	/// the routed path of a navigate url: everything before '?' and '#', with
@@ -1694,6 +1928,10 @@ final class Runner: Sendable {
 			body: requestBody,
 			renderToken: token
 		)
+		// an http page request is a load; the two re-render paths annotate
+		// their own requests (`.navigate`, `.refresh`) and nothing else writes
+		// this field.
+		request.renderIntent = .load
 		// the authorizer is asked here — once, before the router sees the
 		// request — and its answer is stamped on the request rather than kept
 		// by the server. that is the whole seam: a responder reads identity
@@ -1734,8 +1972,23 @@ final class Runner: Sendable {
 		// of the same page can be diffed against it and an interaction ships
 		// only the regions that moved. hashes only — the page's bytes are not
 		// retained. one byte scan per page render, and nothing after it.
+		//
+		// remembered under `refreshPolicy` too, because that is the policy the
+		// next diff will compare with — one baseline, one regime.
 		if case .html(let markup) = response.body, !token.value.isEmpty {
-			recordBaseline(RenderSnapshot.derived(fromMarkup: markup.html), for: session)
+			recordBaseline(
+				RenderSnapshot.derived(fromMarkup: markup.html, policy: config.refreshPolicy),
+				for: session
+			)
+		}
+		// and the page this session is on, so `HandlerOutcome.refresh` knows
+		// what to re-render. a GET is a page; a POST's response is not a page a
+		// later refresh can ask for again.
+		if method == .get {
+			recordLastRender(
+				LastRender(path: path, query: request.query, principal: request.principal),
+				for: session
+			)
 		}
 		return try await respond(channel: channel, response: response)
 	}

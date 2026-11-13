@@ -403,6 +403,97 @@ extension View {
     }
 }
 
+// MARK: - Control
+//
+// the first-class stable-id door (§22.2 D2, G7 #2). `controlAttributes`
+// registers during a render pass and emits its routing pair — but only when a
+// `RenderContext` is present, and a host that re-renders a fragment *outside*
+// one (the shape every push edge has) lost `data-component-id` on the first
+// replacement. `.control` splits the two halves deliberately: the pair is a
+// property of the control and always ships; registration is a property of the
+// pass and happens when there is a pass to register in.
+//
+// the handler is an `OutcomeHandler`, not an `EventHandler`, because the door
+// this modifier exists for is `HandlerOutcome.refresh` — a handler that
+// re-renders the page and lets the server diff it. `fragments:` is the 1.x
+// shape, forwarded, so a host migrating one control at a time keeps compiling.
+
+/// the modifier ``View/control(id:on:perform:)`` stands on.
+public struct ControlModifier: ViewModifier {
+    /// the stable component id this control routes under — emitted as
+    /// `data-component-id` and registered as the handler's key.
+    public let componentID: String
+    public let event: HTMLEvent
+    public let handler: OutcomeHandler
+
+    public init(componentID: String, event: HTMLEvent, handler: @escaping OutcomeHandler) {
+        self.componentID = componentID
+        self.event = event
+        self.handler = handler
+    }
+
+    /// emit the routing pair onto the element the content opens, and register
+    /// the handler when a render pass is in force.
+    ///
+    /// outside a pass nothing is registered and nothing is skipped: the
+    /// registration the page-build made persists in the router, so a fragment
+    /// re-rendered from inside a handler carries identical routing attributes
+    /// and still reaches the handler it was built with.
+    public func decorate<C: View>(_ content: C, into buffer: inout HTMLBuffer) {
+        let mark = buffer.mark
+        if var context = RenderContext.current {
+            context.register(outcome: handler, for: ComponentID(componentID))
+        }
+        buffer.addAttribute(attributeText)
+        content.render(into: &buffer)
+        buffer.settlePendingAttributes(from: mark)
+    }
+
+    private var attributeText: String {
+        "data-component-id=\"\(htmlEscape(componentID))\" data-event=\"\(htmlEscape(event.rawValue))\""
+    }
+}
+
+extension View {
+    /// Wire this control to `handler` under the stable id `id`.
+    ///
+    /// the routing attributes are emitted on **every** render, inside a
+    /// `RenderContext` or not; the handler is registered only when a context is
+    /// present, so a fragment re-render outside a pass keeps its pair and its
+    /// page-build registration.
+    ///
+    ///     Button { Text("Refresh") }.control(id: "fx-refresh") { _ in .refresh }
+    ///
+    /// - parameters:
+    ///   - id: the component id — stable across renders, and what the event
+    ///     frame names.
+    ///   - event: the DOM event that fires it. `.click` unless a control needs
+    ///     `.submit`, `.change`, …
+    ///   - handler: answers with a `HandlerOutcome`; `.refresh` re-renders the
+    ///     dispatch session's page and ships the diff to all its sockets.
+    public func control(
+        id: String,
+        on event: HTMLEvent = .click,
+        perform handler: @escaping OutcomeHandler
+    ) -> ModifiedView<Self, ControlModifier> {
+        ModifiedView(content: self, modifier: ControlModifier(componentID: id, event: event, handler: handler))
+    }
+
+    /// Wire this control to a fragment-returning handler — the 1.x `EventHandler`
+    /// shape, forwarded through ``HandlerOutcome/fragments(_:)``.
+    ///
+    /// distinct label (`fragments:`) rather than an overload of `perform:`, the
+    /// same disambiguation `controlAttributes(id:event:handler:)` and
+    /// `controlAttributes(id:event:outcome:)` use.
+    public func control(
+        id: String,
+        on event: HTMLEvent = .click,
+        fragments handler: @escaping EventHandler
+    ) -> ModifiedView<Self, ControlModifier> {
+        control(id: id, on: event, perform: { event in .fragments(await handler(event)) })
+    }
+}
+
 public struct OptimisticClickModifier: ViewModifier {
     public let prediction: [FragmentUpdate]
     public let handler: EventHandler

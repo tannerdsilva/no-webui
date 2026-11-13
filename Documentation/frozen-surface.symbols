@@ -10,7 +10,7 @@
 # forced it. `Tests/WebUITests/FrozenSurfaceTests.swift` fails when this
 # file and a fresh extraction diverge, naming every added and removed symbol.
 #
-# re-measured 2026-11-13: 5443 symbols across 11 modules.
+# re-measured 2026-11-13: 5468 symbols across 11 modules.
 
 ## WebUISharedCore
 
@@ -508,6 +508,12 @@ ComposedModifier.decorate(_:into:)
 ComposedModifier.first
 ComposedModifier.init(first:second:)
 ComposedModifier.second
+ControlModifier
+ControlModifier.componentID
+ControlModifier.decorate(_:into:)
+ControlModifier.event
+ControlModifier.handler
+ControlModifier.init(componentID:event:handler:)
 Details
 Details.content
 Details.init(open:summary:content:)
@@ -881,6 +887,7 @@ HandlerOutcome.isFailure
 HandlerOutcome.navigates
 HandlerOutcome.redirect(to:)
 HandlerOutcome.redirect(to:replace:)
+HandlerOutcome.refresh
 HandlerOutcome.reload
 HandlerOutcome.response(_:)
 HandlerOutcome.state(path:value:)
@@ -2280,6 +2287,8 @@ View.behavior(_:)
 View.border(_:)
 View.class(_:)
 View.classes(_:)
+View.control(id:on:fragments:)
+View.control(id:on:perform:)
 View.cornerRadius(_:)
 View.cssVar(_:_:when:)
 View.data(_:_:when:)
@@ -5082,6 +5091,20 @@ PathPattern.init(stringLiteral:)
 PathPattern.match(_:)
 PathPattern.pattern
 PathPattern.specificity
+RenderIntent
+RenderIntent.load
+RenderIntent.navigate
+RenderIntent.refresh
+RenderRequest
+RenderRequest.init(request:intent:)
+RenderRequest.intent
+RenderRequest.method
+RenderRequest.params
+RenderRequest.path
+RenderRequest.principal
+RenderRequest.query
+RenderRequest.renderToken
+RenderRequest.request
 RenderToken
 RenderToken.description
 RenderToken.init(_:)
@@ -5105,6 +5128,7 @@ Route.method
 Route.page(_:content:)
 Route.pattern
 Route.post(_:_:)
+Route.render(_:_:)
 Route.upload(_:limit:handler:)
 RouteBuilder
 RouteBuilder.buildArray(_:)
@@ -5186,7 +5210,7 @@ WebUIServerConfig.assets
 WebUIServerConfig.authorizer
 WebUIServerConfig.handlerFailurePolicy
 WebUIServerConfig.host
-WebUIServerConfig.init(host:port:maxConnections:maxSessions:maxHandlers:readIdleSeconds:assetCacheSeconds:pagePath:themeSheet:assets:requireRenderToken:handlerFailurePolicy:onRenderFailure:maxBodyBytes:maxMultipartParts:maxFrameSize:authorizer:socketObserver:)
+WebUIServerConfig.init(host:port:maxConnections:maxSessions:maxHandlers:readIdleSeconds:assetCacheSeconds:pagePath:themeSheet:assets:requireRenderToken:handlerFailurePolicy:onRenderFailure:maxBodyBytes:maxMultipartParts:maxFrameSize:authorizer:socketObserver:refreshPolicy:)
 WebUIServerConfig.maxBodyBytes
 WebUIServerConfig.maxConnections
 WebUIServerConfig.maxFrameSize
@@ -5197,6 +5221,7 @@ WebUIServerConfig.onRenderFailure
 WebUIServerConfig.pagePath
 WebUIServerConfig.port
 WebUIServerConfig.readIdleSeconds
+WebUIServerConfig.refreshPolicy
 WebUIServerConfig.requireRenderToken
 WebUIServerConfig.socketObserver
 WebUIServerConfig.themeSheet

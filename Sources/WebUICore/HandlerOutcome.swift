@@ -12,6 +12,18 @@ import WebUISharedCore
 public enum HandlerOutcome: Sendable {
 	/// replace the named fragments in the live page.
 	case fragments([FragmentUpdate])
+	/// re-render the page the event was dispatched in and ship what changed.
+	///
+	/// the outcome carries **no session**, deliberately: it is applied to the
+	/// session the dispatch happened in, so no value a handler returns can name
+	/// another page. the server re-renders that session's remembered page with
+	/// ``RenderIntent/refresh``, diffs it against the session's baseline and
+	/// fans the update out to every socket the session holds — two tabs of one
+	/// page agree, and a second session receives nothing.
+	///
+	/// the re-render is the work: a handler that returns `.refresh` must have
+	/// moved the state the page reads, or the diff is empty and nothing ships.
+	case refresh
 	/// navigate the page. `replace` picks `history.replaceState` over `pushState`.
 	case redirect(to: String, replace: Bool)
 	/// write one client-state entry (the engine's `State.set(path, value)`).
@@ -51,6 +63,11 @@ public enum HandlerOutcome: Sendable {
 		switch self {
 		case .fragments(let updates):
 			return updates.isEmpty ? [] : [.update(fragments: updates)]
+		case .refresh:
+			// the server re-renders and fans out on the session's sockets; the
+			// outcome itself puts nothing on the wire, so the dispatch path
+			// that answers the originating socket adds no duplicate frame.
+			return []
 		case .redirect(let to, let replace):
 			return [.redirect(url: to, replace: replace)]
 		case .state(let path, let value):

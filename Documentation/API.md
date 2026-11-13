@@ -145,6 +145,7 @@ real `POST` — bodies, uploads, redirect-after-post — lands in **W3**
 | `.onMouseOut(_ handler:)` | `data-component-id="cN" data-event="mouseout"` |
 | `.onOptimisticClick(predict:perform:)` | click + `data-optimistic="{json prediction}"` — client patches before the round-trip, confirms on update, rolls back on timeout |
 | `.onDismiss(_ handler:)` | `Dismissible` views (`WebUIAlert`/`WebUIToast`/`WebUIModal`/`WebUIChip`) — wires the close button as a routed component; handler receives `(ElementRef, EventData)` targeting the component's own root |
+| `.control(id:on:perform:)` | a first-class stable-id control: emits `data-component-id`/`data-event` on **every** render — inside a `RenderContext` or not — and registers the `OutcomeHandler` only when a pass is present. the emission half is what a fragment re-rendered outside a pass needs (`.onClick(id:)` drops its pair there); `on:` defaults to `.click`, and `.control(id:on:fragments:)` takes the 1.x fragment handler |
 | `controlAttributes(id:event:handler:)` | free function for component authors: register a handler under a caller-stable id and emit `data-component-id`/`data-event`. registers when a `RenderContext` is present; re-emits the stable id on context-free fragment re-renders so page-build registrations keep routing |
 | `.onSort(_:)` / `.onSelectAll(_:)` / `.onSelect(_:)` / `.onToggleExpand(_:)` | `WebUITable` typed handlers — self-wire each sort header / select-all / row-select / expand button as a routed component; receive typed payloads (`column`, `rowID`) + an `ElementRef` to the table root |
 | `.onPageChange(_:)` / `.onRowsPerPageChange(_:)` | `WebUIPagination` typed handlers — prev/next/number buttons and the rows-per-page select are routed components; receive the computed page / parsed size + an `ElementRef` |
@@ -156,7 +157,7 @@ real `POST` — bodies, uploads, redirect-after-post — lands in **W3**
 |---|---|
 | `EventData` | `{ component: ComponentID, event: String, data: [String: JSONValue] }` — **not** `[String: String]`. read flat fields through `event.string(_:)` / `event.number(_:)`; structured values (search terms, row ids) arrive as `JSONValue` and are read through it. `click` data carries `targetId` and `targetClass` of the clicked element |
 | `EventHandler` | `@Sendable (EventData) async -> [FragmentUpdate]` |
-| `OutcomeHandler` | `@Sendable (EventData) async throws -> HandlerOutcome` — a handler that can answer with a redirect, a client-state write, a reload or a failure, and may throw. a throw becomes `HandlerOutcome.fail(code: "handler", …)`; register a fallback with `register(fallback:for:)` to keep the control usable. register with `register(outcome:for:)` / `controlAttributes(id:event:outcome:)` |
+| `OutcomeHandler` | `@Sendable (EventData) async throws -> HandlerOutcome` — a handler that can answer with a redirect, a client-state write, a reload or a failure, and may throw. a throw becomes `HandlerOutcome.fail(code: "handler", …)`; register a fallback with `register(fallback:for:)` to keep the control usable. register with `register(outcome:for:)` / `controlAttributes(id:event:outcome:)` / `.control(id:on:perform:)`. `HandlerOutcome.refresh` re-renders the dispatch session's page and fans the diff out to its sockets — see "the refresh contract" below |
 | `EventRouter` | routes events to registered handlers. `maxHandlers: Int` (default 10,000), `handlerCount: Int`. one router per render pass — call `reset()` before rendering a fresh page. `begin(_:preservingRegistrations:)` starts a render pass, resetting the session; `preservingRegistrations: true` keeps the handlers and fallbacks it already holds and restarts only the mint counters — the in-place re-render shape the server's `navigate` answer uses, so handlers a host registered outside a render pass survive it. the default (`false`) is the original reset. note the signature moved from `begin(_:)` to `begin(_:preservingRegistrations:)` (defaulted, so source-compatible) |
 | `RenderContext` | `@TaskLocal` context providing component ID generation, element ID minting, and handler registration |
 | `ComponentID` | hashable/codable string wrapper for component ids |
@@ -602,6 +603,62 @@ try await server.start()                       // serves until stop() / process 
 - `WebUIServer` is an actor. `stop()` closes the listener; the accept loop
   drains the connections already accepted and shuts the event loop group down
   itself, so a handler never schedules work on a stopped loop.
+
+### the refresh contract
+
+`HandlerOutcome.refresh` is the fourth answer a handler can give, beside
+fragments, a redirect and a failure: **re-render the page this event was
+dispatched in and ship what moved.** it carries **no session** — the outcome is
+applied to the dispatch session, so no value a handler returns can name another
+page — and it is four typed pieces, not one:
+
+```swift
+Route.render("/inbox") { request in          // the intent door
+    switch request.intent {
+    case .load:     return renderInbox(request, armScrollBottom: true)
+    case .navigate: return renderInbox(request, pushHistory: true)
+    case .refresh:  return renderInbox(request)   // no load-only side effects
+    }
+}
+Button("Mark read", id: "mark-read", type: .button)
+    .control(id: "inbox-mark-read") { event in
+        store.commit { $0.markRead(event.string("id") ?? "") }
+        return .refresh
+    }
+```
+
+- **`RenderIntent`** — `.load` on an http page request, `.navigate` when the
+  engine reported a client navigation, `.refresh` when a handler answered
+  `.refresh`. it rides the `RenderRequest` a `Route.render` closure receives
+  (`method`, `path`, `query` plus the underlying `HTTPRequest`: headers,
+  cookies, path parameters, `principal`, `renderToken`). `Route.get`/`.post`/
+  `.page` are unchanged, so a host that ignores intent compiles byte for byte.
+- **session-scoped fan-out** — the re-render is diffed against *that session's*
+  baseline and every socket currently bound to the session receives the result;
+  a second session receives nothing. `broadcast(_:)` stays the host's
+  push-everything door and is never used for an outcome.
+- **the remembered page** — the server keeps `path` + `query` + `principal` per
+  render session (set on every GET page render and every navigate), capped and
+  evicted oldest-first at `WebUIServerConfig.maxSessions`: the refresh state
+  cannot outgrow the sessions that could use it. a `.refresh` with no
+  remembered page, or a re-render that throws, answers the session's sockets
+  with an `error` frame (`code: "refresh"` / `"render"`) rather than silence.
+- **`WebUIServerConfig.refreshPolicy`** — the `RegionPolicy` every server diff
+  uses, *including* the baseline it compares against, so one session is never
+  diffed under two regimes. `.default` is today's coarse contract; `excluded:`
+  names regions another writer owns so they never ship and never make an
+  ancestor look changed:
+
+  ```swift
+  WebUIServerConfig(refreshPolicy: RegionPolicy(excluded: ["live-turn-text",
+                                                         "live-turn-thinking"]))
+  ```
+- **post-patch restoration is the engine's** — the update frame a refresh sends
+  is an ordinary `update`, so the afterPatch funnel (`data-focus-return`,
+  `data-scroll-key`, `data-draft-id`, `data-preserve-open`, `data-dismiss`)
+  restores the reader's state inside the replaced region. no server-side
+  restoration code exists; `designer/behaviour-probe.mjs` proves focus, scroll
+  and draft survive a `.refresh`.
 
 ### host assets
 

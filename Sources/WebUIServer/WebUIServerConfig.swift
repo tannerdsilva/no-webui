@@ -1,5 +1,6 @@
 import WebUI
 import WebUIDesignSystem
+import WebUIState
 
 // MARK: - Configuration
 
@@ -108,6 +109,24 @@ public struct WebUIServerConfig: Sendable {
 	/// an observer and no authorizer announces nothing.
 	public var socketObserver: (any SocketLifecycleObserver)?
 
+	/// how every server diff collapses a re-render into frames.
+	///
+	/// `.default` — coarse coverage, component-attribute identity, a full page
+	/// for an insertion — is the contract every host already has. a host opts in
+	/// to `.finest` (ship the region whose own bytes moved) and/or an `excluded`
+	/// set here, and the policy governs the **baseline** as well as the diff: a
+	/// render is recorded under the same policy that will compare against it, so
+	/// one session is never diffed under two regimes.
+	///
+	/// exclusions are what makes a refresh safe on a page another writer owns:
+	/// a region carrying a streamed turn (`live-turn-text`, `live-turn-thinking`)
+	/// changes on every token, and a refresh must not ship it back — nor let it
+	/// make an ancestor look changed. naming it here is the way to say so.
+	///
+	/// applies to the navigate re-render and to `HandlerOutcome.refresh`, so
+	/// the two in-place paths cannot disagree about which regions ship.
+	public var refreshPolicy: RegionPolicy
+
 	public init(
 		host: String = "0.0.0.0",
 		port: Int = 9090,
@@ -126,7 +145,8 @@ public struct WebUIServerConfig: Sendable {
 		maxMultipartParts: Int = 64,
 		maxFrameSize: Int = 256 * 1024,
 		authorizer: (any RequestAuthorizer)? = nil,
-		socketObserver: (any SocketLifecycleObserver)? = nil
+		socketObserver: (any SocketLifecycleObserver)? = nil,
+		refreshPolicy: RegionPolicy = .default
 	) {
 		// the decoder's own bound, refused here the way nio refuses it there
 		// (a `precondition`, not a clamp): a frame length above `UInt32.max` is
@@ -151,5 +171,6 @@ public struct WebUIServerConfig: Sendable {
 		self.maxFrameSize = maxFrameSize
 		self.authorizer = authorizer
 		self.socketObserver = socketObserver
+		self.refreshPolicy = refreshPolicy
 	}
 }

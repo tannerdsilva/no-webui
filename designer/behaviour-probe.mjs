@@ -698,6 +698,80 @@ if (!clipboardGranted) {
 }
 
 // ---------------------------------------------------------------------------
+// 21b. HandlerOutcome.refresh — a `.control` whose handler returns `.refresh`:
+//      the server re-renders the page in the dispatch session, diffs it against
+//      the session's baseline, ships the region whose bytes moved, and the
+//      engine's afterPatch funnel restores the reader's state inside it.
+// ---------------------------------------------------------------------------
+{
+  // the reader's state, every bit of it INSIDE the region the refresh replaces.
+  await page.fill("#refresh-draft", "draft survives a refresh");
+  await page.evaluate(() => {
+    document.querySelector("#fx-refresh-region [data-scroll-key]").scrollTop = 30;
+    document.getElementById("refresh-link").focus();
+    window.__refreshSurvives = 1;
+    // a node OUTSIDE the region: it must be the same node after the refresh,
+    // which is what makes "a region patch" true and "a document/body replace"
+    // false. the draft field below is deliberately inside the region.
+    window.__refreshOutsideNode = document.getElementById("draft");
+  });
+  await page.waitForTimeout(150);
+  const before = await page.evaluate(() => {
+    const thread = document.querySelector("#fx-refresh-region [data-scroll-key]");
+    return {
+      count: (document.getElementById("refresh-count")?.textContent || "").trim(),
+      focus: document.activeElement?.id ?? null,
+      scroll: thread ? thread.scrollTop : null,
+      draft: document.getElementById("refresh-draft")?.value ?? null,
+    };
+  });
+
+  // a programmatic click: it fires the delegated handler without moving focus,
+  // so the focus-return assertion below is about the patch, not about the click.
+  await page.evaluate(() => document.getElementById("refresh").click());
+  await page.waitForTimeout(800);
+
+  const after = await page.evaluate(() => {
+    const thread = document.querySelector("#fx-refresh-region [data-scroll-key]");
+    return {
+      count: (document.getElementById("refresh-count")?.textContent || "").trim(),
+      focus: document.activeElement?.id ?? null,
+      scroll: thread ? thread.scrollTop : null,
+      draft: document.getElementById("refresh-draft")?.value ?? null,
+      sameOutsideNode: window.__refreshOutsideNode === document.getElementById("draft"),
+      marker: window.__refreshSurvives,
+      region: !!document.getElementById("fx-refresh-region"),
+    };
+  });
+
+  if (before.count === "refreshes: 0" && after.count === "refreshes: 1" && after.region) {
+    ok("refresh: a .control returning .refresh re-rendered the page and patched the region carrying the new state");
+  } else {
+    bad(`refresh: region count went ${JSON.stringify(before.count)} -> ${JSON.stringify(after.count)} (region present: ${after.region})`);
+  }
+  if (after.sameOutsideNode && after.marker === 1) {
+    ok("refresh: the update was a region patch, not a document load (a node outside the region and page state survived)");
+  } else {
+    bad(`refresh: expected a region patch; outside node reused=${after.sameOutsideNode}, page state=${after.marker}`);
+  }
+  if (before.focus === "refresh-link" && after.focus === "refresh-search") {
+    ok("refresh: focus inside a data-focus-return region survives the refresh (restored to the declared id)");
+  } else {
+    bad(`refresh: focus was ${JSON.stringify(before.focus)} then ${JSON.stringify(after.focus)}`);
+  }
+  if (before.scroll === 30 && after.scroll === 30) {
+    ok("refresh: a data-scroll-key offset survives the refresh (the region was replaced, the offset came back)");
+  } else {
+    bad(`refresh: data-scroll-key offset was ${JSON.stringify(before.scroll)} then ${JSON.stringify(after.scroll)}`);
+  }
+  if (before.draft === "draft survives a refresh" && after.draft === before.draft) {
+    ok("refresh: a data-draft-id value survives the refresh (the replaced field was repopulated)");
+  } else {
+    bad(`refresh: draft value was ${JSON.stringify(before.draft)} then ${JSON.stringify(after.draft)}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 22. data-reltime repaints on its 60 s tick (the last assertion: it waits).
 // ---------------------------------------------------------------------------
 {

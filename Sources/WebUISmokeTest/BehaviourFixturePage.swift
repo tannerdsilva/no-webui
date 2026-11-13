@@ -23,8 +23,18 @@ final class BehaviourFixtureState: Sendable {
 		var feed = 0
 		var saved = "(none)"
 		var last = "(none)"
+		var refreshes = 0
 	}
 	private let values = Mutex(Values())
+
+	/// one clock reading for the life of the fixture, NOT one per render.
+	///
+	/// the ticking labels are painted client-side from `data-reltime`, so the
+	/// server's stamp only has to be stable: a per-render `now` would move six
+	/// spans on every render, and a re-render (the refresh contract's whole
+	/// point) would then change bytes outside every region — the residue — and
+	/// escalate to a full page instead of a region patch.
+	let stamp: UInt64 = UInt64(Date().timeIntervalSince1970 * 1000)
 
 	var feed: Int {
 		get { values.withLock { $0.feed } }
@@ -37,6 +47,10 @@ final class BehaviourFixtureState: Sendable {
 	var last: String {
 		get { values.withLock { $0.last } }
 		set { values.withLock { $0.last = newValue } }
+	}
+	var refreshes: Int {
+		get { values.withLock { $0.refreshes } }
+		set { values.withLock { $0.refreshes = newValue } }
 	}
 }
 
@@ -121,9 +135,25 @@ func renderBehaviourPage(
 	state: BehaviourFixtureState,
 	renderToken: String
 ) -> String {
-	let now = UInt64(Date().timeIntervalSince1970 * 1000)
+	let now = state.stamp
 	let followOff = ScrollFollow(mode: .off).attributeText
 	let table = TableEnhance(mode: .sortAndFilter).attributeText
+	// the refresh control is a `.control`, and it is the ONE owner of its
+	// handler: this page is rendered inside the server's render pass, so the
+	// modifier registers here and emits the routing pair. the handler moves the
+	// only state the region renders, then answers `.refresh` — the server
+	// re-renders this page in the same session, diffs it against that session's
+	// baseline and ships the section whose bytes moved.
+	let refreshButton = Button("Refresh this page", id: "refresh", type: .button)
+		.control(id: "fx-refresh") { _ in
+			state.refreshes += 1
+			return .refresh
+		}
+		.markup.html
+	var refreshLines = ""
+	for i in 0..<30 {
+		refreshLines += "<p>refresh line \(i + 1)</p>"
+	}
 	let body = """
 	<main class="fx">
 	<h1>Behavior fixture</h1>
@@ -143,6 +173,15 @@ func renderBehaviourPage(
 	<div class="fx-row"><button id="to-feed" type="button"\(ScrollTo(id: "feed").attributeText)>Jump to the feed</button></div>
 	<div id="follow-off"\(followOff) class="fx-thread" aria-label="not followed"><p>off</p><p>off</p><p>off</p><p>off</p><p>off</p><p>off</p><p>off</p><p>off</p><p>off</p><p>off</p><p>off</p><p>off</p></div>
 	<input id="draft" type="text" aria-label="draft" placeholder="draft"\(DraftIdentity(key: "note").attributeText)>
+	</section>
+
+	<section class="fx-sec" id="fx-refresh-region" data-component-id="fx-refresh-region"><h2>refresh contract</h2>
+	<p class="fx-muted">the button below is a <code>.control</code> whose handler returns <code>.refresh</code>: the server re-renders this page and patches only this region, then the engine's afterPatch funnel restores focus, scroll and draft inside it.</p>
+	<div class="fx-row">\(refreshButton)</div>
+	<div id="refresh-focus"\(FocusReturn(id: "refresh-search").attributeText) class="fx-focus"><a id="refresh-link" href="#fx-refresh-region">a link inside the refreshed region</a><input id="refresh-search" type="search" aria-label="search the refreshed region" placeholder="search"></div>
+	<div id="refresh-thread"\(ScrollKey(key: "refresh-thread").attributeText) class="fx-thread" aria-label="refresh thread">\(refreshLines)</div>
+	<form id="refresh-draft-form" class="fx-row" data-component-id="fx-refresh-draft" data-event="submit"><input id="refresh-draft" type="text" aria-label="refresh draft" placeholder="draft"\(DraftIdentity(key: "refresh-draft").attributeText)></form>
+	<p id="refresh-count" class="fx-muted">refreshes: \(state.refreshes)</p>
 	</section>
 
 	<section class="fx-sec"><h2>dismiss stack</h2>

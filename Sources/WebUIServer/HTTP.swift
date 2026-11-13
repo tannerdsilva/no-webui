@@ -49,6 +49,15 @@ public struct HTTPRequest: Sendable {
 	/// responder that asked. `nil` means "no session presented" — either the
 	/// config carries no authorizer, or the one it carries answered `nil`.
 	public var principal: SessionKey?
+	/// why this render is happening — the server's annotation, read only by the
+	/// intent door (``Route/render(_:_:)``) when it builds its ``RenderRequest``.
+	///
+	/// internal, deliberately: a host on the plain `HTTPRequest` door sees the
+	/// request it has always seen, so the additive door is additive. the server
+	/// is the only writer (`.load` for an http page render, `.navigate` for the
+	/// engine's navigate frame, `.refresh` for a `HandlerOutcome.refresh`
+	/// re-render), which is what keeps a handler from naming its own intent.
+	var renderIntent: RenderIntent = .load
 
 	public init(
 		method: HTTPMethod = .get,

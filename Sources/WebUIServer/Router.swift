@@ -146,6 +146,65 @@ public struct PathPattern: Sendable, ExpressibleByStringLiteral {
 	}
 }
 
+// MARK: - RenderIntent
+
+/// why a page is being rendered.
+///
+/// one render pipeline serves three occasions, and a host's render is not
+/// identical across them: a first load may arm a scroll-to-bottom, a client
+/// navigation pushes history, and a refresh must re-render the page it is
+/// already on without replaying either side effect. the intent is a value on
+/// the request — not a bool, not an ambient flag — so the host switches
+/// exhaustively and the compiler names the third case when it arrives.
+public enum RenderIntent: Sendable, Hashable {
+	/// the server is answering an http page request: the browser is loading
+	/// this document.
+	case load
+	/// the engine reported a client-side navigation and the server is
+	/// re-rendering the page in place (`answerNavigate`).
+	case navigate
+	/// a handler answered `HandlerOutcome.refresh` and the server is
+	/// re-rendering the session's current page to diff it.
+	case refresh
+}
+
+/// the request the intent door hands a host.
+///
+/// `{ method, path, query, intent }` plus the rest of the ``HTTPRequest`` the
+/// route was matched with — headers, cookies, body, path parameters and the
+/// render token — reachable through ``request``. the token matters: a page is
+/// what publishes it, so a render door that could not reach it could not serve
+/// a mixed page.
+///
+/// a value, not the live request: a host may keep it, and nothing about the
+/// server's state is mutable through it.
+public struct RenderRequest: Sendable {
+	/// the http request the route matched, with `params` already filled.
+	public let request: HTTPRequest
+	/// why this render is happening.
+	public let intent: RenderIntent
+
+	public var method: HTTPMethod { request.method }
+	/// the routed path, query stripped.
+	public var path: String { request.path }
+	/// the decoded query pairs.
+	public var query: [String: String] { request.query }
+	/// the path parameters the pattern captured.
+	public var params: [String: String] { request.params }
+	/// the session the server resolved for this render, when a host configured
+	/// an authorizer. carried across a refresh so a per-identity page keeps its
+	/// identity rather than falling back to an anonymous render.
+	public var principal: SessionKey? { request.principal }
+	/// the token minted for this render; a page echoes it into
+	/// ``RuntimeConfig/renderToken`` so its frames are answered in its session.
+	public var renderToken: RenderToken { request.renderToken }
+
+	public init(request: HTTPRequest, intent: RenderIntent) {
+		self.request = request
+		self.intent = intent
+	}
+}
+
 // MARK: - Route
 
 /// one method + pattern pair and the responder that answers it.
@@ -190,6 +249,32 @@ public struct Route: Sendable {
 		_ r: @escaping @Sendable (HTTPRequest) async -> HTTPResponse
 	) -> Route {
 		Route(method: .post, pattern: pattern, responder: ClosureResponder(r))
+	}
+
+	/// a GET route whose responder sees **why** the page is being rendered.
+	///
+	/// the additive door beside ``get(_:_:)``: that one hands the host an
+	/// `HTTPRequest` and nothing more, and a host that ignores intent keeps
+	/// compiling byte for byte. this one hands a ``RenderRequest``, whose
+	/// `intent` is `.load` on an http page request, `.navigate` when the engine
+	/// reported a client navigation, and `.refresh` when a handler answered
+	/// `HandlerOutcome.refresh` — which is how a host stops replaying
+	/// load-only side effects (arm-scroll-to-bottom, push-history) on a refresh.
+	///
+	/// named `render`, not an overload of `get`: a trailing closure binds to
+	/// the last parameter whatever its label, so `Route.get("/") { _ in … }`
+	/// would be ambiguous between the two closure shapes at every existing call
+	/// site (`_ in HTTPResponse(…)` satisfies both) — an additive door that
+	/// breaks the door beside it is not additive.
+	///
+	/// the closure is non-throwing, exactly like ``get(_:_:)``: a render that
+	/// fails answers the request by returning an error response, and a throw
+	/// would have no head to turn into one on the websocket paths.
+	public static func render(
+		_ pattern: PathPattern,
+		_ r: @escaping @Sendable (RenderRequest) async -> HTTPResponse
+	) -> Route {
+		Route(method: .get, pattern: pattern, responder: IntentResponder(r))
 	}
 
 	/// a POST route whose body is handed to the handler as it arrives.
@@ -254,7 +339,7 @@ public struct Route: Sendable {
 	}
 }
 
-/// the closure-backed responder `Route.get`/`.post` stand on.
+/// the responder `Route.get`/`.post` stand on.
 private struct ClosureResponder: Responder {
 	let body: @Sendable (HTTPRequest) async -> HTTPResponse
 	init(_ body: @escaping @Sendable (HTTPRequest) async -> HTTPResponse) {
@@ -262,6 +347,22 @@ private struct ClosureResponder: Responder {
 	}
 	func respond(to request: HTTPRequest) async throws -> HTTPResponse {
 		await body(request)
+	}
+}
+
+/// the responder `Route.render` stands on: lift the request's intent into a
+/// ``RenderRequest`` and hand it to the host's closure.
+///
+/// the intent rides on the request the server built, so this adapter adds no
+/// state of its own — two renders of one page can never be handed each other's
+/// intent.
+private struct IntentResponder: Responder {
+	let body: @Sendable (RenderRequest) async -> HTTPResponse
+	init(_ body: @escaping @Sendable (RenderRequest) async -> HTTPResponse) {
+		self.body = body
+	}
+	func respond(to request: HTTPRequest) async throws -> HTTPResponse {
+		await body(RenderRequest(request: request, intent: request.renderIntent))
 	}
 }
 
