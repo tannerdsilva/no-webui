@@ -101,8 +101,9 @@ control.
 | `Clipboard` (toast) | `data-webui-toast` | the engine-owned toast element a copy consequence mounts (engine-written) |
 | `Roving` | `data-roving` | presence; one tab stop for the group, arrow keys move it |
 | `Scrollspy` | `data-scrollspy` | presence; the container whose sections the nav highlights |
-| `ThemeChoice` | `data-theme-choice` | the chosen mode (see above; already live) |
-| form semantics | `data-autogrow`, `data-submit-on-enter`, `data-clear-on-submit` | presence; autogrow, enter-to-send, clear on submit |
+| `ThemeChoice` | `data-theme-choice` | the chosen mode. **`aria-pressed` is the theme-selected contract:** exactly one button of the toggle carries `aria-pressed="true"`, it tracks `<html data-theme>`, and the engine reconciles it on boot and on every press. hosts key their sheets on `[aria-pressed="true"]` (or the root `data-theme`), never on a server-only class. no-JS/first-paint limitation: the server renders all three `false` and the boot press corrects it |
+| form semantics | `data-autogrow`, `data-clear-on-submit` | presence; autogrow, clear on submit |
+| form semantics (enter) | `data-submit-on-enter` | the three-value vocabulary: bare (the `SubmitOnEnter()` default, `legacy`) — `Enter` without `Shift` submits a single-line control and a `textarea` stays exempt; `plain` — `Enter` submits and `Shift+Enter` inserts a newline; `meta` — `Meta`/`Ctrl`+`Enter` submits and plain `Enter` inserts a newline. **the one attribute where value and presence do different jobs:** bare is the legacy rule every existing page already has, and a textarea opts in by value, never by presence. an IME composition (`isComposing`, or `keyCode === 229`) never submits in any mode, and `data-prevent-enter="false"` opts out in every mode |
 | form semantics (number) | `data-clamp` | `min,max` — the accepted numeric range |
 | upload destination | `data-upload-into` | the typed destination as a **relative directory**: `attachments` or `docs/x` (no scheme). the engine composes `<directory>/<name>` into `X-Upload-Path`, and the route's `200 {path}` answer is authoritative |
 | upload name template | `data-upload-name-template` | optional filename template the engine resolves before composing the path: `{name}`, `{ext}`, `{ts}`, `{seq}`; unknown tokens stay literal. read inside the upload binder — not its own dispatch key |

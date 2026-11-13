@@ -628,16 +628,39 @@ public struct AutogrowAttribute: AttributeRepresentable {
 
 // MARK: - 19. submit on enter
 
+/// the key gesture that submits from a control carrying ``SubmitOnEnter``.
+public enum SubmitOnEnterMode: String, Sendable {
+	/// the bare attribute: `Enter` submits a single-line control and a
+	/// `textarea` stays exempt — the rule every existing page already has.
+	case legacy
+	/// `Enter` submits; `Shift+Enter` inserts a newline.
+	case plain
+	/// `Meta`/`Ctrl`+`Enter` submits; plain `Enter` inserts a newline.
+	case meta
+}
+
 /// enter submits the form.
 ///
 /// a single-line composer has no other submit gesture a reader reaches for; the
 /// behavior says the control accepts it rather than leaving the client to guess
-/// by element type.
+/// by element type. this is the one behavior whose value and presence do
+/// different jobs: the bare attribute keeps the legacy rule, and a textarea
+/// opts in to a submit gesture by value (``SubmitOnEnterMode/plain`` or
+/// ``SubmitOnEnterMode/meta``), never by presence.
 public struct SubmitOnEnter: Behavior {
-	public init() {}
+	/// the submit gesture the control declares.
+	public let mode: SubmitOnEnterMode
+
+	public init() {
+		self.mode = .legacy
+	}
+
+	public init(mode: SubmitOnEnterMode) {
+		self.mode = mode
+	}
 
 	public func attribute() -> SubmitOnEnterAttribute {
-		SubmitOnEnterAttribute()
+		SubmitOnEnterAttribute(mode: mode)
 	}
 }
 
@@ -645,9 +668,21 @@ public struct SubmitOnEnter: Behavior {
 public struct SubmitOnEnterAttribute: AttributeRepresentable {
 	public static let name = "data-submit-on-enter"
 
-	public init() {}
+	/// the submit gesture the attribute carries.
+	public let mode: SubmitOnEnterMode
 
-	public var value: String { "" }
+	public init() {
+		self.mode = .legacy
+	}
+
+	public init(mode: SubmitOnEnterMode) {
+		self.mode = mode
+	}
+
+	/// empty for ``SubmitOnEnterMode/legacy`` so the attribute stays bare.
+	public var value: String {
+		mode == .legacy ? "" : mode.rawValue
+	}
 }
 
 // MARK: - 20. clear on submit

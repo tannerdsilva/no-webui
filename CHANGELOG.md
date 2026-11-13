@@ -6,6 +6,28 @@ all notable changes to this project are documented here.
 
 ### added
 
+- **submit-on-enter modes** — `SubmitOnEnter(mode:)` gains `SubmitOnEnterMode`
+  with three values. `legacy` (the `SubmitOnEnter()` default) emits the **bare**
+  `data-submit-on-enter` byte-identically to before: `Enter` without `Shift`
+  submits a single-line control, and a `textarea` stays exempt. `plain` emits
+  `data-submit-on-enter="plain"` — `Enter` submits, `Shift+Enter` inserts a
+  newline — so a textarea opts in by value, never by presence. `meta` emits
+  `="meta"` — `Meta`/`Ctrl`+`Enter` submits, plain `Enter` inserts a newline.
+  the binder returns early on an IME composition (`isComposing`, or
+  `keyCode === 229`), so a confirming `Enter` never submits mid-composition,
+  and `data-prevent-enter="false"` opts out in every mode. this is the one
+  attribute where value and presence do different jobs. no new attribute and no
+  vocabulary-set change.
+
+- **the theme selected-state contract** — `aria-pressed` is normative for
+  `[data-theme-choice]`: exactly one button of the toggle carries
+  `aria-pressed="true"`, it tracks `<html data-theme>`, and the engine
+  reconciles it on boot and on every press. hosts key their sheets on
+  `[aria-pressed="true"]` (or the root `data-theme`), never on a server-only
+  class. documented limitation: without JavaScript the first paint keeps the
+  server's all-`false` rendering until the boot press runs. no code, markup or
+  golden changed.
+
 - **a draft seeded from the server** — `DraftSeed(text:)` emits
   `data-draft-value`, the text the server rendered into a field that also
   carries `DraftIdentity`. the pair is one consequence with one precedence

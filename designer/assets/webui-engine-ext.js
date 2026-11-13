@@ -629,8 +629,15 @@ window.WebUIEngineExt = (function () {
 
     BEHAVIORS['data-submit-on-enter'] = function (el) {
       el.addEventListener('keydown', function (e) {
-        if (e.key !== 'Enter' || e.shiftKey || el.tagName === 'TEXTAREA') { return; }
+        if (e.isComposing || e.keyCode === 229) { return; }
+        if (e.key !== 'Enter') { return; }
         if (el.getAttribute('data-prevent-enter') === 'false') { return; }
+        var mode = el.getAttribute('data-submit-on-enter') || '';
+        var submit = false;
+        if (mode === 'plain') { submit = !e.shiftKey; }
+        else if (mode === 'meta') { submit = e.metaKey || e.ctrlKey; }
+        else { submit = !e.shiftKey && el.tagName !== 'TEXTAREA'; }
+        if (!submit) { return; }
         var form = el.form || (el.closest ? el.closest('form') : null);
         if (!form) { return; }
         e.preventDefault();

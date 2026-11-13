@@ -23,6 +23,7 @@ final class BehaviourFixtureState: Sendable {
 		var feed = 0
 		var saved = "(none)"
 		var last = "(none)"
+		var lastMeta = "(none)"
 		var refreshes = 0
 		var dialogOpen = false
 		var dialog2Open = false
@@ -77,6 +78,10 @@ final class BehaviourFixtureState: Sendable {
 	var last: String {
 		get { values.withLock { $0.last } }
 		set { values.withLock { $0.last = newValue } }
+	}
+	var lastMeta: String {
+		get { values.withLock { $0.lastMeta } }
+		set { values.withLock { $0.lastMeta = newValue } }
 	}
 	var refreshes: Int {
 		get { values.withLock { $0.refreshes } }
@@ -444,8 +449,11 @@ func renderBehaviourPage(
 	<form id="submit-form" class="fx-form" data-component-id="fx-submit" data-event="submit">
 	<p><input id="submit-input" name="q" type="text" aria-label="query" placeholder="type and press enter"\(SubmitOnEnter().attributeText)\(ClearOnSubmit().attributeText)></p>
 	<p><textarea id="submit-area" name="body" rows="2" aria-label="body"\(SubmitOnEnter().attributeText)></textarea></p>
+	<p><textarea id="submit-plain" name="plain" rows="2" aria-label="plain submit"\(SubmitOnEnter(mode: .plain).attributeText)></textarea></p>
+	<p><textarea id="submit-meta" name="meta" rows="2" aria-label="meta submit"\(SubmitOnEnter(mode: .meta).attributeText)></textarea></p>
 	<p><input id="submit-exempt" name="x" type="text" aria-label="exempt" placeholder="enter stays here"\(SubmitOnEnter().attributeText) data-prevent-enter="false"></p>
 	<p id="submit-out" class="fx-muted">last: \(htmlEscape(state.last))</p>
+	<p id="submit-meta-out" class="fx-muted">meta: \(htmlEscape(state.lastMeta))</p>
 	</form>
 	<textarea id="grow" rows="1" aria-label="grow"\(Autogrow().attributeText)></textarea>
 	<p><input id="clamp" type="number" value="5" aria-label="clamp"\(NumberClamp(min: 1, max: 10).attributeText)></p>
@@ -463,7 +471,7 @@ func renderBehaviourPage(
 	</section>
 
 	<section class="fx-sec"><h2>theme choice</h2>
-	<div class="fx-row"><button id="theme-dark" type="button"\(ThemeChoice(mode: .dark).attributeText)>Dark</button><button id="theme-light" type="button"\(ThemeChoice(mode: .light).attributeText)>Light</button></div>
+	<div class="fx-row"><button id="theme-system" type="button"\(ThemeChoice(mode: .system).attributeText)>System</button><button id="theme-dark" type="button"\(ThemeChoice(mode: .dark).attributeText)>Dark</button><button id="theme-light" type="button"\(ThemeChoice(mode: .light).attributeText)>Light</button></div>
 	</section>
 
 	<div id="scroll-target" class="fx-sec"><h2>The scroll marker</h2><p class="fx-muted">data-scroll-to lands here.</p></div>
@@ -564,9 +572,12 @@ struct BehaviourPageResponder: Responder {
 			])
 		}, for: ComponentID("fx-inline"), in: session)
 		router.register(outcome: { event in
-			state.last = event.string("q") ?? "(none)"
+			let plain = event.string("plain") ?? ""
+			state.last = !plain.isEmpty ? plain : (event.string("q") ?? "(none)")
+			state.lastMeta = event.string("meta") ?? "(none)"
 			return .fragments([
 				FragmentUpdate(id: "submit-out", html: "<p id=\"submit-out\" class=\"fx-muted\">last: \(htmlEscape(state.last))</p>"),
+				FragmentUpdate(id: "submit-meta-out", html: "<p id=\"submit-meta-out\" class=\"fx-muted\">meta: \(htmlEscape(state.lastMeta))</p>"),
 			])
 		}, for: ComponentID("fx-submit"), in: session)
 		// one handler per destination: the engine's `upload-complete` event

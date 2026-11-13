@@ -217,8 +217,31 @@ struct BehaviorPrimitivesTests {
 	func submitOnEnter() {
 		#expect(SubmitOnEnterAttribute.name == "data-submit-on-enter")
 		#expect(SubmitOnEnter().attribute().value == "")
+		#expect(SubmitOnEnter().attribute().mode == .legacy)
+		#expect(SubmitOnEnterAttribute().mode == .legacy)
 		#expect(rendered(SubmitOnEnter()).contains(" data-submit-on-enter"))
 		#expect(!rendered(SubmitOnEnter()).contains("data-submit-on-enter=\"\""))
+	}
+
+	@Test("SubmitOnEnter(mode:) carries the mode and serializes plain/meta by value")
+	func submitOnEnterModes() {
+		#expect(SubmitOnEnterMode.legacy.rawValue == "legacy")
+		#expect(SubmitOnEnterMode.plain.rawValue == "plain")
+		#expect(SubmitOnEnterMode.meta.rawValue == "meta")
+		#expect(SubmitOnEnter(mode: .legacy).mode == .legacy)
+		#expect(SubmitOnEnter(mode: .plain).attribute().mode == .plain)
+		#expect(SubmitOnEnterAttribute(mode: .plain).value == "plain")
+		#expect(SubmitOnEnterAttribute(mode: .meta).value == "meta")
+	}
+
+	@Test("SubmitOnEnterAttribute(mode:) renders the value form; legacy stays bare")
+	func submitOnEnterModeAttributeText() {
+		#expect(SubmitOnEnterAttribute(mode: .plain).attributeText == " data-submit-on-enter=\"plain\"")
+		#expect(SubmitOnEnterAttribute(mode: .meta).attributeText == " data-submit-on-enter=\"meta\"")
+		#expect(SubmitOnEnterAttribute(mode: .legacy).attributeText == " data-submit-on-enter")
+		#expect(rendered(SubmitOnEnter(mode: .plain)).contains(" data-submit-on-enter=\"plain\""))
+		#expect(rendered(SubmitOnEnter(mode: .meta)).contains(" data-submit-on-enter=\"meta\""))
+		#expect(!rendered(SubmitOnEnter(mode: .legacy)).contains("data-submit-on-enter=\"legacy\""))
 	}
 
 	// MARK: - 20. clear on submit

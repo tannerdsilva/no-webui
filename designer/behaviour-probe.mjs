@@ -851,6 +851,58 @@ if (!clipboardGranted) {
   }));
   if (exempt.value === "keep" && exempt.out.includes("hello")) ok('data-submit-on-enter: data-prevent-enter="false" exempts the control');
   else bad(`data-submit-on-enter: prevent-enter exemption failed — ${JSON.stringify(exempt)}`);
+
+  await page.click("#submit-plain");
+  await page.keyboard.type("plain line");
+  await page.keyboard.press("Enter");
+  const plainSubmitted = await settled(() => {
+    const value = document.getElementById("submit-plain").value;
+    const out = (document.getElementById("submit-out")?.textContent || "").trim();
+    return { ok: out.includes("plain line") && value === "plain line", value, out };
+  });
+  if (plainSubmitted?.ok) ok('data-submit-on-enter="plain": Enter submits the textarea (server echoed the field)');
+  else bad(`data-submit-on-enter="plain": Enter did not submit — ${JSON.stringify(plainSubmitted)}`);
+
+  await page.keyboard.press("Shift+Enter");
+  await page.keyboard.type("second line");
+  const plainShift = await settled(() => {
+    const value = document.getElementById("submit-plain").value;
+    const out = (document.getElementById("submit-out")?.textContent || "").trim();
+    return { ok: value.includes("\n") && value.includes("second line") && !out.includes("second line"), value, out };
+  });
+  if (plainShift?.ok) ok('data-submit-on-enter="plain": Shift+Enter inserts a newline instead of submitting');
+  else bad(`data-submit-on-enter="plain": Shift+Enter produced ${JSON.stringify(plainShift)}`);
+
+  const beforeIme = await page.evaluate(() => (document.getElementById("submit-out")?.textContent || "").trim());
+  await page.evaluate(() => {
+    const el = document.getElementById("submit-plain");
+    el.focus();
+    el.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", isComposing: true, bubbles: true, cancelable: true }));
+  });
+  await page.waitForTimeout(500);
+  const afterIme = await page.evaluate(() => (document.getElementById("submit-out")?.textContent || "").trim());
+  if (afterIme === beforeIme) ok("data-submit-on-enter: an Enter during IME composition (isComposing) does not submit");
+  else bad(`data-submit-on-enter: the IME-guarded Enter submitted — ${JSON.stringify({ beforeIme, afterIme })}`);
+
+  const beforeMeta = await page.evaluate(() => (document.getElementById("submit-meta-out")?.textContent || "").trim());
+  await page.click("#submit-meta");
+  await page.keyboard.type("meta line");
+  await page.keyboard.press("Enter");
+  const metaPlain = await settled((before) => {
+    const value = document.getElementById("submit-meta").value;
+    const out = (document.getElementById("submit-meta-out")?.textContent || "").trim();
+    return { ok: value.includes("\n") && value.includes("meta line") && out === before, value, out };
+  }, beforeMeta);
+  if (metaPlain?.ok) ok('data-submit-on-enter="meta": plain Enter inserts a newline and does not submit');
+  else bad(`data-submit-on-enter="meta": plain Enter produced ${JSON.stringify(metaPlain)}`);
+
+  await page.keyboard.press("Meta+Enter");
+  const metaSubmitted = await settled(() => {
+    const out = (document.getElementById("submit-meta-out")?.textContent || "").trim();
+    return { ok: out.includes("meta line"), out };
+  });
+  if (metaSubmitted?.ok) ok('data-submit-on-enter="meta": Meta+Enter submits the textarea (server echoed the field)');
+  else bad(`data-submit-on-enter="meta": Meta+Enter did not submit — ${JSON.stringify(metaSubmitted)}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -1265,21 +1317,45 @@ if (!clipboardGranted) {
 
 // ---------------------------------------------------------------------------
 // 19. data-theme-choice — the existing reconciliation, extended not duplicated.
+//     aria-pressed is the selected-state contract: exactly one true, matching
+//     <html data-theme>, at load and after every press.
 // ---------------------------------------------------------------------------
 {
+  const themeSelected = () => {
+    const buttons = Array.from(document.querySelectorAll("[data-theme-choice]"));
+    const pressed = buttons.filter((b) => b.getAttribute("aria-pressed") === "true");
+    const theme = document.documentElement.getAttribute("data-theme");
+    return {
+      ok: pressed.length === 1 && pressed[0].getAttribute("data-theme-choice") === theme,
+      total: buttons.length,
+      pressed: pressed.map((b) => b.getAttribute("data-theme-choice")),
+      theme,
+    };
+  };
+  const atLoad = await settled(themeSelected);
+  if (atLoad?.ok) ok(`data-theme-choice: exactly one aria-pressed="true" at load and it matches <html data-theme> (${atLoad.pressed[0]} -> ${atLoad.theme})`);
+  else bad(`data-theme-choice: the load state was ${JSON.stringify(atLoad)} — expected exactly one pressed button matching data-theme`);
+
   await page.click("#theme-dark");
   await page.waitForTimeout(150);
   const dark = await page.evaluate(() => ({
     theme: document.documentElement.getAttribute("data-theme"),
     pressed: [document.getElementById("theme-dark").getAttribute("aria-pressed"), document.getElementById("theme-light").getAttribute("aria-pressed")],
   }));
+  const darkSelected = await settled(themeSelected);
+  if (dark.theme === "dark" && dark.pressed[0] === "true" && dark.pressed[1] === "false") ok("data-theme-choice: the choice applies and aria-pressed reconciles (existing path)");
+  else bad(`data-theme-choice: dark produced ${JSON.stringify(dark)}`);
+  if (darkSelected?.ok && darkSelected.theme === "dark") ok('data-theme-choice: exactly one aria-pressed="true" after the dark press, and it matches data-theme=dark');
+  else bad(`data-theme-choice: the dark press left ${JSON.stringify(darkSelected)}`);
+
   await page.click("#theme-light");
   await page.waitForTimeout(150);
   const light = await page.evaluate(() => document.documentElement.getAttribute("data-theme"));
-  if (dark.theme === "dark" && dark.pressed[0] === "true" && dark.pressed[1] === "false") ok("data-theme-choice: the choice applies and aria-pressed reconciles (existing path)");
-  else bad(`data-theme-choice: dark produced ${JSON.stringify(dark)}`);
   if (light === "light") ok("data-theme-choice: the second choice applies too");
   else bad(`data-theme-choice: light produced ${JSON.stringify(light)}`);
+  const lightSelected = await settled(themeSelected);
+  if (lightSelected?.ok && lightSelected.theme === "light") ok('data-theme-choice: exactly one aria-pressed="true" after the light press, and it matches data-theme=light');
+  else bad(`data-theme-choice: the light press left ${JSON.stringify(lightSelected)}`);
 }
 
 // ---------------------------------------------------------------------------

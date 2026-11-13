@@ -10,7 +10,7 @@
 # forced it. `Tests/WebUITests/FrozenSurfaceTests.swift` fails when this
 # file and a fresh extraction diverge, naming every added and removed symbol.
 #
-# re-measured 2026-11-13: 5528 symbols across 11 modules.
+# re-measured 2026-11-13: 5537 symbols across 11 modules.
 
 ## WebUISharedCore
 
@@ -2135,10 +2135,19 @@ StyleSheet.rules
 SubmitOnEnter
 SubmitOnEnter.attribute()
 SubmitOnEnter.init()
+SubmitOnEnter.init(mode:)
+SubmitOnEnter.mode
 SubmitOnEnterAttribute
 SubmitOnEnterAttribute.init()
+SubmitOnEnterAttribute.init(mode:)
+SubmitOnEnterAttribute.mode
 SubmitOnEnterAttribute.name
 SubmitOnEnterAttribute.value
+SubmitOnEnterMode
+SubmitOnEnterMode.init(rawValue:)
+SubmitOnEnterMode.legacy
+SubmitOnEnterMode.meta
+SubmitOnEnterMode.plain
 Table
 Table.class
 Table.headers

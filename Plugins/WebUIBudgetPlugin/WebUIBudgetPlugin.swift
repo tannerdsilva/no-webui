@@ -216,9 +216,25 @@ struct WebUIBudgetPlugin: CommandPlugin {
     /// both engine ceilings move to the smallest hundred strictly above the measurement —
     /// 79,600 / 18,500 (13 raw bytes of headroom, never padded) — and stay under the
     /// journal's 80,000 absolute engine cap (413 bytes of raw headroom).
+    ///
+    /// re-pinned 2026-11-13 (Phase 7 — submit-on-enter modes and the IME rule):
+    ///
+    /// the extension's submit binder gained the value-carrying modes and the IME
+    /// guard: an early return on `isComposing`/`keyCode === 229`, the mode read,
+    /// and the three branches (`plain` = Enter, `meta` = Meta/Ctrl+Enter, empty =
+    /// the legacy single-line rule). the theme selected-state contract (Phase 8)
+    /// is doc + probe only and adds no bytes. measured on this tree, from the
+    /// asset tool's manifest (`served`):
+    ///   engine      79,587 raw / 18,446 gz   (≤ 79,600 / 18,500 — unchanged)
+    ///   engine-ext  28,558 raw /  6,935 gz   (was pinned 28,300 / 6,900; +339 raw
+    ///                                         and +76 gz)
+    ///   sheet      325,766 raw / 45,622 gz   (≤ 335,000 / 49,500 — unchanged)
+    ///   shell        1,514 raw /    539 gz   (≤   1,700 /    650 — unchanged)
+    /// both extension ceilings move to the smallest hundred strictly above the
+    /// measurement — 28,600 / 7,000 (42 raw bytes of headroom, never padded).
     private static let ceilings: [Ceiling] = [
         Ceiling(surface: "engine", label: "webui-engine.js", raw: 79_600, gz: 18_500),
-        Ceiling(surface: "engineExt", label: "webui-engine-ext.js", raw: 28_300, gz: 6_900),
+        Ceiling(surface: "engineExt", label: "webui-engine-ext.js", raw: 28_600, gz: 7_000),
         Ceiling(surface: "sheet", label: "design-system.css", raw: 335_000, gz: 49_500),
         Ceiling(surface: "shell", label: "webui-shell.js", raw: 1_700, gz: 650),
     ]
