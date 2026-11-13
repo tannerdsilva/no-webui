@@ -811,6 +811,39 @@ await page.evaluate(() => { document.querySelectorAll('link[rel="stylesheet"]').
     await esc.close();
 }
 
+// 4b. focus return by opener id across a SERVER round trip: the fixture's
+//     dialog is opened by a button and closed by a handler that answers with a
+//     patch removing it, so focus has to come back to #fx-dialog-open with no
+//     Escape and no client-side close. this is the server-driven twin of the
+//     Escape block above.
+{
+    const dlg = await browser.newPage();
+    const dlgErrors = [];
+    dlg.on("pageerror", (e) => dlgErrors.push(String(e)));
+    await dlg.goto(`${BASE}/behaviour`, { waitUntil: "load" });
+    await dlg.waitForTimeout(500);
+    await dlg.click("#fx-dialog-open");
+    await dlg.waitForFunction(() => !!document.getElementById("fx-dialog"), null, { timeout: 5000 }).catch(() => {});
+    const opened = await dlg.evaluate(() => !!document.getElementById("fx-dialog"));
+    await dlg.focus("#fx-dialog-field");
+    const parked = await dlg.evaluate(() => document.activeElement?.id ?? null);
+    await dlg.evaluate(() => document.getElementById("fx-dialog-close").click());
+    await dlg.waitForFunction(() => !document.getElementById("fx-dialog"), null, { timeout: 5000 }).catch(() => {});
+    await dlg.waitForTimeout(100);
+    const closed = await dlg.evaluate(() => ({
+        dialog: !!document.getElementById("fx-dialog"),
+        focus: document.activeElement?.id ?? null,
+    }));
+    if (opened && parked === "fx-dialog-field" && !closed.dialog && closed.focus === "fx-dialog-open") {
+        ok("a dialog closed by a server patch returns focus to its opener by id (round trip, not Escape)");
+    } else {
+        bad(`round-trip dialog: opened=${opened} parked=${JSON.stringify(parked)} after=${JSON.stringify(closed)}`);
+    }
+    if (dlgErrors.length === 0) ok("round-trip dialog probe has no page errors");
+    else bad(`round-trip dialog page errors: ${JSON.stringify(dlgErrors)}`);
+    await dlg.close();
+}
+
 // 5. cascade layers: unlayered consumer css outranks the sheet by intent, not by
 //    specificity. the probe picks its pair out of the *served* bytes — a framework
 //    rule whose selector carries more than one class part — so it cannot pass by

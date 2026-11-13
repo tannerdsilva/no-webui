@@ -24,6 +24,8 @@ final class BehaviourFixtureState: Sendable {
 		var saved = "(none)"
 		var last = "(none)"
 		var refreshes = 0
+		var dialogOpen = false
+		var t26 = 0
 		var uploads: [String: String] = [:]
 		var templated: [String] = []
 		var streamLines: [String] = []
@@ -76,6 +78,14 @@ final class BehaviourFixtureState: Sendable {
 	var refreshes: Int {
 		get { values.withLock { $0.refreshes } }
 		set { values.withLock { $0.refreshes = newValue } }
+	}
+	var dialogOpen: Bool {
+		get { values.withLock { $0.dialogOpen } }
+		set { values.withLock { $0.dialogOpen = newValue } }
+	}
+	var t26: Int {
+		get { values.withLock { $0.t26 } }
+		set { values.withLock { $0.t26 = newValue } }
 	}
 
 	/// the streamed-delta fixture: `#stream` appends one line and the handler
@@ -134,6 +144,34 @@ func behaviourLayerAHTML() -> String {
 func behaviourLayerBHTML() -> String {
 	"""
 	<div id="layer-b"\(DismissStack(layer: "b").attributeText) class="fx-layer"><p>Layer B — opened later, first in the document.</p><button id="close-b" type="button"\(DismissStack(layer: "b").attributeText) data-component-id="fx-close-b" data-event="click">Close B</button></div>
+	"""
+}
+
+/// the round-trip dialog: `#fx-dialog-open` is a button that names the dialog
+/// it opens, and `#fx-dialog-close` names the opener focus must return to.
+/// both handlers answer with a patch of `#fx-dialog-region`, so the dialog is
+/// removed by a server round trip — never by Escape — which is the path the
+/// opener memo and the removal pass exist for.
+func behaviourDialogRegionHTML(_ state: BehaviourFixtureState) -> String {
+	let dialog: String = state.dialogOpen ? """
+	<div id="fx-dialog" class="fx-layer" role="dialog" aria-label="round trip dialog"><p class="fx-muted">opened by <code>#fx-dialog-open</code>; closed by a server patch.</p><input id="fx-dialog-field" type="text" aria-label="dialog field" value="focus me"><button id="fx-dialog-close" type="button"\(FocusReturn(id: "fx-dialog-open").attributeText) data-component-id="fx-dialog-close" data-event="click">Close the dialog</button></div>
+	""" : ""
+	return """
+	<section id="fx-dialog-region" class="fx-sec"><h2>focus return by round trip</h2>
+	<p class="fx-muted">the close is a server round trip: the patch removes the dialog, and focus returns to the opener by id.</p>
+	<div class="fx-row"><button id="fx-dialog-open" type="button"\(FocusReturn(id: "fx-dialog").attributeText) data-component-id="fx-dialog-open" data-event="click">Open the dialog</button><p id="fx-dialog-state" class="fx-muted">dialog: \(state.dialogOpen ? "open" : "closed")</p></div>
+	\(dialog)</section>
+	"""
+}
+
+/// T26: a focused button whose own click returns a fragment replacing the
+/// region it lives in. the button is not an input, so it records `focus:<id>`
+/// and the replacement's new `#fx-t26` gets the focus back by id.
+func behaviourT26HTML(_ state: BehaviourFixtureState) -> String {
+	"""
+	<div id="t26-region" class="fx-sec"><h2>a focused button, replaced</h2>
+	<p class="fx-muted">the button returns a fragment that replaces this whole region; focus has to come back to <code>#fx-t26</code>.</p>
+	<div class="fx-row"><button id="fx-t26" type="button" data-component-id="fx-t26" data-event="click">Replace me (render \(state.t26))</button><p id="t26-out" class="fx-muted">t26: \(state.t26)</p></div></div>
 	"""
 }
 
@@ -267,6 +305,10 @@ func renderBehaviourPage(
 	<div id="layers" class="fx-layers"></div>
 	</section>
 
+	\(behaviourDialogRegionHTML(state))
+
+	\(behaviourT26HTML(state))
+
 	<section class="fx-sec"><h2>reorder</h2>
 	<ul id="reorder" class="fx-list"\(Reorder(inputID: "order-input").attributeText)><li id="item-a">item a</li><li id="item-b">item b</li><li id="item-c">item c</li></ul>
 	<input id="order-input" type="hidden" name="order" value="">
@@ -397,6 +439,22 @@ struct BehaviourPageResponder: Responder {
 		router.register(outcome: { _ in
 			.fragments([FragmentUpdate(id: "layer-b", html: "")])
 		}, for: ComponentID("fx-close-b"), in: session)
+		// the round-trip dialog: open and close are both patches of the region
+		// holding it, so the removal path — not Escape — returns focus to the
+		// opener the close control names.
+		router.register(outcome: { _ in
+			state.dialogOpen = true
+			return .fragments([FragmentUpdate(id: "fx-dialog-region", html: behaviourDialogRegionHTML(state))])
+		}, for: ComponentID("fx-dialog-open"), in: session)
+		router.register(outcome: { _ in
+			state.dialogOpen = false
+			return .fragments([FragmentUpdate(id: "fx-dialog-region", html: behaviourDialogRegionHTML(state))])
+		}, for: ComponentID("fx-dialog-close"), in: session)
+		// T26: the clicked button's own answer replaces the region holding it.
+		router.register(outcome: { _ in
+			state.t26 += 1
+			return .fragments([FragmentUpdate(id: "t26-region", html: behaviourT26HTML(state))])
+		}, for: ComponentID("fx-t26"), in: session)
 		router.register(outcome: { event in
 			state.saved = event.string("title") ?? "(none)"
 			return .fragments([

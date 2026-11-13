@@ -124,8 +124,31 @@ struct WebUIBudgetPlugin: CommandPlugin {
     /// moving it would leave the extension reading a `press` seam main owns, i.e. a
     /// broken binder rather than a smaller engine. the 74,500 pin is measured +2 kb and
     /// still under the plan's 80,000 absolute ceiling.
+    ///
+    /// re-pinned 2026-11-13 (the arc overlay-elimination program, Phase 4 — focus
+    /// return by opener id + T26):
+    ///
+    /// the engine gained the opener memo (a click, or `Enter`/`Space`, on a
+    /// `[data-focus-return]` element records the id it names, keyed by the element's
+    /// own id — strings only, so the record outlives the element), the removal pass
+    /// that runs after `applyAll`/`syncFollow` and hands focus back when a recorded id
+    /// no longer resolves (the "closed by a server round-trip" path, not Escape), and
+    /// T26's one-condition fix: a focused `BUTTON` is no longer classified as form
+    /// state for the `focus:<id>` branch, so a button replaced by its own region patch
+    /// is restored by id like any other non-input. measured on this tree, from the
+    /// asset tool's manifest (`served`):
+    ///   engine      75,707 raw / 17,691 gz   (was pinned 74,500 / 18,600; the raw
+    ///                                         ceiling carried 360 bytes of headroom,
+    ///                                         so this phase tripped it by design)
+    ///   engine-ext  23,199 raw /  5,861 gz   (≤ 23,200 / 5,900 — unchanged: this phase
+    ///                                         touches no extension binder)
+    ///   sheet      325,063 raw / 45,486 gz   (≤ 335,000 / 49,500 — unchanged)
+    ///   shell        1,514 raw /    539 gz   (≤   1,700 /    650 — unchanged)
+    /// the ceilings move to the smallest hundred strictly above the measured value —
+    /// 75,800 / 17,700 (93 raw bytes of headroom, never padded) — and stay under the
+    /// journal's 80,000 absolute engine cap.
     private static let ceilings: [Ceiling] = [
-        Ceiling(surface: "engine", label: "webui-engine.js", raw: 74_500, gz: 18_600),
+        Ceiling(surface: "engine", label: "webui-engine.js", raw: 75_800, gz: 17_700),
         Ceiling(surface: "engineExt", label: "webui-engine-ext.js", raw: 23_200, gz: 5_900),
         Ceiling(surface: "sheet", label: "design-system.css", raw: 335_000, gz: 49_500),
         Ceiling(surface: "shell", label: "webui-shell.js", raw: 1_700, gz: 650),

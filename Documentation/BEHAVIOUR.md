@@ -75,7 +75,7 @@ control.
 | `ScrollTo` | `data-scroll-to` | the element id to scroll to, with the 1.4 s flash contract; an empty value scrolls the document to the top |
 | `ScrollTo` (flash) | `data-scroll-flash` | presence while the scroll-to target flashes (engine-written, removed after 1400 ms) |
 | `DraftIdentity` | `data-draft-id` | the draft key a control's unsubmitted value is remembered under |
-| `FocusReturn` | `data-focus-return` | the id to return focus to after a patch (empty = the element itself) |
+| `FocusReturn` | `data-focus-return` | the id to return focus to after a patch (empty = the element itself). activation — a click, or `Enter`/`Space` — on an element carrying the attribute records the id it names, keyed by the element's own id, and the record is only strings, so it survives the element's removal; after a patch, an element that carried the attribute and no longer resolves hands focus to the id it named (the "closed by a server round-trip" path, not Escape). covers `button` as well as `[tabindex]`: a focused button replaced by its own region patch is restored by id like any non-input that carries one |
 | `DismissStack` | `data-dismiss` | presence marks a layer; the engine orders Escape and outside-click |
 | `Reorder` | `data-reorder` | the hidden input id the engine writes the new order into |
 | `Clipboard` | `data-copy` | text to copy (empty = the element's own text) |

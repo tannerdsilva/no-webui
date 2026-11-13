@@ -788,6 +788,66 @@ if (!clipboardGranted) {
 }
 
 // ---------------------------------------------------------------------------
+// 18b. data-focus-return by opener id — a dialog opened from a button and
+//      closed by a SERVER round trip (not Escape) returns focus to the opener.
+//      focus is parked on a field inside the dialog first, so the restore is
+//      the removal pass's work and not the still-present-element shortcut.
+// ---------------------------------------------------------------------------
+{
+  await page.click("#fx-dialog-open");
+  await page.waitForFunction(() => !!document.getElementById("fx-dialog"), null, { timeout: 4000 }).catch(() => {});
+  const opened = await page.evaluate(() => ({
+    dialog: !!document.getElementById("fx-dialog"),
+    state: (document.getElementById("fx-dialog-state")?.textContent || "").trim(),
+  }));
+  if (opened.dialog && opened.state === "dialog: open") {
+    ok("focus return by id: the opener's click round-tripped and the server rendered the dialog region");
+  } else {
+    bad(`focus return by id: after the open click ${JSON.stringify(opened)}`);
+  }
+
+  await page.focus("#fx-dialog-field");
+  const parked = await page.evaluate(() => document.activeElement?.id ?? null);
+  await page.evaluate(() => document.getElementById("fx-dialog-close").click());
+  await page.waitForFunction(() => !document.getElementById("fx-dialog"), null, { timeout: 4000 }).catch(() => {});
+  await page.waitForTimeout(80);
+  const closed = await page.evaluate(() => ({
+    dialog: !!document.getElementById("fx-dialog"),
+    state: (document.getElementById("fx-dialog-state")?.textContent || "").trim(),
+    focus: document.activeElement?.id ?? null,
+  }));
+  if (parked === "fx-dialog-field" && !closed.dialog && closed.state === "dialog: closed" && closed.focus === "fx-dialog-open") {
+    ok("focus return by id: the server's patch removed the dialog and focus came back to the opener (#fx-dialog-open)");
+  } else {
+    bad(`focus return by id: parked ${JSON.stringify(parked)}, after the close ${JSON.stringify(closed)}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 18c. T26 — a focused button whose own click replaces the region holding it
+//      keeps focus by id (the button records `focus:<id>`, not form state).
+// ---------------------------------------------------------------------------
+{
+  const before = await page.evaluate(() => ({
+    text: (document.getElementById("fx-t26")?.textContent || "").trim(),
+    focus: document.activeElement?.id ?? null,
+  }));
+  await page.click("#fx-t26");
+  await page.waitForFunction(() => (document.getElementById("t26-out")?.textContent || "").trim() === "t26: 1", null, { timeout: 4000 }).catch(() => {});
+  await page.waitForTimeout(80);
+  const after = await page.evaluate(() => ({
+    text: (document.getElementById("fx-t26")?.textContent || "").trim(),
+    out: (document.getElementById("t26-out")?.textContent || "").trim(),
+    focus: document.activeElement?.id ?? null,
+  }));
+  if (before.text === "Replace me (render 0)" && after.out === "t26: 1" && after.focus === "fx-t26") {
+    ok("T26: a focused button replaced by its own region patch keeps focus by id (#fx-t26)");
+  } else {
+    bad(`T26: before ${JSON.stringify(before)}, after ${JSON.stringify(after)}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 19. data-theme-choice — the existing reconciliation, extended not duplicated.
 // ---------------------------------------------------------------------------
 {

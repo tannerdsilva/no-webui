@@ -1106,7 +1106,7 @@ window.WebUIEngine = (function () {
       saveScroll(root, '__root', state);
       if (active && root.contains(active)) {
         var tag = active.tagName;
-        var isForm = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || tag === 'BUTTON';
+        var isForm = tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT';
         if (!isForm && active.id) {
           state['focus:' + active.id] = { focus: true };
         }
@@ -1739,6 +1739,8 @@ window.WebUIEngine = (function () {
     var scrollMemo = {};
     var openMemo = {};
     var focusMemo = null;
+    var openerMemo = {};
+    var removalMemo = null;
     var layers = [];
     var mounted = false;
 
@@ -1884,6 +1886,20 @@ window.WebUIEngine = (function () {
       });
     };
 
+    function noteOpener(target) {
+      var el = target && target.closest ? target.closest('[data-focus-return]') : null;
+      if (!el || !el.id) { return; }
+      openerMemo[el.id] = el.getAttribute('data-focus-return') || el.id;
+    }
+
+    function onOpenerClick(e) { noteOpener(e.target); }
+
+    function onOpenerKey(e) {
+      var k = e.key;
+      if (k !== 'Enter' && k !== ' ' && k !== 'Spacebar') { return; }
+      noteOpener(e.target);
+    }
+
     BEHAVIORS['data-focus-return'] = function () { };
 
     BEHAVIORS['data-dismiss'] = function (el) {
@@ -1940,11 +1956,32 @@ window.WebUIEngine = (function () {
       var active = document.activeElement;
       var decl = active && active.closest ? active.closest('[data-focus-return]') : null;
       focusMemo = decl ? { active: active, target: decl.getAttribute('data-focus-return') || decl.id } : null;
+      removalMemo = [];
+      var holders = document.querySelectorAll('[data-focus-return]');
+      for (var r = 0; r < holders.length; r++) {
+        if (holders[r].id) { removalMemo.push(holders[r].id); }
+      }
+    }
+
+    function restoreRemovedOpener() {
+      var recorded = removalMemo;
+      removalMemo = null;
+      if (!recorded) { return; }
+      for (var i = 0; i < recorded.length; i++) {
+        var id = recorded[i];
+        if (document.getElementById(id)) { continue; }
+        var opener = openerMemo[id];
+        if (!opener) { continue; }
+        var target = document.getElementById(opener);
+        if (!target || typeof target.focus !== 'function') { continue; }
+        try { target.focus(); } catch (e) { }
+      }
     }
 
     function restore(nodes) {
       for (var i = 0; i < nodes.length; i++) { applyAll(nodes[i]); }
       syncFollow();
+      restoreRemovedOpener();
       var memo = focusMemo;
       focusMemo = null;
       if (!memo || !memo.target) { return; }
@@ -1976,11 +2013,15 @@ window.WebUIEngine = (function () {
       if (mounted) { return; }
       mounted = true;
       document.addEventListener('click', onDocClick);
+      document.addEventListener('click', onOpenerClick, true);
+      document.addEventListener('keydown', onOpenerKey, true);
     }
 
     function destroy() {
       if (mounted) {
         document.removeEventListener('click', onDocClick);
+        document.removeEventListener('click', onOpenerClick, true);
+        document.removeEventListener('keydown', onOpenerKey, true);
       }
       mounted = false;
       layers = [];
@@ -1988,6 +2029,8 @@ window.WebUIEngine = (function () {
       scrollMemo = {};
       openMemo = {};
       focusMemo = null;
+      openerMemo = {};
+      removalMemo = null;
     }
 
     return {
