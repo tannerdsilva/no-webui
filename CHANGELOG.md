@@ -44,6 +44,25 @@ all notable changes to this project are documented here.
   registry). `WebUIServer` grows `RequestAuthorizer` and
   `SocketLifecycleObserver` and consults both.
 
+- **`@Wired` handlers may return `HandlerOutcome`, not only `[FragmentUpdate]`** —
+  the handler's own return type is the decision (no flag, no bool):
+  `@WireGroup` emits the existing fragment registration for `[FragmentUpdate]`
+  and `router.register(outcome:for:)` for `HandlerOutcome` (identifier or
+  `WebUI.`-qualified), both into the HOST table. a non-listed event answers
+  `.fragments([])` on the outcome path — the same wire shape the fragment path's
+  `[]` sends. `@Wired`'s diagnostic now reads "must return '[FragmentUpdate]' or
+  'HandlerOutcome'".
+- **`WebUIServer.refresh(session:)`** — the producer's door to the refresh a
+  `HandlerOutcome.refresh` performs, for a host that has no client event to
+  answer: re-renders the page that session last rendered and fans the diff out to
+  that session's sockets only. it is the same pass (same `lastRender`/`diffFrame`/
+  `fanOut`, same `begin(preservingRegistrations:)`, same baseline — no second
+  baseline owner and no second differ), and the remembered render's principal
+  wins, so a page re-renders as the identity that rendered it. a session with no
+  remembered page (unknown, or evicted at `maxSessions`) answers its sockets with
+  the existing `refresh` error frame instead of silence. binding is lazy: a socket
+  reaches the fan-out only after its first token-bearing frame.
+
 ### changed
 
 - **the upload wire: `data-upload-into` is a relative directory, and the engine

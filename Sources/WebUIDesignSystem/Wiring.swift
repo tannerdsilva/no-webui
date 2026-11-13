@@ -7,16 +7,25 @@ import WebUI
 /// peer role, empty expansion — the marker itself contributes nothing to the
 /// host; all generation happens in the enclosing group macro.
 ///
+/// the handler's return type picks the registration:
+/// `[FragmentUpdate]` keeps the fragment door, `HandlerOutcome` registers
+/// through `register(outcome:for:)` — so a handler can answer `.refresh`,
+/// `.redirect`, `.state`, `.reload` or `.fail` without a second annotation.
+///
 /// ```swift
 /// @WireGroup("chat")
 /// extension Controller {
 ///     @Wired("cb-file", events: [.click])
 ///     func handleAttachFile(_ event: EventData) async -> [FragmentUpdate] { … }
+///
+///     @Wired("cb-save", events: [.submit])
+///     func handleSave(_ event: EventData) async -> HandlerOutcome { .refresh }
 /// }
 /// ```
 /// - Parameter id: the component id this handler is registered for.
 /// - Parameter events: the event types this handler accepts; anything else
-///   returns empty fragments from the generated registration block.
+///   returns no fragments from the generated registration block (`.fragments([])`
+///   on the outcome path — the same nothing).
 @attached(peer)
 public macro Wired(_ id: String, events: [HTMLEvent] = [.click]) =
     #externalMacro(module: "WebUIDesignSystemMacros", type: "WiredMacro")

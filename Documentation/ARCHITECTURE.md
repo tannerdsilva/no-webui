@@ -359,6 +359,40 @@ default CSP (`csp(nonce:)`). `includeRuntime: false` suppresses both.
 | `ping` | — | Keepalive heartbeat |
 | `navigate` | `{ url }` | Client-side navigation (popstate). answered by re-rendering the matched route into the socket's session as an in-place `update` patch of the page region; a path the router cannot answer is answered with a full-page `redirect`. the re-render PRESERVES registrations made outside a render pass — see "in-place re-render preserves registrations" in Layer 2 |
 
+### producer-initiated refresh — `refresh(session:)`
+
+a handler that returns `HandlerOutcome.refresh` re-renders the page the event was
+dispatched in. the outcome carries **no session**, deliberately: the dispatch
+session is the authority, so no value a handler returns can name another page.
+a producer — a file that landed, a background job that finished, a store another
+writer owns — has no event to answer, and `WebUIServer.refresh(session:)` is the
+door it calls:
+
+```swift
+await server.refresh(session: renderSession)
+```
+
+it is the same pass, not a second one. the re-render routes through the same
+`lastRender`/`diffFrame`/`fanOut` and the same
+`router.begin(session, preservingRegistrations: true)` a handler refresh takes,
+against the same per-session baseline — **there is no second baseline owner and
+no second differ**, so the two doors cannot disagree about what a refresh means
+(the bytes are diffed, and a re-render that reproduces the page sends nothing).
+
+**the remembered render's principal wins.** the request carries
+`remembered.principal`, exactly as the outcome path's does, so a producer refresh
+re-renders the page as the identity that rendered it — never as nobody, and never
+as whoever happens to be asking. a page rendered for one identity stays that
+identity's page across a refresh.
+
+**a session with no page answers its sockets.** an unknown session, or one whose
+remembered page was evicted at `WebUIServerConfig.maxSessions`, gets the existing
+`refresh` error frame (`{ code: "refresh", message: "this session has no page to
+refresh" }`) on every socket bound to it — never silence, which a page cannot
+tell from a refresh that changed nothing. binding is lazy: a socket that only
+connects is not in the session index, so a refresh reaches a socket only after
+that socket's first token-bearing frame (`ping`) bound it.
+
 ### JS Runtime Modules
 
 The engine (`webui-engine.js`) is organized around a set of factory functions

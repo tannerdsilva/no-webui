@@ -254,6 +254,77 @@ struct WiredMacroExpansionTests {
             """
         )
     }
+
+    @Test("@Wired accepts a HandlerOutcome return type and still expands to nothing")
+    func handlerOutcomeReturnAccepted() {
+        // the return type is the decision; the marker itself emits nothing, so a
+        // `HandlerOutcome` handler is accepted exactly like a fragments one.
+        assertExpansion(
+            """
+            @Wired("cb-save", events: [.submit])
+            func handleSave(_ event: EventData) async -> HandlerOutcome { .refresh }
+            """,
+            expanded: """
+            func handleSave(_ event: EventData) async -> HandlerOutcome { .refresh }
+            """
+        )
+    }
+
+    @Test("a qualified HandlerOutcome is the same type too")
+    func qualifiedHandlerOutcomeAccepted() {
+        assertExpansion(
+            """
+            @Wired("cb-save")
+            func handleSave(_ event: EventData) async -> WebUI.HandlerOutcome { .refresh }
+            """,
+            expanded: """
+            func handleSave(_ event: EventData) async -> WebUI.HandlerOutcome { .refresh }
+            """
+        )
+    }
+
+    @Test("a @WireGroup with both return kinds emits the two registrations, in declaration order")
+    func wireGroupDualEmission() {
+        // the ONE decision the macro makes from the handler's own signature:
+        // `[FragmentUpdate]` keeps the fragment door, `HandlerOutcome` registers
+        // through the outcome door. both land in the HOST table (no session) —
+        // the shape `WebUIServer.start()` seals.
+        assertExpansion(
+            """
+            @WireGroup("chat")
+            extension Controller {
+                @Wired("cb-file", events: [.click])
+                func handleAttachFile(_ event: EventData) async -> [FragmentUpdate] { [] }
+
+                @Wired("cb-save", events: [.submit])
+                func handleSave(_ event: EventData) async -> HandlerOutcome { .refresh }
+            }
+            """,
+            expanded: """
+            extension Controller {
+                func handleAttachFile(_ event: EventData) async -> [FragmentUpdate] { [] }
+                func handleSave(_ event: EventData) async -> HandlerOutcome { .refresh }
+
+                func wireGroup_chat(_ router: EventRouter) {
+                    let handleAttachFileEvents: [String] = ([.click] as [HTMLEvent]).map(\\.rawValue)
+                    router.register({ event in
+                        guard handleAttachFileEvents.contains(event.event.rawValue) else {
+                            return []
+                        }
+                        return await self.handleAttachFile(event)
+                    }, for: ComponentID("cb-file"))
+                    let handleSaveEvents: [String] = ([.submit] as [HTMLEvent]).map(\\.rawValue)
+                    router.register(outcome: { event in
+                        guard handleSaveEvents.contains(event.event.rawValue) else {
+                            return .fragments([])
+                        }
+                        return await self.handleSave(event)
+                    }, for: ComponentID("cb-save"))
+                }
+            }
+            """
+        )
+    }
 }
 
 // MARK: - negative cases
@@ -290,7 +361,7 @@ struct WiredMacroNegativeTests {
             @Wired("x", events: [.click])
             func handler(_ event: EventData) async -> Int { 0 }
             """,
-            message: "@Wired on 'handler' must return '[FragmentUpdate]', got 'Int'"
+            message: "@Wired on 'handler' must return '[FragmentUpdate]' or 'HandlerOutcome', got 'Int'"
         )
     }
 

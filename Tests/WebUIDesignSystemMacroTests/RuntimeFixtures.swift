@@ -144,8 +144,42 @@ struct WiredCompiledRuntimeTests {
 		// the count that moves; `.default` is a real render session and holds
 		// nothing here. the two dispatches above are the reachability proof: the
 		// host table answers a tokenless path, which is why they did not change.
-		#expect(router.hostHandlerCount == 2)
+		// three handlers now: two fragments, one outcome, one registration each.
+		#expect(router.hostHandlerCount == 3)
 		#expect(router.handlerCount(in: session) == 0)
+	}
+
+	@Test("a @Wired HandlerOutcome handler registers through the outcome door")
+	func outcomeHandlerRoutesThroughTheOutcomeDoor() async {
+		let router = EventRouter()
+		let wiring = ProbeWiring()
+		wiring.wireGroup_chat(router)
+
+		// the return type chose the door: same host table, same seal ordering,
+		// but `register(outcome:for:)` — so the handler's own answer reaches the
+		// router unflattened instead of being read as fragments.
+		let listed = await router.dispatch(
+			EventData(component: ComponentID("cb-save"), event: "submit"),
+			in: .default
+		)
+		if case .refresh = listed {
+			// the handler said `.refresh` and the router heard it.
+		} else {
+			Issue.record("a @Wired HandlerOutcome handler must answer .refresh; got \(listed)")
+		}
+
+		// a non-listed event is filtered by the generated guard, and its answer is
+		// the outcome door's empty shape — the same nothing the fragment path's
+		// `[]` sends.
+		let filtered = await router.dispatch(
+			EventData(component: ComponentID("cb-save"), event: "click"),
+			in: .default
+		)
+		if case .fragments(let fragments) = filtered {
+			#expect(fragments.isEmpty, "a filtered event must ship nothing")
+		} else {
+			Issue.record("a non-listed event must answer .fragments([]); got \(filtered)")
+		}
 	}
 }
 
@@ -159,6 +193,16 @@ struct ProbeWiring {
 	@Wired("cb-send", events: [.click, .submit])
 	func cbSend(_ event: EventData) async -> [FragmentUpdate] {
 		[FragmentUpdate(id: "cb-send", html: "<p>sent</p>")]
+	}
+
+	// the second return kind: this handler answers a `HandlerOutcome`, so the
+	// generated registrar uses the outcome door. the answer is a `refresh` — the
+	// server re-renders the dispatch session's page — which is the outcome a
+	// producer door (`WebUIServer.refresh(session:)`) exists to reach without an
+	// event.
+	@Wired("cb-save", events: [.submit])
+	func cbSave(_ event: EventData) async -> HandlerOutcome {
+		.refresh
 	}
 }
 

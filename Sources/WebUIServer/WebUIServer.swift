@@ -550,6 +550,46 @@ public actor WebUIServer {
 		sinks.count
 	}
 
+	/// re-render the page `session` last rendered and fan the diff out to every
+	/// socket bound to that session — the producer's door to the refresh
+	/// `HandlerOutcome.refresh` performs.
+	///
+	/// an outcome carries **no session** (§22.2): the dispatch session is the
+	/// authority, so no value a handler returns can name another page. a host
+	/// that has no event to answer — a file landed, a background job finished, a
+	/// store changed on disk — has no dispatch session to borrow, and this is the
+	/// door it calls instead. it names the session whose page should be
+	/// re-rendered, and nothing else changes: the render is the same one the
+	/// outcome path performs.
+	///
+	/// **the remembered render's principal wins.** the request this builds
+	/// carries `remembered.principal ?? nil`, exactly as the outcome path's does,
+	/// so a producer refresh re-renders the page as the identity that rendered it
+	/// — never as nobody, and never as whoever happens to be asking. a page
+	/// rendered for one identity stays that identity's page across a refresh.
+	///
+	/// **no second baseline owner, no second differ.** the pass routes through
+	/// the same `lastRender`/`diffFrame`/`fanOut` and the same
+	/// `router.begin(session, preservingRegistrations: true)` a handler refresh
+	/// takes, so the two doors cannot drift in what a refresh means: the bytes
+	/// are diffed against this session's baseline, and a re-render that
+	/// reproduces the page sends nothing at all.
+	///
+	/// **a session with no page answers its sockets.** an unknown session, or one
+	/// whose remembered page was evicted at `WebUIServerConfig.maxSessions`, gets
+	/// the existing `refresh` error frame (`code: "refresh"`, "this session has
+	/// no page to refresh") on every socket bound to it — never silence, which a
+	/// page cannot tell from a refresh that changed nothing.
+	///
+	/// - Parameter session: the render session whose page should be refreshed.
+	public func refresh(session: RenderSessionID) async {
+		// no runner means `start()` has not run: nothing has been rendered and no
+		// socket can be bound, so there is nothing for a refresh to reach. it is
+		// the same no-op `broadcast` is before start, not an error a host must
+		// learn to handle.
+		await runner?.refresh(session: session, principal: nil)
+	}
+
 	// MARK: - frame budget
 
 	/// record one frame the websocket decoder refused as over budget: one
@@ -1474,7 +1514,7 @@ final class Runner: Sendable {
 	///
 	/// every failure answers the session's sockets: a refresh that throws must
 	/// not leave a page waiting for a frame that will not come.
-	private func refresh(session: RenderSessionID, principal: SessionKey?) async {
+	fileprivate func refresh(session: RenderSessionID, principal: SessionKey?) async {
 		guard let remembered = lastRender(for: session) else {
 			logger.error(
 				"WebUIServer: refresh asked in session '\(session.rawValue)' with no remembered page"

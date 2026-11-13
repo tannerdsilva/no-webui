@@ -10,7 +10,7 @@
 # forced it. `Tests/WebUITests/FrozenSurfaceTests.swift` fails when this
 # file and a fresh extraction diverge, naming every added and removed symbol.
 #
-# re-measured 2026-11-13: 5482 symbols across 11 modules.
+# re-measured 2026-11-13: 5483 symbols across 11 modules.
 
 ## WebUISharedCore
 
@@ -5202,6 +5202,7 @@ WebUIServer.init(render:router:config:logger:)
 WebUIServer.init(requestRender:router:config:logger:)
 WebUIServer.init(router:config:logger:)
 WebUIServer.init(router:eventRouter:config:logger:)
+WebUIServer.refresh(session:)
 WebUIServer.refusedFrameCount
 WebUIServer.start()
 WebUIServer.stop()

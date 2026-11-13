@@ -6,13 +6,20 @@ import SwiftSyntaxMacros
 
 /// `@Wired` is a peer marker: it expands to nothing. The only work it does is
 /// validate the annotated handler (must be a func, must be `async`, must
-/// return `[FragmentUpdate]`). All code generation happens in the enclosing
-/// `@WireGroup` member macro.
+/// return `[FragmentUpdate]` or `HandlerOutcome`). All code generation happens
+/// in the enclosing `@WireGroup` member macro.
 ///
 /// ```swift
 /// @Wired("cb-file", events: [.click])
 /// func handleAttachFile(_ event: EventData) async -> [FragmentUpdate] { … }
+///
+/// @Wired("cb-save", events: [.submit])
+/// func handleSave(_ event: EventData) async -> HandlerOutcome { .refresh }
 /// ```
+///
+/// the return type is the decision, not an argument: a fragments handler keeps
+/// the fragment registration and an outcome handler registers through the
+/// outcome door. there is no flag and no bool to get wrong.
 public struct WiredMacro: PeerMacro {
     public static func expansion(
         of node: AttributeSyntax,
@@ -34,15 +41,18 @@ public struct WiredMacro: PeerMacro {
 
         // the return type is compared structurally, not as text: `[FragmentUpdate]`
         // and `[WebUI.FragmentUpdate]` are the same type, and a string comparison
-        // would reject the qualified spelling.
+        // would reject the qualified spelling. the same walk accepts
+        // `HandlerOutcome` / `WebUI.HandlerOutcome`: a handler's own return type
+        // is the compile-time decision for what `@WireGroup` emits, so there is
+        // no flag, no bool, and no second spelling to keep in sync.
         guard let returnType = funcDecl.signature.returnClause?.type else {
             throw MacroExpansionErrorMessage(
-                "@Wired on '\(name)' must return '[FragmentUpdate]', got 'no return type'"
+                "@Wired on '\(name)' must return '[FragmentUpdate]' or 'HandlerOutcome', got 'no return type'"
             )
         }
-        guard isFragmentUpdateArray(returnType) else {
+        guard isFragmentUpdateArray(returnType) || isHandlerOutcome(returnType) else {
             throw MacroExpansionErrorMessage(
-                "@Wired on '\(name)' must return '[FragmentUpdate]', got '\(returnType.trimmedDescription)'"
+                "@Wired on '\(name)' must return '[FragmentUpdate]' or 'HandlerOutcome', got '\(returnType.trimmedDescription)'"
             )
         }
 
@@ -56,6 +66,17 @@ public struct WiredMacro: PeerMacro {
         }
 
         return []
+    }
+
+    /// whether the type is `HandlerOutcome`, qualified or not.
+    static func isHandlerOutcome(_ type: TypeSyntax) -> Bool {
+        if let identifier = type.as(IdentifierTypeSyntax.self) {
+            return identifier.name.text == "HandlerOutcome"
+        }
+        if let member = type.as(MemberTypeSyntax.self) {
+            return member.name.text == "HandlerOutcome"
+        }
+        return false
     }
 
     /// whether the type is `[FragmentUpdate]`, qualified or not.
@@ -191,7 +212,15 @@ public struct WireGroupMacro: MemberMacro {
                     id: wired.id,
                     idLiteral: wired.idLiteral,
                     eventsExpr: wired.eventsExpr,
-                    funcName: funcDecl.name.text
+                    funcName: funcDecl.name.text,
+                    // the handler's own return type is the decision, read the same
+                    // structural way `@Wired` validates it. a type that is neither
+                    // stays on the fragment path here: `@Wired` owns that
+                    // diagnostic and reports it once, at the attribute — this
+                    // macro must not emit a second error for one mistake.
+                    returnsOutcome: funcDecl.signature.returnClause.map {
+                        WiredMacro.isHandlerOutcome($0.type)
+                    } ?? false
                 )
             )
         }
@@ -227,6 +256,9 @@ public struct WireGroupMacro: MemberMacro {
         /// the events expression as written (`[.click]`), for emission.
         let eventsExpr: String
         let funcName: String
+        /// whether the handler answers `HandlerOutcome` rather than
+        /// `[FragmentUpdate]` — the one thing that changes what is emitted.
+        let returnsOutcome: Bool
     }
 
     // MARK: helpers
@@ -295,12 +327,31 @@ public struct WireGroupMacro: MemberMacro {
             bodyLines.append(
                 "    let \(eventsName): [String] = (\(handler.eventsExpr) as [HTMLEvent]).map(\\.rawValue)"
             )
-            bodyLines.append("    router.register({ event in")
-            bodyLines.append("        guard \(eventsName).contains(event.event.rawValue) else {")
-            bodyLines.append("            return []")
-            bodyLines.append("        }")
-            bodyLines.append("        return await self.\(handler.funcName)(event)")
-            bodyLines.append("    }, for: ComponentID(\(handler.idLiteral)))")
+            // two return types, two registrations — both into the HOST table (no
+            // session argument), which is the single-page host's shape and the
+            // table `WebUIServer.start()` seals before the listener accepts a
+            // frame. a `@Wired` handler wired in a host's own init therefore has
+            // to register here, not in a session it does not have.
+            if handler.returnsOutcome {
+                // the outcome door: the same event filter, the handler's own
+                // `HandlerOutcome` passed through untouched. a filtered event
+                // answers `.fragments([])` — the same wire shape as the fragment
+                // path's `[]`, and the only spelling that type-checks, because
+                // `HandlerOutcome` has no ExpressibleByArrayLiteral conformance.
+                bodyLines.append("    router.register(outcome: { event in")
+                bodyLines.append("        guard \(eventsName).contains(event.event.rawValue) else {")
+                bodyLines.append("            return .fragments([])")
+                bodyLines.append("        }")
+                bodyLines.append("        return await self.\(handler.funcName)(event)")
+                bodyLines.append("    }, for: ComponentID(\(handler.idLiteral)))")
+            } else {
+                bodyLines.append("    router.register({ event in")
+                bodyLines.append("        guard \(eventsName).contains(event.event.rawValue) else {")
+                bodyLines.append("            return []")
+                bodyLines.append("        }")
+                bodyLines.append("        return await self.\(handler.funcName)(event)")
+                bodyLines.append("    }, for: ComponentID(\(handler.idLiteral)))")
+            }
         }
 
         let body = bodyLines.joined(separator: "\n")

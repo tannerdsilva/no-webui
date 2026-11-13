@@ -103,6 +103,54 @@ func withServer(
 	try await assertClosed(port: port)
 }
 
+/// start a server on a free port and hand `body` the live ``WebUIServer``
+/// instance beside the port, then stop it.
+///
+/// the same boot `withServer` performs, with the instance exposed: some calls
+/// a page's socket cannot make name a `RenderSessionID` instead — a producer
+/// refresh (`WebUIServer.refresh(session:)`) is one — and the token a render
+/// mints is only knowable from the server's own render. `withServer` keeps its
+/// signature and behaviour; this is the second door onto the same harness.
+///
+/// `maxSessions` is forwarded to the config so a test can drive the eviction
+/// case with a table of one.
+func withServerHandle(
+	requestRender: @escaping WebUIServer.RequestRender,
+	router: EventRouter,
+	assets: [WebUIServerAsset],
+	themeSheet: ThemeSheet? = nil,
+	requireRenderToken: Bool = false,
+	handlerFailurePolicy: HandlerFailurePolicy = .notifyClient,
+	maxSessions: Int = 1_024,
+	portBase: Int = 21000,
+	_ body: (WebUIServer, Int) async throws -> Void
+) async throws {
+	let port = try await freePort(base: portBase)
+	let server = WebUIServer(
+		requestRender: requestRender,
+		router: router,
+		config: WebUIServerConfig(
+			host: "127.0.0.1", port: port,
+			maxSessions: maxSessions,
+			themeSheet: themeSheet, assets: assets,
+			requireRenderToken: requireRenderToken,
+			handlerFailurePolicy: handlerFailurePolicy
+		)
+	)
+	let task = Task { try await server.start() }
+	_ = try await waitForServe(port: port)
+	do {
+		try await body(server, port)
+	} catch {
+		await server.stop()
+		task.cancel()
+		throw error
+	}
+	await server.stop()
+	task.cancel()
+	try await assertClosed(port: port)
+}
+
 /// start a router-driven server (plan w3.2's `init(router:config:logger:)`)
 /// on a free port, run `body`, then stop it. same shape as `withServer`, so
 /// the wire-asserting suites drive both with the same helpers.
