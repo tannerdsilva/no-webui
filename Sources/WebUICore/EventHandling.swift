@@ -322,6 +322,20 @@ public final class EventRouter: Sendable {
             /// session (a re-render mints fresh state) while a re-render does
             /// not close anybody's socket — liveness must survive the reset.
             var live: Set<RenderSessionID> = []
+            /// the HOST table: registrations made without a session — the
+            /// hand-wired boot shape (`register(_:for:)`), which is what a host
+            /// that wires its controls in `init` uses. ONE table for the whole
+            /// router, never a copy per session: N host handlers cost N entries
+            /// however many pages the server holds.
+            var host: [ComponentID: OutcomeHandler] = [:]
+            /// the host's per-component failure fragments. resolved after the
+            /// session's own, so the two tables share one precedence rule.
+            var hostFallbacks: [ComponentID: EventHandler] = [:]
+            /// set once by ``EventRouter/sealHostRegistrations()``: the host's
+            /// boot wiring is complete, so a later host registration is refused
+            /// (and logged) rather than silently growing a table under a server
+            /// that is already serving.
+            var hostSealed = false
         }
         private let values = Mutex(Values())
 
@@ -588,6 +602,83 @@ public final class EventRouter: Sendable {
             }
         }
 
+        // MARK: host table
+
+        /// whether a host registration landed, was refused by the handler cap,
+        /// or was refused because the table is sealed. `sealed` is not a cap: it
+        /// means the table is closed for the rest of the router's life.
+        enum HostRegistration: Sendable, Equatable {
+            case registered
+            case capReached
+            case sealed
+        }
+
+        /// register `handler` in the HOST table, refusing a NEW component id
+        /// once the table holds `limit` handlers and any registration at all
+        /// once it is sealed.
+        ///
+        /// re-registering an id the host already carries is an OVERWRITE and is
+        /// never refused for the cap — the same rule the session door follows,
+        /// and what lets a boot routine that runs twice land the same shapes.
+        func registerHost(
+            _ handler: @escaping OutcomeHandler,
+            for componentID: ComponentID,
+            limit: Int
+        ) -> HostRegistration {
+            values.withLock { values in
+                guard !values.hostSealed else { return .sealed }
+                if values.host[componentID] == nil, values.host.count >= limit {
+                    return .capReached
+                }
+                values.host[componentID] = handler
+                return .registered
+            }
+        }
+
+        /// register a host fallback. bounded by the host's own ids (a host wires
+        /// a fixed set at boot), exactly as session fallbacks are bounded by the
+        /// page's — the cap is on handlers, one table per scope.
+        func registerHostFallback(
+            _ handler: @escaping EventHandler,
+            for componentID: ComponentID
+        ) -> HostRegistration {
+            values.withLock { values in
+                guard !values.hostSealed else { return .sealed }
+                values.hostFallbacks[componentID] = handler
+                return .registered
+            }
+        }
+
+        /// close the host table. returns whether THIS call closed it, so the
+        /// router logs one seal line rather than one per caller.
+        func sealHost() -> Bool {
+            values.withLock { values in
+                guard !values.hostSealed else { return false }
+                values.hostSealed = true
+                return true
+            }
+        }
+
+        var hostSealed: Bool {
+            values.withLock { $0.hostSealed }
+        }
+
+        func hostHandler(for componentID: ComponentID) -> OutcomeHandler? {
+            values.withLock { $0.host[componentID] }
+        }
+
+        func hostFallback(for componentID: ComponentID) -> EventHandler? {
+            values.withLock { $0.hostFallbacks[componentID] }
+        }
+
+        var hostHandlerCount: Int {
+            values.withLock { $0.host.count }
+        }
+
+        var hostFallbackCount: Int {
+            values.withLock { $0.hostFallbacks.count }
+        }
+
         func nextComponentID(in session: RenderSessionID) -> ComponentID {
             values.withLock { values in
                 var current = values.sessions[session] ?? Session()
@@ -609,7 +700,14 @@ public final class EventRouter: Sendable {
         }
 
         func reset() {
-            values.withLock { values in values = Values() }
+            values.withLock { values in
+                // the seal is lifecycle state, not a row: a router that has
+                // served must not reopen its host table because somebody called
+                // `reset()`. both tables are cleared; the door stays shut.
+                let sealed = values.hostSealed
+                values = Values()
+                values.hostSealed = sealed
+            }
         }
     }
     public init(
@@ -786,8 +884,52 @@ public final class EventRouter: Sendable {
     }
 
     /// how many handlers `session` holds.
+    ///
+    /// session table only: the host table is stored once for the whole router
+    /// and is reported by ``hostHandlerCount``, so a soak test can tell "this
+    /// page's registrations are bounded" from "the boot wiring is bounded".
     public func handlerCount(in session: RenderSessionID) -> Int {
         state.handlerCount(in: session)
+    }
+
+    /// how many handlers the HOST table holds — registrations made without a
+    /// session.
+    ///
+    /// constant in the number of render sessions by construction: the table is
+    /// stored once, never copied per session, so ten boot-wired handlers read
+    /// `10` whether the router holds one page or a thousand.
+    public var hostHandlerCount: Int {
+        state.hostHandlerCount
+    }
+
+    /// whether the host table is sealed (see ``sealHostRegistrations()``).
+    public var hostRegistrationsSealed: Bool {
+        state.hostSealed
+    }
+
+    /// close the host table: from here a registration made WITHOUT a session is
+    /// refused and logged at `.error` — never silently dropped, never landed.
+    ///
+    /// a server calls this once, after the host's boot wiring and before its
+    /// listener accepts a frame (``WebUIServer/start()`` does exactly that).
+    /// the host table is boot-time configuration, so a registration arriving
+    /// after serve is a bug the router reports rather than absorbs; and a table
+    /// that cannot grow under a live server is a table whose `maxHandlers` bound
+    /// is a fact rather than a hope.
+    ///
+    /// registrations WITH a session are unaffected: a render pass keeps
+    /// registering its own controls for as long as the server runs.
+    ///
+    /// idempotent. ``reset()`` clears both tables but leaves the seal standing —
+    /// sealing is a lifecycle fact, not a row.
+    public func sealHostRegistrations() {
+        guard state.sealHost() else { return }
+        logger.emit(
+            ObservableEvent.debug(
+                message: "EventRouter: host registrations sealed (\(state.hostHandlerCount) handler(s), \(state.hostFallbackCount) fallback(s))"
+            ),
+            observers: observers
+        )
     }
 
     // MARK: registration
@@ -834,14 +976,55 @@ public final class EventRouter: Sendable {
         }
     }
 
-    /// register into the shared default session — the single-page host's path.
-    public func register(_ handler: @escaping EventHandler, for componentID: ComponentID) {
-        register(handler, for: componentID, in: .default)
+    /// register into the HOST table — the single-page host's path.
+    ///
+    /// this is the 1.x shape (`register(_:for:)` with no session) and it keeps
+    /// its meaning: the handler is reachable from every dispatch in every
+    /// session, because the host table answers a page whose own session did not
+    /// register the id. it is no longer a write into `.default`: `.default`
+    /// stays a real render session for tokenless pages, so a stale page's event
+    /// can no longer reach another page's shape through it.
+    ///
+    /// returns whether the registration landed. `false` means it was refused —
+    /// the table is sealed (``sealHostRegistrations()``) or at `maxHandlers` —
+    /// and in both cases the refusal is logged rather than swallowed.
+    @discardableResult
+    public func register(_ handler: @escaping EventHandler, for componentID: ComponentID) -> Bool {
+        register(outcome: { event in .fragments(await handler(event)) }, for: componentID)
     }
 
-    /// register an outcome handler into the shared default session.
-    public func register(outcome handler: @escaping OutcomeHandler, for componentID: ComponentID) {
-        register(outcome: handler, for: componentID, in: .default)
+    /// register an outcome handler into the HOST table.
+    ///
+    /// returns whether the registration landed (see
+    /// ``register(_:for:)-(EventHandler,ComponentID)``).
+    ///
+    /// at `maxHandlers` the refusal follows ``policy`` exactly as the session
+    /// door's does — recorded nowhere, because there is no render pass to fail,
+    /// but logged: `.error` in ``FailurePolicy/strict``, one warning in
+    /// ``FailurePolicy/degrade``.
+    @discardableResult
+    public func register(outcome handler: @escaping OutcomeHandler, for componentID: ComponentID) -> Bool {
+        switch state.registerHost(handler, for: componentID, limit: maxHandlers) {
+        case .registered:
+            return true
+        case .sealed:
+            logger.error(
+                "EventRouter: host registrations are sealed — '\(componentID.value)' was refused. Register before the server starts (WebUIServer seals the host table in start()), or register inside a render pass with an explicit session."
+            )
+            return false
+        case .capReached:
+            switch policy {
+            case .strict:
+                logger.error(
+                    "EventRouter: host handler cap reached (\(maxHandlers)) — '\(componentID.value)' was refused. A host wires a fixed set at boot; raise maxHandlers."
+                )
+            case .degrade:
+                logger.warning(
+                    "EventRouter: host handler cap reached (\(maxHandlers)) — '\(componentID.value)' was refused. A host wires a fixed set at boot; raise maxHandlers."
+                )
+            }
+            return false
+        }
     }
 
     /// register fragments to render when `componentID`'s handler fails.
@@ -857,9 +1040,25 @@ public final class EventRouter: Sendable {
         state.registerFallback(handler, for: componentID, in: session)
     }
 
-    /// register a fallback into the shared default session.
-    public func register(fallback handler: @escaping EventHandler, for componentID: ComponentID) {
-        register(fallback: handler, for: componentID, in: .default)
+    /// register a fallback into the HOST table.
+    ///
+    /// returns whether the registration landed: `false` once the table is
+    /// sealed, which is logged at `.error` like every other late host write.
+    @discardableResult
+    public func register(fallback handler: @escaping EventHandler, for componentID: ComponentID) -> Bool {
+        switch state.registerHostFallback(handler, for: componentID) {
+        case .registered:
+            return true
+        case .sealed:
+            logger.error(
+                "EventRouter: host registrations are sealed — fallback for '\(componentID.value)' was refused. Register before the server starts (WebUIServer seals the host table in start()), or register inside a render pass with an explicit session."
+            )
+            return false
+        case .capReached:
+            // a fallback has no cap of its own: the handler cap bounds ids, and
+            // a fallback for an id the host already wired is an overwrite.
+            return true
+        }
     }
 
     /// mint the next component id in `session`.
@@ -890,11 +1089,29 @@ public final class EventRouter: Sendable {
     // MARK: dispatch
 
     /// route `event` within `session`, returning the full outcome.
+    ///
+    /// resolution order, exact before family and session before host:
+    /// 1. the exact component id in the SESSION,
+    /// 2. the exact component id in the HOST table,
+    /// 3. the action family in the SESSION,
+    /// 4. the action family in the HOST table,
+    /// 5. the debug drop.
+    ///
+    /// a session registration SHADOWS a host id: a mixed page's render-time
+    /// handler is the one that answers, and the boot-wired shape stays the
+    /// fallback for everything the render did not wire itself. the host table
+    /// is a second scope, not a second truth — there is exactly one host table,
+    /// never a copy per session.
     public func dispatch(_ event: EventData, in session: RenderSessionID) async -> HandlerOutcome {
         logger.emit(ObservableEvent.eventReceived(component: event.component.value, event: event.event), observers: observers)
 
         if let handler = state.handler(for: event.component, in: session) {
-            return await run(handler, for: event, in: session)
+            return await run(handler, for: event, fallback: fallback(for: event.component, in: session))
+        }
+
+        if let handler = state.hostHandler(for: event.component) {
+            noteHostAnswer(for: event.component, in: session)
+            return await run(handler, for: event, fallback: fallback(for: event.component, in: session))
         }
 
         // no exact id: the component id may be an action wire id. the family is
@@ -906,16 +1123,26 @@ public final class EventRouter: Sendable {
             maxSplits: 1,
             omittingEmptySubsequences: false
         )
-        if let family = segments.first, !family.isEmpty,
-           let familyHandler = state.handler(for: Self.familyKey(String(family)), in: session) {
-            guard ActionKey(wireID: event.component.value) != nil else {
-                // the family is registered but the slots do not split: a frame
-                // this server could not have minted (a stale page, a tampered
-                // attribute). dropped, never handed to a handler undecoded.
-                logger.emit(ObservableEvent.debug(message: "action payload for component '\(event.component.value)' does not decode"), observers: observers)
-                return .fragments([])
+        if let family = segments.first, !family.isEmpty {
+            let key = Self.familyKey(String(family))
+            if let familyHandler = state.handler(for: key, in: session) {
+                guard ActionKey(wireID: event.component.value) != nil else {
+                    // the family is registered but the slots do not split: a frame
+                    // this server could not have minted (a stale page, a tampered
+                    // attribute). dropped, never handed to a handler undecoded.
+                    logger.emit(ObservableEvent.debug(message: "action payload for component '\(event.component.value)' does not decode"), observers: observers)
+                    return .fragments([])
+                }
+                return await run(familyHandler, for: event, fallback: fallback(for: event.component, in: session))
             }
-            return await run(familyHandler, for: event, in: session)
+            if let hostFamily = state.hostHandler(for: key) {
+                guard ActionKey(wireID: event.component.value) != nil else {
+                    logger.emit(ObservableEvent.debug(message: "action payload for component '\(event.component.value)' does not decode"), observers: observers)
+                    return .fragments([])
+                }
+                noteHostAnswer(for: event.component, in: session)
+                return await run(hostFamily, for: event, fallback: fallback(for: event.component, in: session))
+            }
         }
 
         // route through `logger.emit` so the observer fan-out stays on the
@@ -924,15 +1151,43 @@ public final class EventRouter: Sendable {
         return .fragments([])
     }
 
+    /// the failure fragments for `componentID`: the session's own first, the
+    /// host's second — the same precedence the handlers follow, so a render can
+    /// override a boot-wired fallback without unregistering it.
+    private func fallback(for componentID: ComponentID, in session: RenderSessionID) -> EventHandler? {
+        state.fallback(for: componentID, in: session) ?? state.hostFallback(for: componentID)
+    }
+
+    /// one diagnostic for the exact arc failure this slice exists to name: a
+    /// TOKEN-BOUND dispatch missed the page's own session and the host table
+    /// answered instead.
+    ///
+    /// the answer is unchanged — that is the point of the host table — but a
+    /// mixed page that does not publish its render token is a page whose
+    /// render-time controls are being routed by the boot wiring, and that is
+    /// worth one line at debug rather than a silent success. a tokenless page
+    /// (`.default`) is not a mixed page: it has no session of its own to miss.
+    private func noteHostAnswer(for componentID: ComponentID, in session: RenderSessionID) {
+        guard session != .default else { return }
+        logger.emit(
+            ObservableEvent.debug(
+                message: "EventRouter: '\(componentID.value)' missed render session '\(session.rawValue)' and the HOST table answered — mixed page (host-wired plus render-time handlers). Publish the render token so the page's own session is bound."
+            ),
+            observers: observers
+        )
+    }
+
     /// call `handler`, turning a throw into an answer: observers hear the
     /// failure, and the page gets the component's fallback fragments.
     ///
-    /// one body for both dispatch paths, so an exact-id route and a family
-    /// route cannot drift in what a throw, a fallback or an emission means.
+    /// one body for every dispatch path, so an exact-id route, a family route,
+    /// and a host answer cannot drift in what a throw, a fallback or an emission
+    /// means. `fallback` is resolved by the caller with the session-then-host
+    /// precedence, so this body never needs to know which table answered.
     private func run(
         _ handler: OutcomeHandler,
         for event: EventData,
-        in session: RenderSessionID
+        fallback: EventHandler?
     ) async -> HandlerOutcome {
         let outcome: HandlerOutcome
         do {
@@ -945,7 +1200,7 @@ public final class EventRouter: Sendable {
             let message = String(describing: error)
             logger.emit(ObservableEvent.error(message: "handler for '\(event.component.value)' threw: \(message)"), observers: observers)
             let fragments: [FragmentUpdate]
-            if let fallback = state.fallback(for: event.component, in: session) {
+            if let fallback {
                 fragments = await fallback(event)
             } else {
                 fragments = []
@@ -987,23 +1242,40 @@ public final class EventRouter: Sendable {
         in session: RenderSessionID,
         _ handler: @escaping @Sendable (A, EventData) async -> [FragmentUpdate]
     ) {
-        let outcome: OutcomeHandler = { event in
+        register(outcome: Self.familyOutcome(A.self, handler), for: Self.familyKey(A.family), in: session)
+    }
+
+    /// the outcome one typed action registration answers with: the decode runs
+    /// before the handler, so a frame that does not split, names another family,
+    /// or that `A` declines never reaches `handler`.
+    ///
+    /// one body for both doors (session and host), so the two cannot drift in
+    /// what "the family answered" means.
+    private static func familyOutcome<A: Action>(
+        _ type: A.Type,
+        _ handler: @escaping @Sendable (A, EventData) async -> [FragmentUpdate]
+    ) -> OutcomeHandler {
+        { event in
             guard let key = ActionKey(wireID: event.component.value),
                   key.family == A.family,
                   let action = A(key: key, event: event)
             else { return .fragments([]) }
             return .fragments(await handler(action, event))
         }
-        register(outcome: outcome, for: Self.familyKey(A.family), in: session)
     }
 
-    /// register one typed handler for the whole `A` family, in the shared
-    /// default session.
+    /// register one typed handler for the whole `A` family, in the HOST table.
+    ///
+    /// returns whether the registration landed (`false` once the table is
+    /// sealed). the family key is the same reserved id either way, so the
+    /// dispatch precedence is the ordinary one: a session's family handler
+    /// shadows the host's.
+    @discardableResult
     public func on<A: Action>(
         _ type: A.Type,
         _ handler: @escaping @Sendable (A, EventData) async -> [FragmentUpdate]
-    ) {
-        on(type, in: .default, handler)
+    ) -> Bool {
+        register(outcome: Self.familyOutcome(A.self, handler), for: Self.familyKey(A.family))
     }
 
     /// route `event` within `session`, returning its fragments.
@@ -1020,7 +1292,11 @@ public final class EventRouter: Sendable {
         await handle(event, in: .default)
     }
 
-    /// discard every session and every handler.
+    /// discard every session, every handler, and the host table.
+    ///
+    /// the host SEAL survives: sealing is a lifecycle fact, so a router that has
+    /// served reopens nothing. a test that wants a fresh door builds a fresh
+    /// router.
     public func reset() {
         state.reset()
     }

@@ -115,17 +115,34 @@ struct RenderSessionTests {
         #expect(router.handlerCount(in: pageB) == 2)
     }
 
-    @Test("the session-less path still routes through the shared default session")
-    func defaultSessionIsUnchanged() async {
+    @Test("the tokenless path reaches the default session and the host table, and only the session is a session")
+    func defaultSessionAndHostTable() async {
         let router = EventRouter()
+        // a RENDER-TIME registration: the default session, which a tokenless
+        // page routes in.
         let context = RenderContext(router: router)
         _ = RenderContext.$current.withValue(context) {
             Div { Text("x") }.onClick { _ in [FragmentUpdate(id: "hit", html: "hit")] }.markup.html
         }
+        #expect(router.handlerCount(in: .default) == 1)
+
+        // a NO-SESSION registration: the hand-wired boot shape. it is reachable
+        // from the same tokenless dispatch — that is the 1.x promise — but it
+        // lives in the HOST table, so it is not a member of `.default` and a
+        // session reset can no longer delete it.
+        let landed = router.register(
+            { _ in [FragmentUpdate(id: "boot", html: "boot")] },
+            for: ComponentID("boot")
+        )
+        #expect(landed, "a host registration before the seal must land")
+        #expect(router.hostHandlerCount == 1)
+        #expect(router.handlerCount(in: .default) == 1, "the host table is not a write into .default")
 
         let updates = await router.handle(EventData(component: ComponentID("c0"), event: "click"))
         #expect(updates.first?.id == "hit")
-        #expect(router.handlerCount(in: .default) == 1)
+
+        let boot = await router.handle(EventData(component: ComponentID("boot"), event: "click"))
+        #expect(boot.first?.id == "boot", "a no-session registration must be reachable from the tokenless path")
     }
 
     @Test("sessions are bounded, and eviction takes the least-recently-used")

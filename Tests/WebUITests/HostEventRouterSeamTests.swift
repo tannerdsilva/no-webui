@@ -135,9 +135,11 @@ struct HostEventRouterSeamTests {
 	func hostOwnedRouterReceivesTheClick() async throws {
 		let hits = HitBox()
 		let eventRouter = EventRouter()
-		// the 1.x registration shape: no session argument, so this lands in
-		// `.default` — the documented single-page host's path, and the shape
-		// arc-agent's ~64 hand-wired registrations use.
+		// the 1.x registration shape: no session argument, so this lands in the
+		// HOST table — the single-page host's path, and the shape arc-agent's
+		// ~64 hand-wired registrations use. the table is sealed by
+		// `WebUIServer.start()` after this point, which is why the wiring must
+		// happen before the server starts (it does: here, in the test's body).
 		eventRouter.register({ _ in
 			hits.mark()
 			return [FragmentUpdate(id: "hit", html: "hit")]
@@ -234,7 +236,8 @@ struct HostEventRouterSeamTests {
 			calls.bump()
 			return [FragmentUpdate(id: "boot-target", html: "<span id=\"boot-target\">boot-ok</span>")]
 		}, for: "boot-btn")
-		#expect(events.handlerCount(in: .default) == 1)
+		#expect(events.hostHandlerCount == 1, "the no-session registration must land in the HOST table")
+		#expect(events.handlerCount(in: .default) == 0, "the host table is not a write into .default")
 
 		let click = #"{"type":"event","component":"boot-btn","event":"click","data":{}}"#
 

@@ -139,8 +139,13 @@ struct WiredCompiledRuntimeTests {
 		)
 		#expect(nonListed.isEmpty, "non-listed event should produce no fragments")
 
-		// handlerCount matches the handler count
-		#expect(router.handlerCount(in: session) == 2)
+		// handlerCount matches the handler count. the generated registrar calls
+		// `router.register(_:for:)` with no session — the HOST table — so that is
+		// the count that moves; `.default` is a real render session and holds
+		// nothing here. the two dispatches above are the reachability proof: the
+		// host table answers a tokenless path, which is why they did not change.
+		#expect(router.hostHandlerCount == 2)
+		#expect(router.handlerCount(in: session) == 0)
 	}
 }
 

@@ -222,13 +222,27 @@ resets a session's *mint counters* but keeps its *handler and fallback tables*.
 the server uses that shape for the `navigate` answer
 (`WebUIServer.answerNavigate`), which re-renders a live page's own region rather
 than a fresh page. it has to: the `navigate` frame carries no render token, so it
-routes to the shared default session — the session a host that wired its handlers
-by hand with `register(_:for:)` registered into — and a full reset there would
-drop every control in that session, server-wide, with nothing on the wire to say
-so (`dispatch` answers a missing handler with an empty fragment list). the default
-(`false`) is the original full reset, which is what makes a re-render idempotent
-for render-time registrations. a fresh page instance (`WebUIServer.routePage`,
-a token-derived session) still takes the full reset.
+routes to the session the socket is bound to (the shared `.default` for a
+tokenless page), and a full reset there would drop every render-time control in
+that session, server-wide, with nothing on the wire to say so (`dispatch` answers
+a missing handler with an empty fragment list). the default (`false`) is the
+original full reset, which is what makes a re-render idempotent for render-time
+registrations. a fresh page instance (`WebUIServer.routePage`, a token-derived
+session) still takes the full reset.
+
+**the host table.** `register(_:for:)` with no session writes into the router's
+**host table** — one table for the whole router, never a copy per session. it is
+the boot-wiring shape (`init(router:eventRouter:…)`, `@WireGroup` registrars), and
+dispatch resolves the exact id **in the session first, in the host second**, then
+the action family the same way. a session registration therefore shadows a host
+id, and a mixed page (boot-wired plus render-time controls) routes both
+populations. `.default` remains a real render session for tokenless pages; it is
+no longer the host's bucket. a server seals the table once
+(`EventRouter.sealHostRegistrations()`, called by `WebUIServer.start()` after the
+host's boot wiring and before the listener accepts a frame): a later host
+registration is refused and logged at `.error`, never silently dropped. the
+bound is `maxHandlers` on that one table, so N host handlers stay N however many
+sessions the router holds.
 
 the honest cost: after a `navigate` to a *different* route, the previous route's
 handlers are no longer dropped. because the mint counters restart, the new render

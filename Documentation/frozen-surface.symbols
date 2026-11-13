@@ -10,7 +10,7 @@
 # forced it. `Tests/WebUITests/FrozenSurfaceTests.swift` fails when this
 # file and a fresh extraction diverge, naming every added and removed symbol.
 #
-# re-measured 2026-11-12: 5440 symbols across 11 modules.
+# re-measured 2026-11-13: 5443 symbols across 11 modules.
 
 ## WebUISharedCore
 
@@ -669,6 +669,8 @@ EventRouter.handle(_:)
 EventRouter.handle(_:in:)
 EventRouter.handlerCount
 EventRouter.handlerCount(in:)
+EventRouter.hostHandlerCount
+EventRouter.hostRegistrationsSealed
 EventRouter.init(logger:observers:maxHandlers:maxSessions:policy:)
 EventRouter.isLive(_:)
 EventRouter.logger
@@ -693,6 +695,7 @@ EventRouter.register(fallback:for:in:)
 EventRouter.register(outcome:for:)
 EventRouter.register(outcome:for:in:)
 EventRouter.reset()
+EventRouter.sealHostRegistrations()
 EventRouter.sessionClosed(_:)
 EventRouter.sessionCount
 FailurePolicy

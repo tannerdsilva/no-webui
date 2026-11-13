@@ -307,10 +307,15 @@ public actor WebUIServer {
 	/// router: that suits a host whose handlers all register during render
 	/// (`.onX`/`controlAttributes`, which write into the server's router for the
 	/// render's session). a host that wires handlers *explicitly* — the
-	/// `router.register(_:for:)` shape, whose default session is documented as
-	/// the single-page host's path — must hand its router in, or every
-	/// registration lands in a router nothing consults. the label is distinct,
-	/// so the two inits never compete in overload resolution.
+	/// `router.register(_:for:)` shape, whose HOST table is the single-page
+	/// host's path — must hand its router in, or every registration lands in a
+	/// router nothing consults. the label is distinct, so the two inits never
+	/// compete in overload resolution.
+	///
+	/// the router's host table is boot-time configuration: ``start()`` seals it
+	/// before the listener accepts a frame, so a registration made after serve
+	/// is refused (and logged) rather than silently landed. register here, in the
+	/// host's own `init`, or inside a render pass with an explicit session.
 	public init(
 		router: Router,
 		eventRouter: EventRouter,
@@ -365,6 +370,14 @@ public actor WebUIServer {
 			// network. nio enables this for client channels but not for accepted
 			// children, so set it explicitly.
 			.childChannelOption(ChannelOptions.tcpOption(.tcp_nodelay), value: 1)
+
+		// the host's boot wiring is complete by the time `start()` runs: every
+		// registration made through `init(router:eventRouter:…)` (and every
+		// `@WireGroup` registrar a host runs in its own init) has landed in the
+		// host table. seal it BEFORE the listener accepts a frame, so a late
+		// registration is a logged refusal instead of a table that grows under a
+		// live server. `init`-time wiring is untouched: nothing seals at init.
+		router.sealHostRegistrations()
 
 		let channel: NIOAsyncChannel<EventLoopFuture<ServerUpgradeResult>, Never> = try await bootstrap.bind(
 			host: cfg.host,
@@ -1273,14 +1286,14 @@ final class Runner: Sendable {
 		// the re-render takes the same path a fresh page request takes: a
 		// session pass, the render context established for its duration — but
 		// PRESERVING, because this is an IN-PLACE re-render of a page that was
-		// never left. the navigate frame carries no token, so `session` is the
-		// shared `.default` a host that wired its handlers by hand
-		// (`init(router:eventRouter:…)`) registered them into; a plain reset here
-		// would drop every control in that session server-wide, and `dispatch`
+		// never left. the navigate frame carries no token, so `session` may be
+		// the shared `.default` a tokenless page routes in; a plain reset here
+		// would drop every control that session holds server-wide, and `dispatch`
 		// answers a dropped handler with an empty fragment list — nothing on the
 		// wire, so the page would just stop reacting with no error to show. the
 		// mint counters still restart, so a render-time host keeps its
-		// idempotence.
+		// idempotence. (handlers a host wired by hand live in the router's HOST
+		// table, which no session reset can touch.)
 		router.begin(session, preservingRegistrations: true)
 		let response: HTTPResponse
 		do {
