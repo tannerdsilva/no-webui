@@ -158,6 +158,44 @@ public struct DraftIdentityAttribute: AttributeRepresentable {
 	public var value: String { key }
 }
 
+/// `data-draft-value` — the server-rendered text a draft starts from.
+///
+/// a **seed** on its own decides nothing: the engine iterates `[data-draft-id]`,
+/// so a `DraftSeed` without a ``DraftIdentity`` on the same control is inert.
+/// the pair is the consequence — the identity names the store, the seed is what
+/// the server says the field held at render time.
+///
+/// the precedence rule is the reason the seed travels separately from the
+/// element's own `value`: a patch that keeps the identity is the same draft and
+/// keeps the reader's keystrokes, while a patch that changes the identity is a
+/// different draft and the server's seed wins — the reader's unsubmitted text
+/// belonged to the old identity and must not leak into the new one.
+public struct DraftSeed: Behavior {
+	/// the server-rendered draft text.
+	public let text: String
+
+	public init(text: String) {
+		self.text = text
+	}
+
+	public func attribute() -> DraftSeedAttribute {
+		DraftSeedAttribute(text: text)
+	}
+}
+
+/// `data-draft-value` — the serialized form of ``DraftSeed``.
+public struct DraftSeedAttribute: AttributeRepresentable {
+	public static let name = "data-draft-value"
+
+	public let text: String
+
+	public init(text: String) {
+		self.text = text
+	}
+
+	public var value: String { text }
+}
+
 // MARK: - 5. focus return
 
 /// return focus to an id after the next patch.

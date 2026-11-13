@@ -194,8 +194,30 @@ struct WebUIBudgetPlugin: CommandPlugin {
     /// both raw ceilings move to the smallest hundred strictly above the measurement —
     /// 78,500 / 18,300 and 28,300 / 6,900 — and the engine stays under the journal's
     /// 80,000 absolute cap (1,500 bytes of raw headroom).
+    ///
+    /// re-pinned 2026-11-13 (Phase 6 — the seeded draft and its precedence rule):
+    ///
+    /// the engine gained `DraftSeed`'s client half: the capture-time draft memo (one
+    /// query beside the follow loop, recording each `[data-draft-id]` element's
+    /// identity by id) and the restore-time `syncDrafts()` pass. the pass runs after
+    /// `applyAll`, `syncFollow` and the removal pass — i.e. after `replaceElement`'s
+    /// `saveInputState` → `replaceChild` → `restoreInputState` has already written the
+    /// old fragment's value over the new render — which is why the ordering is
+    /// load-bearing: an identity change writes the seed (the server wins) and rewrites
+    /// `webui-draft:<identity>`, while the same identity leaves the reader's keystrokes
+    /// and the store alone. measured on this tree, from the asset tool's manifest
+    /// (`served`):
+    ///   engine      79,587 raw / 18,446 gz   (was pinned 78,500 / 18,300; +1,131 raw
+    ///                                         and +191 gz)
+    ///   engine-ext  28,219 raw /  6,859 gz   (≤ 28,300 / 6,900 — unchanged: this phase
+    ///                                         touches no extension binder)
+    ///   sheet      325,766 raw / 45,622 gz   (≤ 335,000 / 49,500 — unchanged)
+    ///   shell        1,514 raw /    539 gz   (≤   1,700 /    650 — unchanged)
+    /// both engine ceilings move to the smallest hundred strictly above the measurement —
+    /// 79,600 / 18,500 (13 raw bytes of headroom, never padded) — and stay under the
+    /// journal's 80,000 absolute engine cap (413 bytes of raw headroom).
     private static let ceilings: [Ceiling] = [
-        Ceiling(surface: "engine", label: "webui-engine.js", raw: 78_500, gz: 18_300),
+        Ceiling(surface: "engine", label: "webui-engine.js", raw: 79_600, gz: 18_500),
         Ceiling(surface: "engineExt", label: "webui-engine-ext.js", raw: 28_300, gz: 6_900),
         Ceiling(surface: "sheet", label: "design-system.css", raw: 335_000, gz: 49_500),
         Ceiling(surface: "shell", label: "webui-shell.js", raw: 1_700, gz: 650),

@@ -6,6 +6,19 @@ all notable changes to this project are documented here.
 
 ### added
 
+- **a draft seeded from the server** — `DraftSeed(text:)` emits
+  `data-draft-value`, the text the server rendered into a field that also
+  carries `DraftIdentity`. the pair is one consequence with one precedence
+  rule: the engine memoises each `[data-draft-id]` element's identity at
+  capture (before the patch), and a restore-time pass runs **after**
+  `applyAll`/`syncFollow`/the removal pass — i.e. after `replaceElement`'s own
+  `saveInputState` → `replaceChild` → `restoreInputState` has written the old
+  fragment's value over the new render. on an identity change the seed wins
+  (it replaces the value and rewrites `webui-draft:<identity>`, because the
+  reader's text belonged to the old draft); on the same identity the reader's
+  keystrokes survive, and an empty field still restores from the store. a seed
+  with no identity is inert — the engine iterates `[data-draft-id]` only.
+
 - **the drawer's open state** — `WebUIDrawer(title:id:)` now emits `id="<id>"`
   on its root and, inside it, a `div.drawer__scrim[data-drawer-toggle="<id>"]`,
   with the same `data-drawer-toggle` on the drawer's own close control and

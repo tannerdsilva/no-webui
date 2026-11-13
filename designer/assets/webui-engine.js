@@ -1739,6 +1739,7 @@ window.WebUIEngine = (function () {
 
   function createBehaviors(log) {
     var followMemo = {};
+    var draftMemo = {};
     var scrollMemo = {};
     var openMemo = {};
     var focusMemo = null;
@@ -2004,6 +2005,27 @@ window.WebUIEngine = (function () {
       }
     }
 
+    function syncDrafts() {
+      var list = document.querySelectorAll('[data-draft-id]');
+      for (var i = 0; i < list.length; i++) {
+        var el = list[i];
+        if (!el.id || (el.closest && el.closest('[data-webui-island]'))) { continue; }
+        var identity = el.getAttribute('data-draft-id');
+        var prior = draftMemo[el.id];
+        var seed = el.getAttribute('data-draft-value');
+        if (prior !== undefined && prior !== identity && seed !== null) {
+          el.value = seed;
+          try { sessionStorage.setItem('webui-draft:' + identity, seed); } catch (e) { }
+        } else if (!el.value) {
+          try {
+            var saved = sessionStorage.getItem('webui-draft:' + identity);
+            if (saved) { el.value = saved; }
+          } catch (e) { }
+        }
+        draftMemo[el.id] = identity;
+      }
+    }
+
     function capture(fragments) {
       var replaced = false;
       for (var i = 0; i < fragments.length; i++) {
@@ -2013,6 +2035,10 @@ window.WebUIEngine = (function () {
       var list = document.querySelectorAll('[data-follow]');
       for (var a = 0; a < list.length; a++) {
         if (list[a].id) { followMemo[list[a].id] = gap(list[a]) <= 24; }
+      }
+      var drafts = document.querySelectorAll('[data-draft-id]');
+      for (var d = 0; d < drafts.length; d++) {
+        if (drafts[d].id) { draftMemo[drafts[d].id] = drafts[d].getAttribute('data-draft-id'); }
       }
       if (!replaced) { return; }
       list = document.querySelectorAll('[data-scroll-key]');
@@ -2055,6 +2081,7 @@ window.WebUIEngine = (function () {
       for (var i = 0; i < nodes.length; i++) { applyAll(nodes[i]); }
       syncFollow();
       restoreRemovedOpener();
+      syncDrafts();
       var memo = focusMemo;
       focusMemo = null;
       if (!memo || !memo.target) { return; }
@@ -2102,6 +2129,7 @@ window.WebUIEngine = (function () {
       dismissEls = [];
       if (dismissWatch) { dismissWatch.disconnect(); dismissWatch = null; }
       followMemo = {};
+      draftMemo = {};
       scrollMemo = {};
       openMemo = {};
       focusMemo = null;

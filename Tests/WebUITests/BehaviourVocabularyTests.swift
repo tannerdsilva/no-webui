@@ -38,6 +38,7 @@ struct BehaviourVocabularyTests {
 		"data-scroll-to",
 		"data-reading-keys",
 		"data-draft-id",
+		"data-draft-value",
 		"data-focus-return",
 		"data-dismiss",
 		"data-reorder",

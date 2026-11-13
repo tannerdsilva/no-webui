@@ -27,6 +27,8 @@ final class BehaviourFixtureState: Sendable {
 		var dialogOpen = false
 		var dialog2Open = false
 		var t26 = 0
+		var draftIdentity = "a"
+		var draftSeed = "server-a"
 		var uploads: [String: String] = [:]
 		var templated: [String] = []
 		var streamLines: [String] = []
@@ -92,6 +94,27 @@ final class BehaviourFixtureState: Sendable {
 	var t26: Int {
 		get { values.withLock { $0.t26 } }
 		set { values.withLock { $0.t26 = newValue } }
+	}
+
+	/// the draft the seeded field names, and the text the server renders for it.
+	var draftIdentity: String {
+		get { values.withLock { $0.draftIdentity } }
+		set { values.withLock { $0.draftIdentity = newValue } }
+	}
+	var draftSeed: String {
+		get { values.withLock { $0.draftSeed } }
+		set { values.withLock { $0.draftSeed = newValue } }
+	}
+
+	/// flips the draft's identity and the seed that travels with it: the switch is
+	/// the changed-identity patch, its toggle back is a second one, and the
+	/// re-patch control re-renders the same identity without the seed winning.
+	func switchDraftIdentity() {
+		values.withLock {
+			let next = $0.draftIdentity == "a" ? "b" : "a"
+			$0.draftIdentity = next
+			$0.draftSeed = "server-" + next
+		}
 	}
 
 	/// the streamed-delta fixture: `#stream` appends one line and the handler
@@ -192,6 +215,22 @@ func behaviourT26HTML(_ state: BehaviourFixtureState) -> String {
 	<div id="t26-region" class="fx-sec"><h2>a focused button, replaced</h2>
 	<p class="fx-muted">the button returns a fragment that replaces this whole region; focus has to come back to <code>#fx-t26</code>.</p>
 	<div class="fx-row"><button id="fx-t26" type="button" data-component-id="fx-t26" data-event="click">Replace me (render \(state.t26))</button><p id="t26-out" class="fx-muted">t26: \(state.t26)</p></div></div>
+	"""
+}
+
+/// the seeded draft: a server-rendered value the reader may type over, plus the
+/// two controls the precedence rule needs. the switch changes the identity (the
+/// seed wins over the reader's keystrokes and over the old store); the re-patch
+/// re-renders the same identity (the reader's keystrokes survive).
+func behaviourSeedHTML(_ state: BehaviourFixtureState) -> String {
+	let identity = state.draftIdentity
+	let seed = state.draftSeed
+	return """
+	<section id="fx-seed-region" class="fx-sec"><h2>seeded draft · identity precedence</h2>
+	<p class="fx-muted">two behaviors on one control: <code>DraftIdentity(key:)</code> names the store, <code>DraftSeed(text:)</code> carries the server's text. a patch that changes the identity writes the seed — the server wins — and a patch that keeps it leaves the reader's keystrokes alone. a seed with no identity is inert: the engine iterates <code>[data-draft-id]</code> only.</p>
+	<div class="fx-row"><input id="fx-seed" type="text" aria-label="seeded draft" placeholder="draft" value="\(htmlEscape(seed))"\(DraftIdentity(key: identity).attributeText)\(DraftSeed(text: seed).attributeText)><button id="fx-seed-switch" type="button" data-component-id="fx-seed-switch" data-event="click">Switch identity</button><button id="fx-seed-repatch" type="button" data-component-id="fx-seed-repatch" data-event="click">Re-patch the same identity</button></div>
+	<p id="fx-seed-state" class="fx-muted">identity: \(htmlEscape(identity)) · seed: \(htmlEscape(seed))</p>
+	</section>
 	"""
 }
 
@@ -338,6 +377,8 @@ func renderBehaviourPage(
 	\(behaviourDialog2RegionHTML(state))
 
 	\(behaviourT26HTML(state))
+
+	\(behaviourSeedHTML(state))
 
 	<section class="fx-sec"><h2>reorder</h2>
 	<ul id="reorder" class="fx-list"\(Reorder(inputID: "order-input").attributeText)><li id="item-a">item a</li><li id="item-b">item b</li><li id="item-c">item c</li></ul>
@@ -507,6 +548,15 @@ struct BehaviourPageResponder: Responder {
 			state.t26 += 1
 			return .fragments([FragmentUpdate(id: "t26-region", html: behaviourT26HTML(state))])
 		}, for: ComponentID("fx-t26"), in: session)
+		// the seeded draft: the switch changes the identity (and the seed with
+		// it), the re-patch re-renders the same identity — both replace the region.
+		router.register(outcome: { _ in
+			state.switchDraftIdentity()
+			return .fragments([FragmentUpdate(id: "fx-seed-region", html: behaviourSeedHTML(state))])
+		}, for: ComponentID("fx-seed-switch"), in: session)
+		router.register(outcome: { _ in
+			.fragments([FragmentUpdate(id: "fx-seed-region", html: behaviourSeedHTML(state))])
+		}, for: ComponentID("fx-seed-repatch"), in: session)
 		router.register(outcome: { event in
 			state.saved = event.string("title") ?? "(none)"
 			return .fragments([

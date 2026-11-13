@@ -1395,6 +1395,87 @@ if (!clipboardGranted) {
 }
 
 // ---------------------------------------------------------------------------
+// 21c. data-draft-value — a server seed, and the identity precedence rule:
+//      a changed identity writes the seed (not the typed value, not the old
+//      store); the same identity re-rendered keeps the reader's keystrokes.
+// ---------------------------------------------------------------------------
+{
+  const draftValue = () => page.evaluate(() => document.getElementById("fx-seed")?.value ?? null);
+  const stored = (key) => page.evaluate((k) => {
+    try { return sessionStorage.getItem("webui-draft:" + k); } catch { return null; }
+  }, key);
+  const settled = async (expected, timeout = 4000) => {
+    const deadline = Date.now() + timeout;
+    for (;;) {
+      if ((await draftValue()) === expected) return true;
+      if (Date.now() > deadline) return false;
+      await page.waitForTimeout(50);
+    }
+  };
+
+  const start = await page.evaluate(() => {
+    const el = document.getElementById("fx-seed");
+    return {
+      value: el?.value ?? null,
+      identity: el?.getAttribute("data-draft-id") ?? null,
+      seed: el?.getAttribute("data-draft-value") ?? null,
+    };
+  });
+  if (start.value === "server-a" && start.identity === "a" && start.seed === "server-a") {
+    ok("data-draft-value: the control carries an identity and a seed, and starts at the server's text");
+  } else {
+    bad(`data-draft-value: the fixture field read ${JSON.stringify(start)}`);
+  }
+
+  await page.fill("#fx-seed", "typed-a");
+  await page.waitForTimeout(120);
+  const storedA = await stored("a");
+  if (storedA === "typed-a") ok("data-draft-id: typing under identity a persists under webui-draft:a");
+  else bad(`data-draft-id: webui-draft:a held ${JSON.stringify(storedA)} after typing`);
+
+  await page.click("#fx-seed-switch");
+  const switched = await settled("server-b");
+  const afterSwitch = await page.evaluate(() => {
+    const el = document.getElementById("fx-seed");
+    return { value: el?.value ?? null, identity: el?.getAttribute("data-draft-id") ?? null };
+  });
+  if (switched && afterSwitch.identity === "b") {
+    ok('data-draft-value: an identity change writes the server\'s seed ("server-b"), not the typed value');
+  } else {
+    bad(`data-draft-value: after the switch to identity b the field read ${JSON.stringify(afterSwitch)} (deadline ${switched})`);
+  }
+  if (afterSwitch.value !== "typed-a") ok("data-draft-value: the old identity's typed text did not leak into the new identity");
+  else bad("data-draft-value: the old identity's typed value survived the identity change");
+  const storedB = await stored("b");
+  if (storedB === "server-b") ok("data-draft-value: the seed is persisted under the new identity's key");
+  else bad(`data-draft-value: webui-draft:b held ${JSON.stringify(storedB)} after the switch`);
+
+  await page.fill("#fx-seed", "typed-b");
+  await page.waitForTimeout(120);
+  await page.click("#fx-seed-repatch");
+  const repatched = await settled("typed-b");
+  const afterRepatch = await page.evaluate(() => ({
+    value: document.getElementById("fx-seed")?.value ?? null,
+    identity: document.getElementById("fx-seed")?.getAttribute("data-draft-id") ?? null,
+    state: (document.getElementById("fx-seed-state")?.textContent || "").trim(),
+  }));
+  if (repatched && afterRepatch.identity === "b" && /identity: b/.test(afterRepatch.state)) {
+    ok("data-draft-value: the same identity re-rendered keeps the reader's keystrokes (typed-b survived the patch)");
+  } else {
+    bad(`data-draft-value: after the same-identity re-patch the field read ${JSON.stringify(afterRepatch)} (deadline ${repatched})`);
+  }
+
+  await page.click("#fx-seed-switch");
+  const switchedBack = await settled("server-a");
+  const storedBackA = await stored("a");
+  if (switchedBack && storedBackA === "server-a") {
+    ok("data-draft-value: switching back is another identity change — the seed wins over the stale store and rewrites it");
+  } else {
+    bad(`data-draft-value: switching back read ${JSON.stringify(await draftValue())}, webui-draft:a held ${JSON.stringify(storedBackA)} (deadline ${switchedBack})`);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 22. data-reltime repaints on its 60 s tick (the last assertion: it waits).
 // ---------------------------------------------------------------------------
 {

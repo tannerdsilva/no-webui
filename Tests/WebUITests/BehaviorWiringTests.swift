@@ -152,6 +152,22 @@ struct BehaviorWiringTests {
 		#expect(!closed.contains(" open>"), "closed by default: \(closed)")
 	}
 
+	// MARK: - DraftSeed
+
+	@Test("DraftSeed: a server seed serializes beside the identity it seeds")
+	func draftSeedWiring() throws {
+		#expect(DraftSeedAttribute.name == "data-draft-value", "the name is the engine's read key: \(DraftSeedAttribute.name)")
+		let rendered = DraftSeed(text: "server-a").attributeText
+		#expect(rendered == " data-draft-value=\"server-a\"", "the seed is the attribute's value: \(rendered)")
+
+		let seeded = html(Input(id: "seed").behavior(DraftIdentity(key: "a")).behavior(DraftSeed(text: "server-a")))
+		let start = try #require(seeded.range(of: "<input"), "no input tag in: \(seeded)")
+		let end = try #require(seeded[start.upperBound...].firstIndex(of: ">"), "the input tag never closes: \(seeded)")
+		let tag = seeded[start.lowerBound..<end]
+		#expect(tag.contains("data-draft-id=\"a\""), "the identity is on the control: \(seeded)")
+		#expect(tag.contains("data-draft-value=\"server-a\""), "the seed rides the same control: \(seeded)")
+	}
+
 	// MARK: - ReadingKeys
 
 	@Test("ReadingKeys: a bare presence marker on the element that scrolls")
