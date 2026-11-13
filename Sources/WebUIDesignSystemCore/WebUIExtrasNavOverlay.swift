@@ -732,11 +732,21 @@ public struct WebUIDrawer<Content: View, Footer: View>: View {
         } else {
             attrs = ""
         }
-        var html = "<div class=\"drawer\(Self.classFor(edge))\(Self.classFor(size))\"\(attrs)" + Aria.attributes([.modal(.yes)], role: .dialog) + ">"
-        html += "<div class=\"drawer__panel\"\(DismissStack().attributeText)>"
+        let rootID = id.map { " id=\"\(htmlEscape($0))\"" } ?? ""
+        var html = "<div class=\"drawer\(Self.classFor(edge))\(Self.classFor(size))\"\(rootID)\(attrs)" + Aria.attributes([.modal(.yes)], role: .dialog) + ">"
+        if let id {
+            // the scrim is the layer's outside surface: a click on it is a
+            // close, and it exists only on an id-bearing drawer (the id is
+            // the state the engine flips).
+            html += "<div class=\"drawer__scrim\" data-drawer-toggle=\"\(htmlEscape(id))\"></div>"
+            html += "<div class=\"drawer__panel\"\(DismissStack().attributeText) tabindex=\"-1\">"
+        } else {
+            html += "<div class=\"drawer__panel\"\(DismissStack().attributeText)>"
+        }
         if let title {
             let closeID = id.map { " id=\"\(htmlEscape("\($0)-close"))\"" } ?? ""
-            html += "<div class=\"drawer__header\"><div class=\"drawer__title\">\(htmlEscape(title))</div><button class=\"drawer__close\"\(closeID)\(DismissStack().attributeText)" + Aria.label(RenderContext.currentStrings.close).render() + ">×</button></div>"
+            let toggle = id.map { " data-drawer-toggle=\"\(htmlEscape($0))\"" } ?? ""
+            html += "<div class=\"drawer__header\"><div class=\"drawer__title\">\(htmlEscape(title))</div><button class=\"drawer__close\"\(closeID)\(DismissStack().attributeText)\(toggle)" + Aria.label(RenderContext.currentStrings.close).render() + ">×</button></div>"
         }
         html += "<div class=\"drawer__content\">"
         buffer.append(html)

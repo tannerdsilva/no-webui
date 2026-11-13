@@ -235,7 +235,8 @@ let behaviourFixtureStyle: String = """
 func renderBehaviourPage(
 	state: BehaviourFixtureState,
 	renderToken: String,
-	bareReader: Bool = false
+	bareReader: Bool = false,
+	drawer: Bool = false
 ) -> String {
 	let now = state.stamp
 	let followOff = ScrollFollow(mode: .off).attributeText
@@ -279,6 +280,13 @@ func renderBehaviourPage(
 	for i in 0..<24 {
 		readerLines += "<p>reader line \(i + 1)</p>"
 	}
+	let drawerSection = drawer ? """
+	<section class="fx-sec" id="fx-drawer-host"><h2>drawer open state</h2>
+	<p class="fx-muted">below 860px the drawer is an off-canvas layer: the host button opens it, and the scrim, <code>Escape</code> or its own close control shuts it, with focus moving into the panel and back to the toggle. above 860px it is the static rail and the toggle changes nothing.</p>
+	<div class="fx-row"><button id="fx-drawer-open" type="button" data-drawer-toggle="fx-drawer">Open the drawer</button></div>
+	\(WebUIDrawer(title: "fx drawer", id: "fx-drawer") { Text("drawer body") }.markup.html)
+	</section>
+	""" : ""
 	let body = bareReader ? """
 	<main class="fx">
 	<h1>Reading keys, bare</h1>
@@ -388,6 +396,8 @@ func renderBehaviourPage(
 	<div id="fx-item-world" class="fx-item" role="menuitem" tabindex="-1">world</div>
 	</div>
 	</section>
+
+	\(drawerSection)
 
 	<section class="fx-sec"><h2>form semantics</h2>
 	<form id="submit-form" class="fx-form" data-component-id="fx-submit" data-event="submit">
@@ -545,7 +555,8 @@ struct BehaviourPageResponder: Responder {
 		let html = renderBehaviourPage(
 			state: state,
 			renderToken: request.renderToken.value,
-			bareReader: request.query["bare"] == "reader"
+			bareReader: request.query["bare"] == "reader",
+			drawer: request.query["drawer"] == "1"
 		)
 		return HTTPResponse(headers: smokeHeaders(), body: .html(UnsafeMarkup.trusted(html)))
 	}

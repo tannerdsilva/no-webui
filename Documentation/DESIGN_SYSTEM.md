@@ -1089,6 +1089,34 @@ WebUIDropdown(trigger: {
   `--z-dropdown`, and `display: none` until `.dropdown--open .dropdown__panel`
   shows it. before this rule it rendered inline, unstyled, and always visible.
 
+### `WebUIDrawer` — open state, the 860px breakpoint, and the scrim
+
+a drawer is one surface with two forms, split at the same 860px the navbar
+collapses at (`@media (max-width: 860px)`).
+
+- **at 861px and wider it is the static rail** — the markup renders exactly as
+  before and the sheet's `.drawer` rules apply unchanged. `data-open` is
+  ignored: a host `data-drawer-toggle` calls `preventDefault()` and then does
+  nothing, so the toggle never changes the rail's visibility.
+- **at 860px and narrower it is an off-canvas layer** — the closed root is
+  `display: none`; `.drawer[data-open]` is `position: fixed; inset: 0` and
+  full-viewport. The sheet shows the drawer's own `.drawer__scrim` only while
+  the root carries `data-open`.
+- **the state lives on the root** — `data-open` is engine-written and its
+  absence is the closed state; nothing server-renders it. The engine's
+  `data-drawer-toggle` flips it with no round-trip, opens focus into
+  `.drawer__panel` (first focusable, else the panel through `tabindex="-1"`),
+  and returns focus to the toggle on close. `Escape` and an outside click go
+  through the dismiss stack: the panel's `data-dismiss` is armed only while
+  the root is open, so a closed drawer never takes the key.
+- **the id is the contract** — `WebUIDrawer(title:id:)` emits `id="<id>"` on the
+  root, `data-drawer-toggle="<id>"` on the scrim and on the close control, and
+  `tabindex="-1"` on the panel. A drawer with no id renders byte-identically to
+  before (no scrim, no toggle, no tabindex): there is no state to flip.
+- **the scrim is not a second surface** — it exists only inside an id-bearing
+  drawer, sits under the panel, and carries the same toggle so a click on it is
+  a close.
+
 ## CSS Class Naming Convention
 
 All classes follow BEM-like naming:

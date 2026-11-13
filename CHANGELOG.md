@@ -6,6 +6,28 @@ all notable changes to this project are documented here.
 
 ### added
 
+- **the drawer's open state** — `WebUIDrawer(title:id:)` now emits `id="<id>"`
+  on its root and, inside it, a `div.drawer__scrim[data-drawer-toggle="<id>"]`,
+  with the same `data-drawer-toggle` on the drawer's own close control and
+  `tabindex="-1"` on `.drawer__panel`. a click on any of them flips the root's
+  `data-open` with no round-trip: opening moves focus into the panel (first
+  focusable, else the panel), closing returns focus to the toggle that opened
+  it. `preventDefault()` always, so an anchor toggle never navigates. the sheet
+  splits the surface at the same 860px the navbar collapses at: wider keeps the
+  static rail and ignores `data-open`; at 860px and narrower the closed root is
+  `display: none` and `[data-open]` is a full-viewport layer with the scrim
+  shown only while open. a drawer with no id renders byte-identically to before.
+
+- **`data-dismiss` arms on open** — a layer whose open state lives on itself
+  (`data-open`) or on a drawer root that names it is registered only while that
+  holder is open: it registers when the holder opens and unregisters when it
+  closes, through one `MutationObserver` on `data-open`. this fixes the drawer
+  panel (state on the root) and the always-rendered combo/palette panels (state
+  on themselves, off screen until opened). without any holder — a toast, a
+  permanently visible dismissible — the bind-time registration is unchanged.
+  `closeLayer` also climbs to the nearest `[data-open]` ancestor, so Escape on
+  a drawer panel closes the drawer.
+
 - **the filter write-back** — `FilterList(source:)` names the field that
   carries the query when it lives outside the filtered region (a selector or a
   bare id). the bare `FilterList()` still emits `data-filter-list` with no

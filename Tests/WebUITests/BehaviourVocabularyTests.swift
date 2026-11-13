@@ -63,6 +63,7 @@ struct BehaviourVocabularyTests {
 		"data-filter-template",
 		"data-filter-clear",
 		"data-open",
+		"data-drawer-toggle",
 	]
 
 	// MARK: - the two assets
@@ -174,6 +175,7 @@ struct BehaviourVocabularyTests {
 		"data-theme-choice",
 		"data-filter-list",
 		"data-upload-into",
+		"data-drawer-toggle",
 	]
 
 	enum EngineSourceError: Error, CustomStringConvertible {
@@ -252,12 +254,12 @@ struct BehaviourVocabularyTests {
 		let keys = core.union(ext)
 		#expect(keys.count >= 23, "the dispatch table read as \(keys.count) keys — the gate would pass vacuously")
 		// the split is a checked property, not a memory: nine patch-survival
-		// consequences in the engine, fifteen interaction consequences behind
-		// the extension's fetch (the upload transport is the fifteenth), and no
-		// key registered twice (a duplicate binder is a dead copy of a
-		// consequence).
+		// consequences in the engine, sixteen interaction consequences behind
+		// the extension's fetch (the upload transport is the fifteenth, the
+		// drawer toggle the sixteenth), and no key registered twice (a
+		// duplicate binder is a dead copy of a consequence).
 		#expect(core.count == 9, "the engine's table read as \(core.count) keys, expected the 9 patch-survival consequences")
-		#expect(ext.count == 15, "the extension's table read as \(ext.count) keys, expected the 15 interaction consequences")
+		#expect(ext.count == 16, "the extension's table read as \(ext.count) keys, expected the 16 interaction consequences")
 		#expect(
 			core.intersection(ext).isEmpty,
 			"a consequence is registered in both assets: \(core.intersection(ext).sorted().joined(separator: ", "))"

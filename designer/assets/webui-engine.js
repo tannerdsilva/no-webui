@@ -1745,6 +1745,8 @@ window.WebUIEngine = (function () {
     var openerMemo = {};
     var removalMemo = null;
     var layers = [];
+    var dismissEls = [];
+    var dismissWatch = null;
     var mounted = false;
 
     function warn(name, el, e) {
@@ -1806,8 +1808,70 @@ window.WebUIEngine = (function () {
       return live.length ? live[live.length - 1] : null;
     }
 
+    function layerIndex(el) {
+      for (var i = 0; i < layers.length; i++) { if (layers[i] === el) { return i; } }
+      return -1;
+    }
+
+    function addLayer(el) {
+      if (layerIndex(el) === -1) { layers.push(el); }
+    }
+
+    function dropLayer(el) {
+      var at = layerIndex(el);
+      if (at !== -1) { layers.splice(at, 1); }
+    }
+
+    function openHolder(el) {
+      if (el.hasAttribute('data-open')) { return el; }
+      return el.closest ? el.closest('[data-open]') : null;
+    }
+
+    function drawerHolder(el) {
+      var up = el.parentElement;
+      while (up && up !== document.documentElement) {
+        if (up.id) {
+          var toggles = up.querySelectorAll('[data-drawer-toggle]');
+          for (var i = 0; i < toggles.length; i++) {
+            if (toggles[i].getAttribute('data-drawer-toggle') === up.id) { return up; }
+          }
+        }
+        up = up.parentElement;
+      }
+      return null;
+    }
+
+    function dismissGate(el) {
+      var open = openHolder(el);
+      if (open) { return { open: true }; }
+      if (drawerHolder(el)) { return { open: false }; }
+      return null;
+    }
+
+    function watchDismiss() {
+      if (dismissWatch || typeof MutationObserver !== 'function') { return; }
+      dismissWatch = new MutationObserver(syncDismiss);
+      dismissWatch.observe(document, { attributes: true, subtree: true, attributeFilter: ['data-open'] });
+    }
+
+    function syncDismiss() {
+      for (var i = 0; i < dismissEls.length; i++) {
+        var el = dismissEls[i];
+        if (!el.isConnected) { continue; }
+        var gate = dismissGate(el);
+        if (!gate) {
+          if (el.__webuiArmed) { dropLayer(el); }
+          continue;
+        }
+        if (gate.open) { el.__webuiArmed = true; addLayer(el); }
+        else if (el.__webuiArmed) { dropLayer(el); }
+      }
+    }
+
     function closeLayer(el) {
       if (el.hasAttribute('data-open')) { el.removeAttribute('data-open'); return; }
+      var holder = el.closest ? el.closest('[data-open]') : null;
+      if (holder) { holder.removeAttribute('data-open'); return; }
       if (el.tagName === 'DETAILS') { el.open = false; return; }
       fire(el.querySelector('button[data-dismiss], a[data-dismiss], [role=button][data-dismiss]') || el);
     }
@@ -1908,8 +1972,11 @@ window.WebUIEngine = (function () {
 
     BEHAVIORS['data-dismiss'] = function (el) {
       if (isControl(el)) { return; }
-      for (var i = 0; i < layers.length; i++) { if (layers[i] === el) { return; } }
-      layers.push(el);
+      if (!el.__webuiDismiss) { el.__webuiDismiss = true; dismissEls.push(el); }
+      var gate = dismissGate(el);
+      if (gate && gate.open) { el.__webuiArmed = true; addLayer(el); }
+      else if (!gate && onScreen(el)) { addLayer(el); }
+      watchDismiss();
     };
 
 
@@ -2010,6 +2077,7 @@ window.WebUIEngine = (function () {
     }
 
     function onDocClick(e) {
+      if (e.target && e.target.closest && e.target.closest('[data-drawer-toggle]')) { return; }
       var top = topLayer();
       if (top && !top.contains(e.target)) { closeLayer(top); }
     }
@@ -2031,6 +2099,8 @@ window.WebUIEngine = (function () {
       }
       mounted = false;
       layers = [];
+      dismissEls = [];
+      if (dismissWatch) { dismissWatch.disconnect(); dismissWatch = null; }
       followMemo = {};
       scrollMemo = {};
       openMemo = {};

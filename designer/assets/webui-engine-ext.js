@@ -514,6 +514,47 @@ window.WebUIEngineExt = (function () {
       return;
     };
 
+    BEHAVIORS['data-drawer-toggle'] = function (el) {
+      var id = el.getAttribute('data-drawer-toggle') || '';
+      var root = id ? document.getElementById(id) : null;
+      if (!root) { return; }
+      if (!root.__webuiDrawerWatch && typeof MutationObserver === 'function') {
+        root.__webuiDrawerWasOpen = root.hasAttribute('data-open');
+        root.__webuiDrawerWatch = new MutationObserver(function () {
+          var open = root.hasAttribute('data-open');
+          if (open === root.__webuiDrawerWasOpen) { return; }
+          root.__webuiDrawerWasOpen = open;
+          if (open) { return; }
+          var back = root.__webuiDrawerToggle;
+          if (!back || !back.isConnected) { return; }
+          var active = document.activeElement;
+          if (active && active !== document.body && !root.contains(active)) { return; }
+          try { back.focus(); } catch (e1) { }
+        });
+        root.__webuiDrawerWatch.observe(root, { attributes: true, attributeFilter: ['data-open'] });
+      }
+      function panel() { return root.querySelector('.drawer__panel'); }
+      function focusPanel() {
+        var box = panel();
+        if (!box) { return; }
+        var list = box.querySelectorAll('a[href], button, input, select, textarea, [tabindex]');
+        for (var i = 0; i < list.length; i++) {
+          if (list[i].disabled || list[i].getClientRects().length === 0) { continue; }
+          try { list[i].focus(); } catch (e2) { }
+          if (document.activeElement === list[i]) { return; }
+        }
+        try { box.focus(); } catch (e3) { }
+      }
+      el.addEventListener('click', function (e) {
+        e.preventDefault();
+        if (typeof window.matchMedia !== 'function' || !window.matchMedia('(max-width: 860px)').matches) { return; }
+        if (root.hasAttribute('data-open')) { root.removeAttribute('data-open'); return; }
+        root.__webuiDrawerToggle = el;
+        root.setAttribute('data-open', '');
+        focusPanel();
+      });
+    };
+
     BEHAVIORS['data-skip-to'] = function (el) {
       el.addEventListener('click', function (e) {
         var target = document.getElementById(el.getAttribute('data-skip-to') || '');

@@ -3808,6 +3808,30 @@ code, .inline-code {
 }
 .drawer__close:hover { background: var(--color-bg-subtle); color: var(--color-text); }
 .drawer__content { padding: var(--space-4); font-size: var(--font-size-sm); color: var(--color-text-muted); }
+.drawer__scrim { display: none; }
+@media (max-width: 860px) {
+  .drawer { display: none; }
+  .drawer[data-open] {
+    display: flex;
+    position: fixed;
+    inset: 0;
+    min-height: 0;
+    border: 0;
+    border-radius: 0;
+    background: transparent;
+    z-index: var(--z-modal);
+  }
+  .drawer[data-open] .drawer__scrim {
+    display: block;
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    background: color-mix(in srgb, var(--color-neutral-900) 55%, transparent);
+  }
+  .drawer[data-open] .drawer__panel { z-index: 2; max-width: 100%; }
+  .drawer[data-open].drawer--right .drawer__panel { margin-inline-start: auto; }
+  .drawer[data-open].drawer--left .drawer__panel { margin-inline-end: auto; }
+}
 
 .popover-stage {
   position: relative;

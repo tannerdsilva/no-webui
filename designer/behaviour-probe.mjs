@@ -582,6 +582,182 @@ if (!clipboardGranted) {
 }
 
 // ---------------------------------------------------------------------------
+// 10f. the drawer's open state. it is one surface with two forms, split at the
+//      860px breakpoint the navbar collapses at: at 600px the closed drawer is
+//      off-canvas and `data-open` is the layer (scrim, focus entry, Escape and
+//      its own close control); at 1200px it is the static rail and the toggle
+//      cannot move it. the drawer page is its own tab so the always-rendered
+//      rail never changes the main page's "no layer on screen" measurements,
+//      and the closed drawer doubles as the layer-ordering witness: with it
+//      shut, Escape must reach an unrelated open layer.
+// ---------------------------------------------------------------------------
+{
+  const drawerPage = await context.newPage();
+  const drawerErrors = [];
+  drawerPage.on("pageerror", (e) => drawerErrors.push(String(e)));
+  await drawerPage.setViewportSize({ width: 600, height: 800 });
+  await drawerPage.goto(BASE + "/behaviour?drawer=1", { waitUntil: "domcontentloaded" });
+  await drawerPage.waitForTimeout(900);
+
+  // a drawer-page predicate polled to a deadline — the engine writes the
+  // attribute on its own schedule, so one sample is a race.
+  const drawerSettled = async (predicate, tries = 40) => {
+    let last = null;
+    for (let i = 0; i < tries; i++) {
+      last = await drawerPage.evaluate(predicate);
+      if (last && last.ok) return last;
+      await drawerPage.waitForTimeout(50);
+    }
+    return last;
+  };
+  const drawerState = () => drawerPage.evaluate(() => {
+    const root = document.getElementById("fx-drawer");
+    const panel = root ? root.querySelector(".drawer__panel") : null;
+    const scrim = root ? root.querySelector(".drawer__scrim") : null;
+    const active = document.activeElement;
+    return {
+      root: !!root,
+      open: root ? root.hasAttribute("data-open") : null,
+      display: root ? getComputedStyle(root).display : null,
+      panel: panel ? panel.getClientRects().length > 0 : false,
+      scrim: scrim ? (scrim.getClientRects().length > 0 && getComputedStyle(scrim).display !== "none") : false,
+      focus: active ? (active.id || active.tagName) : null,
+      inside: !!(panel && active && panel.contains(active)),
+    };
+  });
+
+  const atLoad = await drawerState();
+  const wiring = await drawerPage.evaluate(() => {
+    const root = document.getElementById("fx-drawer");
+    const panel = root ? root.querySelector(".drawer__panel") : null;
+    const scrim = root ? root.querySelector(".drawer__scrim") : null;
+    return {
+      rootID: root ? root.id : null,
+      scrim: scrim ? scrim.getAttribute("data-drawer-toggle") : null,
+      close: document.getElementById("fx-drawer-close")?.getAttribute("data-drawer-toggle") || null,
+      host: document.getElementById("fx-drawer-open")?.getAttribute("data-drawer-toggle") || null,
+      tabindex: panel ? panel.getAttribute("tabindex") : null,
+      dismiss: panel ? panel.hasAttribute("data-dismiss") : false,
+    };
+  });
+  if (atLoad.root && atLoad.open === false && atLoad.display === "none" && !atLoad.panel && !atLoad.scrim) {
+    ok("drawer: at 600px the closed drawer is off-canvas at load (no data-open, root display:none, panel and scrim off screen)");
+  } else {
+    bad(`drawer: at load the drawer was ${JSON.stringify(atLoad)}`);
+  }
+  const wired = wiring.rootID === "fx-drawer" && wiring.scrim === "fx-drawer" &&
+    wiring.close === "fx-drawer" && wiring.host === "fx-drawer" &&
+    wiring.tabindex === "-1" && wiring.dismiss;
+  if (wired) {
+    ok(`data-drawer-toggle: the root id is the state, and the host button, the scrim and the close control all name it (panel tabindex ${wiring.tabindex}, panel data-dismiss ${wiring.dismiss})`);
+  } else {
+    bad(`data-drawer-toggle: the drawer wiring was ${JSON.stringify(wiring)}`);
+  }
+
+  await drawerPage.click("#fx-drawer-open");
+  const opened = await drawerSettled(() => {
+    const root = document.getElementById("fx-drawer");
+    const panel = root.querySelector(".drawer__panel");
+    const scrim = root.querySelector(".drawer__scrim");
+    const active = document.activeElement;
+    return {
+      ok: root.hasAttribute("data-open") && root.getClientRects().length > 0 &&
+        panel.getClientRects().length > 0 && scrim.getClientRects().length > 0 &&
+        getComputedStyle(scrim).display !== "none" && !!active && panel.contains(active),
+      open: root.hasAttribute("data-open"),
+      display: getComputedStyle(root).display,
+      panel: panel.getClientRects().length > 0,
+      scrim: scrim.getClientRects().length > 0,
+      focus: active ? (active.id || active.tagName) : null,
+    };
+  });
+  if (opened && opened.ok) {
+    ok(`data-drawer-toggle: a click opens the drawer with no round-trip (data-open set, root and panel on screen, scrim shown, focus inside the panel on ${opened.focus})`);
+  } else {
+    bad(`data-drawer-toggle: the opening click left ${JSON.stringify(opened)}`);
+  }
+
+  await drawerPage.click("#fx-drawer .drawer__scrim", { position: { x: 20, y: 20 } });
+  const byScrim = await drawerSettled(() => {
+    const root = document.getElementById("fx-drawer");
+    return {
+      ok: !root.hasAttribute("data-open") && getComputedStyle(root).display === "none" && document.activeElement?.id === "fx-drawer-open",
+      open: root.hasAttribute("data-open"),
+      display: getComputedStyle(root).display,
+      focus: document.activeElement?.id || null,
+    };
+  });
+  if (byScrim && byScrim.ok) ok("data-open: a scrim click closes the drawer and returns focus to the toggle");
+  else bad(`data-open: the scrim click left ${JSON.stringify(byScrim)}`);
+
+  await drawerPage.click("#fx-drawer-open");
+  await drawerSettled(() => ({ ok: document.getElementById("fx-drawer").hasAttribute("data-open") }));
+  await drawerPage.keyboard.press("Escape");
+  const byEscape = await drawerSettled(() => {
+    const root = document.getElementById("fx-drawer");
+    return {
+      ok: !root.hasAttribute("data-open") && getComputedStyle(root).display === "none" && document.activeElement?.id === "fx-drawer-open",
+      open: root.hasAttribute("data-open"),
+      focus: document.activeElement?.id || null,
+    };
+  });
+  if (byEscape && byEscape.ok) ok("data-open: Escape on the panel closes the drawer through the dismiss stack and returns focus to the toggle");
+  else bad(`data-open: Escape on the drawer panel left ${JSON.stringify(byEscape)}`);
+
+  await drawerPage.click("#fx-drawer-open");
+  await drawerSettled(() => ({ ok: document.getElementById("fx-drawer").hasAttribute("data-open") }));
+  await drawerPage.click("#fx-drawer-close");
+  const byClose = await drawerSettled(() => {
+    const root = document.getElementById("fx-drawer");
+    return {
+      ok: !root.hasAttribute("data-open") && getComputedStyle(root).display === "none" && document.activeElement?.id === "fx-drawer-open",
+      open: root.hasAttribute("data-open"),
+      focus: document.activeElement?.id || null,
+    };
+  });
+  if (byClose && byClose.ok) ok("data-drawer-toggle: the drawer's own close control shuts it and returns focus to the host toggle");
+  else bad(`data-drawer-toggle: the close control left ${JSON.stringify(byClose)}`);
+
+  // layer ordering: the drawer is closed, so its panel must not be the layer
+  // Escape reaches — the layer the reader opened is.
+  await drawerPage.evaluate(() => document.getElementById("open-a").click());
+  await drawerPage.waitForTimeout(500);
+  const layerBefore = await drawerPage.evaluate(() => ({
+    layer: !!document.getElementById("layer-a"),
+    open: document.getElementById("fx-drawer").hasAttribute("data-open"),
+  }));
+  await drawerPage.keyboard.press("Escape");
+  await drawerPage.waitForTimeout(500);
+  const layerAfter = await drawerPage.evaluate(() => ({
+    layer: !!document.getElementById("layer-a"),
+    open: document.getElementById("fx-drawer").hasAttribute("data-open"),
+  }));
+  if (layerBefore.layer && !layerBefore.open && !layerAfter.layer && !layerAfter.open) {
+    ok("data-dismiss: with the drawer closed, Escape closes the open layer and leaves the drawer shut (the closed drawer never takes the key)");
+  } else {
+    bad(`data-dismiss: the closed-drawer Escape left ${JSON.stringify({ layerBefore, layerAfter })}`);
+  }
+
+  await drawerPage.setViewportSize({ width: 1200, height: 800 });
+  await drawerPage.waitForTimeout(300);
+  const railBefore = await drawerState();
+  await drawerPage.click("#fx-drawer-open");
+  await drawerPage.waitForTimeout(250);
+  const railAfter = await drawerState();
+  const railHeld = railBefore.open === false && railBefore.display !== "none" && railBefore.panel && !railBefore.scrim &&
+    railAfter.open === false && railAfter.panel && railAfter.display === railBefore.display && !railAfter.scrim;
+  if (railHeld) {
+    ok(`drawer: at 1200px the drawer is the static rail (display ${railBefore.display}, no data-open, no scrim) and the toggle does not change its visibility`);
+  } else {
+    bad(`drawer: the 1200px rail was ${JSON.stringify({ railBefore, railAfter })}`);
+  }
+
+  if (drawerErrors.length === 0) ok("drawer: no uncaught page exceptions while driving the open state");
+  else bad(`drawer: uncaught page exceptions while driving the open state: ${drawerErrors.join(" | ")}`);
+  await drawerPage.close();
+}
+
+// ---------------------------------------------------------------------------
 // 11. data-scrollspy — the section in view marks its own anchor.
 // ---------------------------------------------------------------------------
 {
