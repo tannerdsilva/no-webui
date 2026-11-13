@@ -1032,9 +1032,10 @@ await page.evaluate(() => { document.querySelectorAll('link[rel="stylesheet"]').
     ok("upload (destination): two zones sent two composed X-Upload-Path values (attachments/note.txt vs docs/docs.txt)");
   } else bad(`upload (destination): the echoed composed paths did not differ — ${JSON.stringify(twoPaths)}`);
 
-  // (b2) the name template: one templated zone, two sequential uploads, two
+  // (b2) the name template: one templated zone, the SAME file name twice, two
   //      distinct composed paths. the template resolves BEFORE composition, so
-  //      the second upload cannot land on the first one's name.
+  //      the second upload cannot land on the first one's name; the timestamp
+  //      token is asserted as a 13-digit epoch, since its exact value moves.
   const zoneC = '[data-component-id="fx-upload-c"] input[type=file]';
   const templateAttr = await uploadPage.evaluate(() => {
     const a = document.querySelector('[data-component-id="fx-upload-a"]');
@@ -1045,29 +1046,27 @@ await page.evaluate(() => { document.querySelectorAll('link[rel="stylesheet"]').
       into: c ? c.getAttribute("data-upload-into") : null,
     };
   });
-  if (templateAttr.plain === false && templateAttr.templated === "{name}-{seq}.{ext}" && templateAttr.into === "docs") {
+  if (templateAttr.plain === false && templateAttr.templated === "{name}-{seq}-{ts}.{ext}" && templateAttr.into === "docs") {
     ok("upload (template): only the templated zone carries data-upload-name-template, and its destination is the relative directory docs");
   } else bad(`upload (template): attribute wiring wrong — ${JSON.stringify(templateAttr)}`);
 
-  await uploadPage.setInputFiles(zoneC, { name: "alpha.txt", mimeType: "text/plain", buffer: Buffer.from("alpha\n") });
-  try { await waitRow("alpha-1.txt", "done"); } catch { bad(`upload (template): no done row for alpha-1.txt — ${JSON.stringify(await trayRows())}`); }
+  await uploadPage.setInputFiles(zoneC, { name: "note.txt", mimeType: "text/plain", buffer: Buffer.from("same name, first\n") });
   const firstTemplated = await uploadPage.waitForFunction(() => {
     const el = document.getElementById("upload-out-c1");
-    return el && /path=docs\/alpha-1\.txt/.test(el.textContent) ? el.textContent.trim() : false;
+    return el && /path=docs\/note-1-\d{13}\.txt/.test(el.textContent) ? el.textContent.trim() : false;
   }, null, { timeout: 8000 }).then((h) => h.jsonValue()).catch(() => null);
-  if (firstTemplated && /name=alpha-1\.txt/.test(firstTemplated)) {
-    ok(`upload (template): {name}-{seq}.{ext} composed the first path — ${firstTemplated}`);
-  } else bad(`upload (template): first templated upload did not compose docs/alpha-1.txt — ${JSON.stringify(firstTemplated)}`);
+  if (firstTemplated && /name=note-1-\d{13}\.txt/.test(firstTemplated)) {
+    ok(`upload (template): the same name resolved to a distinct first path — ${firstTemplated}`);
+  } else bad(`upload (template): first templated upload did not compose docs/note-1-<ts>.txt — ${JSON.stringify(firstTemplated)}`);
 
-  await uploadPage.setInputFiles(zoneC, { name: "beta.txt", mimeType: "text/plain", buffer: Buffer.from("beta\n") });
-  try { await waitRow("beta-2.txt", "done"); } catch { bad(`upload (template): no done row for beta-2.txt — ${JSON.stringify(await trayRows())}`); }
+  await uploadPage.setInputFiles(zoneC, { name: "note.txt", mimeType: "text/plain", buffer: Buffer.from("same name, second\n") });
   const secondTemplated = await uploadPage.waitForFunction(() => {
     const el = document.getElementById("upload-out-c2");
-    return el && /path=docs\/beta-2\.txt/.test(el.textContent) ? el.textContent.trim() : false;
+    return el && /path=docs\/note-2-\d{13}\.txt/.test(el.textContent) ? el.textContent.trim() : false;
   }, null, { timeout: 8000 }).then((h) => h.jsonValue()).catch(() => null);
-  if (secondTemplated && /name=beta-2\.txt/.test(secondTemplated)) {
-    ok(`upload (template): the second upload through the same zone composed a distinct path — ${secondTemplated}`);
-  } else bad(`upload (template): second templated upload did not compose docs/beta-2.txt — ${JSON.stringify(secondTemplated)}`);
+  if (secondTemplated && /name=note-2-\d{13}\.txt/.test(secondTemplated) && firstTemplated && secondTemplated !== firstTemplated) {
+    ok(`upload (template): the second upload of the SAME name composed a distinct path — ${secondTemplated}`);
+  } else bad(`upload (template): second templated upload did not compose docs/note-2-<ts>.txt — ${JSON.stringify(secondTemplated)}`);
 
   // (c) paste: a synthesized clipboard image (the native path is a manual pass).
   const paste = await uploadPage.evaluate(() => {

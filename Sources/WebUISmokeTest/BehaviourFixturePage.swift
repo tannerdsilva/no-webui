@@ -189,10 +189,10 @@ func renderBehaviourPage(
 		route: "/upload/contract", id: "fx-upload-b"
 	).markup.html
 	let zoneC = WebUIDropZone(
-		"Drop a file here", hint: "docs, templated {name}-{seq}.{ext}",
+		"Drop a file here", hint: "docs, templated {name}-{seq}-{ts}.{ext}",
 		destination: .folder(path: "docs"),
 		route: "/upload/contract", id: "fx-upload-c",
-		nameTemplate: UploadNameTemplate(template: "{name}-{seq}.{ext}")
+		nameTemplate: UploadNameTemplate(template: "{name}-{seq}-{ts}.{ext}")
 	).markup.html
 	var refreshLines = ""
 	for i in 0..<30 {
