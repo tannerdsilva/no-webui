@@ -322,15 +322,16 @@ if (!clipboardGranted) {
 // 10. data-scroll-to — smooth scroll into view + the 1.4 s flash.
 // ---------------------------------------------------------------------------
 {
+  const started = Date.now();
   await page.click("#to-target");
   const flashed = await page.evaluate(() => document.getElementById("scroll-target").hasAttribute("data-scroll-flash"));
-  await page.waitForTimeout(900);
-  const near = await page.evaluate(() => {
+  // smooth scroll duration grows with the distance, and this fixture keeps
+  // growing: poll the settled position instead of sampling one frame.
+  const near = await page.waitForFunction(() => {
     const r = document.getElementById("scroll-target").getBoundingClientRect();
     return Math.abs(r.top) < 400;
-  });
-  await page.waitForTimeout(800);
-  const cleared = await page.evaluate(() => !document.getElementById("scroll-target").hasAttribute("data-scroll-flash"));
+  }, null, { timeout: 3000 }).then(() => true).catch(() => false);
+  const cleared = await page.waitForFunction(() => !document.getElementById("scroll-target").hasAttribute("data-scroll-flash"), null, { timeout: 4000 }).then(() => true).catch(() => false);
   if (flashed) ok("data-scroll-to: click sets data-scroll-flash on the target");
   else bad("data-scroll-to: data-scroll-flash was not set");
   if (near) ok("data-scroll-to: the target is scrolled into view");
@@ -845,6 +846,49 @@ if (!clipboardGranted) {
   } else {
     bad(`T26: before ${JSON.stringify(before)}, after ${JSON.stringify(after)}`);
   }
+}
+
+// ---------------------------------------------------------------------------
+// 18d. an EMPTY-FRAGMENT close — the patch targets the dialog itself, so the
+//      frame carries no changed node; the removal pass must still run.
+// ---------------------------------------------------------------------------
+{
+  await page.click("#fx-dialog2-open");
+  await page.waitForFunction(() => !!document.getElementById("fx-dialog2"), null, { timeout: 4000 }).catch(() => {});
+  const opened = await page.evaluate(() => !!document.getElementById("fx-dialog2"));
+  await page.focus("#fx-dialog2-field");
+  const parked = await page.evaluate(() => document.activeElement?.id ?? null);
+  await page.evaluate(() => document.getElementById("fx-dialog2-close").click());
+  await page.waitForFunction(() => !document.getElementById("fx-dialog2"), null, { timeout: 4000 }).catch(() => {});
+  await page.waitForTimeout(80);
+  const after = await page.evaluate(() => ({
+    dialog: !!document.getElementById("fx-dialog2"),
+    focus: document.activeElement?.id ?? null,
+  }));
+  if (opened && parked === "fx-dialog2-field" && !after.dialog && after.focus === "fx-dialog2-open") {
+    ok("focus return by id: a dialog removed by an EMPTY fragment still returns focus to the opener");
+  } else {
+    bad(`focus return by empty fragment: opened ${opened}, parked ${JSON.stringify(parked)}, after ${JSON.stringify(after)}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 18e. focus the reader moved while the round trip was in flight is not stolen
+//      by the removal pass.
+// ---------------------------------------------------------------------------
+{
+  await page.click("#fx-dialog-open");
+  await page.waitForFunction(() => !!document.getElementById("fx-dialog"), null, { timeout: 4000 }).catch(() => {});
+  await page.focus("#fx-dialog-close");
+  await page.evaluate(() => {
+    document.getElementById("fx-dialog-close").click();
+    document.getElementById("reader").focus();
+  });
+  await page.waitForFunction(() => !document.getElementById("fx-dialog"), null, { timeout: 4000 }).catch(() => {});
+  await page.waitForTimeout(80);
+  const focus = await page.evaluate(() => document.activeElement?.id ?? null);
+  if (focus === "reader") ok("focus return by id: focus moved before the patch lands is not stolen");
+  else bad(`focus theft: activeElement after the patch was ${JSON.stringify(focus)} (expected reader)`);
 }
 
 // ---------------------------------------------------------------------------

@@ -892,6 +892,7 @@ window.WebUIEngine = (function () {
     function applyFragments(fragments, optimistic) {
       if (beforePatchHooks.length) { runHooks(beforePatchHooks, fragments); }
       var changed = [];
+      var removedAny = false;
       for (var i = 0; i < fragments.length; i++) {
         var f = fragments[i];
         if (!f.id || (f.html === undefined && f.op !== 'text')) {
@@ -920,11 +921,13 @@ window.WebUIEngine = (function () {
           if (added) { changed.push(added); }
           continue;
         }
+        var existed = !!regionElement(f.id);
         replaceElement(f.id, f.html);
         var node = regionElement(f.id);
         if (node) { changed.push(node); }
+        else if (existed) { removedAny = true; }
       }
-      if (changed.length) { refreshIslandRegions(changed); runHooks(afterPatchHooks, changed); }
+      if (changed.length || removedAny) { refreshIslandRegions(changed); runHooks(afterPatchHooks, changed); }
     }
 
     function setTextContent(id, value) {
@@ -1967,6 +1970,8 @@ window.WebUIEngine = (function () {
       var recorded = removalMemo;
       removalMemo = null;
       if (!recorded) { return; }
+      var active = document.activeElement;
+      if (active && active !== document.body && active !== document.documentElement && active.isConnected) { return; }
       for (var i = 0; i < recorded.length; i++) {
         var id = recorded[i];
         if (document.getElementById(id)) { continue; }

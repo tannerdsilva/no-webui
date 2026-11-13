@@ -147,8 +147,16 @@ struct WebUIBudgetPlugin: CommandPlugin {
     /// the ceilings move to the smallest hundred strictly above the measured value —
     /// 75,800 / 17,700 (93 raw bytes of headroom, never padded) — and stay under the
     /// journal's 80,000 absolute engine cap.
+    ///   engine      76,007 raw / 17,757 gz   (after the follow-up: the removal
+    ///                                         hook now runs for an empty-fragment
+    ///                                         removal, and the removal pass skips a
+    ///                                         reader who moved focus mid-round-trip)
+    ///
+    /// re-pinned 2026-11-13 (same phase, follow-up commit): the two corrections above
+    /// measured 76,007 / 17,757, so the ceilings move to 76,100 / 17,800 (93 raw bytes
+    /// of headroom, never padded), still under the 80,000 absolute cap.
     private static let ceilings: [Ceiling] = [
-        Ceiling(surface: "engine", label: "webui-engine.js", raw: 75_800, gz: 17_700),
+        Ceiling(surface: "engine", label: "webui-engine.js", raw: 76_100, gz: 17_800),
         Ceiling(surface: "engineExt", label: "webui-engine-ext.js", raw: 23_200, gz: 5_900),
         Ceiling(surface: "sheet", label: "design-system.css", raw: 335_000, gz: 49_500),
         Ceiling(surface: "shell", label: "webui-shell.js", raw: 1_700, gz: 650),

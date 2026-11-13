@@ -25,6 +25,7 @@ final class BehaviourFixtureState: Sendable {
 		var last = "(none)"
 		var refreshes = 0
 		var dialogOpen = false
+		var dialog2Open = false
 		var t26 = 0
 		var uploads: [String: String] = [:]
 		var templated: [String] = []
@@ -82,6 +83,11 @@ final class BehaviourFixtureState: Sendable {
 	var dialogOpen: Bool {
 		get { values.withLock { $0.dialogOpen } }
 		set { values.withLock { $0.dialogOpen = newValue } }
+	}
+
+	var dialog2Open: Bool {
+		get { values.withLock { $0.dialog2Open } }
+		set { values.withLock { $0.dialog2Open = newValue } }
 	}
 	var t26: Int {
 		get { values.withLock { $0.t26 } }
@@ -160,6 +166,20 @@ func behaviourDialogRegionHTML(_ state: BehaviourFixtureState) -> String {
 	<section id="fx-dialog-region" class="fx-sec"><h2>focus return by round trip</h2>
 	<p class="fx-muted">the close is a server round trip: the patch removes the dialog, and focus returns to the opener by id.</p>
 	<div class="fx-row"><button id="fx-dialog-open" type="button"\(FocusReturn(id: "fx-dialog").attributeText) data-component-id="fx-dialog-open" data-event="click">Open the dialog</button><p id="fx-dialog-state" class="fx-muted">dialog: \(state.dialogOpen ? "open" : "closed")</p></div>
+	\(dialog)</section>
+	"""
+}
+
+/// the empty-fragment close: the patch targets `#fx-dialog2` itself with empty
+/// html, so `applyFragments` sees no changed node — the removal pass has to run
+/// anyway, which is the branch its removed-element flag exists for.
+func behaviourDialog2RegionHTML(_ state: BehaviourFixtureState) -> String {
+	let dialog: String = state.dialog2Open ? """
+	<div id="fx-dialog2" class="fx-layer" role="dialog" aria-label="empty fragment dialog"><p class="fx-muted">closed by an empty fragment, not a region re-render.</p><input id="fx-dialog2-field" type="text" aria-label="dialog2 field" value="focus me"><button id="fx-dialog2-close" type="button"\(FocusReturn(id: "fx-dialog2-open").attributeText) data-component-id="fx-dialog2-close" data-event="click">Close by empty fragment</button></div>
+	""" : ""
+	return """
+	<section id="fx-dialog2-host" class="fx-sec"><h2>focus return by empty-fragment close</h2>
+	<div class="fx-row"><button id="fx-dialog2-open" type="button"\(FocusReturn(id: "fx-dialog2").attributeText) data-component-id="fx-dialog2-open" data-event="click">Open the empty-fragment dialog</button></div>
 	\(dialog)</section>
 	"""
 }
@@ -307,6 +327,8 @@ func renderBehaviourPage(
 
 	\(behaviourDialogRegionHTML(state))
 
+	\(behaviourDialog2RegionHTML(state))
+
 	\(behaviourT26HTML(state))
 
 	<section class="fx-sec"><h2>reorder</h2>
@@ -450,6 +472,16 @@ struct BehaviourPageResponder: Responder {
 			state.dialogOpen = false
 			return .fragments([FragmentUpdate(id: "fx-dialog-region", html: behaviourDialogRegionHTML(state))])
 		}, for: ComponentID("fx-dialog-close"), in: session)
+		// the empty-fragment dialog: open re-renders its host, close removes the
+		// dialog element itself — a patch with no changed node.
+		router.register(outcome: { _ in
+			state.dialog2Open = true
+			return .fragments([FragmentUpdate(id: "fx-dialog2-host", html: behaviourDialog2RegionHTML(state))])
+		}, for: ComponentID("fx-dialog2-open"), in: session)
+		router.register(outcome: { _ in
+			state.dialog2Open = false
+			return .fragments([FragmentUpdate(id: "fx-dialog2", html: "")])
+		}, for: ComponentID("fx-dialog2-close"), in: session)
 		// T26: the clicked button's own answer replaces the region holding it.
 		router.register(outcome: { _ in
 			state.t26 += 1
