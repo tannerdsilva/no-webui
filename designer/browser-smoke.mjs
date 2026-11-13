@@ -1012,11 +1012,11 @@ await page.evaluate(() => { document.querySelectorAll('link[rel="stylesheet"]').
 
   const echoedA = await uploadPage.waitForFunction(() => {
     const el = document.getElementById("upload-out-a");
-    return el && /path=attachments/.test(el.textContent) ? el.textContent.trim() : false;
+    return el && /path=attachments\/note\.txt/.test(el.textContent) ? el.textContent.trim() : false;
   }, null, { timeout: 8000 }).then((h) => h.jsonValue()).catch(() => null);
   if (echoedA && /name=note\.txt/.test(echoedA) && /bytes=13/.test(echoedA)) {
-    ok(`upload (refresh): .refresh patched the region with the route's echo — ${echoedA}`);
-  } else bad(`upload (refresh): region did not carry path/name/bytes — ${JSON.stringify(echoedA)}`);
+    ok(`upload (refresh): .refresh patched the region with the route's echoed composed path — ${echoedA}`);
+  } else bad(`upload (refresh): region did not carry path=attachments/note.txt + name/bytes — ${JSON.stringify(echoedA)}`);
 
   // (b) two destinations: the same transport, two typed values, two echoes.
   await uploadPage.setInputFiles(zoneB, { name: "docs.txt", mimeType: "text/plain", buffer: Buffer.from("into the folder\n") });
@@ -1025,12 +1025,49 @@ await page.evaluate(() => { document.querySelectorAll('link[rel="stylesheet"]').
     const a = document.getElementById("upload-out-a");
     const b = document.getElementById("upload-out-b");
     if (!a || !b) return false;
-    if (!/path=folder:docs/.test(b.textContent)) return false;
+    if (!/path=docs\/docs\.txt/.test(b.textContent)) return false;
     return { a: a.textContent.trim(), b: b.textContent.trim() };
   }, null, { timeout: 8000 }).then((h) => h.jsonValue()).catch(() => null);
-  if (twoPaths && /path=attachments/.test(twoPaths.a) && /path=folder:docs/.test(twoPaths.b)) {
-    ok("upload (destination): two zones sent two different X-Upload-Path values (attachments vs folder:docs)");
-  } else bad(`upload (destination): the echoed destinations did not differ — ${JSON.stringify(twoPaths)}`);
+  if (twoPaths && /path=attachments\/note\.txt/.test(twoPaths.a) && /path=docs\/docs\.txt/.test(twoPaths.b)) {
+    ok("upload (destination): two zones sent two composed X-Upload-Path values (attachments/note.txt vs docs/docs.txt)");
+  } else bad(`upload (destination): the echoed composed paths did not differ — ${JSON.stringify(twoPaths)}`);
+
+  // (b2) the name template: one templated zone, two sequential uploads, two
+  //      distinct composed paths. the template resolves BEFORE composition, so
+  //      the second upload cannot land on the first one's name.
+  const zoneC = '[data-component-id="fx-upload-c"] input[type=file]';
+  const templateAttr = await uploadPage.evaluate(() => {
+    const a = document.querySelector('[data-component-id="fx-upload-a"]');
+    const c = document.querySelector('[data-component-id="fx-upload-c"]');
+    return {
+      plain: a ? a.hasAttribute("data-upload-name-template") : null,
+      templated: c ? c.getAttribute("data-upload-name-template") : null,
+      into: c ? c.getAttribute("data-upload-into") : null,
+    };
+  });
+  if (templateAttr.plain === false && templateAttr.templated === "{name}-{seq}.{ext}" && templateAttr.into === "docs") {
+    ok("upload (template): only the templated zone carries data-upload-name-template, and its destination is the relative directory docs");
+  } else bad(`upload (template): attribute wiring wrong — ${JSON.stringify(templateAttr)}`);
+
+  await uploadPage.setInputFiles(zoneC, { name: "alpha.txt", mimeType: "text/plain", buffer: Buffer.from("alpha\n") });
+  try { await waitRow("alpha-1.txt", "done"); } catch { bad(`upload (template): no done row for alpha-1.txt — ${JSON.stringify(await trayRows())}`); }
+  const firstTemplated = await uploadPage.waitForFunction(() => {
+    const el = document.getElementById("upload-out-c1");
+    return el && /path=docs\/alpha-1\.txt/.test(el.textContent) ? el.textContent.trim() : false;
+  }, null, { timeout: 8000 }).then((h) => h.jsonValue()).catch(() => null);
+  if (firstTemplated && /name=alpha-1\.txt/.test(firstTemplated)) {
+    ok(`upload (template): {name}-{seq}.{ext} composed the first path — ${firstTemplated}`);
+  } else bad(`upload (template): first templated upload did not compose docs/alpha-1.txt — ${JSON.stringify(firstTemplated)}`);
+
+  await uploadPage.setInputFiles(zoneC, { name: "beta.txt", mimeType: "text/plain", buffer: Buffer.from("beta\n") });
+  try { await waitRow("beta-2.txt", "done"); } catch { bad(`upload (template): no done row for beta-2.txt — ${JSON.stringify(await trayRows())}`); }
+  const secondTemplated = await uploadPage.waitForFunction(() => {
+    const el = document.getElementById("upload-out-c2");
+    return el && /path=docs\/beta-2\.txt/.test(el.textContent) ? el.textContent.trim() : false;
+  }, null, { timeout: 8000 }).then((h) => h.jsonValue()).catch(() => null);
+  if (secondTemplated && /name=beta-2\.txt/.test(secondTemplated)) {
+    ok(`upload (template): the second upload through the same zone composed a distinct path — ${secondTemplated}`);
+  } else bad(`upload (template): second templated upload did not compose docs/beta-2.txt — ${JSON.stringify(secondTemplated)}`);
 
   // (c) paste: a synthesized clipboard image (the native path is a manual pass).
   const paste = await uploadPage.evaluate(() => {
@@ -1042,8 +1079,8 @@ await page.evaluate(() => { document.querySelectorAll('link[rel="stylesheet"]').
     if (!event.clipboardData || !event.clipboardData.files || !event.clipboardData.files.length) {
       return { ok: false, why: "ClipboardEvent.clipboardData is not settable in this browser" };
     }
-    zone.dispatchEvent(event);
-    return { ok: true };
+    const prevented = !zone.dispatchEvent(event);
+    return { ok: true, prevented };
   });
   if (!paste.ok) {
     skipWithReason(`upload (paste): ${paste.why} — the native clipboard path is a manual pass`);
@@ -1055,6 +1092,37 @@ await page.evaluate(() => { document.querySelectorAll('link[rel="stylesheet"]').
     const pasteEcho = await uploadPage.evaluate(() => (document.getElementById("upload-out-a") || {}).textContent || "");
     if (/name=paste\.png/.test(pasteEcho)) ok("upload (paste): the route received the pasted file's name");
     else bad(`upload (paste): the region did not carry name=paste.png — ${JSON.stringify(pasteEcho.trim())}`);
+    if (paste.prevented === true) ok("upload (paste): a files-only clipboard is consumed (preventDefault ran)");
+    else bad("upload (paste): preventDefault did not run on a files-only clipboard");
+  }
+
+  // (c2) paste carrying text AND an image: the image uploads, the text is left
+  //      to the browser. `dispatchEvent` returns false when a listener called
+  //      preventDefault — the measured bit this rule turns on.
+  const pasteText = await uploadPage.evaluate(() => {
+    const zone = document.querySelector('[data-component-id="fx-upload-a"]');
+    if (!zone) return { ok: false, why: "no zone" };
+    const dt = new DataTransfer();
+    dt.setData("text/plain", "caption text");
+    dt.items.add(new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], "caption.png", { type: "image/png" }));
+    const event = new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true });
+    if (!event.clipboardData || !event.clipboardData.files || !event.clipboardData.files.length) {
+      return { ok: false, why: "ClipboardEvent.clipboardData is not settable in this browser" };
+    }
+    const types = Array.from(event.clipboardData.types || []);
+    const prevented = !zone.dispatchEvent(event);
+    return { ok: true, prevented, types };
+  });
+  if (!pasteText.ok) {
+    skipWithReason(`upload (paste + text): ${pasteText.why} — the native clipboard path is a manual pass`);
+  } else {
+    try {
+      await waitRow("caption.png", "done");
+      ok("upload (paste + text): the image still uploads when the clipboard also carries text/plain");
+    } catch { bad(`upload (paste + text): no done row for caption.png — ${JSON.stringify(await trayRows())}`); }
+    if (pasteText.prevented === false) {
+      ok(`upload (paste + text): the paste was not consumed, so the browser inserts the text (clipboard types: ${pasteText.types.join(", ")})`);
+    } else bad(`upload (paste + text): preventDefault ran on a clipboard that carried text/plain — types: ${JSON.stringify(pasteText.types)}`);
   }
 
   // (d) directory drop: the recursive walk, over a synthesized entry tree.

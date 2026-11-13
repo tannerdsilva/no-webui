@@ -56,6 +56,8 @@ struct BehaviourVocabularyTests {
 		"data-clear-on-submit",
 		"data-clamp",
 		"data-upload-into",
+		"data-upload-name-template",
+		"data-no-upload-pick",
 	]
 
 	// MARK: - the two assets

@@ -359,10 +359,14 @@ public struct WebUIDropZone: View {
     public let title: String
     public let hint: String
     public let hover: Bool
-    /// where the file lands: `data-upload-into`, sent back as `X-Upload-Path`.
+    /// where the file lands: `data-upload-into`, a relative directory the
+    /// engine prefixes the filename with when it composes `X-Upload-Path`.
     public let destination: UploadDestination
     /// the route the engine posts the body to.
     public let route: String
+    /// the filename template the engine resolves before composing the path;
+    /// `nil` sends the file's own name, and nothing is emitted at all.
+    public let nameTemplate: UploadNameTemplate?
     /// stable id; when set the zone carries `data-component-id` and declares
     /// `data-event="upload-complete"` — the one event it accepts.
     public let id: String?
@@ -373,7 +377,8 @@ public struct WebUIDropZone: View {
         hover: Bool = false,
         destination: UploadDestination = .attachments,
         route: String = "/upload",
-        id: String? = nil
+        id: String? = nil,
+        nameTemplate: UploadNameTemplate? = nil
     ) {
         self.title = title
         self.hint = hint
@@ -381,6 +386,7 @@ public struct WebUIDropZone: View {
         self.destination = destination
         self.route = route
         self.id = id
+        self.nameTemplate = nameTemplate
     }
 
     public func render(into buffer: inout HTMLBuffer) {
@@ -392,7 +398,7 @@ public struct WebUIDropZone: View {
         } ?? ""
         var html = "<div class=\"dropzone\(hover ? " dropzone--hover" : "")\""
         html += AriaRole.button.render() + " tabindex=\"0\""
-        html += destination.attributeText + " data-upload-to=\"\(htmlEscape(route))\"" + wiring + ">"
+        html += destination.attributeText + (nameTemplate?.attributeText ?? "") + " data-upload-to=\"\(htmlEscape(route))\"" + wiring + ">"
         html += "<div class=\"file-drop__icon\"" + Aria.hidden(.yes).render() + ">⇪</div>"
         html += "<div class=\"file-drop__title\">\(htmlEscape(title))</div>"
         if !hint.isEmpty { html += "<div class=\"file-drop__hint\">\(htmlEscape(hint))</div>" }

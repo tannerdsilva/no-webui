@@ -212,10 +212,33 @@ window.WebUIEngineExt = (function () {
       }
     }
 
+    var uploadCounter = 0;
+
+    function uploadName(el, name) {
+      var template = el.getAttribute('data-upload-name-template');
+      if (!template) { return name; }
+      var dot = name.lastIndexOf('.');
+      var stem = dot > 0 ? name.slice(0, dot) : name;
+      var ext = dot > 0 ? name.slice(dot + 1) : '';
+      var seq = null;
+      var out = template.replace(/\{([a-z]+)\}/g, function (whole, token) {
+        if (token === 'name') { return stem; }
+        if (token === 'ext') { return ext; }
+        if (token === 'ts') { return String(Date.now()); }
+        if (token === 'seq') {
+          if (seq === null) { uploadCounter += 1; seq = uploadCounter; }
+          return String(seq);
+        }
+        return whole;
+      });
+      return out || name;
+    }
+
     function uploadFile(el, file) {
       var route = el.getAttribute('data-upload-to') || '/upload';
-      var into = el.getAttribute('data-upload-into') || 'attachments';
-      var name = file.name || 'file';
+      var into = el.getAttribute('data-upload-into') || '';
+      var name = uploadName(el, file.name || 'file');
+      var path = into ? into + '/' + name : name;
       var entry = trayRow(name);
       var xhr = new XMLHttpRequest();
       entry.cancel.addEventListener('click', function () {
@@ -223,7 +246,7 @@ window.WebUIEngineExt = (function () {
       });
       xhr.open('POST', route, true);
       try { xhr.setRequestHeader('X-Upload-Name', name); } catch (e) { }
-      xhr.setRequestHeader('X-Upload-Path', into);
+      xhr.setRequestHeader('X-Upload-Path', path);
       var token = uploadToken();
       if (token) { xhr.setRequestHeader('X-Render-Token', token); }
       xhr.upload.onprogress = function (event) {
@@ -234,10 +257,11 @@ window.WebUIEngineExt = (function () {
         var answer = null;
         try { answer = JSON.parse(xhr.responseText); } catch (e) { answer = null; }
         if (xhr.status >= 200 && xhr.status < 300 && answer && answer.ok === true) {
-          traySettle(entry, 'done', String(answer.path || into) + ' \u00b7 ' + String(answer.bytes) + ' bytes', 100);
+          var landed = String(answer.path || path);
+          traySettle(entry, 'done', landed + ' \u00b7 ' + String(answer.bytes) + ' bytes', 100);
           sendTyped(el, 'upload-complete', {
             name: String(answer.name || name),
-            path: String(answer.path || into),
+            path: landed,
             bytes: String(answer.bytes)
           });
           return;
@@ -273,13 +297,19 @@ window.WebUIEngineExt = (function () {
       function pick() {
         if (input) { try { input.click(); } catch (e) { } }
       }
+      function controlHit(target) {
+        if (!target || !target.closest) { return null; }
+        return target.closest('button, a, input, textarea, select, [role=button], [contenteditable], [data-no-upload-pick]');
+      }
       el.addEventListener('click', function (event) {
-        var tag = event.target && event.target.tagName;
-        if (tag === 'INPUT' || tag === 'BUTTON') { return; }
+        var hit = controlHit(event.target);
+        if (hit && hit !== el) { return; }
         pick();
       });
       el.addEventListener('keydown', function (event) {
         if (event.key !== 'Enter' && event.key !== ' ') { return; }
+        var hit = controlHit(event.target);
+        if (hit && hit !== el) { return; }
         event.preventDefault();
         pick();
       });
@@ -301,11 +331,16 @@ window.WebUIEngineExt = (function () {
             if (data.items[j].kind === 'file' && data.items[j].getAsFile) { files.push(data.items[j].getAsFile()); }
           }
         }
+        var hasText = false;
+        var kinds = data.types || [];
+        for (var t = 0; t < kinds.length; t++) {
+          if (kinds[t] === 'text/plain') { hasText = true; }
+        }
         var started = 0;
         for (var k = 0; k < files.length; k++) {
           if (files[k] && String(files[k].type).indexOf('image/') === 0) { uploadFile(el, files[k]); started++; }
         }
-        if (started) { event.preventDefault(); }
+        if (started && !hasText) { event.preventDefault(); }
       });
       el.addEventListener('dragover', function (event) { event.preventDefault(); });
       el.addEventListener('drop', function (event) {

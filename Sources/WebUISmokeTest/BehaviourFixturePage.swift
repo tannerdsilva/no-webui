@@ -25,6 +25,7 @@ final class BehaviourFixtureState: Sendable {
 		var last = "(none)"
 		var refreshes = 0
 		var uploads: [String: String] = [:]
+		var templated: [String] = []
 	}
 	private let values = Mutex(Values())
 
@@ -46,6 +47,17 @@ final class BehaviourFixtureState: Sendable {
 
 	func upload(zone: String) -> String {
 		values.withLock { $0.uploads[zone] ?? "(none)" }
+	}
+
+	/// appends one templated-zone result, so the region can render both
+	/// sequential uploads and the probe can read two composed paths from one
+	/// zone without a second page load.
+	func recordTemplatedUpload(path: String, name: String, bytes: String) {
+		values.withLock { $0.templated.append("path=\(path) name=\(name) bytes=\(bytes)") }
+	}
+
+	func templatedUpload(_ index: Int) -> String {
+		values.withLock { index < $0.templated.count ? $0.templated[index] : "(none)" }
 	}
 
 	var feed: Int {
@@ -163,16 +175,24 @@ func renderBehaviourPage(
 			return .refresh
 		}
 		.markup.html
-	// the upload fixture: two typed destinations against one contract route, so
-	// the probe can prove the destination travelled (the server echoes the
-	// header it received) and that one engine transport serves every zone.
+	// the upload fixture: three typed destinations against one contract route,
+	// so the probe can prove the destination travelled (the server echoes the
+	// composed path it received) and that one engine transport serves every
+	// zone. the third zone carries a name template and is uploaded to twice,
+	// so the region can show two composed paths from the same zone.
 	let zoneA = WebUIDropZone(
 		"Drop a file here", hint: "attachments", destination: .attachments,
 		route: "/upload/contract", id: "fx-upload-a"
 	).markup.html
 	let zoneB = WebUIDropZone(
-		"Drop a file here", hint: "folder:docs", destination: .folder(path: "docs"),
+		"Drop a file here", hint: "docs", destination: .folder(path: "docs"),
 		route: "/upload/contract", id: "fx-upload-b"
+	).markup.html
+	let zoneC = WebUIDropZone(
+		"Drop a file here", hint: "docs, templated {name}-{seq}.{ext}",
+		destination: .folder(path: "docs"),
+		route: "/upload/contract", id: "fx-upload-c",
+		nameTemplate: UploadNameTemplate(template: "{name}-{seq}.{ext}")
 	).markup.html
 	var refreshLines = ""
 	for i in 0..<30 {
@@ -273,11 +293,14 @@ func renderBehaviourPage(
 	</section>
 
 	<section class="fx-sec" id="fx-upload" data-component-id="fx-upload"><h2>upload contract</h2>
-	<p class="fx-muted">each zone posts to <code>/upload/contract</code> through the engine's XHR transport; the route echoes the destination and the filename headers it received, and the handler answers <code>.refresh</code>.</p>
+	<p class="fx-muted">each zone posts to <code>/upload/contract</code> through the engine's XHR transport; the engine composes <code>&lt;destination&gt;/&lt;name&gt;</code> into <code>X-Upload-Path</code>, and the route echoes the path it received. the handler answers <code>.refresh</code>.</p>
 	<div class="fx-upload-zone">\(zoneA)</div>
 	<div class="fx-upload-zone">\(zoneB)</div>
+	<div class="fx-upload-zone">\(zoneC)</div>
 	<p id="upload-out-a" class="fx-muted">attachments: \(htmlEscape(state.upload(zone: "a")))</p>
-	<p id="upload-out-b" class="fx-muted">folder:docs: \(htmlEscape(state.upload(zone: "b")))</p>
+	<p id="upload-out-b" class="fx-muted">docs: \(htmlEscape(state.upload(zone: "b")))</p>
+	<p id="upload-out-c1" class="fx-muted">templated 1: \(htmlEscape(state.templatedUpload(0)))</p>
+	<p id="upload-out-c2" class="fx-muted">templated 2: \(htmlEscape(state.templatedUpload(1)))</p>
 	</section>
 
 	<section class="fx-sec"><h2>theme choice</h2>
@@ -368,6 +391,18 @@ struct BehaviourPageResponder: Responder {
 			)
 			return .refresh
 		}, for: ComponentID("fx-upload-b"), in: session)
+		// the templated zone: two uploads, two composed paths. the region keeps
+		// both lines so the probe can read them without a reload, and the
+		// handler answers `.refresh` exactly like the untemplated zones — the
+		// template is a transport detail, not a second contract.
+		router.register(outcome: { event in
+			state.recordTemplatedUpload(
+				path: event.string("path") ?? "",
+				name: event.string("name") ?? "",
+				bytes: event.string("bytes") ?? ""
+			)
+			return .refresh
+		}, for: ComponentID("fx-upload-c"), in: session)
 		let html = renderBehaviourPage(state: state, renderToken: request.renderToken.value)
 		return HTTPResponse(headers: smokeHeaders(), body: .html(UnsafeMarkup.trusted(html)))
 	}

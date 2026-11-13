@@ -704,23 +704,67 @@ public struct FilterListAttribute: AttributeRepresentable {
 /// where an upload lands, as the route named it.
 ///
 /// a value, not a string convention inside the engine: ``WebUIDropZone``
-/// serializes the destination to `data-upload-into` and the engine sends it
-/// back as `X-Upload-Path`, so the transport never parses a destination out
-/// of a url or a class name. what the two values mean is the route's
-/// business — the framework owns the wire and the tray, never the storage
-/// (plan §22.3, risk 4).
+/// serializes the destination to `data-upload-into` and the engine composes
+/// the file path from it (`<directory>/<name>`) before sending
+/// `X-Upload-Path`, so the transport never parses a destination out of a url
+/// or a class name. what the directory means is the route's business — the
+/// framework owns the wire and the tray, never the storage (plan §22.3,
+/// risk 4).
 public enum UploadDestination: AttributeRepresentable, Sendable, Equatable, Hashable {
 	/// the host's attachment store.
 	case attachments
-	/// one folder inside that store, serialized as `folder:<path>`.
+	/// one directory inside that store, as a relative path.
+	///
+	/// the value is a **relative directory**, never a scheme: `.folder(path:
+	/// "docs")` serializes as `docs`, not `folder:docs`. the case distinction
+	/// is Swift-side intent only — the wire carries a relative directory and
+	/// the route decides where it lands.
 	case folder(path: String)
 
 	public static let name = "data-upload-into"
 
+	/// the value, normalized: split on `/`, drop empty, `.` and `..` segments,
+	/// rejoin with `/`.
+	///
+	/// the value is a behavior, so it never traps and never resolves: `..`
+	/// segments are **dropped**, not applied — `a/../b` is `a/b`, and `../etc`
+	/// is `etc`. `..` alone (or an empty path) is the empty value, which the
+	/// engine reads as "no directory" and composes the bare filename.
 	public var value: String {
 		switch self {
 			case .attachments: return "attachments"
-			case .folder(let path): return "folder:\(path)"
+			case .folder(let path):
+				return path
+					.split(separator: "/", omittingEmptySubsequences: true)
+					.map(String.init)
+					.filter { $0 != "." && $0 != ".." }
+					.joined(separator: "/")
 		}
 	}
+}
+
+/// a filename template for an upload, as the route named it.
+///
+/// `data-upload-name-template` is read by the engine's upload binder, not by an
+/// entry of its own in the dispatch table: it parameterizes the one transport
+/// `data-upload-into` already owns. tokens are resolved before the path is
+/// composed, so two uploads through one zone cannot collide:
+///
+/// - `{name}` — the file's name with the final extension stripped;
+/// - `{ext}` — the final extension without the dot (empty when there is none);
+/// - `{ts}` — `Date.now()`, in milliseconds;
+/// - `{seq}` — a per-page counter starting at 1, incremented once per upload
+///   whose template names it;
+///
+/// an unknown token stays literal, and a template that resolves to an empty
+/// string falls back to the file's original name.
+public struct UploadNameTemplate: AttributeRepresentable, Sendable, Equatable, Hashable {
+	public static let name = "data-upload-name-template"
+
+	/// the template text, e.g. `{name}-{seq}.{ext}`.
+	public let template: String
+
+	public init(template: String) { self.template = template }
+
+	public var value: String { template }
 }

@@ -93,8 +93,10 @@ control.
 | `ThemeChoice` | `data-theme-choice` | the chosen mode (see above; already live) |
 | form semantics | `data-autogrow`, `data-submit-on-enter`, `data-clear-on-submit` | presence; autogrow, enter-to-send, clear on submit |
 | form semantics (number) | `data-clamp` | `min,max` — the accepted numeric range |
-| upload destination | `data-upload-into` | the typed destination: `attachments` or `folder:<path>`; the engine sends it back as `X-Upload-Path` |
+| upload destination | `data-upload-into` | the typed destination as a **relative directory**: `attachments` or `docs/x` (no scheme). the engine composes `<directory>/<name>` into `X-Upload-Path`, and the route's `200 {path}` answer is authoritative |
+| upload name template | `data-upload-name-template` | optional filename template the engine resolves before composing the path: `{name}`, `{ext}`, `{ts}`, `{seq}`; unknown tokens stay literal. read inside the upload binder — not its own dispatch key |
 | upload route | `data-upload-to` | the route the engine posts the body to (`/upload` by default) |
+| upload picker opt-out | `data-no-upload-pick` | presence on a subtree inside a zone: a click there never opens the file picker — for controls that live inside a container zone |
 | upload (tray) | `data-webui-upload-tray` | the tray the transport mounts and owns (engine-written) |
 | upload (state) | `data-webui-upload-state` | a tray row's state: `uploading`, `done`, `error`, `cancelled` (engine-written) |
 
@@ -121,8 +123,14 @@ request** — a ledger row and a slice — not a supported seam.
 1. add the behavior as a Swift type whose `AttributeRepresentable.name` is the
    attribute, and emit it through `.behavior(_:)`;
 2. add the row here;
-3. run `swift test --filter BehaviourVocabularyTests` — the gate compares the
+3. add the name to `BehaviourVocabularyTests.canonical` — the gate pins this
+   document against that set. add it to the suite's `dispatched` set **only**
+   when the attribute is its own `BEHAVIORS[...]` key: the gate also asserts
+   the engine's dispatch keys equal `dispatched`, so a parameter attribute read
+   inside another binder (`data-upload-name-template` is read by the upload
+   binder) would make that assertion red;
+4. run `swift test --filter BehaviourVocabularyTests` — the gate compares the
    engine's attribute set with this document in both directions;
-4. ship it in a minor tag and name the attribute in the release note.
+5. ship it in a minor tag and name the attribute in the release note.
 
 A new engine behavior with no row here is a bug, not a feature.

@@ -108,7 +108,9 @@ struct WebUIBudgetPlugin: CommandPlugin {
     ///                                          `wsClient.send` through its public
     ///                                          `_getInstance()` door, so main did
     ///                                          not grow a byte)
-    ///   engine-ext  21,879 raw /  5,505 gz   (≤ 22,400 /  5,700 — re-pinned)
+    ///   engine-ext  23,199 raw /  5,861 gz   (≤ 23,200 /  5,900 — re-pinned:
+    ///                                          2.11.0's composed upload path +
+    ///                                          name template cost 1,320 raw)
     ///   sheet      325,063 raw / 45,486 gz   (≤ 335,000 / 49,500 — hold: the
     ///                                          tray's 11 rules cost 1,639 bytes and
     ///                                          the existing ceiling still carries
@@ -124,7 +126,7 @@ struct WebUIBudgetPlugin: CommandPlugin {
     /// still under the plan's 80,000 absolute ceiling.
     private static let ceilings: [Ceiling] = [
         Ceiling(surface: "engine", label: "webui-engine.js", raw: 74_500, gz: 18_600),
-        Ceiling(surface: "engineExt", label: "webui-engine-ext.js", raw: 22_400, gz: 5_700),
+        Ceiling(surface: "engineExt", label: "webui-engine-ext.js", raw: 23_200, gz: 5_900),
         Ceiling(surface: "sheet", label: "design-system.css", raw: 335_000, gz: 49_500),
         Ceiling(surface: "shell", label: "webui-shell.js", raw: 1_700, gz: 650),
     ]

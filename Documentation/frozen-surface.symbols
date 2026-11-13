@@ -10,7 +10,7 @@
 # forced it. `Tests/WebUITests/FrozenSurfaceTests.swift` fails when this
 # file and a fresh extraction diverge, naming every added and removed symbol.
 #
-# re-measured 2026-11-13: 5476 symbols across 11 modules.
+# re-measured 2026-11-13: 5482 symbols across 11 modules.
 
 ## WebUISharedCore
 
@@ -2256,6 +2256,11 @@ UploadDestination.attachments
 UploadDestination.folder(path:)
 UploadDestination.name
 UploadDestination.value
+UploadNameTemplate
+UploadNameTemplate.init(template:)
+UploadNameTemplate.name
+UploadNameTemplate.template
+UploadNameTemplate.value
 VStack
 VStack.alignment
 VStack.content
@@ -3635,7 +3640,8 @@ WebUIDropZone.destination
 WebUIDropZone.hint
 WebUIDropZone.hover
 WebUIDropZone.id
-WebUIDropZone.init(_:hint:hover:destination:route:id:)
+WebUIDropZone.init(_:hint:hover:destination:route:id:nameTemplate:)
+WebUIDropZone.nameTemplate
 WebUIDropZone.render(into:)
 WebUIDropZone.route
 WebUIDropZone.title

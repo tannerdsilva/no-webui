@@ -412,8 +412,35 @@ func dropZone() {
 func uploadDestination() {
     #expect(UploadDestination.name == "data-upload-into")
     #expect(UploadDestination.attachments.value == "attachments")
-    #expect(UploadDestination.folder(path: "docs/x").value == "folder:docs/x")
+    #expect(UploadDestination.folder(path: "docs/x").value == "docs/x")
     #expect(UploadDestination.attachments.attributeText == " data-upload-into=\"attachments\"")
+}
+
+@Test("a folder destination is a relative directory, normalized at emission")
+func uploadDestinationNormalizes() {
+    // the wire value is a directory inside the host's store, never a scheme:
+    // the engine prefixes it with nothing and composes `<dir>/<name>` itself.
+    #expect(UploadDestination.folder(path: "docs/").value == "docs")
+    #expect(UploadDestination.folder(path: "/docs").value == "docs")
+    #expect(UploadDestination.folder(path: "./docs").value == "docs")
+    #expect(UploadDestination.folder(path: "a//b").value == "a/b")
+    #expect(UploadDestination.folder(path: "docs//x/./y/").value == "docs/x/y")
+    // `..` is dropped, not resolved: `a/../b` loses the hop, it does not
+    // climb out of `a` and back. the value is a behavior and never traps.
+    #expect(UploadDestination.folder(path: "../etc").value == "etc")
+    #expect(UploadDestination.folder(path: "a/../b").value == "a/b")
+    #expect(UploadDestination.folder(path: "..").value == "")
+    #expect(UploadDestination.folder(path: "").value == "")
+}
+
+@Test("UploadNameTemplate serializes the template")
+func uploadNameTemplate() {
+    #expect(UploadNameTemplate.name == "data-upload-name-template")
+    #expect(UploadNameTemplate(template: "{name}-{seq}.{ext}").value == "{name}-{seq}.{ext}")
+    #expect(
+        UploadNameTemplate(template: "{name}-{seq}.{ext}").attributeText
+            == " data-upload-name-template=\"{name}-{seq}.{ext}\""
+    )
 }
 
 @Test("WebUIDropZone emits the destination, the route and the event wiring")
@@ -423,7 +450,9 @@ func dropZoneContract() {
         destination: .folder(path: "docs"), route: "/upload/contract", id: "up-a"
     )
     let h = v.markup.html
-    #expect(h.contains("data-upload-into=\"folder:docs\""))
+    #expect(h.contains("data-upload-into=\"docs\""))
+    #expect(!h.contains("folder:"))
+    #expect(!h.contains("data-upload-name-template"))
     #expect(h.contains("data-upload-to=\"/upload/contract\""))
     #expect(h.contains("data-component-id=\"up-a\""))
     #expect(h.contains("data-event=\"upload-complete\""))
@@ -440,11 +469,23 @@ func dropZoneDefaults() {
     #expect(!h.contains("data-event"))
 }
 
+@Test("a drop zone emits its name template only when one is set")
+func dropZoneNameTemplate() {
+    let plain = WebUIDropZone("Drop files").markup.html
+    #expect(!plain.contains("data-upload-name-template"))
+    let templated = WebUIDropZone(
+        "Drop files", destination: .folder(path: "docs"),
+        nameTemplate: UploadNameTemplate(template: "{name}-{seq}.{ext}")
+    ).markup.html
+    #expect(templated.contains("data-upload-into=\"docs\""))
+    #expect(templated.contains("data-upload-name-template=\"{name}-{seq}.{ext}\""))
+}
+
 @Test("a folder path cannot break out of the destination attribute")
 func uploadDestinationEscapes() {
     let h = WebUIDropZone("x", destination: .folder(path: "\" ondrop=\"alert(1)"), id: "u").markup.html
     #expect(!h.contains("ondrop=\"alert(1)\""))
-    #expect(h.contains("folder:&quot; ondrop=&quot;alert(1)"))
+    #expect(h.contains("data-upload-into=\"&quot; ondrop=&quot;alert(1)\""))
 }
 
 @Test("WebUISignature renders pad")

@@ -137,9 +137,12 @@ func uploadContractJSON(_ fields: [String: JSONValue], status: HTTPStatus = .ok)
 	)
 }
 
-/// the contract route's handler: echo the two headers the engine travelled
-/// with, and count the body as it streams past. the destination and the
-/// filename are the proof — a route that received neither cannot answer.
+/// the contract route's handler: take `X-Upload-Path` as the composed relative
+/// file path the engine sent (`<directory>/<name>`), refuse anything that is
+/// not that shape, and echo what arrived. the route never re-composes the path
+/// from the destination and the name — a route that did would hide a broken
+/// engine behind its own arithmetic, which is how this probe passed before the
+/// 2.11.0 wire change.
 func uploadContract(
 	head: UploadHead,
 	body: consuming UploadBody
@@ -165,11 +168,30 @@ func uploadContract(
 			status: HTTPStatus(400)
 		)
 	}
+	let path = head.headers.first(name: "X-Upload-Path") ?? ""
+	guard !path.isEmpty else {
+		return uploadContractJSON(
+			["ok": .bool(false), "error": .string("missing X-Upload-Path header")],
+			status: HTTPStatus(400)
+		)
+	}
+	guard !path.hasPrefix("folder:") else {
+		return uploadContractJSON(
+			["ok": .bool(false), "error": .string("X-Upload-Path must be a relative file path, not a destination")],
+			status: HTTPStatus(400)
+		)
+	}
+	guard path == name || path.hasSuffix("/" + name) else {
+		return uploadContractJSON(
+			["ok": .bool(false), "error": .string("X-Upload-Path must name the file it carries")],
+			status: HTTPStatus(400)
+		)
+	}
 	var received = 0
 	for try await chunk in body { received += chunk.count }
 	return uploadContractJSON([
 		"ok": .bool(true),
-		"path": .string(head.headers.first(name: "X-Upload-Path") ?? ""),
+		"path": .string(path),
 		"name": .string(name),
 		"bytes": .number(Double(received)),
 	])

@@ -6,6 +6,14 @@ all notable changes to this project are documented here.
 
 ### added
 
+- **`data-upload-name-template`** — `UploadNameTemplate(template:)` on
+  `WebUIDropZone` (`nameTemplate:`), resolved by the engine's upload transport
+  **before** the file path is composed. tokens: `{name}` (filename, final
+  extension stripped), `{ext}` (final extension, no dot, empty when none),
+  `{ts}` (`Date.now()`), `{seq}` (per-page counter from 1). an unknown token
+  stays literal; an empty resolution falls back to the original filename. the
+  attribute is emitted only when a zone sets one, so every existing zone renders
+  byte-identically.
 - **`WebUIState`** — a page as a pure function of state. `Store<State>`
   (`final class` + `Mutex`, synchronously readable because render cannot
   `await`), `StatefulPage` (`initialState()` + `body(_:)`),
@@ -38,6 +46,20 @@ all notable changes to this project are documented here.
 
 ### changed
 
+- **the upload wire: `data-upload-into` is a relative directory, and the engine
+  sends the composed file path.** `UploadDestination.folder(path:)` no longer
+  serializes a `folder:` scheme — `.folder(path: "docs")` is `docs`, normalized
+  at emission (split on `/`, drop empty/`.`/`..` segments, rejoin; `..` is
+  dropped, not resolved). the transport composes `<directory>/<name>` and sends
+  that as `X-Upload-Path` (`attachments/note.txt`, `docs/docs.txt`), with
+  `X-Upload-Name` the bare filename. the route's `200 {path}` answer is
+  authoritative: the tray and the `upload-complete` payload carry it, and the
+  engine never re-derives the path from its own request. a click on a control
+  inside a zone no longer opens the picker (`[data-no-upload-pick]` opts a
+  subtree out), and a paste carrying both `text/plain` and an image uploads the
+  image without swallowing the text. hosts that read `data-upload-into` as a
+  destination token must switch to the relative-directory reading; the smoke
+  contract route validates `X-Upload-Path` fail-closed and echoes what arrived.
 - **`WebUIAuthExample` is the composition, not the plumbing: 1,183 → 741 → 315
   lines.** the last 309 lines of hand-rolled NIO transport are gone — no
   `ServerBootstrap`, no upgrade pipeline, no hand-parsed `Cookie` header, no
