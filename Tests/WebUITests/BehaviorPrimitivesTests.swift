@@ -2,7 +2,7 @@ import Testing
 import Foundation
 import WebUICore
 
-// the 22 register rows, pinned one test each.
+// the 25 register rows, pinned one test each.
 //
 // §24 of the behavior-layer journal is the naming authority: a row is a Swift
 // type whose `AttributeRepresentable.name` equals the register's attribute
@@ -282,7 +282,7 @@ struct BehaviorPrimitivesTests {
 		#expect(!html.contains("onmouseover"), "attribute value escaped its quotes: \(html)")
 	}
 
-	@Test("the register's 22 attributes are distinct")
+	@Test("the register's 25 attributes are distinct")
 	func registerIsInjective() {
 		let names: [String] = [
 			ScrollFollowAttribute.name,
@@ -307,8 +307,11 @@ struct BehaviorPrimitivesTests {
 			ClearOnSubmitAttribute.name,
 			NumberClampAttribute.name,
 			FilterListAttribute.name,
+			FilterInsertAttribute.name,
+			FilterTemplateAttribute.name,
+			FilterClearAttribute.name,
 		]
-		#expect(names.count == 22)
+		#expect(names.count == 25)
 		#expect(Set(names).count == names.count, "two behaviors claim one attribute")
 	}
 
@@ -343,6 +346,10 @@ struct BehaviorPrimitivesTests {
 			SubmitOnEnterAttribute.name,
 			ClearOnSubmitAttribute.name,
 			NumberClampAttribute.name,
+			FilterListAttribute.name,
+			FilterInsertAttribute.name,
+			FilterTemplateAttribute.name,
+			FilterClearAttribute.name,
 		]
 		let missing = Set(names).subtracting(documented).sorted()
 		#expect(

@@ -59,6 +59,10 @@ struct BehaviourVocabularyTests {
 		"data-upload-into",
 		"data-upload-name-template",
 		"data-no-upload-pick",
+		"data-filter-insert",
+		"data-filter-template",
+		"data-filter-clear",
+		"data-open",
 	]
 
 	// MARK: - the two assets

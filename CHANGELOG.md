@@ -6,6 +6,20 @@ all notable changes to this project are documented here.
 
 ### added
 
+- **the filter write-back** — `FilterList(source:)` names the field that
+  carries the query when it lives outside the filtered region (a selector or a
+  bare id). the bare `FilterList()` still emits `data-filter-list` with no
+  value, so every existing region renders byte-identically. three new
+  behaviors complete the pair: `FilterInsert(target:)` names the field a
+  selection is written into, `FilterTemplate(text:)` carries the text with
+  `{value}` standing for the item's trimmed label, and `FilterClear()` strips
+  the token the reader was typing before the insert. a click on an item, or
+  `Enter` on a focused one, writes it back at the target's caret and dispatches
+  an `input` event; a template with no insert (or an insert with no template)
+  is inert. `.combo__panel` is now open-stateful: hidden unless it carries
+  `data-open`, which the field's focus writes and a selection, `Escape` or an
+  outside click clears — the last two through the dismiss stack's layer path.
+
 - **`data-upload-name-template`** — `UploadNameTemplate(template:)` on
   `WebUIDropZone` (`nameTemplate:`), resolved by the engine's upload transport
   **before** the file path is composed. tokens: `{name}` (filename, final

@@ -379,6 +379,16 @@ func renderBehaviourPage(
 	\(WebUIComboBox(placeholder: "filter the options", options: [.init("alpha"), .init("beta"), .init("gamma")], emptyMessage: "nothing matches").markup.html)
 	</section>
 
+	<section class="fx-sec" id="fx-filter-source"><h2>filter list · external source · write-back</h2>
+	<p class="fx-muted">the query lives in the composer, outside the list. typing filters the items; a click, or <code>Enter</code> on a focused item, writes the item back at the composer's caret and strips the typed token first.</p>
+	<textarea id="fx-composer" rows="2" aria-label="composer"></textarea>
+	<div id="fx-palette"\(FilterList(source: "#fx-composer").attributeText)\(FilterInsert(target: "fx-composer").attributeText)\(FilterTemplate(text: "{value} ").attributeText)\(FilterClear().attributeText) role="menu" aria-label="palette">
+	<div id="fx-item-hello" class="fx-item" role="menuitem" tabindex="-1">hello</div>
+	<div id="fx-item-help" class="fx-item" role="menuitem" tabindex="-1">help</div>
+	<div id="fx-item-world" class="fx-item" role="menuitem" tabindex="-1">world</div>
+	</div>
+	</section>
+
 	<section class="fx-sec"><h2>form semantics</h2>
 	<form id="submit-form" class="fx-form" data-component-id="fx-submit" data-event="submit">
 	<p><input id="submit-input" name="q" type="text" aria-label="query" placeholder="type and press enter"\(SubmitOnEnter().attributeText)\(ClearOnSubmit().attributeText)></p>

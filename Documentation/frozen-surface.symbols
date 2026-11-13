@@ -10,7 +10,7 @@
 # forced it. `Tests/WebUITests/FrozenSurfaceTests.swift` fails when this
 # file and a fresh extraction diverge, naming every added and removed symbol.
 #
-# re-measured 2026-11-13: 5490 symbols across 11 modules.
+# re-measured 2026-11-13: 5519 symbols across 11 modules.
 
 ## WebUISharedCore
 
@@ -722,13 +722,42 @@ FieldValues.isEmpty
 FieldValues.removeAll()
 FieldValues.subscript(_:)
 FieldValues.subscript(_:default:)
+FilterClear
+FilterClear.attribute()
+FilterClear.init()
+FilterClearAttribute
+FilterClearAttribute.init()
+FilterClearAttribute.name
+FilterClearAttribute.value
+FilterInsert
+FilterInsert.attribute()
+FilterInsert.init(target:)
+FilterInsert.target
+FilterInsertAttribute
+FilterInsertAttribute.init(target:)
+FilterInsertAttribute.name
+FilterInsertAttribute.target
+FilterInsertAttribute.value
 FilterList
 FilterList.attribute()
 FilterList.init()
+FilterList.init(source:)
+FilterList.source
 FilterListAttribute
 FilterListAttribute.init()
+FilterListAttribute.init(source:)
 FilterListAttribute.name
+FilterListAttribute.source
 FilterListAttribute.value
+FilterTemplate
+FilterTemplate.attribute()
+FilterTemplate.init(text:)
+FilterTemplate.text
+FilterTemplateAttribute
+FilterTemplateAttribute.init(text:)
+FilterTemplateAttribute.name
+FilterTemplateAttribute.text
+FilterTemplateAttribute.value
 FocusReturn
 FocusReturn.attribute()
 FocusReturn.id

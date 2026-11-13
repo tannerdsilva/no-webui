@@ -30,6 +30,28 @@ struct BehaviorWiringTests {
 		#expect(out.components(separatedBy: "tabindex=\"-1\"").count == 3, "both options carry tabindex -1: \(out)")
 	}
 
+	// MARK: - FilterList and its write-back
+
+	@Test("FilterList: the bare marker stays bare, a source is the value")
+	func filterListSource() {
+		let bare = html(Element(.div) { Text("x") }.behavior(FilterList()))
+		#expect(bare.contains(" data-filter-list"), "the contained form still emits the bare marker: \(bare)")
+		#expect(!bare.contains("data-filter-list=\"\""), "an empty source is never spelled `=\"\"`: \(bare)")
+		let sourced = html(Element(.div) { Text("x") }.behavior(FilterList(source: "#composer")))
+		#expect(sourced.contains(" data-filter-list=\"#composer\""), "the source is the attribute's value: \(sourced)")
+	}
+
+	@Test("the filter write-back is three behaviors and three attributes")
+	func filterWriteBack() {
+		let insert = html(Element(.div) { Text("x") }.behavior(FilterInsert(target: "fx-composer")))
+		#expect(insert.contains(" data-filter-insert=\"fx-composer\""), "the insert names its target: \(insert)")
+		let template = html(Element(.div) { Text("x") }.behavior(FilterTemplate(text: "{value} ")))
+		#expect(template.contains(" data-filter-template=\"{value} \""), "the template is the attribute's value, escaped but verbatim: \(template)")
+		let clear = html(Element(.div) { Text("x") }.behavior(FilterClear()))
+		#expect(clear.contains(" data-filter-clear"), "clear is the bare marker: \(clear)")
+		#expect(!clear.contains("data-filter-clear=\"\""), "presence has no value: \(clear)")
+	}
+
 	// MARK: - WebUICommandPalette
 
 	@Test("WebUICommandPalette: the dialog dismisses and filters, the results rove, items are one tab stop")

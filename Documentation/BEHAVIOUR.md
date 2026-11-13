@@ -15,7 +15,11 @@ Two rules make the contract hold:
    behavior's `attributeText`, which is still the typed value).
 2. **regions are component ids.** a behavior addresses the element it is
    attached to, or an element identified by `data-component-id`; it never
-   picks an arbitrary CSS selector.
+   picks an arbitrary CSS selector. the one exception is `FilterList`'s
+   `source`, which names the field that carries the query and may be a
+   selector or a bare id — a composer textarea a palette filters is a
+   plain form control, not a component. the write-back's `data-filter-insert`
+   target is always a bare id.
 
 Islands are behavior-free (§19.1): markup inside `[data-webui-island]` is
 render-only, and the engine does not run behavior consequences there. A
@@ -77,11 +81,15 @@ control.
 | `DraftIdentity` | `data-draft-id` | the draft key a control's unsubmitted value is remembered under |
 | `FocusReturn` | `data-focus-return` | the id to return focus to after a patch (empty = the element itself). activation — a click, or `Enter`/`Space` — on an element carrying the attribute records the id it names, keyed by the element's own id, and the record is only strings, so it survives the element's removal; after a patch, an element that carried the attribute and no longer resolves hands focus to the id it named (the "closed by a server round-trip" path, not Escape). covers `button` as well as `[tabindex]`: a focused button replaced by its own region patch is restored by id like any non-input that carries one |
 | `DismissStack` | `data-dismiss` | presence marks a layer; the engine orders Escape and outside-click |
+| layer open state | `data-open` | presence while a client-owned panel is open (engine-written). `.combo__panel` is hidden unless it carries the attribute: the field's focus opens it, typing keeps it open, and a selection, `Escape` or an outside click closes it — the last two through the dismiss stack's layer path. not a dispatch key: the filter binder writes it, `closeLayer` clears it |
 | `Reorder` | `data-reorder` | the hidden input id the engine writes the new order into |
 | `Clipboard` | `data-copy` | text to copy (empty = the element's own text) |
 | `TableEnhance` | `data-table-enhance` | `sort`, `filter`, or `sort filter` |
 | `TableEnhance` (filter) | `data-table-filter` | the filter input inside the enhanced region (engine-read) |
-| `FilterList` | `data-filter-list` | presence; the region whose input filters its `[role=option]` / `[role=menuitem]` / `.command-palette__item` items by case-insensitive substring, hiding non-matches |
+| `FilterList` | `data-filter-list` | presence (the region's own `input`) or the field that carries the query — a selector or a bare id, for a field outside the region. the items `[role=option]` / `[role=menuitem]` / `.command-palette__item` inside the region are filtered by case-insensitive substring, hiding non-matches. a source that does not resolve is inert |
+| `FilterInsert` | `data-filter-insert` | the id of the field a selected item is written into. read inside the filter binder — not its own dispatch key |
+| `FilterTemplate` | `data-filter-template` | the text an inserted selection takes; `{value}` is the item's trimmed text, every occurrence replaced. **pairing:** a template with no insert is inert, an insert with no template is inert — the three filter write-back attributes are one consequence |
+| `FilterClear` | `data-filter-clear` | presence: before the insert, the engine strips the run of non-whitespace immediately before the destination's caret — the token the reader was typing — and inserts at that point. `selectionStart`/`selectionEnd` place the insert; a field without selection support appends |
 | `SkipTarget` | `data-skip-to` | the id a skip link moves focus to |
 | `TickingLabel` | `data-reltime` | ms epoch; the relative-time ladder paints the label |
 | `TickingLabel` (elapsed) | `data-started` + `data-elapsed` | ms epoch + presence; the elapsed clock paints `floor(s/60):SS` |

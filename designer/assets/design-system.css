@@ -1473,6 +1473,7 @@ code, .inline-code {
 }
 .combo__input .dropdown__chevron { position: absolute; right: 0.75rem; top: 50%; transform: translateY(-50%); }
 .combo__panel {
+  display: none;
   margin-top: var(--space-1);
   background: var(--color-bg-raised);
   border: var(--border-width) solid var(--color-border);
@@ -1481,6 +1482,7 @@ code, .inline-code {
   overflow: hidden;
   z-index: var(--z-dropdown);
 }
+.combo__panel[data-open] { display: block; }
 .combo__option {
   display: flex;
   align-items: center;

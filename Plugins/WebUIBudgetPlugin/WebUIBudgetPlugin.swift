@@ -155,9 +155,29 @@ struct WebUIBudgetPlugin: CommandPlugin {
     /// re-pinned 2026-11-13 (same phase, follow-up commit): the two corrections above
     /// measured 76,007 / 17,757, so the ceilings move to 76,100 / 17,800 (93 raw bytes
     /// of headroom, never padded), still under the 80,000 absolute cap.
+    ///
+    /// re-pinned 2026-11-13 (Phase 5A — the filter source and its write-back):
+    ///
+    /// the extension gained the external-source lookup (`data-filter-list` as a selector
+    /// or a bare id), the three-behavior write-back (`data-filter-insert`,
+    /// `data-filter-template`, `data-filter-clear`), the selection path (a click, or
+    /// `Enter` on a focused item, resolving a template against the item's trimmed text
+    /// and writing it at the target's caret), and the combo's `data-open` state.
+    /// measured on this tree, from the asset tool's manifest (`served`):
+    ///   engine      76,092 raw / 17,771 gz   (≤ 76,100 / 17,800 — holds: the one
+    ///                                         `closeLayer` branch is 85 bytes and the
+    ///                                         existing pin carried 93 of headroom, so
+    ///                                         8 bytes remain)
+    ///   engine-ext  26,232 raw /  6,433 gz   (was pinned 23,200 / 5,900; +3,033 raw:
+    ///                                         the source lookup, the three-behavior
+    ///                                         write-back and the panel's open state)
+    ///   sheet      325,123 raw / 45,495 gz   (≤ 335,000 / 49,500 — holds: the two
+    ///                                         `.combo__panel` lines cost 60 bytes)
+    /// the ext ceilings move to the smallest hundred strictly above the measurement —
+    /// 26,300 / 6,500 (68 raw bytes of headroom, never padded).
     private static let ceilings: [Ceiling] = [
         Ceiling(surface: "engine", label: "webui-engine.js", raw: 76_100, gz: 17_800),
-        Ceiling(surface: "engineExt", label: "webui-engine-ext.js", raw: 23_200, gz: 5_900),
+        Ceiling(surface: "engineExt", label: "webui-engine-ext.js", raw: 26_300, gz: 6_500),
         Ceiling(surface: "sheet", label: "design-system.css", raw: 335_000, gz: 49_500),
         Ceiling(surface: "shell", label: "webui-shell.js", raw: 1_700, gz: 650),
     ]

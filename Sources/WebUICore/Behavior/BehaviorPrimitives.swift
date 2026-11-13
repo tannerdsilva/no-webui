@@ -675,24 +675,136 @@ public struct NumberClampAttribute: AttributeRepresentable {
 
 // MARK: - 22. filter list
 
-/// filter a rendered list by what the reader types into its input.
+/// filter a rendered list by what the reader types into a field.
 ///
-/// the region owns both halves: the input that carries the query and the items
-/// the query hides. a list is filtered by the text it already renders, so a
-/// server render needs no second copy of the labels on the wire; a component
-/// that ships this attribute without an input inside the region is inert, which
-/// is why the marker is spliced where both live.
+/// the region owns the items the query hides, not necessarily the field the
+/// query arrives in. `source` names that field when it lives outside the
+/// region — a selector or a bare id (a composer textarea a palette filters and
+/// writes back into is the motivating case). the default is empty, which means
+/// the region's own `input`; that is also the spelling the bare attribute takes,
+/// so every existing region renders byte-identically.
+///
+/// a list is filtered by the text its items already render, so a server render
+/// needs no second copy of the labels on the wire. a region that names a source
+/// which does not resolve is inert, exactly like a region with no input.
 public struct FilterList: Behavior {
-	public init() {}
+	/// the field that carries the query: a selector, a bare id, or empty for
+	/// the region's own `input`.
+	public let source: String
+
+	/// the contained form: the region's own `input` carries the query.
+	public init() {
+		self.source = ""
+	}
+
+	/// the external form: `source` names the field (a selector, or a bare id).
+	public init(source: String) {
+		self.source = source
+	}
 
 	public func attribute() -> FilterListAttribute {
-		FilterListAttribute()
+		FilterListAttribute(source: source)
 	}
 }
 
 /// `data-filter-list` — the serialized form of ``FilterList``.
 public struct FilterListAttribute: AttributeRepresentable {
 	public static let name = "data-filter-list"
+
+	public let source: String
+
+	public init() {
+		self.source = ""
+	}
+
+	public init(source: String) {
+		self.source = source
+	}
+
+	public var value: String { source }
+}
+
+/// `data-filter-insert` — the id of the field a selected item is written into.
+///
+/// one behavior, one attribute (the register's law): `FilterInsert` names the
+/// destination, ``FilterTemplate`` carries the text, and ``FilterClear`` decides
+/// whether the typed query is stripped first. the three are read together inside
+/// the filter binder, and the pairing is load-bearing — an insert with no
+/// template is inert, and a template with no insert is inert.
+public struct FilterInsert: Behavior {
+	/// the id of the field the selection is written into.
+	public let target: String
+
+	public init(target: String) {
+		self.target = target
+	}
+
+	public func attribute() -> FilterInsertAttribute {
+		FilterInsertAttribute(target: target)
+	}
+}
+
+/// `data-filter-insert` — the serialized form of ``FilterInsert``.
+public struct FilterInsertAttribute: AttributeRepresentable {
+	public static let name = "data-filter-insert"
+
+	public let target: String
+
+	public init(target: String) {
+		self.target = target
+	}
+
+	public var value: String { target }
+}
+
+/// `data-filter-template` — the text a selected item is written as.
+///
+/// `{value}` stands for the item's trimmed text; every occurrence is replaced.
+/// a template with no ``FilterInsert`` is inert, because the destination is the
+/// insert's to name.
+public struct FilterTemplate: Behavior {
+	/// the text, with `{value}` standing for the item's label.
+	public let text: String
+
+	public init(text: String) {
+		self.text = text
+	}
+
+	public func attribute() -> FilterTemplateAttribute {
+		FilterTemplateAttribute(text: text)
+	}
+}
+
+/// `data-filter-template` — the serialized form of ``FilterTemplate``.
+public struct FilterTemplateAttribute: AttributeRepresentable {
+	public static let name = "data-filter-template"
+
+	public let text: String
+
+	public init(text: String) {
+		self.text = text
+	}
+
+	public var value: String { text }
+}
+
+/// `data-filter-clear` — strip the typed query before the selection is written.
+///
+/// presence only: the engine removes the run of non-whitespace immediately
+/// before the destination's caret (the token the reader was typing) and then
+/// inserts the resolved template there. absent, the template is inserted with
+/// the query left in place.
+public struct FilterClear: Behavior {
+	public init() {}
+
+	public func attribute() -> FilterClearAttribute {
+		FilterClearAttribute()
+	}
+}
+
+/// `data-filter-clear` — the serialized form of ``FilterClear``.
+public struct FilterClearAttribute: AttributeRepresentable {
+	public static let name = "data-filter-clear"
 
 	public init() {}
 

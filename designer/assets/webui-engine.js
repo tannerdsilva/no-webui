@@ -1807,6 +1807,7 @@ window.WebUIEngine = (function () {
     }
 
     function closeLayer(el) {
+      if (el.hasAttribute('data-open')) { el.removeAttribute('data-open'); return; }
       if (el.tagName === 'DETAILS') { el.open = false; return; }
       fire(el.querySelector('button[data-dismiss], a[data-dismiss], [role=button][data-dismiss]') || el);
     }

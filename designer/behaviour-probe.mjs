@@ -126,6 +126,19 @@ const attr = (sel, name) => page.evaluate(([s, n]) => {
 }, [sel, name]);
 const exists = (sel) => page.evaluate((s) => !!document.querySelector(s), sel);
 
+// a page-side predicate polled to a deadline: a filter, a class flip or a
+// hidden-attribute write lands on the engine's own schedule, so one sample is
+// a race, never a measurement. the predicate returns `{ ok, ... }`.
+async function settled(predicate, arg = undefined, tries = 40) {
+  let last = null;
+  for (let i = 0; i < tries; i++) {
+    last = await page.evaluate(predicate, arg);
+    if (last && last.ok) return last;
+    await page.waitForTimeout(50);
+  }
+  return last;
+}
+
 // ---------------------------------------------------------------------------
 // 1. data-reltime — the §22.9 ladder, painted from the ms epoch.
 // ---------------------------------------------------------------------------
@@ -372,6 +385,8 @@ if (!clipboardGranted) {
       region: region ? region.hasAttribute("data-filter-list") : false,
       roving: panel ? panel.hasAttribute("data-roving") : false,
       dismiss: panel ? panel.hasAttribute("data-dismiss") : false,
+      open: panel ? panel.hasAttribute("data-open") : null,
+      display: panel ? getComputedStyle(panel).display : null,
       tabindex: options.map((o) => o.getAttribute("tabindex")),
       role: options.map((o) => o.getAttribute("role")),
       tabStops: options.filter((o) => o.getAttribute("tabindex") === "0").length,
@@ -384,6 +399,10 @@ if (!clipboardGranted) {
   else bad(`data-filter-list: the combo region wiring was ${JSON.stringify(wiring)}`);
   if (rovingBound) ok("data-roving + data-dismiss: the combo panel carries both and roving left exactly one tab stop");
   else bad(`data-roving/data-dismiss on the combo panel was ${JSON.stringify(wiring)}`);
+  // read before any focus reaches the combo: the panel is open only while the
+  // engine says so (`data-open`), and nothing has said so at load.
+  if (wiring.open === false && wiring.display === "none") ok("data-open: the combo panel is closed at load (no attribute, display:none)");
+  else bad(`data-open: the combo panel at load was ${JSON.stringify({ open: wiring.open, display: wiring.display })}`);
   await page.fill("#fx-filter .combo input", "BET");
   await page.waitForTimeout(150);
   const filtered = await page.evaluate(() => Array.from(document.querySelectorAll("#fx-filter .combo__option"))
@@ -401,18 +420,189 @@ if (!clipboardGranted) {
 }
 
 // ---------------------------------------------------------------------------
+// 10d. data-filter-list with an external source, and the write-back:
+//      `data-filter-insert` + `data-filter-template` + `data-filter-clear`.
+//      the query is typed into a composer outside the list; the selection is
+//      written back at the composer's caret, and the typed token is stripped
+//      first. one behavior per attribute, three attributes, one consequence.
+// ---------------------------------------------------------------------------
+{
+  const wiring = await page.evaluate(() => {
+    const el = document.getElementById("fx-palette");
+    return {
+      source: el ? el.getAttribute("data-filter-list") : null,
+      insert: el ? el.getAttribute("data-filter-insert") : null,
+      template: el ? el.getAttribute("data-filter-template") : null,
+      clear: el ? el.hasAttribute("data-filter-clear") : false,
+      items: el ? Array.from(el.querySelectorAll("[role=menuitem]")).map((i) => (i.textContent || "").trim()) : [],
+    };
+  });
+  const wired = wiring.source === "#fx-composer" && wiring.insert === "fx-composer" &&
+    wiring.template === "{value} " && wiring.clear && wiring.items.length === 3;
+  if (wired) {
+    ok(`data-filter-insert + data-filter-template + data-filter-clear: the region names the external source (${wiring.source}), the write-back target (${wiring.insert}) and the template (${JSON.stringify(wiring.template)})`);
+  } else {
+    bad(`data-filter-list source/write-back wiring was ${JSON.stringify(wiring)}`);
+  }
+
+  // typing in the SOURCE filters the region's items (the source is outside the
+  // region, so this only holds if the binder resolves it).
+  await page.fill("#fx-composer", "hel");
+  const filtered = await settled(() => {
+    const items = Array.from(document.querySelectorAll("#fx-palette [role=menuitem]"));
+    const visible = items.filter((i) => !i.hidden).map((i) => (i.textContent || "").trim());
+    return { ok: visible.join(",") === "hello,help", visible, hidden: items.filter((i) => i.hidden).map((i) => (i.textContent || "").trim()) };
+  });
+  if (filtered && filtered.ok) {
+    ok(`data-filter-list: typing in the external source filters the items (visible ${filtered.visible.join(",")}; hidden ${filtered.hidden.join(",")})`);
+  } else {
+    bad(`data-filter-list: the external source left ${JSON.stringify(filtered)}`);
+  }
+
+  // a click selects: the token before the caret ("hel") is stripped, the
+  // template is resolved against the item's trimmed text and inserted at the
+  // caret, and the caret lands after it.
+  await page.evaluate(() => {
+    const box = document.getElementById("fx-composer");
+    box.focus();
+    box.setSelectionRange(box.value.length, box.value.length);
+  });
+  await page.click("#fx-item-help");
+  const clicked = await settled(() => {
+    const box = document.getElementById("fx-composer");
+    return { ok: box.value === "help " && box.selectionStart === 5, value: box.value, caret: box.selectionStart };
+  });
+  if (clicked && clicked.ok) {
+    ok(`data-filter-clear + data-filter-template: a click writes "${clicked.value}" — the query token stripped, the template inserted at the caret (caret ${clicked.caret})`);
+  } else {
+    bad(`data-filter-clear: after the click the composer read ${JSON.stringify(clicked)}, expected "help " with the caret at 5`);
+  }
+
+  // the caret decides the insertion point, not the end of the field: the same
+  // query with the caret at 0 inserts at 0 and leaves the text after it.
+  await page.fill("#fx-composer", "hel");
+  await page.evaluate(() => document.getElementById("fx-composer").setSelectionRange(0, 0));
+  await page.click("#fx-item-hello");
+  const atCaret = await settled(() => {
+    const box = document.getElementById("fx-composer");
+    return { ok: box.value === "hello hel" && box.selectionStart === 6, value: box.value, caret: box.selectionStart };
+  });
+  if (atCaret && atCaret.ok) {
+    ok(`data-filter-insert: the insertion follows the caret, not the end of the field ("${atCaret.value}", caret ${atCaret.caret})`);
+  } else {
+    bad(`data-filter-insert: a caret at 0 produced ${JSON.stringify(atCaret)}, expected "hello hel" with the caret at 6`);
+  }
+
+  // Enter on a focused item selects it too.
+  await page.fill("#fx-composer", "wor");
+  await page.focus("#fx-item-world");
+  await page.keyboard.press("Enter");
+  const entered = await settled(() => {
+    const box = document.getElementById("fx-composer");
+    return { ok: box.value === "world ", value: box.value };
+  });
+  if (entered && entered.ok) ok(`data-filter-insert: Enter on a focused item writes it back ("${entered.value}")`);
+  else bad(`data-filter-insert: Enter left the composer at ${JSON.stringify(entered)}, expected "world "`);
+}
+
+// ---------------------------------------------------------------------------
+// 10e. the combo's open state: `.combo__panel` is hidden unless it carries
+//      `data-open` (engine-written). the field's focus opens it, typing keeps
+//      it open, and Escape closes it through the engine's layer path.
+// ---------------------------------------------------------------------------
+{
+  await page.focus("#fx-filter .combo input");
+  const opened = await settled(() => {
+    const panel = document.querySelector("#fx-filter .combo__panel");
+    return { ok: !!panel && panel.hasAttribute("data-open") && panel.getClientRects().length > 0,
+      open: !!panel && panel.hasAttribute("data-open"), display: panel ? getComputedStyle(panel).display : null };
+  });
+  if (opened && opened.ok) ok("data-open: the field's focus opens the combo panel (attribute set, panel on screen)");
+  else bad(`data-open: focus left the combo panel ${JSON.stringify(opened)}`);
+
+  await page.fill("#fx-filter .combo input", "bet");
+  const whileTyping = await settled(() => {
+    const panel = document.querySelector("#fx-filter .combo__panel");
+    const visible = Array.from(document.querySelectorAll("#fx-filter .combo__option"))
+      .filter((o) => !o.hidden).map((o) => (o.textContent || "").trim());
+    return { ok: !!panel && panel.hasAttribute("data-open") && visible.join(",") === "beta", open: !!panel && panel.hasAttribute("data-open"), visible };
+  });
+  if (whileTyping && whileTyping.ok) {
+    ok(`data-open: the panel stays open while typing and the filter still hides the non-matches (visible ${whileTyping.visible.join(",")})`);
+  } else {
+    bad(`data-open: typing left ${JSON.stringify(whileTyping)}, expected the panel open and only beta visible`);
+  }
+
+  await page.keyboard.press("Escape");
+  const escaped = await settled(() => {
+    const panel = document.querySelector("#fx-filter .combo__panel");
+    const live = Array.from(document.querySelectorAll("[data-dismiss]")).filter((el) => el.getClientRects().length > 0);
+    return { ok: !!panel && !panel.hasAttribute("data-open") && getComputedStyle(panel).display === "none" && live.length === 0,
+      open: !!panel && panel.hasAttribute("data-open"), display: panel ? getComputedStyle(panel).display : null, live: live.length };
+  });
+  if (escaped && escaped.ok) ok("data-open: Escape closes the combo and leaves no layer on screen");
+  else bad(`data-open: Escape left ${JSON.stringify(escaped)}, expected the panel closed and no live layer`);
+
+  // a click into the field is not "outside": the open state survives it.
+  await page.click("#fx-filter .combo input");
+  const reclined = await settled(() => {
+    const panel = document.querySelector("#fx-filter .combo__panel");
+    return { ok: !!panel && panel.hasAttribute("data-open"), open: !!panel && panel.hasAttribute("data-open") };
+  });
+  if (reclined && reclined.ok) ok("data-open: clicking the field keeps the panel open (a field click is not an outside click)");
+  else bad(`data-open: a click into the field closed the panel (${JSON.stringify(reclined)})`);
+
+  await page.keyboard.press("Escape");
+  await page.waitForTimeout(150);
+
+  // the one main-asset change (`closeLayer`'s `data-open` branch) is reachable
+  // only while the panel is still in the engine's layer list. a fresh page whose
+  // FIRST gesture is focus has not run the outside-click pass that prunes
+  // off-screen layers, so there the panel is the registered top layer and the
+  // engine's escape closes it through `closeLayer` (the binder's own listener
+  // then finds it already closed).
+  const freshPage = await context.newPage();
+  await freshPage.goto(BASE + "/behaviour", { waitUntil: "domcontentloaded" });
+  await freshPage.waitForTimeout(900);
+  await freshPage.focus("#fx-filter .combo input");
+  await freshPage.waitForTimeout(200);
+  const freshOpen = await freshPage.evaluate(() => document.querySelector("#fx-filter .combo__panel").hasAttribute("data-open"));
+  await freshPage.keyboard.press("Escape");
+  await freshPage.waitForTimeout(200);
+  const freshClosed = await freshPage.evaluate(() => ({
+    open: document.querySelector("#fx-filter .combo__panel").hasAttribute("data-open"),
+    live: Array.from(document.querySelectorAll("[data-dismiss]")).filter((el) => el.getClientRects().length > 0).length,
+  }));
+  if (freshOpen && !freshClosed.open && freshClosed.live === 0) {
+    ok("data-open: on a page whose first gesture is focus, the registered layer's Escape clears data-open (closeLayer's branch)");
+  } else {
+    bad(`data-open: the fresh-page layer Escape left ${JSON.stringify({ freshOpen, freshClosed })}`);
+  }
+  await freshPage.close();
+}
+
+// ---------------------------------------------------------------------------
 // 11. data-scrollspy — the section in view marks its own anchor.
 // ---------------------------------------------------------------------------
 {
-  await page.evaluate(() => document.getElementById("sec-c").scrollIntoView({ behavior: "instant", block: "start" }));
-  await page.waitForTimeout(400);
-  const atC = await page.evaluate(() => ["spy-link-a", "spy-link-b", "spy-link-c"].map((id) => document.getElementById(id).getAttribute("aria-current")));
-  await page.evaluate(() => document.getElementById("sec-a").scrollIntoView({ behavior: "instant", block: "start" }));
-  await page.waitForTimeout(400);
-  const atA = await page.evaluate(() => ["spy-link-a", "spy-link-b", "spy-link-c"].map((id) => document.getElementById(id).getAttribute("aria-current")));
-  if (atC[2] === "true" && atC[0] === null) ok("data-scrollspy: the section in view marks its anchor aria-current=true");
+  // the page scrolls smooth (the sheet's default), so a fixed wait samples
+  // mid-animation: poll the marker to a deadline instead of reading one frame.
+  await page.evaluate(() => document.getElementById("sec-c").scrollIntoView({ block: "start" }));
+  const atC = await settled(() => ({
+    ok: document.getElementById("spy-link-c").getAttribute("aria-current") === "true" &&
+      document.getElementById("spy-link-a").getAttribute("aria-current") === null,
+    cur: ["spy-link-a", "spy-link-b", "spy-link-c"].map((id) => document.getElementById(id).getAttribute("aria-current")),
+    y: Math.round(window.scrollY),
+    tops: ["sec-a", "sec-b", "sec-c"].map((id) => Math.round(document.getElementById(id).getBoundingClientRect().top)),
+  }));
+  await page.evaluate(() => document.getElementById("sec-a").scrollIntoView({ block: "start" }));
+  const atA = await settled(() => {
+    const cur = ["spy-link-a", "spy-link-b", "spy-link-c"].map((id) => document.getElementById(id).getAttribute("aria-current"));
+    return { ok: cur[0] === "true" && cur[2] === null, cur, y: Math.round(window.scrollY) };
+  });
+  if (atC && atC.ok) ok("data-scrollspy: the section in view marks its anchor aria-current=true");
   else bad(`data-scrollspy: at section C the anchors were ${JSON.stringify(atC)}`);
-  if (atA[0] === "true" && atA[2] === null) ok("data-scrollspy: scrolling back moves the current marker (the old one is cleared)");
+  if (atA && atA.ok) ok("data-scrollspy: scrolling back moves the current marker (the old one is cleared)");
   else bad(`data-scrollspy: at section A the anchors were ${JSON.stringify(atA)}`);
 }
 
@@ -734,17 +924,23 @@ if (!clipboardGranted) {
     bad(`data-reading-keys: layer Escape produced before ${JSON.stringify(beforeLayer)}, after ${JSON.stringify(afterLayer)}`);
   }
 
-  // this fixture always renders the combo panel, which is a dismiss layer on
-  // screen for the life of the page (the hazard §5 arms `data-open` against), so
-  // `topLayer()` is never null here — Escape keeps choosing the layer. the
-  // no-layer branch is proved on the bare render below, which ships no layer.
+  // the fixture no longer renders a permanently-visible dismiss layer (the
+  // combo panel is open-stateful now), so "a layer keeps the key" is the block
+  // above: layer-a was open, focus was on the reader, and Escape closed the
+  // layer without moving the reader. this pins the consequence of that pass:
+  // the stack is empty, so the next Escape reaches the reader and returns it to
+  // the live tail — the no-layer branch, on the main page, not only on `bare`.
   await page.keyboard.press("Escape");
   await page.waitForTimeout(300);
-  const afterStillLayered = await page.evaluate(() => document.getElementById("reader").scrollTop);
-  if (afterStillLayered === beforeLayer.top) {
-    ok("data-reading-keys: while any layer is on screen, Escape leaves the reader put (the layer keeps the key)");
+  const afterNoLayer = await page.evaluate(() => ({
+    top: document.getElementById("reader").scrollTop,
+    max: document.getElementById("reader").scrollHeight - document.getElementById("reader").clientHeight,
+    live: Array.from(document.querySelectorAll("[data-dismiss]")).filter((el) => el.getClientRects().length > 0).length,
+  }));
+  if (afterNoLayer.live === 0 && afterNoLayer.max > 0 && afterNoLayer.top >= afterNoLayer.max - 2) {
+    ok(`data-reading-keys: with no layer on screen, Escape returns the reader to the live tail (${afterNoLayer.top}/${afterNoLayer.max})`);
   } else {
-    bad(`data-reading-keys: Escape moved the reader to ${afterStillLayered} while a layer was still on screen`);
+    bad(`data-reading-keys: the no-layer Escape on the main page left ${JSON.stringify(afterNoLayer)}`);
   }
 
   const barePage = await context.newPage();
