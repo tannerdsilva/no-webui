@@ -41,12 +41,31 @@ struct ProducerRefreshTests {
 
 	/// the value the page reads — `Mutex`-backed because the render closure is
 	/// `@Sendable` and the test mutates the same counter from its own task.
-	private final class Counter: Sendable {
+	final class Counter: Sendable {
 		private let value = Mutex(0)
 
 		func read() -> Int { value.withLock { $0 } }
 
 		func bump() { value.withLock { $0 += 1 } }
+	}
+
+	// MARK: - the generated registrar
+
+	/// a compiled `@WireGroup` fixture whose handler answers `HandlerOutcome`.
+	///
+	/// this is the one path neither the expansion snapshot nor the router-level
+	/// dispatch covers: the macro's emitted `register(outcome:)` closure, called
+	/// by a live server dispatching a socket frame, returning `.refresh`, and
+	/// the same session re-render shipping the diff back over that socket.
+	@WireGroup("producer_e2e")
+	struct ProducerE2EWiring {
+		let counter: Counter
+
+		@Wired("e2e-refresh", events: [.click])
+		func refresh(_ event: EventData) async -> HandlerOutcome {
+			counter.bump()
+			return .refresh
+		}
 	}
 
 	/// every render token this server minted, in render order.
@@ -353,6 +372,55 @@ struct ProducerRefreshTests {
 				(error.message ?? "").contains("no page to refresh"),
 				"the error frame's text names the reason; got \(String(describing: error.message))"
 			)
+		}
+	}
+
+	// MARK: - c. the generated registrar's outcome reaches the same pass
+
+	@Test("a generated @Wired HandlerOutcome refreshes the page over a real socket")
+	func generatedOutcomeRegistrarRefreshes() async throws {
+		let counter = Counter()
+		let journal = TokenJournal()
+		let router = EventRouter()
+		// the host table, before `start()` seals it — the registrar's documented
+		// shape, and the table a tokenless dispatch consults.
+		ProducerE2EWiring(counter: counter).wireGroup_producer_e2e(router)
+
+		try await withServerHandle(
+			requestRender: { page($0, counter: counter, journal: journal) },
+			router: router,
+			assets: [],
+			requireRenderToken: true,
+			portBase: 52_200
+		) { _, port in
+			let index = journal.count()
+			_ = try await get("http://127.0.0.1:\(port)/")
+			guard let token = await journal.token(at: index) else {
+				Issue.record("the render reported no token")
+				return
+			}
+
+			let socket = openSocket(port: port)
+			defer { socket.cancel(with: .normalClosure, reason: nil) }
+			try await socket.send(.string(pingFrame(token)))
+			#expect(try await frameType(nextFrame(socket)) == "pong")
+
+			// the only thing that moves the counter is the generated handler.
+			let event = """
+			{"type":"event","component":"e2e-refresh","event":"click","data":{},"token":"\(token)"}
+			"""
+			try await socket.send(.string(event))
+
+			let frame = try await nextFrame(socket)
+			print("producer refresh: generated outcome <- \(frame)")
+			#expect(
+				frameType(frame) == "update",
+				"the outcome path must ship the refresh diff; got \(frame.prefix(200))"
+			)
+			let region = fragments(in: frame).first { ($0["id"] as? String) == "counter" }
+			let html = region?["html"] as? String ?? ""
+			#expect(region != nil, "the changed region must ship; got \(fragments(in: frame))")
+			#expect(html.contains(">1<"), "the generated handler's mutation must be visible; got \(html)")
 		}
 	}
 }
