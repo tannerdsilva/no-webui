@@ -815,8 +815,11 @@ func ratingSelfWires() {
 func inlineEditSelfWires() {
     let v = WebUIInlineEdit("n", state: .editing, id: "ie", onSave: { _ in [] })
     let h = v.markup.html
-    #expect(h.contains("data-component-id=\"ie\""))
+    // the save control owns the handler (clicking the root or the cancel
+    // pencil must not save); the root keeps its id and the inline-edit marker.
+    #expect(h.contains("data-component-id=\"ie-save\""))
     #expect(h.contains("id=\"ie-save\""))
+    #expect(!h.contains("data-component-id=\"ie\""))
 }
 
 @Test("WebUIRecurrence self-wires chips and days")

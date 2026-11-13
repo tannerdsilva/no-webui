@@ -76,28 +76,33 @@ struct BehaviorWiringTests {
 
 	@Test("WebUIKanban: the board reorders into a hidden input derived from its id")
 	func kanbanWiring() {
-		let board = WebUIKanban(columns: [.init("Todo", cards: [.init("a")])], id: "tasks")
+		let board = WebUIKanban(columns: [.init("Todo", cards: [.init("a")]), .init("Done", cards: [])], id: "tasks")
 		let out = html(board)
 		#expect(out.contains("class=\"kanban\" id=\"tasks\" data-reorder=\"tasks-order\""), "the derived input id: \(out)")
 		#expect(out.contains("<input id=\"tasks-order\" type=\"hidden\" name=\"order\" value=\"\">"), "the hidden input is rendered: \(out)")
+		#expect(out.contains("<div class=\"kanban__column\" id=\"tasks-order-col-0\">"), "every column is an id-bearing reorder item: \(out)")
+		#expect(out.contains("<div class=\"kanban__column\" id=\"tasks-order-col-1\">"), "the second column is one too: \(out)")
 
 		let explicit = html(WebUIKanban(columns: [.init("Todo", cards: [.init("a")])], id: "tasks", reorderInputID: "order-field"))
 		#expect(explicit.contains("data-reorder=\"order-field\""), "an explicit input id wins: \(explicit)")
 		#expect(explicit.contains("id=\"order-field\""), "the explicit input is rendered: \(explicit)")
+		#expect(explicit.contains("id=\"order-field-col-0\""), "column ids follow the explicit input id: \(explicit)")
 
 		let inert = html(WebUIKanban(columns: [.init("Todo", cards: [.init("a")])]))
 		#expect(!inert.contains("data-reorder"), "no id and no input id is inert, not a dead promise: \(inert)")
 		#expect(!inert.contains("type=\"hidden\""), "no hidden input either: \(inert)")
+		#expect(!inert.contains("kanban__column\" id="), "and no column ids for a reorder that cannot happen: \(inert)")
 	}
 
 	// MARK: - WebUIInlineEdit
 
-	@Test("WebUIInlineEdit: the root edits locally and the check is the form submit")
+	@Test("WebUIInlineEdit: the root edits locally and the save control owns the handler")
 	func inlineEditWiring() {
-		let out = html(WebUIInlineEdit("title", state: .editing))
-		#expect(out.contains("class=\"inline-edit inline-edit--editing\" data-inline-edit"), "the edit root carries the marker: \(out)")
-		#expect(out.contains("inline-edit__check\" type=\"submit\""), "the save control is the submit: \(out)")
-		#expect(out.contains("inline-edit__pencil\" type=\"button\""), "the cancel is explicitly not a submit: \(out)")
+		let out = html(WebUIInlineEdit("title", state: .editing, id: "edit", onSave: { _ in [] }))
+		#expect(out.contains("class=\"inline-edit inline-edit--editing\" id=\"edit\" data-inline-edit"), "the edit root carries the marker and its id: \(out)")
+		#expect(!out.contains("id=\"edit\" data-component-id"), "the root is not the save control: \(out)")
+		#expect(out.contains("inline-edit__check\" type=\"button\" id=\"edit-save\" data-component-id=\"edit-save\" data-event=\"click\""), "the check owns the save handler: \(out)")
+		#expect(out.contains("inline-edit__pencil\" type=\"button\" id=\"edit-cancel\""), "the cancel is a plain button: \(out)")
 	}
 
 	// MARK: - WebUIScrollTop

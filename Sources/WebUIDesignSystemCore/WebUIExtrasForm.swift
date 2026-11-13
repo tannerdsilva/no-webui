@@ -413,17 +413,23 @@ public struct WebUIInlineEdit: View {
     }
 
     public func render(into buffer: inout HTMLBuffer) {
-        let rootAttrs = id.map { controlAttributes(id: $0, event: .click, handler: onSave) } ?? ""
+        // the check is the save control: the handler registers against
+        // "<id>-save", never the root, so a click on the value display or the
+        // cancel pencil cannot save an edit the reader meant to discard.
+        // the save is a typed click (the form-submit door is the other allowed
+        // shape, but this component has no <form> to submit from).
+        let rootID = id.map { " id=\"\(htmlEscape($0))\"" } ?? ""
+        let saveAttrs = id.map { controlAttributes(id: "\($0)-save", event: .click, handler: onSave) } ?? ""
         let saveID = id.map { " id=\"\(htmlEscape("\($0)-save"))\"" } ?? ""
         let cancelID = id.map { " id=\"\(htmlEscape("\($0)-cancel"))\"" } ?? ""
-        var html = "<div class=\"inline-edit\(Self.classFor(state))\(error ? " inline-edit--error" : "")\"\(rootAttrs)\(InlineEdit().attributeText)>"
+        var html = "<div class=\"inline-edit\(Self.classFor(state))\(error ? " inline-edit--error" : "")\"\(rootID)\(InlineEdit().attributeText)>"
         html += "<div class=\"inline-edit__value\">\(htmlEscape(value))<span class=\"inline-edit__pencil\"" + Aria.hidden(.yes).render() + ">✎</span></div>"
         if state == .editing {
             html += "<div class=\"inline-edit__editing\"><input class=\"inline-edit__input\(error ? " inline-edit__input--error" : "")\" value=\"\(htmlEscape(value))\">"
-            // the check is the form submit — the save gesture a keyboard reader
-            // already has — and the cancel is explicitly not a submit, or it
-            // would save the edit it means to discard.
-            html += "<div class=\"inline-edit__actions\"><button class=\"inline-edit__check\" type=\"submit\"\(saveID)" + Aria.label(RenderContext.currentStrings.save).render() + ">✓</button><button class=\"inline-edit__pencil\" type=\"button\"\(cancelID)" + Aria.label(RenderContext.currentStrings.cancel).render() + ">✕</button></div></div>"
+            // the check saves through its own typed handler; the cancel is
+            // explicitly a plain button — the engine's inline-edit binder
+            // reads it as the local cancel gesture.
+            html += "<div class=\"inline-edit__actions\"><button class=\"inline-edit__check\" type=\"button\"\(saveID)\(saveAttrs)" + Aria.label(RenderContext.currentStrings.save).render() + ">✓</button><button class=\"inline-edit__pencil\" type=\"button\"\(cancelID)" + Aria.label(RenderContext.currentStrings.cancel).render() + ">✕</button></div></div>"
         }
         html += "</div>"
         buffer.append(html)

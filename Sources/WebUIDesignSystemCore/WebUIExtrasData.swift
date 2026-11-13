@@ -219,7 +219,10 @@ public struct WebUIKanban: View {
         public init(_ title: String, cards: [Card]) { self.title = title; self.cards = cards } }
     public let columns: [Column]
     /// stable board id. when set (or when `reorderInputID` is) the board emits
-    /// `data-reorder` and a hidden input the new order is written into.
+    /// `data-reorder` and a hidden input the new order is written into. the
+    /// board's id-bearing direct children are the reorder items, so each
+    /// column gets `id == "<orderInputID>-col-<index>"` — without ids the
+    /// engine has nothing to reorder and the drag writes an empty order.
     public let id: String?
     /// the hidden input the engine writes the dragged order into. `nil` derives
     /// `"<id>-order"` from `id`; with neither, the board is inert — no attribute,
@@ -242,8 +245,9 @@ public struct WebUIKanban: View {
         if let id { html += " id=\"\(htmlEscape(id))\"" }
         if let orderInputID { html += Reorder(inputID: orderInputID).attributeText }
         html += ">"
-        for column in columns {
-            html += "<div class=\"kanban__column\"><div class=\"kanban__header\">\(htmlEscape(column.title))<span class=\"kanban__count\">\(column.cards.count)</span></div><div class=\"kanban__body\">"
+        for (index, column) in columns.enumerated() {
+            let columnID = orderInputID.map { " id=\"\(htmlEscape("\($0)-col-\(index)"))\"" } ?? ""
+            html += "<div class=\"kanban__column\"\(columnID)><div class=\"kanban__header\">\(htmlEscape(column.title))<span class=\"kanban__count\">\(column.cards.count)</span></div><div class=\"kanban__body\">"
             for card in column.cards {
                 html += "<div class=\"kanban__card\(card.wip ? " kanban__card--wip" : "")\">\(htmlEscape(card.title))"
                 if !card.tags.isEmpty {

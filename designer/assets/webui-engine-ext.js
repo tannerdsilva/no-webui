@@ -242,7 +242,14 @@ window.WebUIEngineExt = (function () {
 
     BEHAVIORS['data-inline-edit'] = function (el) {
       el.addEventListener('click', function (e) {
-        if (el.hasAttribute('data-editing') || (e.target.closest && e.target.closest('button, a'))) { return; }
+        var btn = e.target.closest ? e.target.closest('button, a') : null;
+        if (btn) {
+          if (btn.getAttribute('type') === 'button' && el.hasAttribute('data-editing')) {
+            el.removeAttribute('data-editing');
+          }
+          return;
+        }
+        if (el.hasAttribute('data-editing')) { return; }
         el.setAttribute('data-editing', '');
         var field = el.querySelector('input, textarea');
         if (field && field.focus) { try { field.focus(); } catch (err) { } }
