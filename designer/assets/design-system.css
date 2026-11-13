@@ -7047,6 +7047,18 @@ code, .inline-code {
 .dropzone { display: grid; place-items: center; min-height: 6rem; background: var(--color-bg-inset); border: 2px dashed var(--color-border-strong); border-radius: var(--radius-xl); color: var(--color-text-muted); transition: all var(--transition-fast); }
 .dropzone--hover { border-color: var(--color-primary-500); background: var(--color-primary-soft); color: var(--color-primary-strong); }
 
+.upload-tray { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-3); padding: var(--space-3); background: var(--color-bg-raised); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-lg); color: var(--color-text); font-size: var(--font-size-sm); }
+.upload-tray__row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); }
+.upload-tray__name { flex: 1 1 8rem; font-weight: var(--font-weight-medium); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.upload-tray__status { color: var(--color-text-muted); font-size: var(--font-size-xs); }
+.upload-tray__cancel { flex: none; padding: var(--space-1) var(--space-2); background: var(--color-bg-raised); border: var(--border-width) solid var(--color-border-strong); border-radius: var(--radius-sm); color: var(--color-text-secondary); font-size: var(--font-size-xs); cursor: pointer; }
+.upload-tray__cancel:hover { border-color: var(--color-danger); color: var(--color-danger); }
+.upload-tray__track { flex: 1 1 100%; order: 3; height: 0.35rem; overflow: hidden; background: var(--color-bg-inset); border-radius: var(--radius-full); }
+.upload-tray__bar { width: 0; height: 100%; background: var(--color-primary-500); transition: width var(--transition-fast); }
+.upload-tray__row[data-webui-upload-state="done"] .upload-tray__bar { background: var(--color-success); }
+.upload-tray__row[data-webui-upload-state="error"] .upload-tray__bar { background: var(--color-danger); }
+.upload-tray__row[data-webui-upload-state="error"] .upload-tray__status { color: var(--color-danger); }
+
 .empty__icon { width: 3.5rem; height: 3.5rem; display: grid; place-items: center; border-radius: var(--radius-full); background: var(--color-bg-inset); border: var(--border-width) solid var(--color-border); font-size: var(--font-size-2xl); color: var(--color-text-muted); }
 .empty__icon--accent { background: var(--color-primary-soft); border-color: var(--color-primary-ring); color: var(--color-primary-strong); }
 .empty__text { max-width: 22rem; font-size: var(--font-size-sm); line-height: var(--line-height-relaxed); }

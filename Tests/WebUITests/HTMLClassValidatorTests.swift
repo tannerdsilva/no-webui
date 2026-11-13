@@ -113,6 +113,15 @@ struct HTMLClassValidatorTests {
 		"engine-status--visible",
 		"engine-status__dot",
 		"engine-status__text",
+		// the upload tray is engine-owned DOM (plan §22.3): the transport mounts
+		// it, so no swift render can emit these names.
+		"upload-tray",
+		"upload-tray__row",
+		"upload-tray__name",
+		"upload-tray__status",
+		"upload-tray__cancel",
+		"upload-tray__track",
+		"upload-tray__bar",
 	]
 
 	private static let baselinePath = "Tests/WebUITests/orphan-class-baseline.txt"

@@ -24,6 +24,7 @@ final class BehaviourFixtureState: Sendable {
 		var saved = "(none)"
 		var last = "(none)"
 		var refreshes = 0
+		var uploads: [String: String] = [:]
 	}
 	private let values = Mutex(Values())
 
@@ -35,6 +36,17 @@ final class BehaviourFixtureState: Sendable {
 	/// point) would then change bytes outside every region — the residue — and
 	/// escalate to a full page instead of a region patch.
 	let stamp: UInt64 = UInt64(Date().timeIntervalSince1970 * 1000)
+
+	/// what the upload route received for one drop zone, as the line the
+	/// region renders: the destination header, the filename header and the
+	/// counted byte total are the proof the transport travelled.
+	func recordUpload(zone: String, path: String, name: String, bytes: String) {
+		values.withLock { $0.uploads[zone] = "path=\(path) name=\(name) bytes=\(bytes)" }
+	}
+
+	func upload(zone: String) -> String {
+		values.withLock { $0.uploads[zone] ?? "(none)" }
+	}
 
 	var feed: Int {
 		get { values.withLock { $0.feed } }
@@ -126,6 +138,7 @@ let behaviourFixtureStyle: String = """
 	.fx-inline { border: 1px solid #ccc; padding: 6px; }
 	.fx-inline[data-editing] { border-color: #06c; }
 	.fx-roving button { margin-right: 4px; }
+	.fx-upload-zone { width: 22rem; max-width: 100%; }
 	</style>
 	"""
 
@@ -150,6 +163,17 @@ func renderBehaviourPage(
 			return .refresh
 		}
 		.markup.html
+	// the upload fixture: two typed destinations against one contract route, so
+	// the probe can prove the destination travelled (the server echoes the
+	// header it received) and that one engine transport serves every zone.
+	let zoneA = WebUIDropZone(
+		"Drop a file here", hint: "attachments", destination: .attachments,
+		route: "/upload/contract", id: "fx-upload-a"
+	).markup.html
+	let zoneB = WebUIDropZone(
+		"Drop a file here", hint: "folder:docs", destination: .folder(path: "docs"),
+		route: "/upload/contract", id: "fx-upload-b"
+	).markup.html
 	var refreshLines = ""
 	for i in 0..<30 {
 		refreshLines += "<p>refresh line \(i + 1)</p>"
@@ -248,6 +272,14 @@ func renderBehaviourPage(
 	<p><input id="clamp" type="number" value="5" aria-label="clamp"\(NumberClamp(min: 1, max: 10).attributeText)></p>
 	</section>
 
+	<section class="fx-sec" id="fx-upload" data-component-id="fx-upload"><h2>upload contract</h2>
+	<p class="fx-muted">each zone posts to <code>/upload/contract</code> through the engine's XHR transport; the route echoes the destination and the filename headers it received, and the handler answers <code>.refresh</code>.</p>
+	<div class="fx-upload-zone">\(zoneA)</div>
+	<div class="fx-upload-zone">\(zoneB)</div>
+	<p id="upload-out-a" class="fx-muted">attachments: \(htmlEscape(state.upload(zone: "a")))</p>
+	<p id="upload-out-b" class="fx-muted">folder:docs: \(htmlEscape(state.upload(zone: "b")))</p>
+	</section>
+
 	<section class="fx-sec"><h2>theme choice</h2>
 	<div class="fx-row"><button id="theme-dark" type="button"\(ThemeChoice(mode: .dark).attributeText)>Dark</button><button id="theme-light" type="button"\(ThemeChoice(mode: .light).attributeText)>Light</button></div>
 	</section>
@@ -315,6 +347,27 @@ struct BehaviourPageResponder: Responder {
 				FragmentUpdate(id: "submit-out", html: "<p id=\"submit-out\" class=\"fx-muted\">last: \(htmlEscape(state.last))</p>"),
 			])
 		}, for: ComponentID("fx-submit"), in: session)
+		// one handler per destination: the engine's `upload-complete` event
+		// carries the route's echo, the region renders it, and `.refresh` ships
+		// the patch — no consumer JavaScript in the loop.
+		router.register(outcome: { event in
+			state.recordUpload(
+				zone: "a",
+				path: event.string("path") ?? "",
+				name: event.string("name") ?? "",
+				bytes: event.string("bytes") ?? ""
+			)
+			return .refresh
+		}, for: ComponentID("fx-upload-a"), in: session)
+		router.register(outcome: { event in
+			state.recordUpload(
+				zone: "b",
+				path: event.string("path") ?? "",
+				name: event.string("name") ?? "",
+				bytes: event.string("bytes") ?? ""
+			)
+			return .refresh
+		}, for: ComponentID("fx-upload-b"), in: session)
 		let html = renderBehaviourPage(state: state, renderToken: request.renderToken.value)
 		return HTTPResponse(headers: smokeHeaders(), body: .html(UnsafeMarkup.trusted(html)))
 	}

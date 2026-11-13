@@ -4,6 +4,7 @@ import Darwin
 #else
 import Glibc
 #endif
+import NIOHTTP1
 import WebUI
 import WebUIBlocks
 import WebUIServer
@@ -114,6 +115,66 @@ func blocksPage(_ path: String) -> String {
 		+ "<p><a href=\"/blocks\">all blocks</a></p></body></html>"
 }
 
+// MARK: - the upload contract route
+
+/// the byte budget the contract route pins. small on purpose: the probe's
+/// limit case is one file over it, and the framework's own counted refusal —
+/// 413 plus the server's text — is what answers, so this route never
+/// re-implements a limit of its own (plan §22.3: limits stay server-owned).
+let uploadContractLimit = 65_536
+
+/// one json answer for `/upload/contract`: the shape `Documentation/UPLOAD.md`
+/// fixes is `{ok, path, name, bytes}` or `{ok, error}`, serialized through the
+/// framework's own `JSONValue` so a header value can never break the document.
+func uploadContractJSON(_ fields: [String: JSONValue], status: HTTPStatus = .ok) -> HTTPResponse {
+	HTTPResponse(
+		status: status,
+		headers: smokeHeaders(),
+		body: .bytes(
+			Array(JSONValue.object(fields).serialize().utf8),
+			contentType: "application/json"
+		)
+	)
+}
+
+/// the contract route's handler: echo the two headers the engine travelled
+/// with, and count the body as it streams past. the destination and the
+/// filename are the proof — a route that received neither cannot answer.
+func uploadContract(
+	head: UploadHead,
+	body: consuming UploadBody
+) async throws -> HTTPResponse {
+	// the browser owns `Origin` on a same-origin POST; the engine never sets
+	// it. when it is present it must name this host, so a cross-origin page
+	// cannot drive the route.
+	if let origin = head.headers.first(name: "Origin"), !origin.isEmpty {
+		let host = head.headers.first(name: "Host") ?? ""
+		let stripped = origin.hasPrefix("https://") ? String(origin.dropFirst("https://".count))
+			: origin.hasPrefix("http://") ? String(origin.dropFirst("http://".count)) : origin
+		guard stripped == host else {
+			return uploadContractJSON(
+				["ok": .bool(false), "error": .string("cross-origin upload refused")],
+				status: HTTPStatus(403)
+			)
+		}
+	}
+	let name = head.headers.first(name: "X-Upload-Name") ?? ""
+	guard !name.isEmpty else {
+		return uploadContractJSON(
+			["ok": .bool(false), "error": .string("missing X-Upload-Name header")],
+			status: HTTPStatus(400)
+		)
+	}
+	var received = 0
+	for try await chunk in body { received += chunk.count }
+	return uploadContractJSON([
+		"ok": .bool(true),
+		"path": .string(head.headers.first(name: "X-Upload-Path") ?? ""),
+		"name": .string(name),
+		"bytes": .number(Double(received)),
+	])
+}
+
 // MARK: - assets
 
 /// the host assets: the embed plugin's dogfood plus the three capability
@@ -165,5 +226,8 @@ func smokeRoutes(state: SmokeState, router: EventRouter) -> Router {
 			)
 		}
 		Route(method: .post, pattern: "/upload", responder: UploadResponder())
+		// the engine's XHR transport posts here: a streamed body, a JSON
+		// answer, and the two headers that name the destination and the file.
+		Route.upload("/upload/contract", limit: uploadContractLimit, handler: uploadContract)
 	}
 }

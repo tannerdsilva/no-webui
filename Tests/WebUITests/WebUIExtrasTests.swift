@@ -408,6 +408,45 @@ func dropZone() {
     #expect(h.contains("class=\"dropzone dropzone--hover\""))
 }
 
+@Test("UploadDestination serializes the typed destination")
+func uploadDestination() {
+    #expect(UploadDestination.name == "data-upload-into")
+    #expect(UploadDestination.attachments.value == "attachments")
+    #expect(UploadDestination.folder(path: "docs/x").value == "folder:docs/x")
+    #expect(UploadDestination.attachments.attributeText == " data-upload-into=\"attachments\"")
+}
+
+@Test("WebUIDropZone emits the destination, the route and the event wiring")
+func dropZoneContract() {
+    let v = WebUIDropZone(
+        "Drop files", hint: "or click", hover: true,
+        destination: .folder(path: "docs"), route: "/upload/contract", id: "up-a"
+    )
+    let h = v.markup.html
+    #expect(h.contains("data-upload-into=\"folder:docs\""))
+    #expect(h.contains("data-upload-to=\"/upload/contract\""))
+    #expect(h.contains("data-component-id=\"up-a\""))
+    #expect(h.contains("data-event=\"upload-complete\""))
+    #expect(h.contains("file-drop__title"))
+    #expect(h.contains("type=\"file\""))
+}
+
+@Test("a drop zone without an id wires no event, and defaults to /upload")
+func dropZoneDefaults() {
+    let h = WebUIDropZone("Drop files").markup.html
+    #expect(h.contains("data-upload-into=\"attachments\""))
+    #expect(h.contains("data-upload-to=\"/upload\""))
+    #expect(!h.contains("data-component-id"))
+    #expect(!h.contains("data-event"))
+}
+
+@Test("a folder path cannot break out of the destination attribute")
+func uploadDestinationEscapes() {
+    let h = WebUIDropZone("x", destination: .folder(path: "\" ondrop=\"alert(1)"), id: "u").markup.html
+    #expect(!h.contains("ondrop=\"alert(1)\""))
+    #expect(h.contains("folder:&quot; ondrop=&quot;alert(1)"))
+}
+
 @Test("WebUISignature renders pad")
 func signature() {
     let v = WebUISignature("Sign here")

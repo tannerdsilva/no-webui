@@ -698,3 +698,29 @@ public struct FilterListAttribute: AttributeRepresentable {
 
 	public var value: String { "" }
 }
+
+// MARK: - 23. upload destination
+
+/// where an upload lands, as the route named it.
+///
+/// a value, not a string convention inside the engine: ``WebUIDropZone``
+/// serializes the destination to `data-upload-into` and the engine sends it
+/// back as `X-Upload-Path`, so the transport never parses a destination out
+/// of a url or a class name. what the two values mean is the route's
+/// business — the framework owns the wire and the tray, never the storage
+/// (plan §22.3, risk 4).
+public enum UploadDestination: AttributeRepresentable, Sendable, Equatable, Hashable {
+	/// the host's attachment store.
+	case attachments
+	/// one folder inside that store, serialized as `folder:<path>`.
+	case folder(path: String)
+
+	public static let name = "data-upload-into"
+
+	public var value: String {
+		switch self {
+			case .attachments: return "attachments"
+			case .folder(let path): return "folder:\(path)"
+		}
+	}
+}

@@ -348,15 +348,51 @@ public struct WebUIValidation: View {
 }
 
 // MARK: WebUI Drop Zone
-/// a drag-and-drop file target.
+/// a drag-and-drop file target that uploads into a typed destination.
+///
+/// the component states the destination, the route and its component id; the
+/// engine owns the transport — the picker, the XHR, progress, the tray, paste
+/// and directory drop — and dispatches one `upload-complete` event per
+/// finished file, so a host handler can answer `.refresh` (plan §22.3). the
+/// hidden file input is what the zone's click opens; nothing here posts.
 public struct WebUIDropZone: View {
     public let title: String
     public let hint: String
     public let hover: Bool
-    public init(_ title: String, hint: String = "", hover: Bool = false) { self.title = title; self.hint = hint; self.hover = hover }
+    /// where the file lands: `data-upload-into`, sent back as `X-Upload-Path`.
+    public let destination: UploadDestination
+    /// the route the engine posts the body to.
+    public let route: String
+    /// stable id; when set the zone carries `data-component-id` and declares
+    /// `data-event="upload-complete"` — the one event it accepts.
+    public let id: String?
+
+    public init(
+        _ title: String,
+        hint: String = "",
+        hover: Bool = false,
+        destination: UploadDestination = .attachments,
+        route: String = "/upload",
+        id: String? = nil
+    ) {
+        self.title = title
+        self.hint = hint
+        self.hover = hover
+        self.destination = destination
+        self.route = route
+        self.id = id
+    }
 
     public func render(into buffer: inout HTMLBuffer) {
-        var html = "<div class=\"dropzone\(hover ? " dropzone--hover" : "")\"" + AriaRole.button.render() + " tabindex=\"0\">"
+        // the declared event is what keeps a DOM click from being routed as
+        // one: the engine delivers only the event a component declares, and
+        // this component's event is the one its transport dispatches.
+        let wiring = id.map {
+            " data-component-id=\"\(htmlEscape($0))\" data-event=\"\(HTMLEvent.custom("upload-complete").rawValue)\""
+        } ?? ""
+        var html = "<div class=\"dropzone\(hover ? " dropzone--hover" : "")\""
+        html += AriaRole.button.render() + " tabindex=\"0\""
+        html += destination.attributeText + " data-upload-to=\"\(htmlEscape(route))\"" + wiring + ">"
         html += "<div class=\"file-drop__icon\"" + Aria.hidden(.yes).render() + ">⇪</div>"
         html += "<div class=\"file-drop__title\">\(htmlEscape(title))</div>"
         if !hint.isEmpty { html += "<div class=\"file-drop__hint\">\(htmlEscape(hint))</div>" }

@@ -140,6 +140,194 @@ window.WebUIEngineExt = (function () {
       for (var i = 0; i < kids.length; i++) { kids[i].setAttribute('tabindex', kids[i] === active ? '0' : '-1'); }
     }
 
+    var uploadTray = null;
+
+    function liveEngine() {
+      var api = window.WebUIEngine;
+      if (!api || typeof api._getInstance !== 'function') { return null; }
+      return api._getInstance();
+    }
+
+    function uploadToken() {
+      var live = liveEngine();
+      return live && live.config ? live.config.renderToken : null;
+    }
+
+    function sendTyped(el, name, data) {
+      var id = el.getAttribute('data-component-id');
+      var live = liveEngine();
+      if (!id || !live || !live.wsClient || typeof live.wsClient.send !== 'function') { return; }
+      var frame = { type: 'event', component: id, event: name, data: data };
+      var token = uploadToken();
+      if (token) { frame.token = token; }
+      live.wsClient.send(frame);
+    }
+
+    function trayRoot() {
+      if (uploadTray && uploadTray.parentNode) { return uploadTray; }
+      uploadTray = document.querySelector('[data-webui-upload-tray]');
+      if (uploadTray) { return uploadTray; }
+      uploadTray = document.createElement('div');
+      uploadTray.className = 'upload-tray';
+      uploadTray.setAttribute('data-webui-upload-tray', '');
+      uploadTray.setAttribute('role', 'status');
+      uploadTray.setAttribute('aria-live', 'polite');
+      document.body.appendChild(uploadTray);
+      return uploadTray;
+    }
+
+    function trayRow(name) {
+      var row = document.createElement('div');
+      row.className = 'upload-tray__row';
+      row.setAttribute('data-webui-upload-state', 'uploading');
+      var label = document.createElement('span');
+      label.className = 'upload-tray__name';
+      label.textContent = name;
+      var status = document.createElement('span');
+      status.className = 'upload-tray__status';
+      status.textContent = 'uploading\u2026';
+      var cancel = document.createElement('button');
+      cancel.type = 'button';
+      cancel.className = 'upload-tray__cancel';
+      cancel.textContent = 'Cancel';
+      var track = document.createElement('div');
+      track.className = 'upload-tray__track';
+      var bar = document.createElement('div');
+      bar.className = 'upload-tray__bar';
+      track.appendChild(bar);
+      row.appendChild(label);
+      row.appendChild(status);
+      row.appendChild(cancel);
+      row.appendChild(track);
+      trayRoot().appendChild(row);
+      return { row: row, status: status, bar: bar, cancel: cancel };
+    }
+
+    function traySettle(entry, state, text, percent) {
+      entry.row.setAttribute('data-webui-upload-state', state);
+      entry.status.textContent = text;
+      if (percent !== undefined) { entry.bar.style.width = percent + '%'; }
+      if (state !== 'uploading' && entry.cancel.parentNode) {
+        entry.cancel.parentNode.removeChild(entry.cancel);
+      }
+    }
+
+    function uploadFile(el, file) {
+      var route = el.getAttribute('data-upload-to') || '/upload';
+      var into = el.getAttribute('data-upload-into') || 'attachments';
+      var name = file.name || 'file';
+      var entry = trayRow(name);
+      var xhr = new XMLHttpRequest();
+      entry.cancel.addEventListener('click', function () {
+        try { xhr.abort(); } catch (e) { }
+      });
+      xhr.open('POST', route, true);
+      try { xhr.setRequestHeader('X-Upload-Name', name); } catch (e) { }
+      xhr.setRequestHeader('X-Upload-Path', into);
+      var token = uploadToken();
+      if (token) { xhr.setRequestHeader('X-Render-Token', token); }
+      xhr.upload.onprogress = function (event) {
+        if (!event.lengthComputable || !event.total) { return; }
+        entry.bar.style.width = Math.round((event.loaded / event.total) * 100) + '%';
+      };
+      xhr.onload = function () {
+        var answer = null;
+        try { answer = JSON.parse(xhr.responseText); } catch (e) { answer = null; }
+        if (xhr.status >= 200 && xhr.status < 300 && answer && answer.ok === true) {
+          traySettle(entry, 'done', String(answer.path || into) + ' \u00b7 ' + String(answer.bytes) + ' bytes', 100);
+          sendTyped(el, 'upload-complete', {
+            name: String(answer.name || name),
+            path: String(answer.path || into),
+            bytes: String(answer.bytes)
+          });
+          return;
+        }
+        var message = answer && answer.error ? String(answer.error) : String(xhr.responseText || '').replace(/^\s+|\s+$/g, '');
+        if (!message) { message = 'HTTP ' + xhr.status; }
+        traySettle(entry, 'error', message);
+      };
+      xhr.onerror = function () { traySettle(entry, 'error', 'network error'); };
+      xhr.onabort = function () { traySettle(entry, 'cancelled', 'cancelled', 0); };
+      xhr.send(file);
+    }
+
+    function uploadEntry(el, entry) {
+      if (entry.isFile) {
+        entry.file(function (file) { uploadFile(el, file); });
+        return;
+      }
+      if (!entry.isDirectory || !entry.createReader) { return; }
+      var reader = entry.createReader();
+      var readBatch = function () {
+        reader.readEntries(function (batch) {
+          if (!batch || !batch.length) { return; }
+          for (var i = 0; i < batch.length; i++) { uploadEntry(el, batch[i]); }
+          readBatch();
+        });
+      };
+      readBatch();
+    }
+
+    BEHAVIORS['data-upload-into'] = function (el) {
+      var input = el.querySelector('input[type=file]');
+      function pick() {
+        if (input) { try { input.click(); } catch (e) { } }
+      }
+      el.addEventListener('click', function (event) {
+        var tag = event.target && event.target.tagName;
+        if (tag === 'INPUT' || tag === 'BUTTON') { return; }
+        pick();
+      });
+      el.addEventListener('keydown', function (event) {
+        if (event.key !== 'Enter' && event.key !== ' ') { return; }
+        event.preventDefault();
+        pick();
+      });
+      if (input) {
+        input.addEventListener('change', function () {
+          var files = input.files || [];
+          for (var i = 0; i < files.length; i++) { uploadFile(el, files[i]); }
+          input.value = '';
+        });
+      }
+      el.addEventListener('paste', function (event) {
+        var data = event.clipboardData;
+        if (!data) { return; }
+        var files = [];
+        if (data.files && data.files.length) {
+          for (var i = 0; i < data.files.length; i++) { files.push(data.files[i]); }
+        } else if (data.items) {
+          for (var j = 0; j < data.items.length; j++) {
+            if (data.items[j].kind === 'file' && data.items[j].getAsFile) { files.push(data.items[j].getAsFile()); }
+          }
+        }
+        var started = 0;
+        for (var k = 0; k < files.length; k++) {
+          if (files[k] && String(files[k].type).indexOf('image/') === 0) { uploadFile(el, files[k]); started++; }
+        }
+        if (started) { event.preventDefault(); }
+      });
+      el.addEventListener('dragover', function (event) { event.preventDefault(); });
+      el.addEventListener('drop', function (event) {
+        if (!event.dataTransfer) { return; }
+        event.preventDefault();
+        var items = event.dataTransfer.items;
+        var entries = [];
+        if (items) {
+          for (var i = 0; i < items.length; i++) {
+            var entry = items[i].webkitGetAsEntry ? items[i].webkitGetAsEntry() : null;
+            if (entry) { entries.push(entry); }
+          }
+        }
+        if (entries.length) {
+          for (var j = 0; j < entries.length; j++) { uploadEntry(el, entries[j]); }
+          return;
+        }
+        var files = event.dataTransfer.files || [];
+        for (var k = 0; k < files.length; k++) { uploadFile(el, files[k]); }
+      });
+    };
+
     BEHAVIORS['data-reorder'] = function (el) {
       function mark() {
         for (var i = 0; i < el.children.length; i++) {

@@ -909,6 +909,286 @@ await page.evaluate(() => { document.querySelectorAll('link[rel="stylesheet"]').
   }
 }
 
+// 7. S7: the upload contract — the engine's XHR transport, its own tray, and
+//    the three inputs that feed one route, driven on `/behaviour` (the fixture
+//    page; the `/` page's 27-component pin is not touched).
+//
+//    what this group cannot own natively is named where it is claimed:
+//      - paste: a synthesized `ClipboardEvent` carrying a `File`. a real paste
+//        needs a clipboard grant the headless context does not have, so the
+//        NATIVE clipboard path is a manual pass per browser.
+//      - directory drop: headless Chromium cannot hand an OS directory to
+//        `DataTransfer`, so the entry tree is synthesized and the engine's own
+//        recursive walk (`createReader().readEntries()`) runs over it. the
+//        native OS-directory path is the same manual pass. if the platform
+//        refuses the synthesized entry, this is `[SKIP]` with the reason —
+//        never a pass.
+//    everything else (both destinations, the route echo, the limit, cancel,
+//    the tray in both themes) runs against the real route.
+{
+  const UP = `${BASE}/behaviour`;
+  const uploadPage = await browser.newPage();
+  const trayRows = () => uploadPage.evaluate(() => Array.from(document.querySelectorAll("[data-webui-upload-tray] [data-webui-upload-state]")).map((row) => ({
+    state: row.getAttribute("data-webui-upload-state"),
+    name: (row.querySelector(".upload-tray__name") || {}).textContent || "",
+    status: (row.querySelector(".upload-tray__status") || {}).textContent || "",
+  })));
+  const waitRow = (name, state, timeout = 10000) => uploadPage.waitForFunction(({ n, s }) => {
+    const rows = document.querySelectorAll("[data-webui-upload-tray] [data-webui-upload-state]");
+    for (const row of rows) {
+      const label = row.querySelector(".upload-tray__name");
+      if (label && label.textContent === n && row.getAttribute("data-webui-upload-state") === s) return true;
+    }
+    return false;
+  }, { n: name, s: state }, { timeout });
+
+  const uploadErrors = [];
+  uploadPage.on("console", (m) => { if (m.type() === "error") uploadErrors.push(m.text()); });
+  await uploadPage.goto(UP, { waitUntil: "load" });
+  await uploadPage.waitForTimeout(700);
+
+  // record the state transitions the engine writes, so "it showed progress"
+  // is a measured transition and not a lucky snapshot.
+  await uploadPage.evaluate(() => {
+    window.__uploadStates = [];
+    const note = () => {
+      document.querySelectorAll("[data-webui-upload-state]").forEach((row) => {
+        const v = row.getAttribute("data-webui-upload-state");
+        if (window.__uploadStates.indexOf(v) === -1) window.__uploadStates.push(v);
+      });
+    };
+    new MutationObserver(note).observe(document.body, { subtree: true, childList: true, attributes: true, attributeFilter: ["data-webui-upload-state"] });
+  });
+
+  // (a) the picker: a real file, the real route, .refresh back into the region.
+  const zoneA = '[data-component-id="fx-upload-a"] input[type=file]';
+  const zoneB = '[data-component-id="fx-upload-b"] input[type=file]';
+  await uploadPage.setInputFiles(zoneA, { name: "note.txt", mimeType: "text/plain", buffer: Buffer.from("hello upload\n") });
+  try {
+    await waitRow("note.txt", "done");
+    ok("upload (picker): the tray row reached done via the engine's XHR transport");
+  } catch { bad(`upload (picker): no done row for note.txt — rows: ${JSON.stringify(await trayRows())}`); }
+
+  const trayShape = await uploadPage.evaluate(() => {
+    const tray = document.querySelector("[data-webui-upload-tray]");
+    if (!tray) return { tray: false };
+    const row = Array.from(tray.querySelectorAll("[data-webui-upload-state]")).find((r) => (r.querySelector(".upload-tray__name") || {}).textContent === "note.txt");
+    if (!row) return { tray: true, row: false };
+    const bar = row.querySelector(".upload-tray__bar");
+    const track = row.querySelector(".upload-tray__track");
+    const br = bar ? bar.getBoundingClientRect() : null;
+    const tr = track ? track.getBoundingClientRect() : null;
+    return {
+      tray: true, row: true,
+      hasTrack: !!track, hasBar: !!bar,
+      fill: br && tr && tr.width > 0 ? Math.round((br.width / tr.width) * 100) : null,
+      states: window.__uploadStates,
+    };
+  });
+  if (trayShape.tray && trayShape.row && trayShape.hasTrack && trayShape.hasBar) {
+    ok("upload (tray): the engine mounted a tray with a row, a track and a progress bar");
+  } else bad(`upload (tray): tray DOM incomplete — ${JSON.stringify(trayShape)}`);
+  if (trayShape.fill !== null && trayShape.fill >= 99) ok(`upload (tray): the progress bar filled to ${trayShape.fill}% of its track on success`);
+  else bad(`upload (tray): progress bar did not fill — ${JSON.stringify(trayShape.fill)}`);
+  if (trayShape.states && trayShape.states.indexOf("uploading") !== -1 && trayShape.states.indexOf("done") !== -1) {
+    ok(`upload (tray): state transitions observed — ${trayShape.states.join(" → ")}`);
+  } else bad(`upload (tray): expected uploading → done, saw ${JSON.stringify(trayShape.states)}`);
+
+  const echoedA = await uploadPage.waitForFunction(() => {
+    const el = document.getElementById("upload-out-a");
+    return el && /path=attachments/.test(el.textContent) ? el.textContent.trim() : false;
+  }, null, { timeout: 8000 }).then((h) => h.jsonValue()).catch(() => null);
+  if (echoedA && /name=note\.txt/.test(echoedA) && /bytes=13/.test(echoedA)) {
+    ok(`upload (refresh): .refresh patched the region with the route's echo — ${echoedA}`);
+  } else bad(`upload (refresh): region did not carry path/name/bytes — ${JSON.stringify(echoedA)}`);
+
+  // (b) two destinations: the same transport, two typed values, two echoes.
+  await uploadPage.setInputFiles(zoneB, { name: "docs.txt", mimeType: "text/plain", buffer: Buffer.from("into the folder\n") });
+  try { await waitRow("docs.txt", "done"); } catch { bad(`upload (destination): no done row for docs.txt — ${JSON.stringify(await trayRows())}`); }
+  const twoPaths = await uploadPage.waitForFunction(() => {
+    const a = document.getElementById("upload-out-a");
+    const b = document.getElementById("upload-out-b");
+    if (!a || !b) return false;
+    if (!/path=folder:docs/.test(b.textContent)) return false;
+    return { a: a.textContent.trim(), b: b.textContent.trim() };
+  }, null, { timeout: 8000 }).then((h) => h.jsonValue()).catch(() => null);
+  if (twoPaths && /path=attachments/.test(twoPaths.a) && /path=folder:docs/.test(twoPaths.b)) {
+    ok("upload (destination): two zones sent two different X-Upload-Path values (attachments vs folder:docs)");
+  } else bad(`upload (destination): the echoed destinations did not differ — ${JSON.stringify(twoPaths)}`);
+
+  // (c) paste: a synthesized clipboard image (the native path is a manual pass).
+  const paste = await uploadPage.evaluate(() => {
+    const zone = document.querySelector('[data-component-id="fx-upload-a"]');
+    if (!zone) return { ok: false, why: "no zone" };
+    const dt = new DataTransfer();
+    dt.items.add(new File([new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10])], "paste.png", { type: "image/png" }));
+    const event = new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true });
+    if (!event.clipboardData || !event.clipboardData.files || !event.clipboardData.files.length) {
+      return { ok: false, why: "ClipboardEvent.clipboardData is not settable in this browser" };
+    }
+    zone.dispatchEvent(event);
+    return { ok: true };
+  });
+  if (!paste.ok) {
+    skipWithReason(`upload (paste): ${paste.why} — the native clipboard path is a manual pass`);
+  } else {
+    try {
+      await waitRow("paste.png", "done");
+      ok("upload (paste): a clipboard image uploads through the same route (synthesized ClipboardEvent; native clipboard is a manual pass)");
+    } catch { bad(`upload (paste): no done row for paste.png — ${JSON.stringify(await trayRows())}`); }
+    const pasteEcho = await uploadPage.evaluate(() => (document.getElementById("upload-out-a") || {}).textContent || "");
+    if (/name=paste\.png/.test(pasteEcho)) ok("upload (paste): the route received the pasted file's name");
+    else bad(`upload (paste): the region did not carry name=paste.png — ${JSON.stringify(pasteEcho.trim())}`);
+  }
+
+  // (d) directory drop: the recursive walk, over a synthesized entry tree.
+  //     `DataTransferItem` hands back a fresh wrapper per access, so the entry
+  //     is installed on the prototype for exactly one dispatch and restored.
+  const dirDrop = await uploadPage.evaluate(() => {
+    const zone = document.querySelector('[data-component-id="fx-upload-b"]');
+    if (!zone) return { ok: false, why: "no zone" };
+    const dt = new DataTransfer();
+    dt.items.add(new File(["leaf"], "leaf.txt", { type: "text/plain" }));
+    const item = dt.items[0];
+    if (!item) return { ok: false, why: "DataTransfer refused the item" };
+    if (typeof item.webkitGetAsEntry !== "function") {
+      return { ok: false, why: "this browser has no webkitGetAsEntry" };
+    }
+    const fileEntry = (name, text) => ({
+      isFile: true, isDirectory: false, name,
+      file: (cb) => cb(new File([text], name, { type: "text/plain" })),
+    });
+    const dirEntry = (name, kids) => ({
+      isFile: false, isDirectory: true, name,
+      createReader: () => {
+        let served = false;
+        return { readEntries: (cb) => { if (served) { cb([]); } else { served = true; cb(kids); } } };
+      },
+    });
+    const tree = dirEntry("bundle", [fileEntry("a.txt", "aaa"), dirEntry("nested", [fileEntry("b.txt", "bb")])]);
+    const proto = Object.getPrototypeOf(item);
+    const original = proto.webkitGetAsEntry;
+    try {
+      proto.webkitGetAsEntry = function () { return tree; };
+    } catch (e) {
+      return { ok: false, why: `DataTransferItem.prototype refused the override (${e})` };
+    }
+    try {
+      zone.dispatchEvent(new DragEvent("drop", { dataTransfer: dt, bubbles: true, cancelable: true }));
+    } finally {
+      proto.webkitGetAsEntry = original;
+    }
+    return { ok: true, restored: proto.webkitGetAsEntry === original };
+  });
+  if (!dirDrop.ok) {
+    skipWithReason(`upload (directory drop): ${dirDrop.why} — the native OS-directory path is a manual pass`);
+  } else {
+    if (!dirDrop.restored) bad("upload (directory drop): the prototype override was not restored");
+    let walked = true;
+    for (const name of ["a.txt", "b.txt"]) {
+      try { await waitRow(name, "done", 8000); } catch { walked = false; bad(`upload (directory drop): the recursive walk never uploaded ${name}`); }
+    }
+    if (walked) ok("upload (directory drop): webkitGetAsEntry walked a directory recursively (a.txt + nested/b.txt; synthesized tree, native path is a manual pass)");
+  }
+
+  // (e) the limit stays server-owned: a file over the route's limit carries the
+  //     server's own text into the tray, and no success row appears.
+  await uploadPage.setInputFiles(zoneA, { name: "too-big.bin", mimeType: "application/octet-stream", buffer: Buffer.alloc(100000) });
+  let limitRow = null;
+  try {
+    await waitRow("too-big.bin", "error", 10000);
+    limitRow = (await trayRows()).find((r) => r.name === "too-big.bin") || null;
+  } catch { limitRow = null; }
+  if (limitRow && /413|too large/i.test(limitRow.status)) {
+    ok(`upload (limit): the server's refusal rendered in the tray — "${limitRow.status.slice(0, 72)}"`);
+  } else bad(`upload (limit): expected the server's 413 text in an error row — ${JSON.stringify(limitRow)}`);
+  const limitDone = (await trayRows()).filter((r) => r.name === "too-big.bin" && r.state === "done").length;
+  if (limitDone === 0) ok("upload (limit): no success row for the oversized file");
+  else bad("upload (limit): an oversized file produced a success row");
+
+  // (f) cancel: hold the request off the wire, start a large upload, cancel it.
+  await uploadPage.route("**/upload/contract", async (route) => {
+    await new Promise((r) => setTimeout(r, 4000));
+    try { await route.abort(); } catch {}
+  });
+  await uploadPage.setInputFiles(zoneA, { name: "huge.bin", mimeType: "application/octet-stream", buffer: Buffer.alloc(8 * 1024 * 1024) });
+  let cancelRow = null;
+  try {
+    await waitRow("huge.bin", "uploading", 8000);
+    const clicked = await uploadPage.evaluate(() => {
+      const rows = document.querySelectorAll("[data-webui-upload-tray] [data-webui-upload-state]");
+      for (const row of rows) {
+        const label = row.querySelector(".upload-tray__name");
+        if (label && label.textContent === "huge.bin") {
+          const btn = row.querySelector(".upload-tray__cancel");
+          if (btn) { btn.click(); return true; }
+        }
+      }
+      return false;
+    });
+    if (!clicked) bad("upload (cancel): the uploading row had no cancel control");
+    await waitRow("huge.bin", "cancelled", 8000);
+    cancelRow = (await trayRows()).find((r) => r.name === "huge.bin") || null;
+  } catch { cancelRow = null; }
+  await uploadPage.unroute("**/upload/contract");
+  if (cancelRow && cancelRow.state === "cancelled") ok("upload (cancel): cancel aborted the in-flight upload and the row reads cancelled");
+  else bad(`upload (cancel): the row never reached cancelled — ${JSON.stringify(cancelRow)}`);
+
+  // (g) the tray in both themes: token colours, opaque, and legible.
+  const contrast = (a, b) => {
+    const lum = ({ r, g, b: bb }) => {
+      const f = (v) => { v /= 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); };
+      return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(bb);
+    };
+    const l1 = lum(a), l2 = lum(b);
+    return (Math.max(l1, l2) + 0.05) / (Math.min(l1, l2) + 0.05);
+  };
+  const parse = (s) => {
+    const m = /rgba?\(([^)]+)\)/.exec(s || "");
+    if (!m) return null;
+    const p = m[1].split(",").map((v) => Number(v.trim()));
+    return { r: p[0], g: p[1], b: p[2], a: p.length > 3 ? p[3] : 1 };
+  };
+  const readTray = () => uploadPage.evaluate(() => {
+    const tray = document.querySelector("[data-webui-upload-tray]");
+    if (!tray) return null;
+    const row = tray.querySelector(".upload-tray__row");
+    const name = tray.querySelector(".upload-tray__name");
+    return {
+      theme: document.documentElement.getAttribute("data-theme"),
+      trayBg: getComputedStyle(tray).backgroundColor,
+      rowBg: row ? getComputedStyle(row).backgroundColor : null,
+      nameColor: name ? getComputedStyle(name).color : getComputedStyle(tray).color,
+      bodyBg: getComputedStyle(document.body).backgroundColor,
+    };
+  });
+
+  const themes = {};
+  for (const [mode, button] of [["dark", "#theme-dark"], ["light", "#theme-light"]]) {
+    await uploadPage.click(button);
+    await uploadPage.waitForTimeout(250);
+    const read = await readTray();
+    themes[mode] = read;
+    const bg = parse(read && read.trayBg), fg = parse(read && read.nameColor);
+    if (bg && fg && bg.a === 1 && fg.a > 0) {
+      const ratio = contrast(bg, fg);
+      if (ratio >= 4.5) ok(`upload (tray/${mode}): tray background opaque and text legible (contrast ${ratio.toFixed(1)}:1)`);
+      else bad(`upload (tray/${mode}): text contrast ${ratio.toFixed(1)}:1 is below 4.5:1 — ${JSON.stringify(read)}`);
+    } else bad(`upload (tray/${mode}): tray has no opaque background or no text colour — ${JSON.stringify(read)}`);
+  }
+  if (themes.dark && themes.light && themes.dark.trayBg !== themes.light.trayBg && themes.dark.nameColor !== themes.light.nameColor) {
+    ok(`upload (tray): both themes resolve — dark ${themes.dark.trayBg}/${themes.dark.nameColor}, light ${themes.light.trayBg}/${themes.light.nameColor}`);
+  } else bad(`upload (tray): the two themes did not resolve to different token colours — ${JSON.stringify(themes)}`);
+
+  // the 413 the limit case provokes is Chromium's own resource log, not a page
+  // error: filter it, then assert nothing else was logged.
+  const realUploadErrors = uploadErrors.filter((t) => !/413|Failed to load resource/i.test(t));
+  if (realUploadErrors.length === 0) ok("upload: no page errors across the upload group (413 resource log filtered)");
+  else bad(`upload: page errors — ${JSON.stringify(realUploadErrors.slice(0, 3))}`);
+
+  await uploadPage.close();
+}
+
 await browser.close();
 server.kill();
 

@@ -93,7 +93,13 @@ control.
 | `ThemeChoice` | `data-theme-choice` | the chosen mode (see above; already live) |
 | form semantics | `data-autogrow`, `data-submit-on-enter`, `data-clear-on-submit` | presence; autogrow, enter-to-send, clear on submit |
 | form semantics (number) | `data-clamp` | `min,max` — the accepted numeric range |
-| upload (S7) | `data-upload-into` | the typed destination: `attachments` or `folder:<path>` |
+| upload destination | `data-upload-into` | the typed destination: `attachments` or `folder:<path>`; the engine sends it back as `X-Upload-Path` |
+| upload route | `data-upload-to` | the route the engine posts the body to (`/upload` by default) |
+| upload (tray) | `data-webui-upload-tray` | the tray the transport mounts and owns (engine-written) |
+| upload (state) | `data-webui-upload-state` | a tray row's state: `uploading`, `done`, `error`, `cancelled` (engine-written) |
+
+the upload rows' transport — the headers, the route's json shape, the tray's
+DOM and class contract — is `Documentation/UPLOAD.md`.
 
 ## changing the vocabulary
 
