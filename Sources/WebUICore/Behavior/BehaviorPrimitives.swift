@@ -1,4 +1,4 @@
-// the behavior primitives — the 22 rows of the attribute register.
+// the behavior primitives — the attribute register's rows.
 //
 // one row is two types: a `Behavior` the view author holds, and the
 // `AttributeRepresentable` it serializes to. the split is what makes the
@@ -227,6 +227,80 @@ public struct FocusReturnAttribute: AttributeRepresentable {
 	}
 
 	public var value: String { id }
+}
+
+// MARK: - 5b. focus into
+
+/// focus an id inside a region that a patch has just inserted or replaced.
+///
+/// the region is the value's scope, not the document: the target is
+/// `getElementById(value)` — empty means the region itself — and the binder
+/// only takes focus when the live one is vacant (`body`/null) or sits **outside**
+/// this region. that is the whole precedence: a field the reader is already
+/// using inside the region is never yanked, while a confirm dialog inserted by a
+/// patch takes the caret the reader expects without fighting an outer field.
+/// a target with no `tabindex` gets `tabindex="-1"`, the same door
+/// `data-skip-to` uses, so naming a `div` is not a dead promise.
+///
+/// it runs in the bind pass (boot, and after every patch that inserts or
+/// replaces the region), and the engine's `data-focus-return` restore runs
+/// **after** the bind pass — a focus-return declaration therefore wins over
+/// this one when both would fire on the same patch.
+public struct FocusInto: Behavior {
+	/// the id to focus; empty is the region itself.
+	public let id: String
+
+	public init(id: String = "") {
+		self.id = id
+	}
+
+	public func attribute() -> FocusIntoAttribute {
+		FocusIntoAttribute(id: id)
+	}
+}
+
+/// `data-focus-into` — the serialized form of ``FocusInto``.
+public struct FocusIntoAttribute: AttributeRepresentable {
+	public static let name = "data-focus-into"
+
+	public let id: String
+
+	public init(id: String = "") {
+		self.id = id
+	}
+
+	public var value: String { id }
+}
+
+// MARK: - 5c. focus on appear
+
+/// focus an element when it appears, with the caret at the end.
+///
+/// the "appear" is the bind pass: on boot when the element is already rendered,
+/// and after a patch that inserts or replaces it — a new-chat composer, or a
+/// form fragment carrying the marker. the guard is stricter than ``FocusInto``'s
+/// and deliberately narrower: it takes focus only when **nothing** holds it
+/// (`body`/null), so a reader mid-field is never interrupted by a re-render.
+/// `preventScroll` keeps a boot-time bind from moving the document.
+///
+/// precedence: ``FocusInto`` wins when both sit on the same element (its id is
+/// the more specific statement), and the engine's `data-focus-return` restore
+/// runs after the bind pass, so it wins over this one too.
+public struct FocusOnAppear: Behavior {
+	public init() {}
+
+	public func attribute() -> FocusOnAppearAttribute {
+		FocusOnAppearAttribute()
+	}
+}
+
+/// `data-focus-on-appear` — the serialized form of ``FocusOnAppear``.
+public struct FocusOnAppearAttribute: AttributeRepresentable {
+	public static let name = "data-focus-on-appear"
+
+	public init() {}
+
+	public var value: String { "" }
 }
 
 // MARK: - 6. dismiss stack
@@ -793,23 +867,51 @@ public struct NumberClampAttribute: AttributeRepresentable {
 /// a list is filtered by the text its items already render, so a server render
 /// needs no second copy of the labels on the wire. a region that names a source
 /// which does not resolve is inert, exactly like a region with no input.
+///
+/// `token` is the prefix-gated form a composer's slash menu needs: the query is
+/// the last whitespace-delimited token **before the field's caret** with
+/// `token` stripped, the panel carries `data-open` only while that token starts
+/// with `token`, and ``FilterInsert`` replaces that whole token — prefix
+/// included — with the template's output, so a menu never leaves a fragment of
+/// its own command behind. an empty/whitespace token, or one without the
+/// prefix, closes the panel and leaves every item visible. an empty `token` is
+/// the whole-field form, byte-identical to 2.17.0; a gated region with no
+/// `.combo__panel` still filters and writes back, it simply has no open state
+/// to state.
+///
+/// the two parts travel in one attribute value — `token|source` — because a
+/// behavior maps to exactly one attribute. a value with no `|` is the
+/// whole-field form (a source, or empty for the region's own `input`); a value
+/// with one splits at the **first** `|`, so a source selector that itself
+/// contains `|` (a namespace selector) cannot be expressed in the gated form.
 public struct FilterList: Behavior {
 	/// the field that carries the query: a selector, a bare id, or empty for
 	/// the region's own `input`.
 	public let source: String
+	/// the token prefix that gates the query, or empty for the whole-field form.
+	public let token: String
 
 	/// the contained form: the region's own `input` carries the query.
 	public init() {
 		self.source = ""
+		self.token = ""
 	}
 
 	/// the external form: `source` names the field (a selector, or a bare id).
 	public init(source: String) {
 		self.source = source
+		self.token = ""
+	}
+
+	/// the prefix-gated form: `token` gates the last caret token, and `source`
+	/// still names the field (empty is the region's own `input`).
+	public init(source: String = "", token: String) {
+		self.source = source
+		self.token = token
 	}
 
 	public func attribute() -> FilterListAttribute {
-		FilterListAttribute(source: source)
+		FilterListAttribute(source: source, token: token)
 	}
 }
 
@@ -818,16 +920,29 @@ public struct FilterListAttribute: AttributeRepresentable {
 	public static let name = "data-filter-list"
 
 	public let source: String
+	public let token: String
 
 	public init() {
 		self.source = ""
+		self.token = ""
 	}
 
 	public init(source: String) {
 		self.source = source
+		self.token = ""
 	}
 
-	public var value: String { source }
+	public init(source: String = "", token: String) {
+		self.source = source
+		self.token = token
+	}
+
+	/// the source alone when no prefix is set — the 2.17.0 spelling, unchanged —
+	/// or `token|source` for the gated form.
+	public var value: String {
+		guard !token.isEmpty else { return source }
+		return token + "|" + source
+	}
 }
 
 /// `data-filter-insert` — the id of the field a selected item is written into.

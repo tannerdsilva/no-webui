@@ -2,6 +2,59 @@
 
 all notable changes to this project are documented here.
 
+## [3.1.0] — 2026-11-14 — the four behaviors a consumer's last overlay needed
+
+measured gaps, not conveniences: each of these was blocking one of a consumer's
+last hand-written client lines. four additive behaviors, one fix, one guard.
+
+- **`FilterList(token:)`** — the prefix-gated form a composer's slash menu
+  needs. `FilterList(source:token:)` emits one attribute value,
+  `prefix|source`; with no prefix the value is the source alone, byte-identical
+  to 2.17.0. with one, the query is the last whitespace-delimited token **before
+  the field's caret** with the prefix stripped, the panel carries `data-open`
+  only while that token starts with the prefix, and `FilterInsert` replaces that
+  whole token — prefix included — with the template's output (the
+  `data-filter-clear` stripping is implied, so a gated region needs no second
+  marker). an empty/whitespace token, or one without the prefix, closes the
+  panel and leaves every item visible. the gate reconciles on input, focus, a
+  click inside the region and `selectionchange`, so a caret moved by the mouse,
+  by arrow keys or programmatically is the token's own truth.
+- **`FocusInto(id:)`** — focus an id inside a region a patch has just inserted
+  or replaced (`data-focus-into`), with the empty value meaning the region
+  itself. the binder takes focus only while the live one is vacant
+  (`body`/null) or sits **outside** the region, so a field the reader is using
+  inside it is never yanked; a target with no `tabindex` gets `tabindex="-1"`
+  (the `data-skip-to` door).
+- **`FocusOnAppear()`** — focus an element when it appears
+  (`data-focus-on-appear`): on boot when it is already rendered, and after a
+  patch that inserts or replaces it, with the caret at the end. the guard is
+  narrower than `FocusInto`'s — focus is taken only when **nothing** holds it —
+  and `preventScroll` keeps a boot-time bind from moving the document.
+  precedence, documented on both: `FocusInto` wins when both sit on one element,
+  and `data-focus-return` (which restores after the bind pass) wins over both.
+- **the draft store clears with the control** — a control carrying both
+  `data-clear-on-submit` and `data-draft-id` had its control cleared but its
+  store entry (`webui-draft:<identity>`) kept, so the replacing patch that
+  answered the submit refilled the field through `syncDrafts()`. `onDocSubmit`
+  now removes the entry in the same pass, guarded like every other
+  `sessionStorage` touch. one line, in the function that already owned the
+  clear.
+- **`data-copy` inside a `<summary>`** — the activation copies and no longer
+  also toggles the disclosure: the binder `preventDefault`s when a `summary`
+  is an ancestor (never when the copy control *is* the summary).
+
+not taken: reporting a failed `navigator.clipboard.writeText` in the toast. the
+fallback (`execCommand('copy')`) is what a failure lands on, and the probe has
+no way to force both paths to fail without patching the runtime in-page — an
+unprovable claim, so the untested branch was not added.
+
+measured at the tag: 1,956 tests / 0 failures; frozen surface 5,566 symbols
+(5,546 + 20: `FilterList.init(source:token:)`, `FilterList.token`,
+`FilterListAttribute.init(source:token:)`, `FilterListAttribute.token`,
+`FocusInto`/`FocusOnAppear` and their attributes); budget PASS (engine
+79,587/18,446, ext 31,027/7,362, sheet 325,766/45,622, shell 1,514/539);
+`behaviour-probe` 149/149 (128 before, +21 rows).
+
 ## [3.0.0] — 2026-11-13 — the overlay-elimination close
 
 the ten-capability program that lets a consumer delete its last client overlay

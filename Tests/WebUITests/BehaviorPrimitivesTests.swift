@@ -2,7 +2,7 @@ import Testing
 import Foundation
 import WebUICore
 
-// the 25 register rows, pinned one test each.
+// the 27 register rows, pinned one test each.
 //
 // §24 of the behavior-layer journal is the naming authority: a row is a Swift
 // type whose `AttributeRepresentable.name` equals the register's attribute
@@ -71,6 +71,29 @@ struct BehaviorPrimitivesTests {
 		#expect(FocusReturn().attribute().value == "")
 		#expect(rendered(FocusReturn()).contains(" data-focus-return"))
 		#expect(!rendered(FocusReturn()).contains("data-focus-return=\"\""))
+	}
+
+	// MARK: - 5b. focus into
+
+	@Test("FocusInto serializes data-focus-into, empty meaning the region itself")
+	func focusInto() {
+		#expect(FocusIntoAttribute.name == "data-focus-into")
+		#expect(FocusInto(id: "confirm").attribute().value == "confirm")
+		#expect(rendered(FocusInto(id: "confirm")).contains(" data-focus-into=\"confirm\""))
+		// empty is the region itself, so the attribute is still present — bare.
+		#expect(FocusInto().attribute().value == "")
+		#expect(rendered(FocusInto()).contains(" data-focus-into"))
+		#expect(!rendered(FocusInto()).contains("data-focus-into=\"\""))
+	}
+
+	// MARK: - 5c. focus on appear
+
+	@Test("FocusOnAppear serializes the bare data-focus-on-appear")
+	func focusOnAppear() {
+		#expect(FocusOnAppearAttribute.name == "data-focus-on-appear")
+		#expect(FocusOnAppear().attribute().value == "")
+		#expect(rendered(FocusOnAppear()).contains(" data-focus-on-appear"))
+		#expect(!rendered(FocusOnAppear()).contains("data-focus-on-appear=\"\""))
 	}
 
 	// MARK: - 6. dismiss stack
@@ -282,6 +305,24 @@ struct BehaviorPrimitivesTests {
 		#expect(!rendered(FilterList()).contains("data-filter-list=\"\""))
 	}
 
+	@Test("FilterList(source:token:) carries the prefix and the source in one value")
+	func filterListToken() {
+		// no prefix is the 2.17.0 spelling, byte for byte: the source alone.
+		#expect(FilterList(source: "#composer").attribute().value == "#composer")
+		#expect(FilterListAttribute(source: "#composer").value == "#composer")
+		#expect(FilterListAttribute(source: "#composer", token: "").value == "#composer")
+		// the gated form is `prefix|source`, and the prefix alone still names
+		// the region's own input — the separator is what makes it unambiguous.
+		#expect(FilterList(token: "/").attribute().value == "/|")
+		#expect(FilterList(source: "#composer", token: "/").attribute().value == "/|#composer")
+		#expect(FilterListAttribute(source: "#composer", token: "/").value == "/|#composer")
+		#expect(rendered(FilterList(source: "#composer", token: "/")).contains(" data-filter-list=\"/|#composer\""))
+		#expect(rendered(FilterList(token: "/")).contains(" data-filter-list=\"/|\""))
+		// the initializers that predate the prefix keep it empty.
+		#expect(FilterList().token == "")
+		#expect(FilterListAttribute().token == "")
+	}
+
 	// MARK: - the rules the register rests on
 
 	@Test("an empty value is the bare attribute; a non-empty value is quoted and escaped")
@@ -312,7 +353,7 @@ struct BehaviorPrimitivesTests {
 		#expect(!html.contains("onmouseover"), "attribute value escaped its quotes: \(html)")
 	}
 
-	@Test("the register's 25 attributes are distinct")
+	@Test("the register's 27 attributes are distinct")
 	func registerIsInjective() {
 		let names: [String] = [
 			ScrollFollowAttribute.name,
@@ -320,6 +361,8 @@ struct BehaviorPrimitivesTests {
 			ScrollToAttribute.name,
 			DraftIdentityAttribute.name,
 			FocusReturnAttribute.name,
+			FocusIntoAttribute.name,
+			FocusOnAppearAttribute.name,
 			DismissStackAttribute.name,
 			ReorderAttribute.name,
 			ClipboardAttribute.name,
@@ -341,7 +384,7 @@ struct BehaviorPrimitivesTests {
 			FilterTemplateAttribute.name,
 			FilterClearAttribute.name,
 		]
-		#expect(names.count == 25)
+		#expect(names.count == 27)
 		#expect(Set(names).count == names.count, "two behaviors claim one attribute")
 	}
 
@@ -360,6 +403,8 @@ struct BehaviorPrimitivesTests {
 			ScrollToAttribute.name,
 			DraftIdentityAttribute.name,
 			FocusReturnAttribute.name,
+			FocusIntoAttribute.name,
+			FocusOnAppearAttribute.name,
 			DismissStackAttribute.name,
 			ReorderAttribute.name,
 			ClipboardAttribute.name,

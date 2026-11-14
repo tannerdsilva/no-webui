@@ -52,6 +52,35 @@ struct BehaviorWiringTests {
 		#expect(!clear.contains("data-filter-clear=\"\""), "presence has no value: \(clear)")
 	}
 
+	@Test("FilterList(source:token:) emits the gated value; no prefix keeps the 2.17.0 spelling")
+	func filterListTokenWiring() {
+		let plain = html(Element(.div) { Text("x") }.behavior(FilterList(source: "#composer")))
+		#expect(plain.contains(" data-filter-list=\"#composer\""), "no prefix, no separator: \(plain)")
+		#expect(!plain.contains("|"), "a legacy source never grows a separator: \(plain)")
+		let gated = html(Element(.div) { Text("x") }.behavior(FilterList(source: "#composer", token: "/")))
+		#expect(gated.contains(" data-filter-list=\"/|#composer\""), "the gated value is prefix|source: \(gated)")
+		let contained = html(Element(.div) { Text("x") }.behavior(FilterList(token: "/")))
+		#expect(contained.contains(" data-filter-list=\"/|\""), "the prefix alone still names the region's own input: \(contained)")
+	}
+
+	// MARK: - FocusInto and FocusOnAppear
+
+	@Test("FocusInto names its target in the value and the region itself when empty")
+	func focusIntoWiring() {
+		let named = html(Element(.div) { Text("x") }.behavior(FocusInto(id: "confirm-field")))
+		#expect(named.contains(" data-focus-into=\"confirm-field\""), "the region names the id it focuses: \(named)")
+		let selfTarget = html(Element(.div) { Text("x") }.behavior(FocusInto()))
+		#expect(selfTarget.contains(" data-focus-into>"), "an empty id is the region itself, spelled bare: \(selfTarget)")
+		#expect(!selfTarget.contains("data-focus-into=\"\""), "the empty value is never spelled `=\"\"`: \(selfTarget)")
+	}
+
+	@Test("FocusOnAppear is a bare presence marker on the element that appears")
+	func focusOnAppearWiring() {
+		let out = html(Element(.div) { Text("x") }.behavior(FocusOnAppear()))
+		#expect(out.contains(" data-focus-on-appear"), "the marker reaches the element: \(out)")
+		#expect(!out.contains("data-focus-on-appear=\""), "presence has no value: \(out)")
+	}
+
 	// MARK: - WebUICommandPalette
 
 	@Test("WebUICommandPalette: the dialog dismisses and filters, the results rove, items are one tab stop")

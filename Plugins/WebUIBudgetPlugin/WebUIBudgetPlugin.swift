@@ -232,9 +232,29 @@ struct WebUIBudgetPlugin: CommandPlugin {
     ///   shell        1,514 raw /    539 gz   (≤   1,700 /    650 — unchanged)
     /// both extension ceilings move to the smallest hundred strictly above the
     /// measurement — 28,600 / 7,000 (42 raw bytes of headroom, never padded).
+    ///
+    /// re-pinned 2026-11-14 (3.1.0 — the four behaviors a consumer's last client
+    /// overlay needs):
+    ///
+    /// the extension gained `FilterList(token:)`'s prefix-gated branch (the
+    /// `prefix|source` split, the caret-token read with the end-of-field
+    /// fallback, the gate that reconciles `data-open` on input/focus/selection
+    /// changes, and the token-stripping write-back), the two focus binders
+    /// (`data-focus-into`, `data-focus-on-appear`), the draft-store removal in
+    /// `onDocSubmit`, and `data-copy`'s `<summary>` guard. the engine did not
+    /// grow a byte: `onDocSubmit` lives in the extension, so the draft fix costs
+    /// the main asset nothing. measured on this tree, from the asset tool's
+    /// manifest (`served`):
+    ///   engine      79,587 raw / 18,446 gz   (≤ 79,600 / 18,500 — unchanged)
+    ///   engine-ext  31,027 raw /  7,362 gz   (was pinned 28,600 / 7,000;
+    ///                                         +2,469 raw / +427 gz)
+    ///   sheet      325,766 raw / 45,622 gz   (≤ 335,000 / 49,500 — unchanged)
+    ///   shell        1,514 raw /    539 gz   (≤   1,700 /    650 — unchanged)
+    /// both extension ceilings move to the smallest hundred strictly above the
+    /// measurement — 31,100 / 7,400 (73 raw / 38 gz of headroom, never padded).
     private static let ceilings: [Ceiling] = [
         Ceiling(surface: "engine", label: "webui-engine.js", raw: 79_600, gz: 18_500),
-        Ceiling(surface: "engineExt", label: "webui-engine-ext.js", raw: 28_600, gz: 7_000),
+        Ceiling(surface: "engineExt", label: "webui-engine-ext.js", raw: 31_100, gz: 7_400),
         Ceiling(surface: "sheet", label: "design-system.css", raw: 335_000, gz: 49_500),
         Ceiling(surface: "shell", label: "webui-shell.js", raw: 1_700, gz: 650),
     ]

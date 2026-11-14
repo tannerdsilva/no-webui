@@ -30,6 +30,9 @@ final class BehaviourFixtureState: Sendable {
 		var t26 = 0
 		var draftIdentity = "a"
 		var draftSeed = "server-a"
+		var into = 0
+		var appearOpen = false
+		var clearLast = "(none)"
 		var uploads: [String: String] = [:]
 		var templated: [String] = []
 		var streamLines: [String] = []
@@ -109,6 +112,25 @@ final class BehaviourFixtureState: Sendable {
 	var draftSeed: String {
 		get { values.withLock { $0.draftSeed } }
 		set { values.withLock { $0.draftSeed = newValue } }
+	}
+
+	/// the focus-into fixture's dialog: 0 closed, 1 the named target, 2 the
+	/// region itself (the empty value).
+	var into: Int {
+		get { values.withLock { $0.into } }
+		set { values.withLock { $0.into = newValue } }
+	}
+
+	/// whether the patch-inserted focus-on-appear region is present.
+	var appearOpen: Bool {
+		get { values.withLock { $0.appearOpen } }
+		set { values.withLock { $0.appearOpen = newValue } }
+	}
+
+	/// the last text a clear-on-submit form sent, as the region renders it.
+	var clearLast: String {
+		get { values.withLock { $0.clearLast } }
+		set { values.withLock { $0.clearLast = newValue } }
 	}
 
 	/// flips the draft's identity and the seed that travels with it: the switch is
@@ -239,6 +261,74 @@ func behaviourSeedHTML(_ state: BehaviourFixtureState) -> String {
 	"""
 }
 
+/// the focus-into fixture: a region a patch inserts (or replaces) whose binder
+/// focuses the field the reader came for. `into` is 0 closed, 1 the named
+/// target, 2 the region itself — the empty value, which is the `tabindex="-1"`
+/// path. the close control declares no focus behavior, so what the probe
+/// measures after a close is the ordinary patch path and nothing else.
+func behaviourIntoHTML(_ state: BehaviourFixtureState) -> String {
+	let dialog: String
+	switch state.into {
+		case 1:
+			dialog = """
+			<div id="fx-into-dialog" class="fx-layer" role="dialog" aria-label="confirm"\(FocusInto(id: "fx-into-confirm").attributeText)><p class="fx-muted">patch-inserted: the binder focuses <code>#fx-into-confirm</code> when the live focus is vacant or outside this region.</p><input id="fx-into-confirm" type="text" aria-label="confirm text" value=""><input id="fx-into-other" type="text" aria-label="second field" value=""><button id="fx-into-close" type="button" data-component-id="fx-into-close" data-event="click">Close the confirm</button></div>
+			"""
+		case 2:
+			dialog = """
+			<div id="fx-into-self" class="fx-layer" role="dialog" aria-label="self focusing region"\(FocusInto().attributeText)><p class="fx-muted">the empty value is the region itself; the engine adds <code>tabindex="-1"</code> so the promise lands.</p><button id="fx-into-self-close" type="button" data-component-id="fx-into-close" data-event="click">Close</button></div>
+			"""
+		default:
+			dialog = ""
+	}
+	return """
+	<section id="fx-into-host" class="fx-sec"><h2>focus into · a patch-inserted region</h2>
+	<p class="fx-muted">the confirm dialog is inserted by a patch. its binder takes focus only while the live one is vacant or outside the region, so a reader mid-field is never yanked; <code>data-focus-return</code> restores after the bind pass.</p>
+	<div class="fx-row"><button id="fx-into-open" type="button" data-component-id="fx-into-open" data-event="click">Open the confirm</button><button id="fx-into-self-open" type="button" data-component-id="fx-into-self-open" data-event="click">Open the self-focusing region</button></div>
+	\(dialog)</section>
+	"""
+}
+
+/// the focus-on-appear fixture: a composer the `+` control patches into a stable
+/// slot, carrying the marker itself (the caret-at-end half needs a text
+/// control). the field parked beside it is the "live field" the binder must
+/// never interrupt — it lives outside the patched slot on purpose, so a patch
+/// cannot destroy it and hand the binder a vacant focus by accident.
+func behaviourAppearRegionHTML(_ state: BehaviourFixtureState) -> String {
+	// the fragment's root carries the patch target's id, which is what makes
+	// `replaceElement` hand the new node to the after-patch bind pass — the
+	// pass the marker's consequence runs in.
+	state.appearOpen ? """
+	<div id="fx-appear-slot" class="fx-row"><textarea id="fx-appear-composer" rows="2" aria-label="composer"\(FocusOnAppear().attributeText)>drafting</textarea></div>
+	""" : "<div id=\"fx-appear-slot\"></div>"
+}
+
+func behaviourAppearHTML(_ state: BehaviourFixtureState) -> String {
+	"""
+	<section id="fx-appear-host" class="fx-sec"><h2>focus on appear · the new-chat composer</h2>
+	<p class="fx-muted">the <code>+</code> control patches the composer into the slot. the marker takes focus and puts the caret at the end only while nothing else holds it, so a reader typing in the field beside it keeps it (that field is outside the slot, so the patch cannot remove it).</p>
+	<div class="fx-row"><button id="fx-appear-add" type="button" data-component-id="fx-appear-add" data-event="click">New chat (+)</button><input id="fx-appear-other" type="text" aria-label="another field" placeholder="park focus here"></div>
+	\(behaviourAppearRegionHTML(state))
+	</section>
+	"""
+}
+
+/// the draft-store fixture: one control carries both `data-clear-on-submit` and
+/// `data-draft-id`, so the submit clears the control **and** its store entry. the
+/// handler answers with a replacing patch of this region — the patch that used
+/// to refill the field from `webui-draft:fx-clear`.
+func behaviourClearHTML(_ state: BehaviourFixtureState) -> String {
+	"""
+	<section id="fx-clear-region" class="fx-sec"><h2>draft store · clear on submit</h2>
+	<p class="fx-muted">the control carries both markers. a successful submit clears it <em>and</em> <code>webui-draft:fx-clear</code>, so the replacing patch below cannot refill it; typing again re-populates the store.</p>
+	<form id="fx-clear-form" class="fx-row" data-component-id="fx-clear" data-event="submit">
+	<input id="fx-clear-input" name="text" type="text" aria-label="clear on submit" placeholder="type and press enter"\(SubmitOnEnter().attributeText)\(ClearOnSubmit().attributeText)\(DraftIdentity(key: "fx-clear").attributeText)>
+	<button id="fx-clear-send" type="submit">Send</button>
+	</form>
+	<p id="fx-clear-out" class="fx-muted">last: \(htmlEscape(state.clearLast))</p>
+	</section>
+	"""
+}
+
 // MARK: - page
 
 /// the fixture's own layout: enough height to scroll, a real overflow on each
@@ -280,7 +370,8 @@ func renderBehaviourPage(
 	state: BehaviourFixtureState,
 	renderToken: String,
 	bareReader: Bool = false,
-	drawer: Bool = false
+	drawer: Bool = false,
+	boot: String = ""
 ) -> String {
 	let now = state.stamp
 	let followOff = ScrollFollow(mode: .off).attributeText
@@ -331,7 +422,25 @@ func renderBehaviourPage(
 	\(WebUIDrawer(title: "fx drawer", id: "fx-drawer") { Text("drawer body") }.markup.html)
 	</section>
 	""" : ""
-	let body = bareReader ? """
+	// two single-purpose pages for the boot half of the focus binders: one where
+	// the marker is already rendered at load (the caret-at-end row), one where a
+	// live field inside the region holds focus before the extension binds (the
+	// never-yank row). separate pages, because each needs the boot focus to
+	// itself.
+	let bootBody: String = boot == "appear" ? """
+	<main class="fx">
+	<h1>Focus on appear, at boot</h1>
+	<p class="fx-muted">the composer is already rendered: the bind pass puts focus and the caret at the end while nothing else holds it.</p>
+	<textarea id="fx-boot-composer" rows="2" aria-label="boot composer"\(FocusOnAppear().attributeText)>boot text</textarea>
+	</main>
+	""" : (boot == "keep" ? """
+	<main class="fx">
+	<h1>Focus into, a live field</h1>
+	<p class="fx-muted">the probe parks the caret in the field inside the region <em>before</em> the extension binds (its fetch is held); the binder must leave it there.</p>
+	<div id="fx-into-keep" class="fx-layer"\(FocusInto(id: "fx-into-keep-b").attributeText)><input id="fx-into-keep-a" type="text" aria-label="live field" value="live"><input id="fx-into-keep-b" type="text" aria-label="target field" value="target"></div>
+	</main>
+	""" : "")
+	let mainBody = bareReader ? """
 	<main class="fx">
 	<h1>Reading keys, bare</h1>
 	<p class="fx-muted">the same reader on a page that renders no layer at all: with no layer open, Escape returns it to the live tail.</p>
@@ -393,6 +502,7 @@ func renderBehaviourPage(
 
 	<section class="fx-sec"><h2>clipboard</h2>
 	<div class="fx-row"><button id="copy-text" type="button"\(Clipboard(text: "pinned text").attributeText)>Copy the pinned text</button><button id="copy-empty" type="button"\(Clipboard().attributeText)>Copy me</button></div>
+	<details id="fx-copy-details" class="fx-details"><summary id="fx-copy-summary">a disclosure holding a copy control<button id="copy-in-summary" type="button" class="fx-row"\(Clipboard(text: "in summary").attributeText)>Copy inside a summary</button></summary><p class="fx-muted">the copy control's activation does not also toggle this disclosure.</p></details>
 	</section>
 
 	<section class="fx-sec"><h2>table enhance</h2>
@@ -443,6 +553,20 @@ func renderBehaviourPage(
 	</div>
 	</section>
 
+	<section class="fx-sec" id="fx-filter-token"><h2>filter list · token prefix · slash menu</h2>
+	<p class="fx-muted">the composer is the source and the palette lives outside it. the query is the last whitespace-delimited token <em>before the caret</em> with <code>/</code> stripped, the panel carries <code>data-open</code> only while that token starts with <code>/</code>, and a selection replaces the whole token — prefix included — with the template. no <code>data-filter-clear</code> here: the token form implies it.</p>
+	<textarea id="fx-slash-composer" rows="2" aria-label="slash composer"></textarea>
+	<div id="fx-slash" class="combo"\(FilterList(source: "#fx-slash-composer", token: "/").attributeText)\(FilterInsert(target: "fx-slash-composer").attributeText)\(FilterTemplate(text: "{value} ").attributeText)>
+	<div class="combo__panel" role="menu" aria-label="slash palette"><div id="fx-slash-hello" class="combo__option" role="option" tabindex="-1">hello</div><div id="fx-slash-help" class="combo__option" role="option" tabindex="-1">help</div><div id="fx-slash-world" class="combo__option" role="option" tabindex="-1">world</div></div>
+	</div>
+	</section>
+
+	\(behaviourIntoHTML(state))
+
+	\(behaviourAppearHTML(state))
+
+	\(behaviourClearHTML(state))
+
 	\(drawerSection)
 
 	<section class="fx-sec"><h2>form semantics</h2>
@@ -484,6 +608,7 @@ func renderBehaviourPage(
 	</section>
 	</main>
 	"""
+	let body = bootBody.isEmpty ? mainBody : bootBody
 	return WebUIDocument(
 		title: "Behavior fixture",
 		body: .trusted(body),
@@ -565,6 +690,34 @@ struct BehaviourPageResponder: Responder {
 		router.register(outcome: { _ in
 			.fragments([FragmentUpdate(id: "fx-seed-region", html: behaviourSeedHTML(state))])
 		}, for: ComponentID("fx-seed-repatch"), in: session)
+		// focus into: opening inserts the dialog (a patch, so the binder runs on
+		// a fresh node); closing replaces the host again, which removes the
+		// dialog. the same handler serves both dialog shapes.
+		router.register(outcome: { _ in
+			if state.into == 1 { state.into = 0 } else { state.into = 1 }
+			return .fragments([FragmentUpdate(id: "fx-into-host", html: behaviourIntoHTML(state))])
+		}, for: ComponentID("fx-into-open"), in: session)
+		router.register(outcome: { _ in
+			if state.into == 2 { state.into = 0 } else { state.into = 2 }
+			return .fragments([FragmentUpdate(id: "fx-into-host", html: behaviourIntoHTML(state))])
+		}, for: ComponentID("fx-into-self-open"), in: session)
+		router.register(outcome: { _ in
+			state.into = 0
+			return .fragments([FragmentUpdate(id: "fx-into-host", html: behaviourIntoHTML(state))])
+		}, for: ComponentID("fx-into-close"), in: session)
+		// focus on appear: the `+` control patches the composer in, and the
+		// binder on the fresh textarea takes focus only while it is vacant.
+		router.register(outcome: { _ in
+			state.appearOpen = true
+			return .fragments([FragmentUpdate(id: "fx-appear-slot", html: behaviourAppearRegionHTML(state))])
+		}, for: ComponentID("fx-appear-add"), in: session)
+		// the draft store: a submit clears the control (the document handler) and
+		// answers with a replacing patch of the region — the patch that used to
+		// refill the field from `webui-draft:fx-clear`.
+		router.register(outcome: { event in
+			state.clearLast = event.string("text") ?? "(none)"
+			return .fragments([FragmentUpdate(id: "fx-clear-region", html: behaviourClearHTML(state))])
+		}, for: ComponentID("fx-clear"), in: session)
 		router.register(outcome: { event in
 			state.saved = event.string("title") ?? "(none)"
 			return .fragments([
@@ -617,7 +770,8 @@ struct BehaviourPageResponder: Responder {
 			state: state,
 			renderToken: request.renderToken.value,
 			bareReader: request.query["bare"] == "reader",
-			drawer: request.query["drawer"] == "1"
+			drawer: request.query["drawer"] == "1",
+			boot: request.query["boot"] ?? ""
 		)
 		return HTTPResponse(headers: smokeHeaders(), body: .html(UnsafeMarkup.trusted(html)))
 	}

@@ -10,7 +10,7 @@
 # forced it. `Tests/WebUITests/FrozenSurfaceTests.swift` fails when this
 # file and a fresh extraction diverge, naming every added and removed symbol.
 #
-# re-measured 2026-11-13: 5546 symbols across 11 modules.
+# re-measured 2026-11-14: 5566 symbols across 11 modules.
 
 ## WebUISharedCore
 
@@ -760,12 +760,16 @@ FilterList
 FilterList.attribute()
 FilterList.init()
 FilterList.init(source:)
+FilterList.init(source:token:)
 FilterList.source
+FilterList.token
 FilterListAttribute
 FilterListAttribute.init()
 FilterListAttribute.init(source:)
+FilterListAttribute.init(source:token:)
 FilterListAttribute.name
 FilterListAttribute.source
+FilterListAttribute.token
 FilterListAttribute.value
 FilterTemplate
 FilterTemplate.attribute()
@@ -776,6 +780,22 @@ FilterTemplateAttribute.init(text:)
 FilterTemplateAttribute.name
 FilterTemplateAttribute.text
 FilterTemplateAttribute.value
+FocusInto
+FocusInto.attribute()
+FocusInto.id
+FocusInto.init(id:)
+FocusIntoAttribute
+FocusIntoAttribute.id
+FocusIntoAttribute.init(id:)
+FocusIntoAttribute.name
+FocusIntoAttribute.value
+FocusOnAppear
+FocusOnAppear.attribute()
+FocusOnAppear.init()
+FocusOnAppearAttribute
+FocusOnAppearAttribute.init()
+FocusOnAppearAttribute.name
+FocusOnAppearAttribute.value
 FocusReturn
 FocusReturn.attribute()
 FocusReturn.id

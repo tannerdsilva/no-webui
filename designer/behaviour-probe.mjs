@@ -276,6 +276,21 @@ if (!clipboardGranted) {
   try { clip2 = await page.evaluate(() => navigator.clipboard.readText()); } catch { clip2 = null; }
   if (clip2 === "Copy me") ok("data-copy: an empty value copies the element's own text");
   else bad(`data-copy: empty-value copy put ${JSON.stringify(clip2)} on the clipboard`);
+  // a copy control inside a <summary>: the activation is the copy, not the
+  // disclosure. without the guard the click also toggles the details.
+  await page.click("#copy-in-summary");
+  await page.waitForTimeout(200);
+  const inSummary = await page.evaluate(async () => {
+    let clip = null;
+    try { clip = await navigator.clipboard.readText(); } catch { clip = null; }
+    return { clip, open: document.getElementById("fx-copy-details").open };
+  });
+  if (inSummary.clip === "in summary" && inSummary.open === false) {
+    ok("data-copy: a copy control inside a <summary> copies and does not toggle the disclosure");
+  } else {
+    bad(`data-copy in a summary: ${JSON.stringify(inSummary)}`);
+  }
+
   await page.waitForTimeout(2100);
   if (!(await exists("[data-webui-toast]"))) ok("data-copy: the toast is removed after 2 s");
   else bad("data-copy: the toast outlived its 2 s window");
@@ -504,6 +519,114 @@ if (!clipboardGranted) {
   if (entered && entered.ok) ok(`data-filter-insert: Enter on a focused item writes it back ("${entered.value}")`);
   else bad(`data-filter-insert: Enter left the composer at ${JSON.stringify(entered)}, expected "world "`);
 }
+
+// ---------------------------------------------------------------------------
+// 10g. data-filter-list in the token form — a composer slash menu. the query is
+//      the last whitespace-delimited token BEFORE the caret with the prefix
+//      stripped, the panel is open only while that token starts with the
+//      prefix, and a selection replaces that whole token (prefix included).
+// ---------------------------------------------------------------------------
+{
+  const wiring = await page.evaluate(() => {
+    const el = document.getElementById("fx-slash");
+    return {
+      value: el ? el.getAttribute("data-filter-list") : null,
+      insert: el ? el.getAttribute("data-filter-insert") : null,
+      clear: el ? el.hasAttribute("data-filter-clear") : null,
+      panel: el ? !!el.querySelector(".combo__panel") : false,
+    };
+  });
+  if (wiring.value === "/|#fx-slash-composer" && wiring.insert === "fx-slash-composer" && wiring.clear === false && wiring.panel) {
+    ok(`data-filter-list: the token form emits "prefix|source" (${JSON.stringify(wiring.value)}) and needs no data-filter-clear`);
+  } else {
+    bad(`data-filter-list token wiring was ${JSON.stringify(wiring)}`);
+  }
+
+  // one page-side read of the whole slash-menu state, polled to a deadline.
+  const slash = async (want, tries = 40) => {
+    let last = null;
+    for (let i = 0; i < tries; i++) {
+      last = await page.evaluate(() => {
+        const panel = document.querySelector("#fx-slash .combo__panel");
+        const box = document.getElementById("fx-slash-composer");
+        const items = Array.from(document.querySelectorAll("#fx-slash .combo__option"));
+        return {
+          open: !!panel && panel.hasAttribute("data-open"),
+          display: panel ? getComputedStyle(panel).display : null,
+          visible: items.filter((i) => !i.hidden).map((i) => (i.textContent || "").trim()),
+          value: box.value,
+          caret: box.selectionStart,
+        };
+      });
+      const openOK = want.open === undefined || want.open === last.open;
+      const visibleOK = want.visible === undefined || want.visible.join(",") === last.visible.join(",");
+      const valueOK = want.value === undefined || want.value === last.value;
+      if (openOK && visibleOK && valueOK) return { ok: true, ...last };
+      await page.waitForTimeout(50);
+    }
+    return { ok: false, ...last };
+  };
+
+  // a token without the prefix is not a query: closed, and nothing is hidden.
+  await page.fill("#fx-slash-composer", "hel");
+  const ungated = await slash({ open: false, visible: ["hello", "help", "world"] });
+  if (ungated.ok && ungated.display === "none") ok("data-filter-list token: a token without the prefix leaves the panel closed and every item visible");
+  else bad(`data-filter-list token: "hel" left ${JSON.stringify(ungated)}`);
+
+  // the prefix gates, and the query is the token with the prefix stripped.
+  await page.fill("#fx-slash-composer", "/hel");
+  const gated = await slash({ open: true, visible: ["hello", "help"] });
+  if (gated.ok && gated.display === "block") ok(`data-filter-list token: "/hel" opens the panel and filters on "hel" (visible ${gated.visible.join(",")})`);
+  else bad(`data-filter-list token: "/hel" left ${JSON.stringify(gated)}`);
+
+  // an earlier token is not the query: the LAST token is.
+  await page.fill("#fx-slash-composer", "hello /wor");
+  const lastToken = await slash({ open: true, visible: ["world"] });
+  if (lastToken.ok) ok('data-filter-list token: "hello /wor" queries the last token, not the whole field');
+  else bad(`data-filter-list token: "hello /wor" left ${JSON.stringify(lastToken)}`);
+
+  // a bare prefix is an empty query, which still opens.
+  await page.fill("#fx-slash-composer", "/");
+  const barePrefix = await slash({ open: true, visible: ["hello", "help", "world"] });
+  if (barePrefix.ok) ok("data-filter-list token: a bare prefix opens the panel with every item visible (the query is empty)");
+  else bad(`data-filter-list token: "/" left ${JSON.stringify(barePrefix)}`);
+
+  // a later token without the prefix closes it again — the caret is the scope.
+  await page.fill("#fx-slash-composer", "/hel x");
+  const later = await slash({ open: false, visible: ["hello", "help", "world"] });
+  if (later.ok) ok('data-filter-list token: "/hel x" is closed — the token at the caret ends in "x", which has no prefix');
+  else bad(`data-filter-list token: "/hel x" left ${JSON.stringify(later)}`);
+
+  // the caret decides: it moves to the end of "/hel" — so that token, not the
+  // trailing "x", is the query. the move is programmatic because synthesized
+  // caret-navigation keys do not move a caret in this headless build (a
+  // pre-existing limit of this host, not of the binder); what is measured is
+  // the binder's `selectionchange` reconciliation.
+  await page.evaluate(() => {
+    const box = document.getElementById("fx-slash-composer");
+    box.focus();
+    box.setSelectionRange(4, 4);
+  });
+  const caret = await slash({ open: true, visible: ["hello", "help"] });
+  if (caret.ok && caret.caret === 4) ok(`data-filter-list token: the token before the caret is the query (caret ${caret.caret} of ${JSON.stringify(caret.value)})`);
+  else bad(`data-filter-list token: the caret at 4 left ${JSON.stringify(caret)}`);
+
+  // a selection replaces that whole token — prefix included — and leaves the
+  // text after the caret alone. the template ends in a space, so the " x" that
+  // followed the token keeps its own leading space.
+  await page.click("#fx-slash-hello");
+  const inserted = await slash({ open: false, value: "hello  x" });
+  if (inserted.ok) ok(`data-filter-list token: the selection replaced the whole token ("${inserted.value}", caret ${inserted.caret})`);
+  else bad(`data-filter-list token: the click wrote ${JSON.stringify(inserted)}, expected "hello  x"`);
+
+  // the same write-back from a token at the end of the field: no prefix survives.
+  await page.fill("#fx-slash-composer", "hello /wor");
+  await page.click("#fx-slash-world");
+  const replaced = await slash({ open: false, value: "hello world " });
+  if (replaced.ok) ok(`data-filter-list token: "${replaced.value}" — the prefix went with the token, and the panel closed`);
+  else bad(`data-filter-list token: the end-of-field click wrote ${JSON.stringify(replaced)}, expected "hello world "`);
+}
+
 
 // ---------------------------------------------------------------------------
 // 10e. the combo's open state: `.combo__panel` is hidden unless it carries
@@ -904,6 +1027,47 @@ if (!clipboardGranted) {
   if (metaSubmitted?.ok) ok('data-submit-on-enter="meta": Meta+Enter submits the textarea (server echoed the field)');
   else bad(`data-submit-on-enter="meta": Meta+Enter did not submit — ${JSON.stringify(metaSubmitted)}`);
 }
+
+// ---------------------------------------------------------------------------
+// 13b. data-clear-on-submit + data-draft-id on one control: a successful submit
+//      clears the control AND its draft store, so the replacing patch that
+//      answers the submit cannot refill the field through syncDrafts().
+// ---------------------------------------------------------------------------
+{
+  await page.click("#fx-clear-input");
+  await page.keyboard.type("submit me");
+  const stored = await page.evaluate(() => {
+    try { return sessionStorage.getItem("webui-draft:fx-clear"); } catch { return "throw"; }
+  });
+  if (stored === "submit me") ok("data-draft-id: typing persists under webui-draft:fx-clear before the submit");
+  else bad(`data-draft-id: webui-draft:fx-clear held ${JSON.stringify(stored)} before the submit`);
+
+  await page.keyboard.press("Enter");
+  const cleared = await settled(() => {
+    const box = document.getElementById("fx-clear-input");
+    const out = (document.getElementById("fx-clear-out")?.textContent || "").trim();
+    let store = "throw";
+    try { store = sessionStorage.getItem("webui-draft:fx-clear"); } catch { store = "throw"; }
+    return {
+      ok: !!box && out.includes("submit me") && box.value === "" && store === null,
+      out, value: box ? box.value : null, store,
+    };
+  });
+  if (cleared?.ok) ok("data-clear-on-submit: the submit cleared the control, removed its draft entry, and the replacing patch left it empty");
+  else bad(`data-clear-on-submit: after the submit ${JSON.stringify(cleared)}`);
+
+  // the store is still a store: typing again repopulates the same key.
+  await page.click("#fx-clear-input");
+  await page.keyboard.type("again");
+  const again = await settled(() => {
+    let store = "throw";
+    try { store = sessionStorage.getItem("webui-draft:fx-clear"); } catch { store = "throw"; }
+    return { ok: store === "again", store };
+  });
+  if (again?.ok) ok("data-draft-id: typing after the submit repopulates webui-draft:fx-clear (the fix removes the entry, not the behavior)");
+  else bad(`data-draft-id: after typing "again" the store held ${JSON.stringify(again?.store)}`);
+}
+
 
 // ---------------------------------------------------------------------------
 // 14. data-dismiss — one LIFO stack; Escape closes the topmost, an outside
@@ -1314,6 +1478,129 @@ if (!clipboardGranted) {
   if (focus === "reader") ok("focus return by id: focus moved before the patch lands is not stolen");
   else bad(`focus theft: activeElement after the patch was ${JSON.stringify(focus)} (expected reader)`);
 }
+
+// ---------------------------------------------------------------------------
+// 18f. data-focus-into — a region a patch inserts focuses the id it names, but
+//      only while the live focus is vacant or OUTSIDE the region; the empty
+//      value focuses the region itself through the tabindex the binder adds.
+// ---------------------------------------------------------------------------
+{
+  await page.click("#fx-into-open");
+  const named = await settled(() => {
+    const dialog = document.getElementById("fx-into-dialog");
+    return {
+      ok: !!dialog && document.activeElement?.id === "fx-into-confirm",
+      dialog: !!dialog, active: document.activeElement?.id ?? null,
+    };
+  });
+  if (named?.ok) ok("data-focus-into: the patch-inserted confirm focuses the field it names (#fx-into-confirm)");
+  else bad(`data-focus-into: after the open patch ${JSON.stringify(named)}`);
+
+  // an outer live field does not stop it — that is the "outside the region"
+  // half. the trigger click is synthetic so the gesture itself moves no focus.
+  await page.focus("#fx-appear-other");
+  const held = await page.evaluate(() => document.activeElement?.id ?? null);
+  await page.evaluate(() => document.getElementById("fx-into-self-open").click());
+  const self = await settled(() => {
+    const box = document.getElementById("fx-into-self");
+    return {
+      ok: !!box && document.activeElement?.id === "fx-into-self" && box.getAttribute("tabindex") === "-1",
+      active: document.activeElement?.id ?? null, tabindex: box ? box.getAttribute("tabindex") : null,
+    };
+  });
+  if (held === "fx-appear-other" && self?.ok) ok("data-focus-into: the empty value focuses the region itself, and a live field outside it does not win");
+  else bad(`data-focus-into: the empty value left ${JSON.stringify({ held, self })}`);
+
+  // closing is the ordinary removal path: no binder fires and nothing is left.
+  await page.evaluate(() => document.getElementById("fx-into-self-close").click());
+  const gone = await settled(() => ({ ok: !document.getElementById("fx-into-self"), present: !!document.getElementById("fx-into-self") }));
+  if (gone?.ok) ok("data-focus-into: closing removes the region through the ordinary patch path (no binder left behind)");
+  else bad(`data-focus-into: after the close ${JSON.stringify(gone)}`);
+}
+
+// ---------------------------------------------------------------------------
+// 18g. data-focus-on-appear — the `+` control patches the composer into a slot;
+//      with nothing holding focus it takes it and puts the caret at the end, and
+//      with a live field elsewhere it declines.
+// ---------------------------------------------------------------------------
+{
+  await page.evaluate(() => { if (document.activeElement && document.activeElement.blur) document.activeElement.blur(); });
+  await page.evaluate(() => document.getElementById("fx-appear-add").click());
+  const appeared = await settled(() => {
+    const box = document.getElementById("fx-appear-composer");
+    return {
+      ok: !!box && document.activeElement?.id === "fx-appear-composer" && box.selectionStart === box.value.length,
+      active: document.activeElement?.id ?? null, caret: box ? box.selectionStart : null, value: box ? box.value : null,
+    };
+  });
+  if (appeared?.ok) ok(`data-focus-on-appear: the patch-inserted composer takes focus with the caret at the end (${appeared.caret}/${appeared.value.length})`);
+  else bad(`data-focus-on-appear: after the + patch ${JSON.stringify(appeared)}`);
+
+  // the slot is replaced again with a live field outside it: no yank.
+  await page.focus("#fx-appear-other");
+  await page.keyboard.type("keep me");
+  await page.evaluate(() => document.getElementById("fx-appear-add").click());
+  await page.waitForTimeout(500);
+  const kept = await page.evaluate(() => ({
+    active: document.activeElement?.id ?? null,
+    value: document.getElementById("fx-appear-other").value,
+    composer: !!document.getElementById("fx-appear-composer"),
+  }));
+  if (kept.active === "fx-appear-other" && kept.value === "keep me" && kept.composer) ok("data-focus-on-appear: a live field keeps focus and its text across the patch (no yank)");
+  else bad(`data-focus-on-appear: the live field lost ${JSON.stringify(kept)}`);
+}
+
+// ---------------------------------------------------------------------------
+// 18h. the boot half of both binders, on pages where the boot focus is
+//      unambiguous: `?boot=appear` renders the marker at load (caret at the
+//      end), `?boot=keep` has a live field inside a focus-into region, focused
+//      by `autofocus` before the extension binds (never yank).
+// ---------------------------------------------------------------------------
+{
+  const bootPage = await context.newPage();
+  const bootErrors = [];
+  bootPage.on("pageerror", (e) => bootErrors.push(String(e)));
+  await bootPage.goto(BASE + "/behaviour?boot=appear", { waitUntil: "domcontentloaded" });
+  await bootPage.waitForTimeout(900);
+  const booted = await bootPage.evaluate(() => {
+    const box = document.getElementById("fx-boot-composer");
+    return { active: document.activeElement?.id ?? null, caret: box ? box.selectionStart : null, length: box ? box.value.length : null };
+  });
+  if (booted.active === "fx-boot-composer" && booted.caret === booted.length && booted.length === 9) {
+    ok(`data-focus-on-appear: a composer already rendered at boot takes focus with the caret at the end (${booted.caret}/${booted.length})`);
+  } else {
+    bad(`data-focus-on-appear at boot: ${JSON.stringify(booted)}`);
+  }
+  if (bootErrors.length === 0) ok("data-focus-on-appear: no uncaught page exceptions on the boot page");
+  else bad(`data-focus-on-appear boot page errors: ${JSON.stringify(bootErrors)}`);
+  await bootPage.close();
+
+  // the live-field race: the extension's fetch is held so the page can park the
+  // caret inside the region BEFORE the bind pass runs. a binder that focused its
+  // target unconditionally would yank it; the guard is meant to leave it alone.
+  const keepPage = await context.newPage();
+  await keepPage.route("**/webui-engine-ext.js", async (route) => {
+    await new Promise((r) => setTimeout(r, 1500));
+    await route.continue();
+  });
+  await keepPage.goto(BASE + "/behaviour?boot=keep", { waitUntil: "domcontentloaded" });
+  await keepPage.focus("#fx-into-keep-a");
+  const parked = await keepPage.evaluate(() => document.activeElement?.id ?? null);
+  await keepPage.waitForTimeout(2400);
+  const keep = await keepPage.evaluate(() => ({
+    active: document.activeElement?.id ?? null,
+    a: document.getElementById("fx-into-keep-a")?.value ?? null,
+    targetTabindex: document.getElementById("fx-into-keep-b")?.getAttribute("tabindex") ?? null,
+    extLoaded: typeof window.WebUIEngineExt === "object",
+  }));
+  if (parked === "fx-into-keep-a" && keep.active === "fx-into-keep-a" && keep.a === "live" && keep.targetTabindex === null && keep.extLoaded) {
+    ok("data-focus-into: a live field inside the region keeps focus when the extension binds (the binder never yanks)");
+  } else {
+    bad(`data-focus-into with a live field at bind: parked ${JSON.stringify(parked)}, ${JSON.stringify(keep)}`);
+  }
+  await keepPage.close();
+}
+
 
 // ---------------------------------------------------------------------------
 // 19. data-theme-choice — the existing reconciliation, extended not duplicated.
