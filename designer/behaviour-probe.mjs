@@ -387,6 +387,63 @@ if (!clipboardGranted) {
 }
 
 // ---------------------------------------------------------------------------
+// 7b. data-copy when the write FAILS. a rejecting `navigator.clipboard.writeText`
+//     (and a missing API whose legacy path also refuses) must toast the
+//     failure, not `Copied` — the 3.1.0 release called this unprovokable; the
+//     injection below is what makes it provokable. the clipboard is restored
+//     afterwards so the copy path itself is re-measured, not assumed.
+// ---------------------------------------------------------------------------
+{
+  const toastText = () => page.evaluate(() => (document.querySelector("[data-webui-toast]")?.textContent || "").trim());
+
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      get: () => ({ writeText: () => Promise.reject(new Error("denied by the probe")) }),
+    });
+  });
+  await page.click("#copy-fail");
+  await page.waitForTimeout(300);
+  const refused = await toastText();
+  if (refused === "Copy failed") {
+    ok('data-copy: a rejecting clipboard.writeText toasts the FAILURE ("Copy failed"), not Copied');
+  } else {
+    bad(`data-copy: the rejected write toasted ${JSON.stringify(refused)}, expected "Copy failed"`);
+  }
+
+  // no clipboard API at all, and the legacy execCommand refuses too — the shape
+  // of a host where nothing can copy.
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, "clipboard", { configurable: true, get: () => undefined });
+    document.execCommand = () => false;
+  });
+  await page.click("#copy-nocb");
+  await page.waitForTimeout(300);
+  const absent = await toastText();
+  if (absent === "Copy failed") {
+    ok('data-copy: a missing navigator.clipboard (and a refusing legacy path) toasts the FAILURE, not Copied');
+  } else {
+    bad(`data-copy: the missing-API copy toasted ${JSON.stringify(absent)}, expected "Copy failed"`);
+  }
+
+  await page.evaluate(() => { delete navigator.clipboard; delete document.execCommand; });
+  if (clipboardGranted) {
+    await page.click("#copy-text");
+    await page.waitForTimeout(200);
+    const restored = await page.evaluate(async () => {
+      let clip = null;
+      try { clip = await navigator.clipboard.readText(); } catch { clip = null; }
+      return { clip, toast: (document.querySelector("[data-webui-toast]")?.textContent || "").trim() };
+    });
+    if (restored.clip === "pinned text" && restored.toast === "Copied") {
+      ok("data-copy: with the clipboard restored, the same control copies and toasts Copied again (the failure path is not a regression)");
+    } else {
+      bad(`data-copy: after restoring the clipboard ${JSON.stringify(restored)}`);
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 8. data-reorder — synthetic drag reorders, writes the id list, fires change.
 // ---------------------------------------------------------------------------
 {

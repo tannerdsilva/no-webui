@@ -30,16 +30,17 @@ window.WebUIEngineExt = (function () {
       }, 2000);
     }
 
-    function copyText(text, done) {
+    function copyText(text) {
       var area = document.createElement('textarea');
       area.value = text;
       area.setAttribute('readonly', '');
       area.style.position = 'fixed';
       area.style.opacity = '0';
       document.body.appendChild(area);
-      try { area.select(); document.execCommand('copy'); } catch (e) { }
+      var copied = false;
+      try { area.select(); copied = document.execCommand('copy') !== false; } catch (e) { copied = false; }
       document.body.removeChild(area);
-      done();
+      return copied;
     }
 
     function relText(ms) {
@@ -422,13 +423,18 @@ window.WebUIEngineExt = (function () {
       el.addEventListener('click', function (event) {
         var text = el.getAttribute('data-copy') || el.textContent || '';
         var done = function () { toast('Copied'); };
+        var failed = function () { toast('Copy failed'); };
         var summary = el.closest ? el.closest('summary') : null;
         if (summary && summary !== el) { event.preventDefault(); }
         if (navigator.clipboard && navigator.clipboard.writeText) {
-          navigator.clipboard.writeText(text).then(done, function () { copyText(text, done); });
+          try {
+            navigator.clipboard.writeText(text).then(done, failed);
+          } catch (e) {
+            failed();
+          }
           return;
         }
-        copyText(text, done);
+        if (copyText(text)) { done(); } else { failed(); }
       });
     };
 

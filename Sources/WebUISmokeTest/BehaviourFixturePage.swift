@@ -575,7 +575,7 @@ func renderBehaviourPage(
 	</section>
 
 	<section class="fx-sec"><h2>clipboard</h2>
-	<div class="fx-row"><button id="copy-text" type="button"\(Clipboard(text: "pinned text").attributeText)>Copy the pinned text</button><button id="copy-empty" type="button"\(Clipboard().attributeText)>Copy me</button></div>
+	<div class="fx-row"><button id="copy-text" type="button"\(Clipboard(text: "pinned text").attributeText)>Copy the pinned text</button><button id="copy-empty" type="button"\(Clipboard().attributeText)>Copy me</button><button id="copy-fail" type="button"\(Clipboard(text: "unreachable").attributeText)>Copy with a refusing clipboard</button><button id="copy-nocb" type="button"\(Clipboard(text: "unreachable too").attributeText)>Copy with no clipboard API</button></div>
 	<details id="fx-copy-details" class="fx-details"><summary id="fx-copy-summary">a disclosure holding a copy control<button id="copy-in-summary" type="button" class="fx-row"\(Clipboard(text: "in summary").attributeText)>Copy inside a summary</button></summary><p class="fx-muted">the copy control's activation does not also toggle this disclosure.</p></details>
 	</section>
 
