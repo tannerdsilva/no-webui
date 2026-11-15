@@ -1450,6 +1450,7 @@ window.WebUIEngine = (function () {
   var instance = null;
 
   var modalFocus = null;
+  var modalDeclared = null;
   function focusablesIn(root) {
     var sel = 'button, [href], input, select, textarea, [tabindex], summary';
     var list = [];
@@ -1460,11 +1461,22 @@ window.WebUIEngine = (function () {
     }
     return list;
   }
+  function declaredReturnIn(root) {
+    var el = root.querySelector('[data-focus-return]');
+    if (!el) { return null; }
+    return el.getAttribute('data-focus-return') || el.id || null;
+  }
   function restoreModalFocus() {
-    if (!modalFocus) return;
+    if (document.querySelector('.modal-overlay')) { return; }
+    if (!modalFocus && !modalDeclared) { return; }
     var opener = modalFocus;
+    var declared = modalDeclared;
     modalFocus = null;
-    if (document.querySelector('.modal-overlay')) return;
+    modalDeclared = null;
+    var target = declared ? document.getElementById(declared) : null;
+    if (target && typeof target.focus === 'function') {
+      try { target.focus(); return; } catch (e) { }
+    }
     if (opener && typeof opener.focus === 'function') {
       try { opener.focus(); } catch (e) { }
     }
@@ -1475,7 +1487,7 @@ window.WebUIEngine = (function () {
     if (!from || !from.closest) return;
     var fromModal = from.closest('.modal-overlay');
     var toModal = to && to.closest ? to.closest('.modal-overlay') : null;
-    if (!fromModal && toModal) { modalFocus = from; }
+    if (!fromModal && toModal) { modalFocus = from; modalDeclared = declaredReturnIn(toModal); }
   }, true);
   document.addEventListener('keydown', function (e) {
     if (e.key !== 'Tab') return;

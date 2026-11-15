@@ -39,6 +39,7 @@ final class BehaviourFixtureState: Sendable {
 		var bucketCollapsed = false
 		var rovingRebinds = 0
 		var slashSubmits = 0
+		var modal = 0
 	}
 	private let values = Mutex(Values())
 
@@ -146,6 +147,13 @@ final class BehaviourFixtureState: Sendable {
 	var slashSubmits: Int {
 		get { values.withLock { $0.slashSubmits } }
 		set { values.withLock { $0.slashSubmits = newValue } }
+	}
+
+	/// the modal focus-return fixture: 0 closed, 1 a declaration that resolves,
+	/// 2 a declaration that names an id nothing renders.
+	var modal: Int {
+		get { values.withLock { $0.modal } }
+		set { values.withLock { $0.modal = newValue } }
 	}
 
 	/// the last text a clear-on-submit form sent, as the region renders it.
@@ -327,6 +335,30 @@ func behaviourRovingBucketHTML(_ state: BehaviourFixtureState) -> String {
 	<details id="fx-bucket-2" open><summary id="fx-bucket-2-sum">bucket 2</summary><button id="rov-k3" type="button">k3</button><button id="rov-k4" type="button">k4</button></details>
 	</div>
 	</section>
+	"""
+}
+
+/// the modal focus-return fixture: a real `.modal-overlay` opened from a
+/// button, whose close control DECLARES where focus goes. the close control
+/// carries no id on purpose — the opener memo is keyed by the control's own id,
+/// so with none it cannot be the mechanism, and only the pre-dialog memory and
+/// the declaration are in play. mode 2 declares an id nothing renders, which is
+/// the memory's turn as the fallback.
+func behaviourModalSlotHTML(_ state: BehaviourFixtureState) -> String {
+	guard state.modal != 0 else { return "<div id=\"fx-modal-slot\"></div>" }
+	let declared = state.modal == 2 ? "fx-modal-gone" : "fx-modal-return"
+	return """
+	<div id="fx-modal-slot"><div id="fx-modal" class="modal-overlay" role="dialog" aria-label="declared return dialog"><div class="modal"><div class="modal__header"><h2 class="modal__title">declared return</h2><button type="button" class="modal__close"\(DismissStack().attributeText)\(FocusReturn(id: declared).attributeText) data-component-id="fx-modal-close" data-event="click">Close</button></div>
+	<div class="modal__body"><p class="fx-muted">the close control declares <code>#\(declared)</code>; the engine's pre-dialog memory is the fallback.</p><input id="fx-modal-field" type="text" aria-label="modal field" value="park focus here"></div></div></div></div>
+	"""
+}
+
+func behaviourModalReturnHTML(_ state: BehaviourFixtureState) -> String {
+	return """
+	<section id="fx-modal-host" class="fx-sec"><h2>modal focus return · declaration beats memory</h2>
+	<p class="fx-muted">the dialog opens from <code>#fx-modal-open</code> — the control the engine remembers before the dialog — and its close control declares <code>#fx-modal-return</code>. <code>Escape</code> closes it through the dismiss control and the server's patch, and focus goes to the DECLARATION while that control exists; the second button opens a dialog whose declaration names an id nothing renders, so the memory is the fallback.</p>
+	<div class="fx-row"><button id="fx-modal-open" type="button" data-component-id="fx-modal-open" data-event="click">Open the modal</button><button id="fx-modal-return" type="button">The declared return</button><button id="fx-modal-open-gone" type="button" data-component-id="fx-modal-open-gone" data-event="click">Open with a missing declaration</button><p class="fx-muted">modal: \(state.modal == 0 ? "closed" : "open")</p></div>
+	<div id="fx-modal-slot">\(behaviourModalSlotHTML(state))</div></section>
 	"""
 }
 
@@ -616,6 +648,8 @@ func renderBehaviourPage(
 	</form>
 	</section>
 
+	\(behaviourModalReturnHTML(state))
+
 	\(behaviourIntoHTML(state))
 
 	\(behaviourAppearHTML(state))
@@ -758,6 +792,21 @@ struct BehaviourPageResponder: Responder {
 			state.slashSubmits += 1
 			return .fragments([FragmentUpdate(id: "fx-slash2-out", html: "<p id=\"fx-slash2-out\" class=\"fx-muted\">submits: \(state.slashSubmits)</p>")])
 		}, for: ComponentID("fx-slash-submit"), in: session)
+		// the modal focus-return fixture: open, open-with-a-dead-declaration,
+		// and the close both open buttons share. every answer replaces the
+		// host, so the dialog is removed by a patch (D5.3's path).
+		router.register(outcome: { _ in
+			state.modal = 1
+			return .fragments([FragmentUpdate(id: "fx-modal-slot", html: behaviourModalSlotHTML(state))])
+		}, for: ComponentID("fx-modal-open"), in: session)
+		router.register(outcome: { _ in
+			state.modal = 2
+			return .fragments([FragmentUpdate(id: "fx-modal-slot", html: behaviourModalSlotHTML(state))])
+		}, for: ComponentID("fx-modal-open-gone"), in: session)
+		router.register(outcome: { _ in
+			state.modal = 0
+			return .fragments([FragmentUpdate(id: "fx-modal-slot", html: behaviourModalSlotHTML(state))])
+		}, for: ComponentID("fx-modal-close"), in: session)
 		// focus into: opening inserts the dialog (a patch, so the binder runs on
 		// a fresh node); closing replaces the host again, which removes the
 		// dialog. the same handler serves both dialog shapes.

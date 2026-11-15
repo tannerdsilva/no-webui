@@ -1663,6 +1663,49 @@ if (!clipboardGranted) {
 }
 
 // ---------------------------------------------------------------------------
+// 18i. `restoreModalFocus` precedence — a `.modal-overlay` remembers the
+//      control that held focus before the dialog, and the close control may
+//      DECLARE where focus goes. the declaration wins while its target exists;
+//      the memory is the fallback. the close control has no id, so the opener
+//      memo (keyed by the control's own id) cannot be the mechanism here.
+// ---------------------------------------------------------------------------
+{
+  const open = async (id) => {
+    await page.focus("#" + id);
+    await page.keyboard.press("Enter");
+    await page.waitForFunction(() => !!document.getElementById("fx-modal"), null, { timeout: 4000 }).catch(() => {});
+    await page.focus("#fx-modal-field");
+    return page.evaluate(() => document.activeElement?.id ?? null);
+  };
+  const close = async () => {
+    await page.keyboard.press("Escape");
+    await page.waitForFunction(() => !document.getElementById("fx-modal"), null, { timeout: 4000 }).catch(() => {});
+    await page.waitForTimeout(120);
+    return page.evaluate(() => ({
+      dialog: !!document.getElementById("fx-modal"),
+      focus: document.activeElement?.id ?? null,
+    }));
+  };
+
+  const parkedA = await open("fx-modal-open");
+  const afterA = await close();
+  if (parkedA === "fx-modal-field" && !afterA.dialog && afterA.focus === "fx-modal-return") {
+    ok("modal focus return: the declaration on the close control wins over the pre-dialog memory (#fx-modal-return, not #fx-modal-open)");
+  } else {
+    bad(`modal focus return: parked ${JSON.stringify(parkedA)}, after Escape ${JSON.stringify(afterA)} — expected the declared #fx-modal-return`);
+  }
+
+  // the declaration names an id nothing renders: the memory is the fallback.
+  const parkedB = await open("fx-modal-open-gone");
+  const afterB = await close();
+  if (parkedB === "fx-modal-field" && !afterB.dialog && afterB.focus === "fx-modal-open-gone") {
+    ok("modal focus return: a declaration whose target is gone falls back to the pre-dialog memory (#fx-modal-open-gone)");
+  } else {
+    bad(`modal focus return: parked ${JSON.stringify(parkedB)}, after Escape with a dead declaration ${JSON.stringify(afterB)} — expected the memory #fx-modal-open-gone`);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 18f. data-focus-into — a region a patch inserts focuses the id it names, but
 //      only while the live focus is vacant or OUTSIDE the region; the empty
 //      value focuses the region itself through the tabindex the binder adds.
