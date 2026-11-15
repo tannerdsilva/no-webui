@@ -252,9 +252,32 @@ struct WebUIBudgetPlugin: CommandPlugin {
     ///   shell        1,514 raw /    539 gz   (≤   1,700 /    650 — unchanged)
     /// both extension ceilings move to the smallest hundred strictly above the
     /// measurement — 31,100 / 7,400 (73 raw / 38 gz of headroom, never padded).
+    ///
+    /// re-pinned 2026-11-15 (3.1.1 — the five focus/roving/copy contracts):
+    ///
+    /// the extension gained `rovingKids`' reachability filter (a kid inside a
+    /// collapsed bucket is no longer a tab stop), `FocusInto`/`data-skip-to`'s
+    /// intrinsic-focusability guard, and the token palette's keyboard half (the
+    /// highlight, its `aria-activedescendant`, the arrow walk and the Enter
+    /// that stops the submit); `data-copy` reports a refused write instead of
+    /// claiming success. the engine gained `restoreModalFocus`'s declaration
+    /// precedence (the id the close control names wins over the pre-dialog
+    /// memory, which is the fallback) and keeps that memory until the overlay
+    /// is actually gone. measured on this tree, from the asset tool's manifest
+    /// (`served`):
+    ///   engine      80,120 raw / 18,534 gz   (was pinned 79,600 / 18,500;
+    ///                                         +533 raw / +88 gz)
+    ///   engine-ext  34,531 raw /  8,073 gz   (was pinned 31,100 / 7,400;
+    ///                                         +3,504 raw / +711 gz)
+    ///   sheet      325,798 raw / 45,635 gz   (≤ 335,000 / 49,500 — unchanged;
+    ///                                         +32 raw is the one added selector)
+    ///   shell        1,514 raw /    539 gz   (≤   1,700 /    650 — unchanged)
+    /// both the engine's and the extension's ceilings move to the smallest
+    /// hundred strictly above the measurement — 80,200 / 18,600 and
+    /// 34,600 / 8,100 (80 raw / 66 gz and 69 raw / 27 gz of headroom).
     private static let ceilings: [Ceiling] = [
-        Ceiling(surface: "engine", label: "webui-engine.js", raw: 79_600, gz: 18_500),
-        Ceiling(surface: "engineExt", label: "webui-engine-ext.js", raw: 31_100, gz: 7_400),
+        Ceiling(surface: "engine", label: "webui-engine.js", raw: 80_200, gz: 18_600),
+        Ceiling(surface: "engineExt", label: "webui-engine-ext.js", raw: 34_600, gz: 8_100),
         Ceiling(surface: "sheet", label: "design-system.css", raw: 335_000, gz: 49_500),
         Ceiling(surface: "shell", label: "webui-shell.js", raw: 1_700, gz: 650),
     ]

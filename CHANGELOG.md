@@ -2,6 +2,62 @@
 
 all notable changes to this project are documented here.
 
+## [3.1.1] — 2026-11-15 — the five contracts a consumer measured
+
+a patch release with no new public surface: five defects in emissions that were
+already shipping, each one measured in a consumer before it was fixed here, each
+one now pinned by a probe row that failed first. `swift test` 1,956 / 0, `budget`
+PASS (both the engine's and the extension's ceilings moved — see below),
+`behaviour-probe` 166/166, frozen surface unchanged at 5,566 symbols.
+
+- **a roving group counts only the kids it can render** — `data-roving` bound
+  every `button`/`[href]`/input in the group, rendered or not. collapsing a
+  bucket that held the active row and re-binding left the group's one
+  `tabindex="0"` on a row inside the collapsed `<details>`: zero tabbable rows,
+  and Tab left the list entirely. the binder now drops candidates that are not
+  rendered — `checkVisibility` where the engine has it (`visibilityProperty` +
+  `contentVisibilityAuto`, which is what catches a closed `<details>`: its
+  content keeps a full-size box under `content-visibility:hidden`), else
+  `display:none` / `visibility:hidden` / zero client rects. excluded kids still
+  carry `tabindex="-1"` so re-opening the bucket cannot add a second tab stop,
+  and a group with nothing rendered (a combo panel before its first open) keeps
+  the full set so the mount-time tab stop exists.
+- **`FocusInto` no longer stamps a natively focusable target** — `data-focus-into`
+  and `data-skip-to` added `tabindex="-1"` to any target without the attribute,
+  including a `button` or an `a[href]`, quietly taking it out of the tab order it
+  already belonged to (consumers compensated with `tabindex="0"`). both sites now
+  stamp only when the target has no intrinsic focusability (`a[href]`, `button`,
+  `input`, `select`, `textarea`, `[tabindex]` are left alone); the `div`/region
+  case still gets `-1`, which is what makes the move land.
+- **the token palette answers Enter from the source field** — the gated
+  `FilterList(token:)` form selected on Enter only when a `[role=option]` was the
+  active element, so with the caret in the composer Enter fell through to
+  `data-submit-on-enter` and sent the half-typed command. the panel now carries a
+  highlight (`data-highlight` on the lit row, `aria-activedescendant` on the
+  field), established on the first visible row when the panel opens or the query
+  changes; `ArrowDown`/`ArrowUp` in the field walk the visible rows and Enter
+  selects the lit one and stops the event before the submit handler sees it. the
+  whole-field form is untouched — it is a filter, not a menu.
+- **a modal's declared return beats the pre-dialog memory** — `restoreModalFocus`
+  restored only the control that held focus before the dialog, and dropped that
+  memory on its first call even while the overlay was still up, so an Escape that
+  closed the dialog by a server patch restored nothing. the engine now reads the
+  `data-focus-return` declaration on the close control when focus enters the
+  overlay and restores in precedence order: the declared id while it resolves,
+  the memory as the fallback. the memory is cleared only once the overlay is gone.
+- **a refused copy toasts the failure** — a rejecting
+  `navigator.clipboard.writeText` fell through to the legacy `copyText` and its
+  `done()` ran unconditionally, so the toast said `Copied` whether or not
+  anything reached the clipboard. a rejection is now an answer (`Copy failed`, no
+  legacy retry), and the legacy path reports what `execCommand('copy')` actually
+  returned. 3.1.0 declined this row as unprovokable; it is provokable by
+  injecting a rejecting `navigator.clipboard` into the probe page before the
+  click.
+
+the shipped bytes moved, so both moving ceilings were re-pinned to the smallest
+hundred strictly above the measurement (never padded): engine 80,200 raw /
+18,600 gz, extension 34,600 / 8,100, sheet and shell unchanged.
+
 ## [3.1.0] — 2026-11-14 — the four behaviors a consumer's last overlay needed
 
 measured gaps, not conveniences: each of these was blocking one of a consumer's

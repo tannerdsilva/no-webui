@@ -412,8 +412,13 @@ one missing typed door, `DrawerToggle`. `3.1.0` is additive on top of the
 closed program: `FilterList(token:)`'s prefix-gated form, `FocusInto`,
 `FocusOnAppear`, and the draft-store clear that rides with
 `data-clear-on-submit` — four behaviors a consumer's last hand-written client
-lines needed, none of them a change to an existing emission. Nothing in either
-program ships in a patch. The `on.afterPatch`/`on.ready` seam is supported
+lines needed, none of them a change to an existing emission. `3.1.1` is a patch
+by intent, not by size: five contracts the consumer measured (a roving group
+must skip kids it cannot render, `FocusInto` must not stamp a natively focusable
+target, the token palette must answer Enter from the source field, a modal's
+declared return must beat the pre-dialog memory, a refused copy must toast the
+failure) — every one a defect in an existing emission, and no new public
+surface. Nothing in either program ships in a patch. The `on.afterPatch`/`on.ready` seam is supported
 through `2.10.0` and deprecated at `3.0.0`; `3.0.0` is also the
 consumer-adoption close (the consumer's overlay file deleted). Consumer-side
 deletions are the consumer's workstream, not a framework change.
@@ -442,6 +447,18 @@ shell 1,514 / 539 (pin 1,700 / 650); `behaviour-probe` 149/149 on `/behaviour`
 including the two boot pages (`?boot=appear`, `?boot=keep`) the focus binders'
 boot half needs. The engine did not grow a byte in this release: the draft-store
 fix lives in the extension, where `onDocSubmit` is.
+
+**the 3.1.1 baseline (measured 2026-11-15):** `swift test` 1,956 tests across
+nine executables / 0 failures; frozen surface **5,566 symbols across 11 modules
+— unchanged**, because 3.1.1 moves no public API (its two Swift edits are doc
+comments and test fixtures); `budget` PASS with engine 80,120 raw / 18,534 gz
+(pin 80,200 / 18,600), extension 34,531 / 8,073 (pin 34,600 / 8,100), sheet
+325,798 / 45,635 (pin 335,000 / 49,500), shell 1,514 / 539 (pin 1,700 / 650);
+`behaviour-probe` 166/166 on `/behaviour` (+17 rows over 3.1.0: the collapsed
+bucket, the natively focusable `FocusInto` target, the token form's keyboard
+half, the modal declaration/fallback pair and the two copy failures). 3.1.1 is
+the first release whose ceiling moved for the ENGINE as well as the extension:
+`restoreModalFocus`'s precedence lives in `webui-engine.js`.
 
 ## change discipline
 
