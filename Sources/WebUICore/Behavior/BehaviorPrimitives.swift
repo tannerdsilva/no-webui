@@ -240,7 +240,11 @@ public struct FocusReturnAttribute: AttributeRepresentable {
 /// using inside the region is never yanked, while a confirm dialog inserted by a
 /// patch takes the caret the reader expects without fighting an outer field.
 /// a target with no `tabindex` gets `tabindex="-1"`, the same door
-/// `data-skip-to` uses, so naming a `div` is not a dead promise.
+/// `data-skip-to` uses, so naming a `div` is not a dead promise. a target that
+/// is focusable on its own — `a[href]`, `button`, `input`, `select`, `textarea`,
+/// `[tabindex]` — is focused and **stamped with nothing**: it already has a
+/// place in the tab order, and `-1` would quietly take it out of one (the
+/// compensation this replaces was a consumer-side `tabindex="0"`).
 ///
 /// it runs in the bind pass (boot, and after every patch that inserts or
 /// replaces the region), and the engine's `data-focus-return` restore runs
@@ -481,7 +485,11 @@ public struct TableEnhanceAttribute: AttributeRepresentable {
 ///
 /// a skip link is an `<a href="#main">` that exists so a keyboard reader does
 /// not tab through the whole chrome; the engine moves real focus, which is what
-/// makes the target reachable afterwards.
+/// makes the target reachable afterwards. a target that is focusable on its own
+/// (`a[href]`, `button`, `input`, `select`, `textarea`, `[tabindex]`) keeps its
+/// own tab order: the stamp is only for a target that has none of that — a
+/// `div` or a `main` — where `tabindex="-1"` is what makes the move land
+/// without adding a tab stop.
 public struct SkipTarget: Behavior {
 	/// the id focus moves to.
 	public let id: String

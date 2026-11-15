@@ -1606,6 +1606,27 @@ if (!clipboardGranted) {
   const gone = await settled(() => ({ ok: !document.getElementById("fx-into-self"), present: !!document.getElementById("fx-into-self") }));
   if (gone?.ok) ok("data-focus-into: closing removes the region through the ordinary patch path (no binder left behind)");
   else bad(`data-focus-into: after the close ${JSON.stringify(gone)}`);
+
+  // a target that is focusable on its own keeps its own tab order: the binder
+  // focuses it and stamps nothing. stamping `tabindex="-1"` here is what took a
+  // button out of the tab order and forced consumers to re-add `tabindex="0"`.
+  await page.evaluate(() => document.getElementById("fx-into-focusable-open").click());
+  const native = await settled(() => {
+    const button = document.getElementById("fx-into-button");
+    return {
+      ok: !!button && document.activeElement?.id === "fx-into-button",
+      active: document.activeElement?.id ?? null,
+      tabindex: button ? button.getAttribute("tabindex") : "absent",
+      has: button ? button.hasAttribute("tabindex") : null,
+    };
+  });
+  if (native?.ok && native.has === false) {
+    ok("data-focus-into: a natively focusable target is focused and gets NO tabindex stamp (button keeps its own tab order)");
+  } else {
+    bad(`data-focus-into: the button target came back ${JSON.stringify(native)} — expected focus on #fx-into-button and no tabindex attribute`);
+  }
+  await page.evaluate(() => document.getElementById("fx-into-button").click());
+  await page.waitForFunction(() => !document.getElementById("fx-into-focusable"), null, { timeout: 4000 }).catch(() => {});
 }
 
 // ---------------------------------------------------------------------------

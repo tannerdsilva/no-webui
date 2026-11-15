@@ -290,13 +290,17 @@ func behaviourIntoHTML(_ state: BehaviourFixtureState) -> String {
 			dialog = """
 			<div id="fx-into-self" class="fx-layer" role="dialog" aria-label="self focusing region"\(FocusInto().attributeText)><p class="fx-muted">the empty value is the region itself; the engine adds <code>tabindex="-1"</code> so the promise lands.</p><button id="fx-into-self-close" type="button" data-component-id="fx-into-close" data-event="click">Close</button></div>
 			"""
+		case 3:
+			dialog = """
+			<div id="fx-into-focusable" class="fx-layer" role="dialog" aria-label="natively focusable target"\(FocusInto(id: "fx-into-button").attributeText)><p class="fx-muted">the named target is a <code>button</code>: focusable on its own, so the binder focuses it and stamps no <code>tabindex</code>.</p><button id="fx-into-button" type="button" data-component-id="fx-into-close" data-event="click">Natively focusable</button><input id="fx-into-third" type="text" aria-label="third field" value=""></div>
+			"""
 		default:
 			dialog = ""
 	}
 	return """
 	<section id="fx-into-host" class="fx-sec"><h2>focus into · a patch-inserted region</h2>
 	<p class="fx-muted">the confirm dialog is inserted by a patch. its binder takes focus only while the live one is vacant or outside the region, so a reader mid-field is never yanked; <code>data-focus-return</code> restores after the bind pass.</p>
-	<div class="fx-row"><button id="fx-into-open" type="button" data-component-id="fx-into-open" data-event="click">Open the confirm</button><button id="fx-into-self-open" type="button" data-component-id="fx-into-self-open" data-event="click">Open the self-focusing region</button></div>
+	<div class="fx-row"><button id="fx-into-open" type="button" data-component-id="fx-into-open" data-event="click">Open the confirm</button><button id="fx-into-self-open" type="button" data-component-id="fx-into-self-open" data-event="click">Open the self-focusing region</button><button id="fx-into-focusable-open" type="button" data-component-id="fx-into-focusable" data-event="click">Open onto a button</button></div>
 	\(dialog)</section>
 	"""
 }
@@ -740,6 +744,12 @@ struct BehaviourPageResponder: Responder {
 			if state.into == 2 { state.into = 0 } else { state.into = 2 }
 			return .fragments([FragmentUpdate(id: "fx-into-host", html: behaviourIntoHTML(state))])
 		}, for: ComponentID("fx-into-self-open"), in: session)
+		// the same binder onto a target that is focusable on its own: the
+		// stamp is the contract (D5.2) — a button keeps its own tab order.
+		router.register(outcome: { _ in
+			if state.into == 3 { state.into = 0 } else { state.into = 3 }
+			return .fragments([FragmentUpdate(id: "fx-into-host", html: behaviourIntoHTML(state))])
+		}, for: ComponentID("fx-into-focusable"), in: session)
 		router.register(outcome: { _ in
 			state.into = 0
 			return .fragments([FragmentUpdate(id: "fx-into-host", html: behaviourIntoHTML(state))])

@@ -560,13 +560,17 @@ window.WebUIEngineExt = (function () {
       return;
     };
 
+    function intrinsicallyFocusable(el) {
+      return !!(el && el.matches && el.matches('a[href], button, input, select, textarea, [tabindex]'));
+    }
+
     BEHAVIORS['data-focus-into'] = function (el) {
       var id = el.getAttribute('data-focus-into') || '';
       var target = id ? document.getElementById(id) : el;
       if (!target || typeof target.focus !== 'function') { return; }
       var live = document.activeElement;
       if (live && live !== document.body && live !== document.documentElement && el.contains(live)) { return; }
-      if (!target.hasAttribute('tabindex')) { target.setAttribute('tabindex', '-1'); }
+      if (!intrinsicallyFocusable(target)) { target.setAttribute('tabindex', '-1'); }
       try { target.focus({ preventScroll: true }); } catch (e) { }
     };
 
@@ -626,7 +630,7 @@ window.WebUIEngineExt = (function () {
         var target = document.getElementById(el.getAttribute('data-skip-to') || '');
         if (!target) { return; }
         e.preventDefault();
-        if (!target.hasAttribute('tabindex')) { target.setAttribute('tabindex', '-1'); }
+        if (!intrinsicallyFocusable(target)) { target.setAttribute('tabindex', '-1'); }
         try { target.focus(); } catch (err) { }
         try { target.scrollIntoView({ block: 'start' }); } catch (err2) { target.scrollIntoView(); }
       });
