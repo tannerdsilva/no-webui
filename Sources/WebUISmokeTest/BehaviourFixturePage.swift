@@ -36,6 +36,8 @@ final class BehaviourFixtureState: Sendable {
 		var uploads: [String: String] = [:]
 		var templated: [String] = []
 		var streamLines: [String] = []
+		var bucketCollapsed = false
+		var rovingRebinds = 0
 	}
 	private let values = Mutex(Values())
 
@@ -125,6 +127,17 @@ final class BehaviourFixtureState: Sendable {
 	var appearOpen: Bool {
 		get { values.withLock { $0.appearOpen } }
 		set { values.withLock { $0.appearOpen = newValue } }
+	}
+
+	/// the roving bucket fixture: whether bucket 1 renders collapsed, and how
+	/// many re-bind patches have run (the probe reads both).
+	var bucketCollapsed: Bool {
+		get { values.withLock { $0.bucketCollapsed } }
+		set { values.withLock { $0.bucketCollapsed = newValue } }
+	}
+	var rovingRebinds: Int {
+		get { values.withLock { $0.rovingRebinds } }
+		set { values.withLock { $0.rovingRebinds = newValue } }
 	}
 
 	/// the last text a clear-on-submit form sent, as the region renders it.
@@ -285,6 +298,23 @@ func behaviourIntoHTML(_ state: BehaviourFixtureState) -> String {
 	<p class="fx-muted">the confirm dialog is inserted by a patch. its binder takes focus only while the live one is vacant or outside the region, so a reader mid-field is never yanked; <code>data-focus-return</code> restores after the bind pass.</p>
 	<div class="fx-row"><button id="fx-into-open" type="button" data-component-id="fx-into-open" data-event="click">Open the confirm</button><button id="fx-into-self-open" type="button" data-component-id="fx-into-self-open" data-event="click">Open the self-focusing region</button></div>
 	\(dialog)</section>
+	"""
+}
+
+/// the roving bucket fixture: two `details` buckets in ONE roving group. the
+/// collapse is server state, so the re-bind patch renders bucket 1 closed and
+/// the binder has to pick a kid it can actually see — the D5.5 contract.
+func behaviourRovingBucketHTML(_ state: BehaviourFixtureState) -> String {
+	let firstOpen = state.bucketCollapsed ? "" : " open"
+	return """
+	<section id="fx-roving-bucket-host" class="fx-sec"><h2>roving · a collapsed bucket</h2>
+	<p class="fx-muted">two <code>details</code> buckets share one roving group. the tab stop can be inside a bucket the reader then collapses: the re-bind below renders bucket 1 closed, so the binder must skip the kids with no box and leave a rendered row as the group's one tab stop.</p>
+	<div class="fx-row"><button id="fx-roving-rebind" type="button" data-component-id="fx-roving-rebind" data-event="click">Collapse bucket 1 and re-bind</button><p id="fx-roving-state" class="fx-muted">rebinds: \(state.rovingRebinds)</p></div>
+	<div id="fx-roving-buckets"\(Roving().attributeText) class="fx-roving" role="toolbar" aria-label="Buckets">
+	<details id="fx-bucket-1"\(firstOpen)><summary id="fx-bucket-1-sum">bucket 1</summary><button id="rov-k1" type="button">k1</button><button id="rov-k2" type="button">k2</button></details>
+	<details id="fx-bucket-2" open><summary id="fx-bucket-2-sum">bucket 2</summary><button id="rov-k3" type="button">k3</button><button id="rov-k4" type="button">k4</button></details>
+	</div>
+	</section>
 	"""
 }
 
@@ -538,6 +568,8 @@ func renderBehaviourPage(
 	<div id="roving"\(Roving().attributeText) class="fx-roving" role="toolbar" aria-label="Letters"><button id="rov-1" type="button">1</button><button id="rov-2" type="button">2</button><button id="rov-3" type="button">3</button></div>
 	</section>
 
+	\(behaviourRovingBucketHTML(state))
+
 	<section class="fx-sec" id="fx-filter"><h2>filter list</h2>
 	<p class="fx-muted">the combo below is the real component: its region carries the marker, its panel carries the dismiss layer and the roving group.</p>
 	\(WebUIComboBox(placeholder: "filter the options", options: [.init("alpha"), .init("beta"), .init("gamma")], emptyMessage: "nothing matches").markup.html)
@@ -690,6 +722,13 @@ struct BehaviourPageResponder: Responder {
 		router.register(outcome: { _ in
 			.fragments([FragmentUpdate(id: "fx-seed-region", html: behaviourSeedHTML(state))])
 		}, for: ComponentID("fx-seed-repatch"), in: session)
+		// the roving bucket: one patch that renders bucket 1 collapsed and hands
+		// the group to a fresh bind pass — the pass D5.5 is about.
+		router.register(outcome: { _ in
+			state.bucketCollapsed = true
+			state.rovingRebinds += 1
+			return .fragments([FragmentUpdate(id: "fx-roving-bucket-host", html: behaviourRovingBucketHTML(state))])
+		}, for: ComponentID("fx-roving-rebind"), in: session)
 		// focus into: opening inserts the dialog (a patch, so the binder runs on
 		// a fresh node); closing replaces the host again, which removes the
 		// dialog. the same handler serves both dialog shapes.

@@ -129,11 +129,29 @@ window.WebUIEngineExt = (function () {
       }
     }
 
-    function rovingKids(el) {
+    function unreachable(el) {
+      if (typeof el.checkVisibility === 'function') {
+        return !el.checkVisibility({ visibilityProperty: true, contentVisibilityAuto: true });
+      }
+      if (el.hidden) { return true; }
+      if (el.getClientRects && el.getClientRects().length === 0) { return true; }
+      var view = el.ownerDocument && el.ownerDocument.defaultView;
+      var style = view && view.getComputedStyle ? view.getComputedStyle(el) : null;
+      return !!style && (style.display === 'none' || style.visibility === 'hidden');
+    }
+
+    function rovingCandidates(el) {
       var list = el.querySelectorAll('button, [href], input, select, textarea, [tabindex]');
       var out = [];
       for (var i = 0; i < list.length; i++) { if (!list[i].disabled) { out.push(list[i]); } }
       return out;
+    }
+
+    function rovingKids(el) {
+      var all = rovingCandidates(el);
+      var out = [];
+      for (var j = 0; j < all.length; j++) { if (!unreachable(all[j])) { out.push(all[j]); } }
+      return out.length ? out : all;
     }
 
     function markRoving(kids, active) {
@@ -647,7 +665,7 @@ window.WebUIEngineExt = (function () {
       if (!kids.length) { return; }
       var active = kids[0];
       for (var i = 0; i < kids.length; i++) { if (kids[i].getAttribute('tabindex') === '0') { active = kids[i]; } }
-      markRoving(kids, active);
+      markRoving(rovingCandidates(el), active);
       el.addEventListener('keydown', function (e) {
         var at = -1;
         for (var j = 0; j < kids.length; j++) { if (kids[j] === document.activeElement) { at = j; } }

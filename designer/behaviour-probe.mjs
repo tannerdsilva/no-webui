@@ -223,6 +223,96 @@ async function settled(predicate, arg = undefined, tries = 40) {
 }
 
 // ---------------------------------------------------------------------------
+// 5b. data-roving across a COLLAPSED bucket — the group's one tab stop must be
+//     a kid a reader can reach. the tab stop is parked inside bucket 1 (arrow
+//     keys), the reader collapses that bucket, and the re-bind patch re-renders
+//     the region with bucket 1 closed: `[tabindex="0"]` must land on the first
+//     kid in an OPEN bucket, not on kids[0] of the raw query, and Tab must
+//     actually reach the group. (a closed `details` still reports a full-size
+//     box for its content in this build — `content-visibility: hidden` — so the
+//     witness is focus, not geometry.)
+// ---------------------------------------------------------------------------
+{
+  const buckets = () => page.evaluate(() => {
+    const kids = ["rov-k1", "rov-k2", "rov-k3", "rov-k4"].map((id) => document.getElementById(id));
+    const stops = kids.filter((k) => k && k.getAttribute("tabindex") === "0");
+    return {
+      tabs: kids.map((k) => (k ? k.getAttribute("tabindex") : null)),
+      stops: stops.map((k) => k.id),
+      open1: document.getElementById("fx-bucket-1")?.open ?? null,
+      active: document.activeElement?.id ?? null,
+      rebinds: (document.getElementById("fx-roving-state")?.textContent || "").trim(),
+    };
+  });
+  const start = await buckets();
+  if (start.tabs[0] === "0" && start.stops.join(",") === "rov-k1" && start.open1 === true) {
+    ok(`data-roving: two open buckets are one tab stop at mount (${JSON.stringify(start.tabs)})`);
+  } else {
+    bad(`data-roving buckets: at mount ${JSON.stringify(start)}`);
+  }
+
+  await page.focus("#rov-k1");
+  await page.keyboard.press("ArrowDown");
+  await page.waitForTimeout(80);
+  const parked = await buckets();
+  if (parked.tabs.join(",") === "-1,0,-1,-1") ok("data-roving: the tab stop moves into the bucket (ArrowDown parks it on #rov-k2)");
+  else bad(`data-roving buckets: ArrowDown left ${JSON.stringify(parked)}`);
+
+  // the reader collapses the bucket holding the tab stop — a native details
+  // toggle, so the collapse is a gesture, not a probe-side write.
+  await page.click("#fx-bucket-1-sum");
+  await page.waitForTimeout(120);
+  const collapsed = await buckets();
+  if (collapsed.open1 === false && collapsed.stops.join(",") === "rov-k2") {
+    ok("data-roving: collapsing bucket 1 leaves the stale tab stop inside it (#rov-k2) — the state the re-bind must repair");
+  } else {
+    bad(`data-roving buckets: after the collapse ${JSON.stringify(collapsed)}`);
+  }
+
+  await page.click("#fx-roving-rebind");
+  const rebased = await settled(() => {
+    const kids = ["rov-k1", "rov-k2", "rov-k3", "rov-k4"].map((id) => document.getElementById(id));
+    const stops = kids.filter((k) => k && k.getAttribute("tabindex") === "0");
+    return {
+      ok: kids.every((k) => !!k) && stops.length === 1 && stops[0].id === "rov-k3",
+      tabs: kids.map((k) => (k ? k.getAttribute("tabindex") : null)),
+      stamped: kids.every((k) => k && k.hasAttribute("tabindex")),
+      stops: stops.map((k) => k.id),
+      open1: document.getElementById("fx-bucket-1")?.open ?? null,
+    };
+  });
+  if (rebased?.ok && rebased.stamped) {
+    ok(`data-roving: after the re-bind the one tab stop is the first kid in an OPEN bucket (${rebased.stops.join(",")}; tabs ${JSON.stringify(rebased.tabs)})`);
+  } else {
+    bad(`data-roving: the re-bound group left ${JSON.stringify(rebased)} — expected one tab stop on #rov-k3 and an explicit stamp on every kid`);
+  }
+
+  // the end-to-end witness: a real Tab from bucket 2's summary — the control
+  // immediately before the open bucket's rows — lands on the group's tab stop.
+  // with the stop on a kid inside the closed bucket nothing in the group is
+  // tabbable and the browser leaves the whole list.
+  await page.focus("#fx-bucket-2-sum");
+  await page.keyboard.press("Tab");
+  await page.waitForTimeout(120);
+  const tabbed = await buckets();
+  if (tabbed.active === "rov-k3") {
+    ok("data-roving: Tab from bucket 2's summary reaches the re-bound tab stop (#rov-k3) — the collapsed list is still keyboard-reachable");
+  } else {
+    bad(`data-roving: Tab from bucket 2's summary landed on ${JSON.stringify(tabbed.active)}, expected "rov-k3" — the list is unreachable`);
+  }
+
+  // and the arrows walk the rendered kids only: from the tab stop down to k4.
+  if (rebased?.ok) {
+    await page.focus("#rov-k3");
+    await page.keyboard.press("ArrowDown");
+    await page.waitForTimeout(80);
+    const walked = await buckets();
+    if (walked.stops.join(",") === "rov-k4") ok("data-roving: the arrow keys walk the open bucket only (k3 -> k4)");
+    else bad(`data-roving buckets: ArrowDown after the re-bind left ${JSON.stringify(walked)}`);
+  }
+}
+
+// ---------------------------------------------------------------------------
 // 6. data-table-enhance — sort (numeric vs locale) + aria-sort, and the
 //    filter input. one click toggles once, which is also the witness that the
 //    binder is not double-bound.
