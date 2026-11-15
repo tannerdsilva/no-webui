@@ -495,7 +495,7 @@ window.WebUIEngineExt = (function () {
         for (var i = 0; i < list.length; i++) {
           list[i].hidden = !!q && String(list[i].textContent).toLowerCase().indexOf(q) === -1;
         }
-        if (prefix) { paint(); }
+        if (prefix) { paint(); if (panel && panel.hasAttribute('data-open')) { lightFirst(); } else { light(null); } }
       }
       function insert(item) {
         if (!target || template === null) { return; }
@@ -518,12 +518,48 @@ window.WebUIEngineExt = (function () {
       function select(item) {
         if (!item) { return; }
         if (panel) { panel.removeAttribute('data-open'); }
+        if (prefix) { light(null); }
         insert(item);
       }
       function itemAt(node) {
         if (!node || !node.closest) { return null; }
         var hit = node.closest('[role=option], [role=menuitem], .command-palette__item');
         return hit && el.contains(hit) ? hit : null;
+      }
+      function visibleItems() {
+        var list = items();
+        var out = [];
+        for (var i = 0; i < list.length; i++) { if (!list[i].hidden) { out.push(list[i]); } }
+        return out;
+      }
+      function litItem() {
+        var list = items();
+        for (var i = 0; i < list.length; i++) { if (list[i].hasAttribute('data-highlight')) { return list[i]; } }
+        return null;
+      }
+      function light(item) {
+        var list = items();
+        for (var i = 0; i < list.length; i++) {
+          if (list[i] === item) { list[i].setAttribute('data-highlight', ''); }
+          else if (list[i].hasAttribute('data-highlight')) { list[i].removeAttribute('data-highlight'); }
+        }
+        if (item && item.id) { field.setAttribute('aria-activedescendant', item.id); }
+        else { field.removeAttribute('aria-activedescendant'); }
+      }
+      function lightFirst() {
+        var shown = visibleItems();
+        var current = litItem();
+        for (var i = 0; i < shown.length; i++) { if (shown[i] === current) { return; } }
+        light(shown.length ? shown[0] : null);
+      }
+      function stepLight(step) {
+        var shown = visibleItems();
+        if (!shown.length) { return; }
+        var at = -1;
+        var current = litItem();
+        for (var i = 0; i < shown.length; i++) { if (shown[i] === current) { at = i; } }
+        var next = at === -1 ? (step > 0 ? 0 : shown.length - 1) : (at + step + shown.length) % shown.length;
+        light(shown[next]);
       }
       field.addEventListener('input', apply);
       el.addEventListener('click', function (e) { select(itemAt(e.target)); });
@@ -534,6 +570,24 @@ window.WebUIEngineExt = (function () {
         e.preventDefault();
         select(hit);
       });
+      if (prefix) {
+        document.addEventListener('keydown', function (e) {
+          if (!panel || !panel.hasAttribute('data-open')) { return; }
+          if (e.target !== field) { return; }
+          if (e.isComposing || e.keyCode === 229) { return; }
+          if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            e.preventDefault();
+            stepLight(e.key === 'ArrowDown' ? 1 : -1);
+            return;
+          }
+          if (e.key !== 'Enter' || e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) { return; }
+          var hit = litItem() || visibleItems()[0];
+          if (!hit) { return; }
+          e.preventDefault();
+          e.stopPropagation();
+          select(hit);
+        }, true);
+      }
       if (!panel) { return; }
       function open() {
         if (!panel.hasAttribute('data-open')) { panel.setAttribute('data-open', ''); }

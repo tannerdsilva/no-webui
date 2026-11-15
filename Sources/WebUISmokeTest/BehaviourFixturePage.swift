@@ -38,6 +38,7 @@ final class BehaviourFixtureState: Sendable {
 		var streamLines: [String] = []
 		var bucketCollapsed = false
 		var rovingRebinds = 0
+		var slashSubmits = 0
 	}
 	private let values = Mutex(Values())
 
@@ -138,6 +139,13 @@ final class BehaviourFixtureState: Sendable {
 	var rovingRebinds: Int {
 		get { values.withLock { $0.rovingRebinds } }
 		set { values.withLock { $0.rovingRebinds = newValue } }
+	}
+
+	/// how many times the token form inside a form actually submitted — the
+	/// echo the D5.1 row reads to prove the Enter was taken by the palette.
+	var slashSubmits: Int {
+		get { values.withLock { $0.slashSubmits } }
+		set { values.withLock { $0.slashSubmits = newValue } }
 	}
 
 	/// the last text a clear-on-submit form sent, as the region renders it.
@@ -597,6 +605,17 @@ func renderBehaviourPage(
 	</div>
 	</section>
 
+	<section class="fx-sec" id="fx-slash-form-host"><h2>filter list · token prefix inside a form</h2>
+	<p class="fx-muted">the same slash palette, with its source field in a form that submits on <code>Enter</code> (<code>data-submit-on-enter="plain"</code>). while the panel is open and a row is highlighted, <code>Enter</code> in the field selects that row and the submit never fires; <code>ArrowDown</code>/<code>ArrowUp</code> move the highlight. with the panel closed, <code>Enter</code> submits as it always did.</p>
+	<form id="fx-slash-form" class="fx-row" data-component-id="fx-slash-submit" data-event="submit">
+	<textarea id="fx-slash2-composer" rows="2" aria-label="slash composer in a form"\(SubmitOnEnter(mode: .plain).attributeText)></textarea>
+	<div id="fx-slash2" class="combo"\(FilterList(source: "#fx-slash2-composer", token: "/").attributeText)\(FilterInsert(target: "fx-slash2-composer").attributeText)\(FilterTemplate(text: "{value} ").attributeText)>
+	<div class="combo__panel" role="menu" aria-label="slash palette in a form"><div id="fx-slash2-hello" class="combo__option" role="option" tabindex="-1">hello</div><div id="fx-slash2-help" class="combo__option" role="option" tabindex="-1">help</div><div id="fx-slash2-world" class="combo__option" role="option" tabindex="-1">world</div></div>
+	</div>
+	<p id="fx-slash2-out" class="fx-muted">submits: \(state.slashSubmits)</p>
+	</form>
+	</section>
+
 	\(behaviourIntoHTML(state))
 
 	\(behaviourAppearHTML(state))
@@ -733,6 +752,12 @@ struct BehaviourPageResponder: Responder {
 			state.rovingRebinds += 1
 			return .fragments([FragmentUpdate(id: "fx-roving-bucket-host", html: behaviourRovingBucketHTML(state))])
 		}, for: ComponentID("fx-roving-rebind"), in: session)
+		// the token form's submit: it must NOT fire while the palette holds a
+		// highlighted row, so the echo is the D5.1 row's counter-evidence.
+		router.register(outcome: { _ in
+			state.slashSubmits += 1
+			return .fragments([FragmentUpdate(id: "fx-slash2-out", html: "<p id=\"fx-slash2-out\" class=\"fx-muted\">submits: \(state.slashSubmits)</p>")])
+		}, for: ComponentID("fx-slash-submit"), in: session)
 		// focus into: opening inserts the dialog (a patch, so the binder runs on
 		// a fresh node); closing replaces the host again, which removes the
 		// dialog. the same handler serves both dialog shapes.

@@ -719,6 +719,99 @@ if (!clipboardGranted) {
 
 
 // ---------------------------------------------------------------------------
+// 10h. data-filter-list in the token form — the KEYBOARD contract. while the
+//      panel is `data-open` and a row is highlighted, `Enter` inside the SOURCE
+//      FIELD selects the highlighted row and never reaches the form's submit;
+//      ArrowDown/ArrowUp move the highlight. the field lives in a form that
+//      submits on Enter, so the echo `#fx-slash2-out` is the counter-evidence:
+//      it must stay at 0 through the selection and move only for a plain Enter.
+// ---------------------------------------------------------------------------
+{
+  const menu = () => page.evaluate(() => {
+    const panel = document.querySelector("#fx-slash2 .combo__panel");
+    const box = document.getElementById("fx-slash2-composer");
+    const rows = Array.from(document.querySelectorAll("#fx-slash2 .combo__option"));
+    const lit = rows.filter((r) => r.hasAttribute("data-highlight"));
+    return {
+      open: !!panel && panel.hasAttribute("data-open"),
+      visible: rows.filter((r) => !r.hidden).map((r) => (r.textContent || "").trim()),
+      lit: lit.map((r) => r.id),
+      activeDescendant: box.getAttribute("aria-activedescendant"),
+      value: box.value,
+      out: (document.getElementById("fx-slash2-out")?.textContent || "").trim(),
+    };
+  });
+
+  await page.fill("#fx-slash2-composer", "/hel");
+  const opened = await settled(() => {
+    const panel = document.querySelector("#fx-slash2 .combo__panel");
+    const rows = Array.from(document.querySelectorAll("#fx-slash2 .combo__option"));
+    const lit = rows.filter((r) => r.hasAttribute("data-highlight"));
+    return {
+      ok: !!panel && panel.hasAttribute("data-open") && lit.length === 1 && lit[0].id === "fx-slash2-hello",
+      open: !!panel && panel.hasAttribute("data-open"),
+      visible: rows.filter((r) => !r.hidden).map((r) => (r.textContent || "").trim()),
+      lit: lit.map((r) => r.id),
+      activeDescendant: document.getElementById("fx-slash2-composer").getAttribute("aria-activedescendant"),
+    };
+  });
+  if (opened?.ok) {
+    ok(`data-filter-list token: the panel opens with its first matching row highlighted (${JSON.stringify(opened.lit)}, aria-activedescendant=${JSON.stringify(opened.activeDescendant)})`);
+  } else {
+    bad(`data-filter-list token: "/hel" left ${JSON.stringify(opened)} — expected one highlighted row (#fx-slash2-hello)`);
+  }
+
+  await page.focus("#fx-slash2-composer");
+  await page.keyboard.press("ArrowDown");
+  await page.waitForTimeout(100);
+  const down = await menu();
+  if (down.lit.join(",") === "fx-slash2-help" && down.activeDescendant === "fx-slash2-help") {
+    ok("data-filter-list token: ArrowDown in the source field moves the highlight to the next row (#fx-slash2-help)");
+  } else {
+    bad(`data-filter-list token: ArrowDown from the field left ${JSON.stringify(down)}`);
+  }
+
+  await page.keyboard.press("ArrowUp");
+  await page.waitForTimeout(100);
+  const up = await menu();
+  if (up.lit.join(",") === "fx-slash2-hello" && up.activeDescendant === "fx-slash2-hello") {
+    ok("data-filter-list token: ArrowUp moves it back (#fx-slash2-hello)");
+  } else {
+    bad(`data-filter-list token: ArrowUp from the field left ${JSON.stringify(up)}`);
+  }
+
+  // the contract: Enter selects the highlighted row and the submit is prevented.
+  await page.keyboard.press("Enter");
+  const selected = await settled(() => {
+    const panel = document.querySelector("#fx-slash2 .combo__panel");
+    const box = document.getElementById("fx-slash2-composer");
+    const out = (document.getElementById("fx-slash2-out")?.textContent || "").trim();
+    return {
+      ok: box.value === "hello " && !(panel && panel.hasAttribute("data-open")) && out === "submits: 0",
+      value: box.value,
+      open: !!panel && panel.hasAttribute("data-open"),
+      out,
+    };
+  });
+  if (selected?.ok) {
+    ok('data-filter-list token: Enter in the source field selected the highlighted row ("hello ") and the form did NOT submit (submits: 0)');
+  } else {
+    bad(`data-filter-list token: Enter in the field left ${JSON.stringify(selected)} — expected value "hello ", panel closed, submits: 0`);
+  }
+
+  // and the same field still submits when nothing is highlighted: the guard is
+  // the open panel, not a broken form.
+  await page.fill("#fx-slash2-composer", "plain text");
+  await page.keyboard.press("Enter");
+  const submitted = await settled(() => {
+    const out = (document.getElementById("fx-slash2-out")?.textContent || "").trim();
+    return { ok: out === "submits: 1", out };
+  });
+  if (submitted?.ok) ok("data-filter-list token: with the panel closed, Enter in the same field submits as before (submits: 1)");
+  else bad(`data-filter-list token: the plain Enter left ${JSON.stringify(submitted)} — the form must still submit`);
+}
+
+// ---------------------------------------------------------------------------
 // 10e. the combo's open state: `.combo__panel` is hidden unless it carries
 //      `data-open` (engine-written). the field's focus opens it, typing keeps
 //      it open, and Escape closes it through the engine's layer path.

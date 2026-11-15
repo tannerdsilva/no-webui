@@ -892,6 +892,20 @@ public struct NumberClampAttribute: AttributeRepresentable {
 /// whole-field form (a source, or empty for the region's own `input`); a value
 /// with one splits at the **first** `|`, so a source selector that itself
 /// contains `|` (a namespace selector) cannot be expressed in the gated form.
+///
+/// **the keyboard half (3.1.1).** the gated form is a menu, so it is driven
+/// from the field: while the panel is `data-open` and a row is highlighted,
+/// `Enter` inside the source field selects the highlighted row and the event
+/// never reaches the form — a composer that submits on `Enter` inserts the
+/// command instead of sending the half-typed one. `ArrowDown`/`ArrowUp` move the
+/// highlight among the **visible** rows only. the highlight is engine state and
+/// is spelled the way every other piece of engine state is: `data-highlight` on
+/// the one lit item (`aria-activedescendant` on the field names it, so a screen
+/// reader follows the same row) and nothing on the rest. it is established on
+/// the first visible row whenever the panel opens or the query changes,
+/// cleared when the panel closes or a row is selected, and it is **not**
+/// written for the whole-field form — that form is a filter, not a menu.
+/// selecting a row by click or by `Enter` on a focused row is unchanged.
 public struct FilterList: Behavior {
 	/// the field that carries the query: a selector, a bare id, or empty for
 	/// the region's own `input`.

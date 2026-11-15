@@ -1492,8 +1492,12 @@ code, .inline-code {
   color: var(--color-text);
   cursor: pointer;
 }
+/* the keyboard highlight the token palette's binder writes — an attribute, like
+   every other engine-owned state (`data-open`), never a class the host has to
+   know about. `--active` stays for pages that spell the state themselves. */
 .combo__option:hover,
-.combo__option--active { background: var(--color-bg-subtle); color: var(--color-text); }
+.combo__option--active,
+.combo__option[data-highlight] { background: var(--color-bg-subtle); color: var(--color-text); }
 .combo__option--selected { background: var(--color-primary-50); color: var(--color-primary-900); font-weight: var(--font-weight-medium); }
 .combo__empty {
   padding: var(--space-4);
