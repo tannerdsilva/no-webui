@@ -1011,6 +1011,22 @@ final class Runner: Sendable {
 	/// the `id` a page's patchable root carries, as a substring test.
 	private static var pageRegionMarker: String { "id=\"\(WebUIServer.pageRegionID)\"" }
 
+	/// the document minus its `<head>` element: what a page-region fragment ships.
+	///
+	/// a fragment is parsed in the context of the element it replaces, so a
+	/// document payload puts the head's nodes where body nodes belong — the
+	/// charset and viewport metas, the csp meta, the styles and the engine
+	/// script all land as siblings of the page region, and a csp delivered
+	/// outside a head is not a policy at all. the served document keeps its
+	/// head: only the fragment drops it, and an input without one (or with an
+	/// unclosed one) is returned unchanged rather than truncated.
+	private static func pageRegionFragment(_ html: String) -> String {
+		guard let open = html.range(of: "<head"),
+		      let close = html.range(of: "</head>", range: open.upperBound..<html.endIndex)
+		else { return html }
+		return String(html[..<open.lowerBound]) + String(html[close.upperBound...])
+	}
+
 	/// remember what a finished render looked like, so the next render of the
 	/// same page can be diffed against it.
 	///
@@ -1129,7 +1145,9 @@ final class Runner: Sendable {
 		guard html.contains(Self.pageRegionMarker) else {
 			return .redirect(url: url, replace: true)
 		}
-		return .update(fragments: [FragmentUpdate(id: WebUIServer.pageRegionID, html: html)])
+		return .update(fragments: [
+			FragmentUpdate(id: WebUIServer.pageRegionID, html: Self.pageRegionFragment(html))
+		])
 	}
 
 	struct HostAsset: Sendable {

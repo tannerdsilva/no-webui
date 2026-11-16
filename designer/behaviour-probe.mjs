@@ -101,6 +101,14 @@ page.on("response", (r) => {
   if (r.url().includes("/webui-engine-ext.js")) extResponses.push(r.status());
 });
 
+// the real socket, observed. §24 reads the whole-page refresh's `update`
+// fragment from this collector rather than from any runtime hook: the frames
+// here are the bytes the server actually sent.
+const wsFrames = [];
+page.on("websocket", (ws) => ws.on("framereceived", (e) => {
+  wsFrames.push(typeof e.payload === "string" ? e.payload : e.payload.toString("utf8"));
+}));
+
 await page.goto(BASE + "/behaviour", { waitUntil: "domcontentloaded" });
 await page.waitForTimeout(700);
 
@@ -2404,6 +2412,74 @@ if (!clipboardGranted) {
     ok("upload/drag-active: a dragend on the zone itself clears the mark and leaves no residue");
   } else {
     bad(`upload/drag-active: a zone dragend left the mark (${JSON.stringify(drag)})`);
+  }
+}
+
+// ---------------------------------------------------------------------------
+// 24. the whole-page refresh fragment carries no <head>. a `.refresh` whose
+//     changed bytes sit OUTSIDE every region cannot be a region patch, so the
+//     server ships the page region instead — and that payload is the document
+//     WITHOUT its `<head>` element. a fragment is parsed in the context of the
+//     element it replaces, so the head's nodes would otherwise arrive as body
+//     siblings of the region (the charset/viewport metas, the csp meta, the
+//     styles and the engine script), which is exactly the string surgery this
+//     removes from a consumer. the served document keeps its head: only the
+//     fragment drops it.
+// ---------------------------------------------------------------------------
+{
+  const countBefore = await page.evaluate(() => (document.getElementById("page-refresh-count")?.textContent || "").trim());
+  const from = wsFrames.length;
+  await page.evaluate(() => document.getElementById("page-refresh").click());
+
+  // the frame this click caused — scanned from `from`, so an earlier row's
+  // frame can never satisfy the row.
+  let fragment = null;
+  for (let i = 0; i < 40 && fragment === null; i++) {
+    await page.waitForTimeout(100);
+    for (let f = from; f < wsFrames.length; f++) {
+      let msg;
+      try { msg = JSON.parse(wsFrames[f]); } catch (e) { continue; }
+      const frags = msg && Array.isArray(msg.fragments) ? msg.fragments : [];
+      const hit = frags.find((x) => x && x.id === "webui-page" && typeof x.html === "string");
+      if (hit) { fragment = hit.html; break; }
+    }
+  }
+
+  // the applied consequence: replacing #webui-page with a head-carrying
+  // fragment puts the head's first node in its place, so the region element
+  // would vanish and the page-level counter would never move.
+  let applied = null;
+  for (let i = 0; i < 40; i++) {
+    applied = await page.evaluate(() => ({
+      regions: document.querySelectorAll("#webui-page").length,
+      count: (document.getElementById("page-refresh-count")?.textContent || "").trim(),
+    }));
+    if (applied.regions === 1 && applied.count !== countBefore) break;
+    await page.waitForTimeout(100);
+  }
+
+  if (fragment === null) {
+    bad(`page-refresh: the click produced no #webui-page fragment within 4s — the whole-page branch was never reached (${wsFrames.length - from} frame(s), ${JSON.stringify(countBefore)} → ${JSON.stringify(applied && applied.count)})`);
+  } else if (!fragment.includes('id="webui-page"')) {
+    bad(`page-refresh: the #webui-page fragment is not a document render: ${JSON.stringify(fragment.slice(0, 200))}`);
+  } else {
+    const headAt = fragment.toLowerCase().indexOf("<head");
+    if (headAt >= 0) {
+      bad(`page-refresh: the #webui-page fragment still carries <head at byte ${headAt}: ${JSON.stringify(fragment.slice(Math.max(0, headAt - 40), headAt + 160))}`);
+    } else if (!(applied && applied.regions === 1 && applied.count !== countBefore)) {
+      bad(`page-refresh: the head-less fragment did not apply — #webui-page × ${applied && applied.regions}, ${JSON.stringify(countBefore)} → ${JSON.stringify(applied && applied.count)}`);
+    } else {
+      ok("refresh/page: a whole-page .refresh ships a #webui-page fragment that carries no <head> element");
+    }
+  }
+
+  // full navigation is untouched: a plain GET still serves the document with
+  // its head, so nothing a first load needs went missing.
+  const served = await (await fetch(BASE + "/behaviour")).text();
+  if (served.includes("<head>") && served.includes("</head>") && served.includes('id="webui-page"')) {
+    ok("refresh/page: the HTTP whole-document render still carries its <head> — only the fragment drops it");
+  } else {
+    bad(`refresh/page: the served document lost its head or its page region: ${JSON.stringify(served.slice(0, 200))}`);
   }
 }
 

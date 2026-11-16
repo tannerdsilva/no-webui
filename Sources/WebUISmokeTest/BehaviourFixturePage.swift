@@ -25,6 +25,7 @@ final class BehaviourFixtureState: Sendable {
 		var last = "(none)"
 		var lastMeta = "(none)"
 		var refreshes = 0
+		var pageRefreshes = 0
 		var dialogOpen = false
 		var dialog2Open = false
 		var t26 = 0
@@ -93,6 +94,12 @@ final class BehaviourFixtureState: Sendable {
 	var refreshes: Int {
 		get { values.withLock { $0.refreshes } }
 		set { values.withLock { $0.refreshes = newValue } }
+	}
+	/// the page-level counter: it renders OUTSIDE every `data-component-id`
+	/// region, so a change to it is residue — the differ's whole-page answer.
+	var pageRefreshes: Int {
+		get { values.withLock { $0.pageRefreshes } }
+		set { values.withLock { $0.pageRefreshes = newValue } }
 	}
 	var dialogOpen: Bool {
 		get { values.withLock { $0.dialogOpen } }
@@ -462,6 +469,15 @@ func renderBehaviourPage(
 			return .refresh
 		}
 		.markup.html
+	// the page-level refresh: the same `.refresh` outcome from a control whose
+	// state renders OUTSIDE every region, so the differ cannot express the
+	// change as a region patch and answers with the whole page region instead.
+	let pageRefreshButton = Button("Refresh the whole page", id: "page-refresh", type: .button)
+		.control(id: "fx-page-refresh") { _ in
+			state.pageRefreshes += 1
+			return .refresh
+		}
+		.markup.html
 	// the upload fixture: three typed destinations against one contract route,
 	// so the probe can prove the destination travelled (the server echoes the
 	// composed path it received) and that one engine transport serves every
@@ -544,6 +560,12 @@ func renderBehaviourPage(
 	<section class="fx-sec"><h2>reading keys</h2>
 	<p class="fx-muted">focus the reader, then use ArrowUp/PageUp/Home/End; Escape returns to the live tail unless a layer is open.</p>
 	<div id="reader" class="fx-reader" tabindex="0" aria-label="reader"\(ReadingKeys().attributeText)>\(readerLines)</div>
+	</section>
+
+	<section class="fx-sec"><h2>page-level refresh</h2>
+	<p class="fx-muted">the control below is a <code>.control</code> whose handler returns <code>.refresh</code> too, but the state it moves renders <em>outside</em> every <code>data-component-id</code> region: the differ cannot express that change as a region patch, so the server ships the whole page region — as a fragment with no document head.</p>
+	<div class="fx-row">\(pageRefreshButton)</div>
+	<p id="page-refresh-count" class="fx-muted">page refreshes: \(state.pageRefreshes)</p>
 	</section>
 
 	<section class="fx-sec" id="fx-refresh-region" data-component-id="fx-refresh-region"><h2>refresh contract</h2>
@@ -698,9 +720,12 @@ func renderBehaviourPage(
 	</main>
 	"""
 	let body = bootBody.isEmpty ? mainBody : bootBody
+	// every behaviour page carries the patchable root, so a whole-page refresh
+	// has an element to receive the bytes: the server names it
+	// `WebUIServer.pageRegionID`.
 	return WebUIDocument(
 		title: "Behavior fixture",
-		body: .trusted(body),
+		body: .trusted(Div(id: WebUIServer.pageRegionID) { Raw(body) }.markup.html),
 		head: behaviourFixtureStyle,
 		clientMode: ClientBoot(config: RuntimeConfig(
 			renderToken: renderToken,
