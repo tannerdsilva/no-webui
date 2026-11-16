@@ -1734,18 +1734,19 @@ if (!clipboardGranted) {
     await page.focus("#fx-modal-field");
     return page.evaluate(() => document.activeElement?.id ?? null);
   };
-  const close = async () => {
+  const close = async (expected) => {
     await page.keyboard.press("Escape");
-    await page.waitForFunction(() => !document.getElementById("fx-modal"), null, { timeout: 4000 }).catch(() => {});
-    await page.waitForTimeout(120);
-    return page.evaluate(() => ({
-      dialog: !!document.getElementById("fx-modal"),
-      focus: document.activeElement?.id ?? null,
-    }));
+    // the restore lands on the engine's own schedule after the slot patch;
+    // poll the settled focus to a deadline instead of sampling one frame.
+    return settled((want) => {
+      const dialog = !!document.getElementById("fx-modal");
+      const focus = document.activeElement?.id ?? null;
+      return { ok: !dialog && focus === want, dialog, focus };
+    }, expected);
   };
 
   const parkedA = await open("fx-modal-open");
-  const afterA = await close();
+  const afterA = await close("fx-modal-return");
   if (parkedA === "fx-modal-field" && !afterA.dialog && afterA.focus === "fx-modal-return") {
     ok("modal focus return: the declaration on the close control wins over the pre-dialog memory (#fx-modal-return, not #fx-modal-open)");
   } else {
@@ -1754,7 +1755,7 @@ if (!clipboardGranted) {
 
   // the declaration names an id nothing renders: the memory is the fallback.
   const parkedB = await open("fx-modal-open-gone");
-  const afterB = await close();
+  const afterB = await close("fx-modal-open-gone");
   if (parkedB === "fx-modal-field" && !afterB.dialog && afterB.focus === "fx-modal-open-gone") {
     ok("modal focus return: a declaration whose target is gone falls back to the pre-dialog memory (#fx-modal-open-gone)");
   } else {
