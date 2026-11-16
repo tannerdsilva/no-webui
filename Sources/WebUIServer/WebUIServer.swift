@@ -248,7 +248,7 @@ public actor WebUIServer {
 	/// navigation: the `navigate` answer patches this element. a page without
 	/// it is still answered (the engine skips an element it cannot find); a
 	/// path the router cannot answer is answered with a full-page redirect.
-	static let pageRegionID = "webui-page"
+	public static let pageRegionID = "webui-page"
 
 	private let config: WebUIServerConfig
 	private let logger: Logger
