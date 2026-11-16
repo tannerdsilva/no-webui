@@ -418,7 +418,7 @@ must skip kids it cannot render, `FocusInto` must not stamp a natively focusable
 target, the token palette must answer Enter from the source field, a modal's
 declared return must beat the pre-dialog memory, a refused copy must toast the
 failure) — every one a defect in an existing emission, and no new public
-surface. Nothing in either program ships in a patch. The `on.afterPatch`/`on.ready` seam is supported
+surface. Nothing in either program ships in a patch. `3.2.0` lands the four requests a consumer's deferral program named: `WebUIServer.pageRegionID` public, `data-upload-active`, the head-less refresh fragment and the popover toggle. The `on.afterPatch`/`on.ready` seam is supported
 through `2.10.0` and deprecated at `3.0.0`; `3.0.0` is also the
 consumer-adoption close (the consumer's overlay file deleted). Consumer-side
 deletions are the consumer's workstream, not a framework change.
@@ -459,6 +459,17 @@ bucket, the natively focusable `FocusInto` target, the token form's keyboard
 half, the modal declaration/fallback pair and the two copy failures). 3.1.1 is
 the first release whose ceiling moved for the ENGINE as well as the extension:
 `restoreModalFocus`'s precedence lives in `webui-engine.js`.
+
+**the 3.2.0 baseline (measured 2026-11-15):** `swift test` 1,957 tests across
+nine executables / 0 failures; frozen surface **5,567 symbols across 11 modules**
+(+1: `WebUIServer.pageRegionID`, the release's only public-API change);
+`budget` PASS with engine 80,120 raw / 18,534 gz (pin 80,200 / 18,600),
+extension 38,627 / 8,939 (pin 38,700 / 9,000 — the extension's ceiling moved
+3,219 raw / 683 gz for the drag-active and popover-toggle contracts), sheet
+325,938 / 45,647 (pin 335,000 / 49,500), shell 1,514 / 539 (pin 1,700 / 650);
+`behaviour-probe` 180/180 on `/behaviour` (+14 rows over 3.1.1: seven for the
+upload drag state, two for the head-less refresh fragment, five for the popover
+toggle, its suppression and the mutual-exclusion matrix).
 
 ## change discipline
 

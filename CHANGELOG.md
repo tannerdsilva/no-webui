@@ -2,6 +2,53 @@
 
 all notable changes to this project are documented here.
 
+## [3.2.0] — 2026-11-15 — the four framework requests a consumer deferred
+
+the four affordances `arc-agent` named during its deferral-remediation program,
+each one landed as a measured contract with a probe row that failed first. they
+remove four consumer workarounds: a re-spelled wire constant, two dead css
+rules, a `<head>` strip, and a popover a second click could not close. `swift
+test` 1,957 / 0 across nine executables, `budget` PASS (the extension's ceiling
+moved — see below), `behaviour-probe` 180/180, frozen surface 5,567 symbols
+across 11 modules (+1).
+
+- **`WebUIServer.pageRegionID` is public** — the element id a document's page
+  region carries (`"webui-page"`) was internal, so a consumer that needed to
+  target the patchable root re-spelled the literal. the constant is now part of
+  the frozen surface. no bytes move: a `public` adds no shipped markup.
+- **a drag over an upload zone paints `data-upload-active`** — the upload
+  binder already prevented `dragover` but exposed no state, so a consumer's
+  drag affordances had no producer. the binder now marks the zone while a drag
+  is over it, with a related-target-aware depth so crossing the zone's own
+  children never flickers; `dragleave` clears only when the pointer truly
+  leaves, and `drop` plus a document-level `dragend` (a real `dragend` fires on
+  the drag source, not the zone) clear it unconditionally. `dragover` stays
+  prevented — the affordance is additive. the sheet styles
+  `[data-upload-active]` with the same tokens as `.dropzone--hover`, and
+  `Documentation/BEHAVIOUR.md` names the attribute.
+- **the whole-page refresh fragment carries no `<head>`** — a `.refresh` whose
+  changed bytes sit outside every region ships the document as the
+  `#webui-page` replacement; a document-shaped fragment is parsed in the
+  replaced element's context, so the head's nodes arrived as body siblings (the
+  csp meta outside a head is not a policy). the fragment now drops the `<head>`
+  element; the marker guard still tests the unstripped document, the HTTP
+  whole-document render still carries its head, and the render snapshot/baseline
+  input is unchanged. a consumer's guarded strip finds no head and passes the
+  payload through.
+- **a second click on a server-armed trigger closes its popover** — the panel's
+  `data-open` is a one-render server latch, so the engine's outside-click
+  removed the attribute and the same click's server event re-armed it (serial
+  `15→16`). the extension now records the control that opened a
+  `[data-open][data-dismiss]` layer and, on a click from that control, removes
+  `data-open` and suppresses the component event before the delegator sees it.
+  `Escape`, outside-click and mutual exclusion keep their existing paths; a
+  non-matching click is never swallowed.
+
+the extension was the only shipped surface to move, and its ceiling was
+re-pinned to the smallest hundred strictly above the measurement (never
+padded): engine 80,200 raw / 18,600 gz, extension 38,700 / 9,000, sheet and
+shell unchanged.
+
 ## [3.1.1] — 2026-11-15 — the five contracts a consumer measured
 
 a patch release with no new public surface: five defects in emissions that were
