@@ -7076,6 +7076,11 @@ code, .inline-code {
 
 .dropzone { display: grid; place-items: center; min-height: 6rem; background: var(--color-bg-inset); border: 2px dashed var(--color-border-strong); border-radius: var(--radius-xl); color: var(--color-text-muted); transition: all var(--transition-fast); }
 .dropzone--hover { border-color: var(--color-primary-500); background: var(--color-primary-soft); color: var(--color-primary-strong); }
+/* the engine's drag affordance: `data-upload-active` is painted while a drag is over a drop target and cleared on
+   dragleave (only when the pointer truly exits — a leave whose related target is still inside the zone keeps it, so
+   crossing the zone's own children never flickers), on drop, and on a document-level dragend (a real dragend fires on
+   the drag SOURCE). the rule mirrors `.dropzone--hover`, so a consumer's own drag styling stays additive. */
+[data-upload-active] { border-color: var(--color-primary-500); background: var(--color-primary-soft); color: var(--color-primary-strong); }
 
 .upload-tray { display: flex; flex-direction: column; gap: var(--space-2); margin-top: var(--space-3); padding: var(--space-3); background: var(--color-bg-raised); border: var(--border-width) solid var(--color-border); border-radius: var(--radius-lg); color: var(--color-text); font-size: var(--font-size-sm); }
 .upload-tray__row { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-1) var(--space-3); }

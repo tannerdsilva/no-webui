@@ -275,9 +275,26 @@ struct WebUIBudgetPlugin: CommandPlugin {
     /// both the engine's and the extension's ceilings move to the smallest
     /// hundred strictly above the measurement — 80,200 / 18,600 and
     /// 34,600 / 8,100 (80 raw / 66 gz and 69 raw / 27 gz of headroom).
+    ///
+    /// re-pinned 2026-11-15 (3.2.0 L2 — the upload drag affordance):
+    ///
+    /// the extension's upload binder paints `data-upload-active` while a drag
+    /// is over a zone (a related-target-aware dragenter/dragleave depth, with
+    /// drop and a document-level `dragend` clearing it); the main engine did
+    /// not change. the sheet gained the one `[data-upload-active]` rule and
+    /// its note. measured on this tree, from the asset tool's manifest
+    /// (`served`):
+    ///   engine      80,120 raw / 18,534 gz   (≤ 80,200 / 18,600 — unchanged)
+    ///   engine-ext  35,408 raw /  8,256 gz   (was pinned 34,600 / 8,100;
+    ///                                         +877 raw / +183 gz)
+    ///   sheet      325,938 raw / 45,647 gz   (≤ 335,000 / 49,500 — unchanged;
+    ///                                         +140 raw is the rule and its note)
+    ///   shell        1,514 raw /    539 gz   (≤   1,700 /    650 — unchanged)
+    /// the extension's ceilings move to the smallest hundred strictly above the
+    /// measurement — 35,500 / 8,300 (92 raw / 44 gz of headroom).
     private static let ceilings: [Ceiling] = [
         Ceiling(surface: "engine", label: "webui-engine.js", raw: 80_200, gz: 18_600),
-        Ceiling(surface: "engineExt", label: "webui-engine-ext.js", raw: 34_600, gz: 8_100),
+        Ceiling(surface: "engineExt", label: "webui-engine-ext.js", raw: 35_500, gz: 8_300),
         Ceiling(surface: "sheet", label: "design-system.css", raw: 335_000, gz: 49_500),
         Ceiling(surface: "shell", label: "webui-shell.js", raw: 1_700, gz: 650),
     ]

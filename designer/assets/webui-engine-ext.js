@@ -361,8 +361,27 @@ window.WebUIEngineExt = (function () {
         }
         if (started && !hasText) { event.preventDefault(); }
       });
+      var dragDepth = 0;
+      function dragNested(node) { return !!node && node !== el && el.contains(node); }
+      function clearDrag() { dragDepth = 0; el.removeAttribute('data-upload-active'); }
+      function endDrag() {
+        if (!el.isConnected) { document.removeEventListener('dragend', endDrag, true); }
+        clearDrag();
+      }
+      el.addEventListener('dragenter', function (event) {
+        if (dragNested(event.relatedTarget)) { return; }
+        dragDepth++;
+        el.setAttribute('data-upload-active', '');
+      });
+      el.addEventListener('dragleave', function (event) {
+        if (dragNested(event.relatedTarget)) { return; }
+        dragDepth = dragDepth > 1 ? dragDepth - 1 : 0;
+        if (dragDepth === 0) { el.removeAttribute('data-upload-active'); }
+      });
+      document.addEventListener('dragend', endDrag, true);
       el.addEventListener('dragover', function (event) { event.preventDefault(); });
       el.addEventListener('drop', function (event) {
+        clearDrag();
         if (!event.dataTransfer) { return; }
         event.preventDefault();
         var items = event.dataTransfer.items;

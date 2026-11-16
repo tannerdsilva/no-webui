@@ -2308,6 +2308,104 @@ if (!clipboardGranted) {
   await residue.close();
 }
 
+// ---------------------------------------------------------------------------
+// §24. upload drag-active: the drag state is the framework's, the styling the
+//      consumer's. a drag over the zone paints `data-upload-active`, and the
+//      mark clears on dragleave (a nested-child leave included), drop, and
+//      dragend — which fires on the drag SOURCE, not the zone.
+// ---------------------------------------------------------------------------
+{
+  const zoneSel = "#fx-upload [data-upload-into]";
+  const zones = await page.evaluate((sel) => document.querySelectorAll(sel).length, zoneSel);
+  if (zones >= 3) ok(`upload/drag-active: the fixture renders ${zones} zones carrying data-upload-into`);
+  else bad(`upload/drag-active: expected the three fixture zones, found ${zones} [data-upload-into] under #fx-upload`);
+
+  const drag = await page.evaluate((sel) => {
+    const zone = document.querySelector(sel);
+    if (!zone) { return { error: "no zone" }; }
+    const title = zone.querySelector(".file-drop__title");
+    if (!title) { return { error: "no nested child to leave through" }; }
+    const fire = (target, type, related) => {
+      const event = new DragEvent(type, {
+        bubbles: true, cancelable: true, composed: true,
+        dataTransfer: new DataTransfer(), relatedTarget: related || null
+      });
+      target.dispatchEvent(event);
+      return event;
+    };
+    const marked = () => zone.hasAttribute("data-upload-active");
+    const out = {};
+
+    // a drag arrives from outside: dragenter then dragover, and the zone's
+    // dragover must stay preventDefault'ed (the affordance is additive).
+    fire(zone, "dragenter", null);
+    const over = fire(zone, "dragover", null);
+    out.enterMarked = marked();
+    out.enterValue = zone.getAttribute("data-upload-active");
+    out.overPrevented = over.defaultPrevented;
+
+    // the pointer moves from the zone onto its own title: dragenter on the
+    // child (related target inside), dragleave on the zone (related target the
+    // child), dragleave on the child (related target back in the zone). a
+    // binder that clears on every dragleave flickers the affordance here.
+    fire(title, "dragenter", zone);
+    fire(zone, "dragleave", title);
+    fire(title, "dragleave", zone);
+    out.nestedKept = marked();
+
+    // the pointer leaves the zone for good: related target outside.
+    fire(zone, "dragleave", document.body);
+    out.leftCleared = !marked();
+
+    // re-enter, then drop with an empty DataTransfer.
+    fire(zone, "dragenter", null);
+    out.reEntered = marked();
+    const drop = fire(zone, "drop", null);
+    out.dropCleared = !marked();
+    out.dropPrevented = drop.defaultPrevented;
+
+    // re-enter, then a dragend that fires on the drag SOURCE and bubbles to
+    // document — the zone never hears it directly.
+    fire(zone, "dragenter", null);
+    out.reEnteredForEnd = marked();
+    document.dispatchEvent(new DragEvent("dragend", { bubbles: true }));
+    out.docEndCleared = !marked();
+
+    // and a dragend that lands on the zone itself.
+    fire(zone, "dragenter", null);
+    fire(zone, "dragend", null);
+    out.zoneEndCleared = !marked();
+
+    out.residual = marked();
+    return out;
+  }, zoneSel);
+
+  if (drag && drag.enterMarked && drag.enterValue === "" && drag.overPrevented) {
+    ok("upload/drag-active: dragenter+dragover on the zone paints data-upload-active and dragover stays preventDefault'ed");
+  } else {
+    bad(`upload/drag-active: after dragenter+dragover the mark is ${JSON.stringify(drag)}`);
+  }
+  if (drag && drag.nestedKept) ok("upload/drag-active: a dragleave on a nested child with a related target inside the zone keeps the mark");
+  else bad(`upload/drag-active: the nested-child dragleave cleared the mark (${JSON.stringify(drag)})`);
+  if (drag && drag.leftCleared) ok("upload/drag-active: a dragleave whose related target is outside the zone clears the mark");
+  else bad(`upload/drag-active: a dragleave out of the zone left the mark (${JSON.stringify(drag)})`);
+  if (drag && drag.reEntered && drag.dropCleared && drag.dropPrevented) {
+    ok("upload/drag-active: drop with an empty DataTransfer clears the mark and stays preventDefault'ed");
+  } else {
+    bad(`upload/drag-active: drop did not clear the mark (${JSON.stringify(drag)})`);
+  }
+  if (drag && drag.reEnteredForEnd && drag.docEndCleared) {
+    ok("upload/drag-active: a document-level dragend (the real drag source's) clears the mark");
+  } else {
+    bad(`upload/drag-active: a document-level dragend left the mark (${JSON.stringify(drag)})`);
+  }
+  if (drag && drag.zoneEndCleared && !drag.residual) {
+    ok("upload/drag-active: a dragend on the zone itself clears the mark and leaves no residue");
+  } else {
+    bad(`upload/drag-active: a zone dragend left the mark (${JSON.stringify(drag)})`);
+  }
+}
+
 await browser.close();
 server.kill();
 

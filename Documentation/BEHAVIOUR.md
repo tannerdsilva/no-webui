@@ -111,6 +111,7 @@ control.
 | upload name template | `data-upload-name-template` | optional filename template the engine resolves before composing the path: `{name}`, `{ext}`, `{ts}`, `{seq}`; unknown tokens stay literal. read inside the upload binder — not its own dispatch key |
 | upload route | `data-upload-to` | the route the engine posts the body to (`/upload` by default) |
 | upload picker opt-out | `data-no-upload-pick` | presence on a subtree inside a zone: a click there never opens the file picker — for controls that live inside a container zone |
+| upload (drag state) | `data-upload-active` | presence on the zone while a drag is over it (engine-written, empty value). cleared on `dragleave` only when the pointer truly exits — a leave whose related target is still inside the zone keeps the mark, so crossing the zone's own children never flickers; cleared on `drop` and on a document-level `dragend` (a real `dragend` fires on the drag SOURCE, so the zone never hears it directly). `dragover` stays prevented either way: the affordance is additive, and the sheet styles it with `[data-upload-active]` |
 | upload (tray) | `data-webui-upload-tray` | the tray the transport mounts and owns (engine-written) |
 | upload (state) | `data-webui-upload-state` | a tray row's state: `uploading`, `done`, `error`, `cancelled` (engine-written) |
 
