@@ -41,6 +41,10 @@ final class BehaviourFixtureState: Sendable {
 		var rovingRebinds = 0
 		var slashSubmits = 0
 		var modal = 0
+		var popLatch = ""
+		var popSerial = 0
+		var popAClicks = 0
+		var popBClicks = 0
 	}
 	private let values = Mutex(Values())
 
@@ -163,6 +167,34 @@ final class BehaviourFixtureState: Sendable {
 		set { values.withLock { $0.modal = newValue } }
 	}
 
+	/// the server-armed popover: the trigger's handler counts itself, arms the
+	/// latch and bumps the serial; the render that answers consumes the latch,
+	/// so the panel is open for exactly one render (a one-render open state).
+	func armPopover(_ which: String) {
+		values.withLock {
+			$0.popLatch = which
+			$0.popSerial += 1
+			if which == "a" { $0.popAClicks += 1 } else { $0.popBClicks += 1 }
+		}
+	}
+
+	/// reads which popover the latch names and its serial, then CLEARS the
+	/// latch: exactly the consumer shape where a render consumes the pending
+	/// open state and the next render ships the panel closed.
+	func takePopover() -> (open: String, serial: Int) {
+		values.withLock {
+			let open = $0.popLatch
+			$0.popLatch = ""
+			return (open, $0.popSerial)
+		}
+	}
+
+	/// how many clicks each trigger's handler has actually received. the probe
+	/// reads these to tell a suppressed click (unchanged) from one the server
+	/// heard (moved).
+	var popClicksA: Int { values.withLock { $0.popAClicks } }
+	var popClicksB: Int { values.withLock { $0.popBClicks } }
+
 	/// the last text a clear-on-submit form sent, as the region renders it.
 	var clearLast: String {
 		get { values.withLock { $0.clearLast } }
@@ -236,6 +268,26 @@ func behaviourLayerAHTML() -> String {
 func behaviourLayerBHTML() -> String {
 	"""
 	<div id="layer-b"\(DismissStack(layer: "b").attributeText) class="fx-layer"><p>Layer B — opened later, first in the document.</p><button id="close-b" type="button"\(DismissStack(layer: "b").attributeText) data-component-id="fx-close-b" data-event="click">Close B</button></div>
+	"""
+}
+
+/// the server-armed popover: ONE latch, two triggers. a trigger's click arms the
+/// latch (and its own counter) and the render below consumes it, so the panel is
+/// open for exactly one render — a later render ships it closed. the counters
+/// live beside the panels, inside the patched slot and outside the panels, so a
+/// click that should have been suppressed is visible as a counter that moved.
+/// the panel carries `data-open="<serial>"` and `data-dismiss`, which is the
+/// dismiss stack's shape: Escape and an outside click close it there.
+func behaviourPopoversHTML(_ state: BehaviourFixtureState) -> String {
+	let latch = state.takePopover()
+	func panel(_ which: String, id: String) -> String {
+		guard latch.open == which else {
+			return "<div id=\"\(id)\" class=\"fx-pop-panel\"><p class=\"fx-muted\">closed</p></div>"
+		}
+		return "<div id=\"\(id)\" class=\"fx-pop-panel\" data-open=\"\(latch.serial)\" data-dismiss=\"\"><p class=\"fx-muted\">open · serial \(latch.serial)</p></div>"
+	}
+	return """
+	<div id="fx-pop-slot" class="fx-pop-slot"><div id="fx-pop-a-wrap" class="fx-pop-wrap"><button id="fx-pop-trigger-a" type="button" data-component-id="fx-pop-a" data-event="click">Open popover A</button><p id="fx-pop-clicks-a" class="fx-muted">a clicks: \(state.popClicksA)</p>\(panel("a", id: "fx-pop-panel-a"))</div><div id="fx-pop-b-wrap" class="fx-pop-wrap"><button id="fx-pop-trigger-b" type="button" data-component-id="fx-pop-b" data-event="click">Open popover B</button><p id="fx-pop-clicks-b" class="fx-muted">b clicks: \(state.popClicksB)</p>\(panel("b", id: "fx-pop-panel-b"))</div></div>
 	"""
 }
 
@@ -429,6 +481,9 @@ let behaviourFixtureStyle: String = """
 	.fx-items { margin: 6px 0 0; padding-left: 18px; }
 	.fx-item { padding: 2px 0; }
 	.fx-layer { border: 1px solid #444; background: #f7f7f7; padding: 10px; margin: 8px 0; }
+	.fx-pop-wrap { border: 1px dashed #999; padding: 8px; margin: 8px 0; }
+	.fx-pop-panel { display: none; border: 1px solid #444; background: #f7f7f7; padding: 8px; margin-top: 6px; }
+	.fx-pop-panel[data-open] { display: block; }
 	.fx-list { list-style: none; margin: 0; padding: 0; }
 	.fx-list li { border: 1px solid #ccc; padding: 4px 8px; margin: 2px 0; }
 	.fx-row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; margin: 6px 0; }
@@ -580,6 +635,11 @@ func renderBehaviourPage(
 	<section class="fx-sec"><h2>dismiss stack</h2>
 	<div class="fx-row"><button id="open-a" type="button" data-component-id="fx-open-a" data-event="click">Open layer A</button><div id="outside" class="fx-muted">click here to close the top layer</div></div>
 	<div id="layers" class="fx-layers"></div>
+	</section>
+
+	<section class="fx-sec"><h2>popover · one-render latch</h2>
+	<p class="fx-muted">the trigger's click reaches the server, which arms a latch; the render that answers consumes it, so the panel is open for exactly one render. a second click on the same trigger must close the panel <em>and</em> never reach the server — otherwise the latch re-arms and the panel re-states. Escape and an outside click close it through the dismiss stack, and the other trigger's click closes it too (mutual exclusion).</p>
+	\(behaviourPopoversHTML(state))
 	</section>
 
 	\(behaviourDialogRegionHTML(state))
@@ -763,6 +823,18 @@ struct BehaviourPageResponder: Responder {
 		router.register(outcome: { _ in
 			.fragments([FragmentUpdate.append(id: "layers", html: behaviourLayerBHTML(), before: "layer-a")])
 		}, for: ComponentID("fx-open-b"), in: session)
+		// the server-armed popover: each trigger counts itself, arms the one
+		// shared latch and answers with a patch of the slot. the render inside
+		// `behaviourPopoversHTML` consumes the latch, so a click the browser
+		// suppressed leaves the panel closed for every later render.
+		router.register(outcome: { _ in
+			state.armPopover("a")
+			return .fragments([FragmentUpdate(id: "fx-pop-slot", html: behaviourPopoversHTML(state))])
+		}, for: ComponentID("fx-pop-a"), in: session)
+		router.register(outcome: { _ in
+			state.armPopover("b")
+			return .fragments([FragmentUpdate(id: "fx-pop-slot", html: behaviourPopoversHTML(state))])
+		}, for: ComponentID("fx-pop-b"), in: session)
 		router.register(outcome: { _ in
 			.fragments([FragmentUpdate(id: "layer-a", html: "")])
 		}, for: ComponentID("fx-close-a"), in: session)

@@ -2483,6 +2483,129 @@ if (!clipboardGranted) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// 25. popover: a server-armed one-render latch. the trigger's click arms the
+//     latch and the render that answers consumes it, so the panel is open for
+//     exactly one render. a second click on the same trigger must close the
+//     panel AND never reach the server (its counter stays put) — otherwise the
+//     latch re-arms and the panel re-states. Escape, an outside click and the
+//     second trigger keep their engine paths.
+// ---------------------------------------------------------------------------
+{
+  const popRead = (side) => page.evaluate((which) => {
+    const panel = document.getElementById("fx-pop-panel-" + which);
+    const clicks = document.getElementById("fx-pop-clicks-" + which);
+    return {
+      open: !!panel && panel.hasAttribute("data-open"),
+      serial: panel ? panel.getAttribute("data-open") : null,
+      clicks: (clicks ? clicks.textContent : "").trim(),
+    };
+  }, side);
+  const countOf = (text) => {
+    const hit = /: (\d+)\s*$/.exec(text || "");
+    return hit ? Number(hit[1]) : null;
+  };
+
+  const baseA = countOf((await popRead("a")).clicks);
+  await page.click("#fx-pop-trigger-a");
+  const first = await settled(() => {
+    const panel = document.getElementById("fx-pop-panel-a");
+    const clicks = (document.getElementById("fx-pop-clicks-a")?.textContent || "").trim();
+    return { ok: !!panel && panel.hasAttribute("data-open"), open: !!panel && panel.hasAttribute("data-open"), serial: panel?.getAttribute("data-open") ?? null, clicks };
+  });
+  if (first?.ok && countOf(first.clicks) === baseA + 1) {
+    ok(`popover: the trigger's click arms the server's latch and the render opens the panel (data-open="${first.serial}", ${first.clicks})`);
+  } else {
+    bad(`popover: after the first click the panel was ${JSON.stringify(first)}, expected data-open present and ${baseA + 1} clicks`);
+  }
+
+  // the contract: the second click closes the panel and the server never hears
+  // it. the sample has to HOLD for a window, not be true once: the engine's
+  // outside-click pass removes `data-open` synchronously, and a broken run
+  // re-opens the panel with a fresh serial a few milliseconds later when the
+  // server's answer lands. so poll past the patch's arrival and fail the
+  // moment the panel re-opens or the counter moves.
+  const beforeSecond = await popRead("a");
+  await page.click("#fx-pop-trigger-a");
+  let second = { ok: false, open: null, serial: null, clicks: beforeSecond.clicks };
+  const secondDeadline = Date.now() + 1200;
+  while (Date.now() < secondDeadline) {
+    const now = await popRead("a");
+    second = { ok: !now.open && now.clicks === beforeSecond.clicks, open: now.open, serial: now.serial, clicks: now.clicks };
+    if (!second.ok) break;
+    await page.waitForTimeout(60);
+  }
+  if (second.ok) {
+    ok(`popover: a second click on the trigger closes the panel and the server never hears it (${second.clicks}, held for 1.2 s)`);
+  } else {
+    bad(`popover: the second click left ${JSON.stringify(second)}, expected data-open absent and ${JSON.stringify(beforeSecond.clicks)} held for 1.2 s — a moved counter means the event reached the server`);
+  }
+
+  // Escape keeps its engine path: the panel is on the dismiss stack, and the
+  // close is client-side (no counter moves).
+  const escapeOpen = await (async () => {
+    await page.click("#fx-pop-trigger-a");
+    return settled(() => ({ ok: !!document.querySelector("#fx-pop-panel-a[data-open]") }));
+  })();
+  const beforeEscape = await popRead("a");
+  await page.keyboard.press("Escape");
+  const escaped = await settled(() => {
+    const panel = document.getElementById("fx-pop-panel-a");
+    const clicks = (document.getElementById("fx-pop-clicks-a")?.textContent || "").trim();
+    return { ok: !!panel && !panel.hasAttribute("data-open"), open: !!panel && panel.hasAttribute("data-open"), clicks };
+  });
+  if (escapeOpen?.ok && escaped?.ok && escaped.clicks === beforeEscape.clicks) {
+    ok(`popover: Escape closes the open panel through the dismiss stack and the counter stays at ${escaped.clicks}`);
+  } else {
+    bad(`popover: after Escape ${JSON.stringify(escaped)} (opened=${JSON.stringify(escapeOpen)}, before=${JSON.stringify(beforeEscape.clicks)}), expected the panel closed and the counter unchanged`);
+  }
+
+  // an outside click keeps its engine path too.
+  const outsideOpen = await (async () => {
+    await page.click("#fx-pop-trigger-a");
+    return settled(() => ({ ok: !!document.querySelector("#fx-pop-panel-a[data-open]") }));
+  })();
+  const beforeOutside = await popRead("a");
+  await page.click("#outside");
+  const outside = await settled(() => {
+    const panel = document.getElementById("fx-pop-panel-a");
+    const clicks = (document.getElementById("fx-pop-clicks-a")?.textContent || "").trim();
+    return { ok: !!panel && !panel.hasAttribute("data-open"), open: !!panel && panel.hasAttribute("data-open"), clicks };
+  });
+  if (outsideOpen?.ok && outside?.ok && outside.clicks === beforeOutside.clicks) {
+    ok(`popover: an outside click closes the open panel and the counter stays at ${outside.clicks}`);
+  } else {
+    bad(`popover: after the outside click ${JSON.stringify(outside)} (opened=${JSON.stringify(outsideOpen)}, before=${JSON.stringify(beforeOutside.clicks)})`);
+  }
+
+  // opening the second trigger closes the first (mutual exclusion), and only
+  // the second trigger's counter moves.
+  const exclusionOpen = await (async () => {
+    await page.click("#fx-pop-trigger-a");
+    return settled(() => ({ ok: !!document.querySelector("#fx-pop-panel-a[data-open]") }));
+  })();
+  const beforeBoth = { a: await popRead("a"), b: await popRead("b") };
+  await page.click("#fx-pop-trigger-b");
+  const exclusion = await settled(() => {
+    const a = document.getElementById("fx-pop-panel-a");
+    const b = document.getElementById("fx-pop-panel-b");
+    const ca = (document.getElementById("fx-pop-clicks-a")?.textContent || "").trim();
+    const cb = (document.getElementById("fx-pop-clicks-b")?.textContent || "").trim();
+    return {
+      ok: !!a && !!b && !a.hasAttribute("data-open") && b.hasAttribute("data-open"),
+      a: { open: !!a && a.hasAttribute("data-open"), clicks: ca },
+      b: { open: !!b && b.hasAttribute("data-open"), clicks: cb },
+    };
+  });
+  const moved = exclusion && exclusion.a.clicks === beforeBoth.a.clicks &&
+    countOf(exclusion.b.clicks) === countOf(beforeBoth.b.clicks) + 1;
+  if (exclusionOpen?.ok && exclusion?.ok && moved) {
+    ok(`popover: opening the second trigger closes the first (mutual exclusion; ${exclusion.a.clicks}, ${exclusion.b.clicks})`);
+  } else {
+    bad(`popover: mutual exclusion left ${JSON.stringify(exclusion)} (before ${JSON.stringify(beforeBoth)})`);
+  }
+}
+
 await browser.close();
 server.kill();
 

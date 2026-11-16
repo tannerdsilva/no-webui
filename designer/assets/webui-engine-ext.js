@@ -813,6 +813,82 @@ window.WebUIEngineExt = (function () {
       el.addEventListener('blur', clamp);
     };
 
+    var OPENER_TTL = 2000;
+    var openerPending = null;
+    var popoverWatch = null;
+
+    function clickControl(target) {
+      if (!target || !target.closest) { return null; }
+      return target.closest('button, a, [role=button], [data-component-id]');
+    }
+
+    function openPopoverLayers() {
+      return document.querySelectorAll('[data-open][data-dismiss]:not(button):not(a):not(input):not(select):not(textarea):not([role=button])');
+    }
+
+    function sameOpener(rec, hit, target) {
+      if (!rec) { return false; }
+      var component = hit.getAttribute('data-component-id') || '';
+      if (rec.node === hit) { return true; }
+      if (rec.id && rec.id === hit.id) { return true; }
+      if (rec.component && rec.component === component) { return true; }
+      if (component && rec.component && component !== rec.component) { return false; }
+      return !!(rec.node && rec.node.contains && rec.node.contains(target));
+    }
+
+    function scanOpened(node) {
+      if (!node || node.nodeType !== 1) { return; }
+      var list = node.hasAttribute('data-open') ? [node] : [];
+      var inner = node.querySelectorAll('[data-open]');
+      for (var i = 0; i < inner.length; i++) { list.push(inner[i]); }
+      for (var j = 0; j < list.length; j++) {
+        var el = list[j].hasAttribute('data-dismiss') ? list[j] : (list[j].closest ? list[j].closest('[data-dismiss]') : null);
+        if (!el || !el.hasAttribute('data-open') || el.__webuiOpener) { continue; }
+        if (!openerPending) { return; }
+        if (Date.now() - openerPending.at > OPENER_TTL) { openerPending = null; return; }
+        el.__webuiOpener = openerPending;
+        openerPending = null;
+      }
+    }
+
+    function onPopoverMutation(records) {
+      for (var i = 0; i < records.length; i++) {
+        var rec = records[i];
+        if (rec.type === 'attributes') {
+          if (rec.target.hasAttribute('data-open')) { scanOpened(rec.target); }
+          else { rec.target.__webuiOpener = null; }
+          continue;
+        }
+        for (var j = 0; j < rec.addedNodes.length; j++) { scanOpened(rec.addedNodes[j]); }
+      }
+    }
+
+    function onPopoverClick(e) {
+      var hit = clickControl(e.target);
+      if (!hit) { return; }
+      var list = openPopoverLayers();
+      for (var i = 0; i < list.length; i++) {
+        if (!sameOpener(list[i].__webuiOpener, hit, e.target)) { continue; }
+        list[i].removeAttribute('data-open');
+        openerPending = null;
+        e.preventDefault();
+        e.stopImmediatePropagation();
+        return;
+      }
+      openerPending = {
+        node: hit,
+        id: hit.id || '',
+        component: hit.getAttribute ? (hit.getAttribute('data-component-id') || '') : '',
+        at: Date.now()
+      };
+    }
+
+    if (typeof MutationObserver === 'function') {
+      popoverWatch = new MutationObserver(onPopoverMutation);
+      popoverWatch.observe(document, { attributes: true, childList: true, subtree: true, attributeFilter: ['data-open'] });
+    }
+    document.addEventListener('click', onPopoverClick, true);
+
     function onDocSubmit(e) {
       var form = e.target;
       if (!form || !form.querySelectorAll) { return; }
@@ -856,6 +932,9 @@ window.WebUIEngineExt = (function () {
       timers = [];
       document.removeEventListener('submit', onDocSubmit);
       document.removeEventListener('scroll', onDocScroll, true);
+      document.removeEventListener('click', onPopoverClick, true);
+      if (popoverWatch) { popoverWatch.disconnect(); popoverWatch = null; }
+      openerPending = null;
       dragItem = null;
       spyQueued = false;
     };

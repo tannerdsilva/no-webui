@@ -292,9 +292,32 @@ struct WebUIBudgetPlugin: CommandPlugin {
     ///   shell        1,514 raw /    539 gz   (≤   1,700 /    650 — unchanged)
     /// the extension's ceilings move to the smallest hundred strictly above the
     /// measurement — 35,500 / 8,300 (92 raw / 44 gz of headroom).
+    ///
+    /// re-pinned 2026-11-15 (3.2.0 L4 — the trigger toggle for a server-armed
+    /// popover):
+    ///
+    /// the extension closes a server-armed dismissible popover when its own
+    /// trigger is clicked again, and suppresses that click so the consumer's
+    /// one-render latch cannot re-arm: a capture-phase click on `document`
+    /// resolves the activated control, matches it against the opener recorded
+    /// on each open `[data-open][data-dismiss]` layer (a mutation observer
+    /// attributes an open to the click that preceded it, by node, id or
+    /// component id), then removes `data-open`, prevents the default and stops
+    /// immediate propagation. Escape and the outside-click pass stay the
+    /// engine's, a click on a different trigger is never swallowed, and a
+    /// nested control carrying its own component id is never mistaken for the
+    /// opener. the main engine did not change. measured on this tree, from the
+    /// asset tool's manifest (`served`):
+    ///   engine      80,120 raw / 18,534 gz   (≤ 80,200 / 18,600 — unchanged)
+    ///   engine-ext  38,627 raw /  8,939 gz   (was pinned 35,500 / 8,300;
+    ///                                         +3,219 raw / +683 gz)
+    ///   sheet      325,938 raw / 45,647 gz   (≤ 335,000 / 49,500 — unchanged)
+    ///   shell        1,514 raw /    539 gz   (≤   1,700 /    650 — unchanged)
+    /// the extension's ceilings move to the smallest hundred strictly above the
+    /// measurement — 38,700 / 9,000 (73 raw / 61 gz of headroom).
     private static let ceilings: [Ceiling] = [
         Ceiling(surface: "engine", label: "webui-engine.js", raw: 80_200, gz: 18_600),
-        Ceiling(surface: "engineExt", label: "webui-engine-ext.js", raw: 35_500, gz: 8_300),
+        Ceiling(surface: "engineExt", label: "webui-engine-ext.js", raw: 38_700, gz: 9_000),
         Ceiling(surface: "sheet", label: "design-system.css", raw: 335_000, gz: 49_500),
         Ceiling(surface: "shell", label: "webui-shell.js", raw: 1_700, gz: 650),
     ]
